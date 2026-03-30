@@ -1,0 +1,9 @@
+﻿#,asset_id,allocation_group,currency_id,equity_index_id,fund_id,mv,fav,asset_classification
+1,trad_equity,equity,cny,cny_equity,trad_fund,632635801.2,632635801.2,FVTPL
+2,cd1_equity,equity,cny,cny_equity,cd1_fund,181147175.6,181147175.6,FVTPL
+3,cd2_equity,equity,cny,cny_equity,cd2_fund,2065456.364,2065456.364,FVTPL
+4,sh_equity,equity,cny,cny_equity,sh_fund,0.01,0.01,FVTPL
+5,trad_private_equity,private_equity,cny,cny_private_equity,trad_fund,4777115711,4777115711,FVTPL
+6,cd1_private_equity,private_equity,cny,cny_private_equity,cd1_fund,81827036.73,81827036.73,FVTPL
+7,cd2_private_equity,private_equity,cny,cny_private_equity,cd2_fund,200398419.9,200398419.9,FVTPL
+8,sh_private_equity,private_equity,cny,cny_private_equity,sh_fund,0.01,0.01,FVTPL

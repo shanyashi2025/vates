@@ -1,0 +1,5 @@
+﻿portfolio_name,Stock Market,Long Term Treasury,Intermediate Term Treasury,Commodities,Gold,rebalance_freq,initial_balance
+tangency portfolio,0.3346709,0,0.44276745,0,0.22256165,12,1000
+max return within standard deviation tolerance,0.45772778,0.00119677,0.18527686,0,0.35579859,12,1000
+portforlio #3,0.18088514,0,0.76331027,0,0.05580459,12,1000
+portforlio #4,0.18088514,0,0.76331027,0,0,12,1000

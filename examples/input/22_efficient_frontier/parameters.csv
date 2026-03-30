@@ -1,0 +1,4 @@
+﻿parameter,value
+risk_free_rate,0.015
+return_target,0.08
+standard_deviation_tolerance,0.1

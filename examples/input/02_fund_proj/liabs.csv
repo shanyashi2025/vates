@@ -1,0 +1,7 @@
+﻿ref_no,liab_id,entry_date,currency_id,fund_id,liab_class,liab_type,no_pols_if,math_res_if,surr_val_if,asset_share_if
+1,trad_if_prod1,2024/12/31,cny,trad_fund,ExtProjLiab,Trad,1,5511073589,5511073589,0
+2,trad_if_prod2,2024/12/31,cny,trad_fund,ExtProjLiab,Trad,1,8309379.888,8309379.888,0
+3,trad_nb_prod1,2025/2/15,cny,trad_fund,ExtProjLiab,Trad,0,0,0,0
+4,cd1_if_prod1,2024/12/31,cny,cd1_fund,ExtProjLiab,Par_CD,1,676242629.8,676242629.8,710054761.3
+5,cd1_nb_prod1,2025/1/15,cny,cd1_fund,ExtProjLiab,Par_CD,0,0,0,0
+6,cd2_if_prod1,2024/12/31,cny,cd2_fund,ExtProjLiab,Par_CD,1,202739329.7,202739329.7,192602363.2

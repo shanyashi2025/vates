@@ -1,0 +1,30 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+Desktop.ini
+
+# Local / generated (adjust if you want to track some of these)
+*.log
+examples/results/
+examples/.output/
+examples/.dev*/
+examples/*/.dev*
+examples/.test*/
+examples/*/.test*
+examples/.tasks/

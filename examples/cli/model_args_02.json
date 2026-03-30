@@ -1,0 +1,10 @@
+{
+    "model_name": "fund_proj",
+    "start_year": 2024,
+    "start_month": 12,
+    "end_year": 2026,
+    "scenario": "demo",
+    "workspace_directory": "examples",
+    "input_directories": ["input/02_fund_proj"],
+    "results_directory": "results/cli_02_fund_proj"
+}

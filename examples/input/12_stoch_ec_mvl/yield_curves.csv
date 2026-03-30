@@ -1,0 +1,2 @@
+﻿#,curve_id,esg_economy,esg_class,esg_measure,esg_term,term_type,interpolation_method
+1,cny_rf,CNY,ZCB,PRICE,1;2;3;5;7;10;20;30;50,Y,Geometric

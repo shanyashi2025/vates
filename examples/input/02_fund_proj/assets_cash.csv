@@ -1,0 +1,5 @@
+﻿#,asset_id,allocation_group,currency_id,positive_cash_balance_ret_id,negative_cash_balance_ret_id,fund_id,nominal
+1,trad_cash,cash,cny,cny_rf:short_rate,cny_rf:short_rate,trad_fund,109514931.1
+2,cd1_cash,cash,cny,cny_rf:short_rate,cny_rf:short_rate,cd1_fund,413253687.3
+3,cd2_cash,cash,cny,cny_rf:short_rate,cny_rf:short_rate,cd2_fund,256363.5357
+4,sh_cash,cash,cny,cny_rf:short_rate,cny_rf:short_rate,sh_fund,1500000000

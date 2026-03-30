@@ -1,0 +1,12 @@
+{
+    "model_name": "stoch_monte_carlo",
+    "start_year": 2024,
+    "start_month": 12,
+    "end_year": 2034,
+    "scenario": "demo",
+    "workspace_directory": "examples",
+    "input_directories": ["input/11_stoch_monte_carlo"],
+    "results_directory": "results/cli_11_stoch_monte_carlo",
+    "simulations": "1-1000",
+    "max_workers": 4
+}

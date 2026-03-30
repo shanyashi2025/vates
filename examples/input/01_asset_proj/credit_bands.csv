@@ -1,0 +1,3 @@
+﻿#,credit_band_id,esg_economy,esg_class,esg_measure_default,default_compound_frequency,esg_measure_recovery,esg_measure_spotmult,esg_measure_spread
+1,AAA,CNY,RATING_AAA,DEFAULT_PC,monthly,RECOVERY_PC,SPOT_MULT_PC,SPREAD_BP
+2,AA,CNY,RATING_AA,DEFAULT_PC,monthly,RECOVERY_PC,SPOT_MULT_PC,SPREAD_BP

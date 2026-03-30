@@ -1,0 +1,6 @@
+﻿date,output_folder,assets_cash,assets_equity,assets_bond
+202503,.output/02/aging_assets,assets_cash_202503,assets_equity_202503,assets_bond_202503
+202506,.output/02/aging_assets,assets_cash_202506,assets_equity_202506,assets_bond_202506
+202509,.output/02/aging_assets,assets_cash_202509,assets_equity_202509,assets_bond_202509
+202512,.output/02/aging_assets,assets_cash_202512,assets_equity_202512,assets_bond_202512
+202612,.output/02/aging_assets,assets_cash_202612,assets_equity_202612,assets_bond_202612

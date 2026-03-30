@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vates"
+version = "0.1.0"
+description = "Actuarial modeling framework and package"
+readme = "README.md"
+requires-python = ">=3.12"
+# Set your SPDX license when you publish (e.g. MIT, Apache-2.0).
+# license = { text = "MIT" }
+authors = [{ name = "..." }]
+keywords = ["actuarial", "actuarial model", "alm"]
+dependencies = [
+    "numpy>=2.2.6",
+    "pandas>=2.3.0, <3.0.0",
+    "pyarrow>=21.0.0",
+    "matplotlib>=3.10",
+    "cvxpy>=1.7.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+# [project.urls]
+# Homepage = "https://github.com/your-org/vates"
+
+# --- Flat layout: package directory `vates/` lives at repository root ---
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vates*"]

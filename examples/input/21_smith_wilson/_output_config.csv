@@ -1,0 +1,4 @@
+﻿item,output_folder,output_file_name
+plot_png,.output/21,smith_wilson_plot.png
+spot_rates_csv,.output/21,smith_wilson_spot_rates.csv
+forward_rates_csv,.output/21,smith_wilson_forward_rates.csv
