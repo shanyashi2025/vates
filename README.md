@@ -74,13 +74,10 @@ Details: **`docs/PROJECT_STRUCTURE.md`**.
 |----|-----------------------|------------------------------------------|
 | 1  | 01_asset_proj         | `python .\examples\scripts\script_01.py` |
 | 2  | 02_fund_proj          | `python .\examples\scripts\script_02.py` |
-| 3  | 03_cross_proj         | `python .\examples\scripts\script_03.py` |
-| 4  | 04_ifrs17_proj        | `python .\examples\scripts\script_04.py` |
-| 5  | 11_stoch_monte_carlo  | `python .\examples\scripts\script_11.py` |
-| 6  | 12_stoch_ec_mvl       | `python .\examples\scripts\script_12.py` |
-| 7  | 21_smith_wilson       | `python .\examples\scripts\script_21.py` |
-| 8  | 22_efficient_frontier | `python .\examples\scripts\script_22.py` |
-| 9  | 23_bond_calc          | `python .\examples\scripts\script_23.py` |
+| 3  | 11_stoch_monte_carlo  | `python .\examples\scripts\script_11.py` |
+| 4  | 12_stoch_ec_mvl       | `python .\examples\scripts\script_12.py` |
+| 5  | 21_smith_wilson       | `python .\examples\scripts\script_21.py` |
+| 6  | 22_efficient_frontier | `python .\examples\scripts\script_22.py` |
 
 ### 2) CLI command (Windows) + json demos
 
@@ -89,13 +86,10 @@ Details: **`docs/PROJECT_STRUCTURE.md`**.
 |----|-----------------------|-----------------------------|----------------------------------------------------------------------------------------|
 | 1  | 01_asset_proj         | `.\examples\cli\cli_01.bat` | `python .\examples\model\em01_asset_proj.py         .\examples\cli\model_args_01.json` |
 | 2  | 02_fund_proj          | `.\examples\cli\cli_02.bat` | `python .\examples\model\em02_fund_proj.py          .\examples\cli\model_args_02.json` |
-| 3  | 03_cross_proj         | `.\examples\cli\cli_03.bat` | `python .\examples\model\em03_cross_proj.py         .\examples\cli\model_args_03.json` |
-| 4  | 04_ifrs17_proj        | `.\examples\cli\cli_04.bat` | `python .\examples\model\em04_ifrs17_proj.py        .\examples\cli\model_args_04.json` |
-| 5  | 11_stoch_monte_carlo  | `.\examples\cli\cli_11.bat` | `python .\examples\model\em11_stoch_monte_carlo.py  .\examples\cli\model_args_11.json` |
-| 6  | 12_stoch_ec_mvl       | `.\examples\cli\cli_12.bat` | `python .\examples\model\em12_stoch_ec_mvl.py       .\examples\cli\model_args_12.json` |
-| 7  | 21_smith_wilson       | `.\examples\cli\cli_21.bat` | `python .\examples\model\em21_smith_wilson.py       .\examples\cli\model_args_21.json` |
-| 8  | 22_efficient_frontier | `.\examples\cli\cli_22.bat` | `python .\examples\model\em22_efficient_frontier.py .\examples\cli\model_args_22.json` |
-| 9  | 23_bond_calc          | `.\examples\cli\cli_23.bat` | `python .\examples\model\em23_bond_calc.py          .\examples\cli\model_args_23.json` |
+| 3  | 11_stoch_monte_carlo  | `.\examples\cli\cli_11.bat` | `python .\examples\model\em11_stoch_monte_carlo.py  .\examples\cli\model_args_11.json` |
+| 4  | 12_stoch_ec_mvl       | `.\examples\cli\cli_12.bat` | `python .\examples\model\em12_stoch_ec_mvl.py       .\examples\cli\model_args_12.json` |
+| 5  | 21_smith_wilson       | `.\examples\cli\cli_21.bat` | `python .\examples\model\em21_smith_wilson.py       .\examples\cli\model_args_21.json` |
+| 6  | 22_efficient_frontier | `.\examples\cli\cli_22.bat` | `python .\examples\model\em22_efficient_frontier.py .\examples\cli\model_args_22.json` |
 
 
 ### 3) GUI
@@ -105,7 +99,7 @@ Start GUI:
 .\gui\start.bat
 ```
 
-## For Tier 1 model developers
+## For model developers
 
 - Treat **`examples/model/`** as a **reference** layout: copy `local_package/` (rename to your company package) and the model files into your own repository.
 - Keep company-specific code **outside** `vates/`; depend on **`vates`** via `pip install` or your dependency mechanism.
