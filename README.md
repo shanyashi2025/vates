@@ -75,20 +75,21 @@ This installs the distribution **`vates`** in editable mode; import the library 
 | 5  | 21_smith_wilson       | `python .\examples\scripts\script_21.py` |
 | 6  | 22_efficient_frontier | `python .\examples\scripts\script_22.py` |
 
-Model output can be found in `.\examples\results\script_*`
+- Model output can be found in `.\examples\results\script_*`
 
 ### 2) CLI command (Windows) + json demos
 
-| No | Example Model         | Batch                       | Python                                                                                 |
-|----|-----------------------|-----------------------------|----------------------------------------------------------------------------------------|
-| 1  | 01_asset_proj         | `.\examples\cli\cli_01.bat` | `python .\examples\model\em01_asset_proj.py         .\examples\cli\model_args_01.json` |
-| 2  | 02_fund_proj          | `.\examples\cli\cli_02.bat` | `python .\examples\model\em02_fund_proj.py          .\examples\cli\model_args_02.json` |
-| 3  | 11_stoch_monte_carlo  | `.\examples\cli\cli_11.bat` | `python .\examples\model\em11_stoch_monte_carlo.py  .\examples\cli\model_args_11.json` |
-| 4  | 12_stoch_ec_mvl       | `.\examples\cli\cli_12.bat` | `python .\examples\model\em12_stoch_ec_mvl.py       .\examples\cli\model_args_12.json` |
-| 5  | 21_smith_wilson       | `.\examples\cli\cli_21.bat` | `python .\examples\model\em21_smith_wilson.py       .\examples\cli\model_args_21.json` |
-| 6  | 22_efficient_frontier | `.\examples\cli\cli_22.bat` | `python .\examples\model\em22_efficient_frontier.py .\examples\cli\model_args_22.json` |
+| No | Example Model         | Batch                       |
+|----|-----------------------|-----------------------------|
+| 1  | 01_asset_proj         | `.\examples\cli\cli_01.bat` |
+| 2  | 02_fund_proj          | `.\examples\cli\cli_02.bat` |
+| 3  | 11_stoch_monte_carlo  | `.\examples\cli\cli_11.bat` |
+| 4  | 12_stoch_ec_mvl       | `.\examples\cli\cli_12.bat` |
+| 5  | 21_smith_wilson       | `.\examples\cli\cli_21.bat` |
+| 6  | 22_efficient_frontier | `.\examples\cli\cli_22.bat` |
 
-Model output can be found in `.\examples\results\cli_*`
+- Configured via the corresponding json file `.\examples\cli\model_args_*.json`.
+- Model output can be found in `.\examples\results\cli_*`
 
 ### 3) GUI
 
