@@ -1,14 +1,13 @@
 # Vates Project
 
-Open-source Python framework and sample implementations for actuarial modeling. Sample implementations include asset-liability model (ALM).
+Open-source Python framework and sample implementations for actuarial modeling.
 
 ### How this repo is organized
 
 1. **`vates/`** — The **standard** library / installable package: reusable framework code (`pip install -e .`).
-2. **`examples/model/`** — **Example / tutorial for model developers** (company builders): reference models (`fund_model.py`, `port_monte_carlo.py`) and local package(s) (`local_package/`). This is the pattern Tier 1 users copy and adapt.
+2. **`examples/model/`** — **Example / tutorial for model developers** (company builders): reference models (`fund_model.py`, `port_monte_carlo.py`) and local package(s) (`local_package/`).
 3. **Other folders under `examples/`** (`scripts/`, `cli/`, `input/`, …) — **Example / tutorial for most colleagues**: how to run models for analysis and reporting (commands, sample data), without editing framework or model code.
-
-The **`gui/`** app is another way for analysts to run tasks; see below.
+4. The **`gui/`** app is another way for analysts to run tasks.
 
 ## Install the framework (`vates`)
 
@@ -62,13 +61,10 @@ This installs the distribution **`vates`** in editable mode; import the library 
 | `gui/`              | End-user launcher.                               |
 | `docs/`             | Structure notes and discussions.                 |
 
-Details: **`docs/PROJECT_STRUCTURE.md`**.
-
 
 ## Quick start
 
 ### 1) Script demos
-
 
 | No | Example Model         | Python                                   |
 |----|-----------------------|------------------------------------------|
@@ -79,8 +75,9 @@ Details: **`docs/PROJECT_STRUCTURE.md`**.
 | 5  | 21_smith_wilson       | `python .\examples\scripts\script_21.py` |
 | 6  | 22_efficient_frontier | `python .\examples\scripts\script_22.py` |
 
-### 2) CLI command (Windows) + json demos
+Model output can be found in `.\examples\results\script_*`
 
+### 2) CLI command (Windows) + json demos
 
 | No | Example Model         | Batch                       | Python                                                                                 |
 |----|-----------------------|-----------------------------|----------------------------------------------------------------------------------------|
@@ -91,6 +88,7 @@ Details: **`docs/PROJECT_STRUCTURE.md`**.
 | 5  | 21_smith_wilson       | `.\examples\cli\cli_21.bat` | `python .\examples\model\em21_smith_wilson.py       .\examples\cli\model_args_21.json` |
 | 6  | 22_efficient_frontier | `.\examples\cli\cli_22.bat` | `python .\examples\model\em22_efficient_frontier.py .\examples\cli\model_args_22.json` |
 
+Model output can be found in `.\examples\results\cli_*`
 
 ### 3) GUI
 
