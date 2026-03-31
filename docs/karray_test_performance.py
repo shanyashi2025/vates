@@ -1,70 +1,81 @@
 import pandas as pd
+import numpy as np
 import random
 import time
 from vates.utils import df_to_karray
 
+def create_test_df(n_idx1: int, n_idx2: int, n_cols: int) -> pd.DataFrame:
+    index1 = np.array([f"a{i}" for i in range(n_idx1)]).repeat(n_idx2)
+    index2 = np.tile(np.array([f"b{i}" for i in range(n_idx2)]), n_idx1)
+    index_array = [index1, index2]
+    multi_index = pd.MultiIndex.from_arrays(index_array, names=['index1', 'index2'])
+    columns = np.array([f"col{i}" for i in range(n_cols)])
+    data = np.random.rand(n_idx1 * n_idx2, n_cols)
+    return pd.DataFrame(data, index=multi_index, columns=columns)
 
-def random_overhead(n: int):
+def random_overhead(n_lookups: int, n_idx1: int, n_idx2: int, n_cols: int):
     s = time.time()
-    for _ in range(n):
-        liab_id = f"id{random.randint(1, 200)}"
-        var_name = f"var{random.randint(1, 12)}"
-        col_name = f"col{random.randint(1, 1200)}"
+    for _ in range(n_lookups):
+        idx1 = f"a{random.randint(0, n_idx1 - 1)}"
+        idx2 = f"b{random.randint(0, n_idx2 - 1)}"
+        col = f"col{random.randint(0, n_cols - 1)}"
     time_taken = time.time() - s
-    print(f"`random_overhead` time taken: {time_taken:.2f} seconds / {n} times")
+    print(f"`random_overhead` time taken: {time_taken:.2f} seconds / {n_lookups:,} times")
     return time_taken
 
-def df_loc(n: int):
-    df = pd.read_csv("karray_test_performance.csv", index_col=['liab_id', 'var_name'])
-
+def df_loc(df: pd.DataFrame, n_lookups: int, n_idx1: int, n_idx2: int, n_cols: int):
     s = time.time()
-    for _ in range(n):
-        liab_id = f"id{random.randint(1, 200)}"
-        var_name = f"var{random.randint(1, 12)}"
-        col_name = f"col{random.randint(1, 1200)}"
-        data_read = df.loc[(liab_id, var_name), col_name]
+    for _ in range(n_lookups):
+        idx1 = f"a{random.randint(0, n_idx1 - 1)}"
+        idx2 = f"b{random.randint(0, n_idx2 - 1)}"
+        col = f"col{random.randint(0, n_cols - 1)}"
+        data_lookup = df.loc[(idx1, idx2), col]
     time_taken = time.time() - s
-    print(f"`df_loc` time taken: {time_taken:.2f} seconds / {n} times")
+    print(f"`df_loc` time taken: {time_taken:.2f} seconds / {n_lookups:,} times")
     return time_taken
 
-def karr_loc(n: int):
-    df = pd.read_csv("karray_test_performance.csv", index_col=['liab_id', 'var_name'])
-
+def karr_loc(df: pd.DataFrame, n_lookups: int, n_idx1: int, n_idx2: int, n_cols: int):
     s = time.time()
     karr = df_to_karray(df)
-    for _ in range(n):
-        liab_id = f"id{random.randint(1, 200)}"
-        var_name = f"var{random.randint(1, 12)}"
-        col_name = f"col{random.randint(1, 1200)}"
-        data_read = karr.loc[(liab_id, var_name), col_name]
+    for _ in range(n_lookups):
+        idx1 = f"a{random.randint(0, n_idx1 - 1)}"
+        idx2 = f"b{random.randint(0, n_idx2 - 1)}"
+        col = f"col{random.randint(0, n_cols - 1)}"
+        data_lookup = karr.loc[(idx1, idx2), col]
     time_taken = time.time() - s
-    print(f"`karr_loc` time taken: {time_taken:.2f} seconds / {n} times")
+    print(f"`karr_loc` time taken: {time_taken:.2f} seconds / {n_lookups:,} times")
     return time_taken
 
 
-def test_performance():
-    n = 100_000
-    t0 = random_overhead(n)
-    t1 = df_loc(n)
-    t2 = karr_loc(n)
+def main():
+    n_lookups = 1_000_000
+    n_idx1, n_idx2, n_cols = 200, 20, 200
+    df = create_test_df(n_idx1, n_idx2, n_cols)
+    print(f"shape: {(n_idx1, n_idx2, n_cols)}, size: {n_idx1 * n_idx2 * n_cols:,} ")
+    t0 = random_overhead(n_lookups, n_idx1, n_idx2, n_cols)
+    t1 = df_loc(df, n_lookups, n_idx1, n_idx2, n_cols)
+    t2 = karr_loc(df, n_lookups, n_idx1, n_idx2, n_cols)
     print(f"`karr_loc` / `df_loc` = {(t2 - t0) / (t1 - t0):.2%}")
 
     """
-    # pandas == 2.3.3
-    # n =     1_000: 94.63%, 86.47%, 87.78%
-    # n =    10_000: 14.05%, 15.14%, 14.84%
-    # n =   100_000:  5.30%,  4.09%,  4.33%
-    # n = 1_000_000:  3.26%,  3.06%,  2.82%
-
-    # pandas == 3.0.1
-    # n =     1_000: 32.35%, 33.60%, 27.88%
-    # n =    10_000:  3.59%,  3.26%,  3.36%
-    # n =   100_000:  1.04%,  0.93%,  0.77%
-    # n = 1_000_000:  0.63%,  0.54%,  0.59%
+    # Benchmark
+    
+    ## CPU: Intel(R) Core(TM) i5-10200H CPU @ 2.40GHz, RAM: 16GB
+    
+    ## parameters:
+    - n_idx1, n_idx2, n_cols = 200, 20, 200
+    - size = 800,000
+    
+    ## summary of performance testing results (metric = `karr_loc` time taken / `df_loc` time taken)
+    
+                pandas version
+    n_lookups   2.3.3   3.0.1
+        1_000: 30.87%, 10.25%
+       10_000:  7.17%,  1.34%
+      100_000:  3.22%,  0.50%
+    1_000_000:  3.20%,  0.47%
+    
     """
-
-def main():
-    test_performance()
 
 
 if __name__ == '__main__':
