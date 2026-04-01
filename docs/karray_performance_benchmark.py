@@ -66,7 +66,7 @@ def main():
     - n_idx1, n_idx2, n_cols = 200, 20, 200
     - size = 800,000
     
-    ## summary of performance testing results (metric = `karr_loc` time taken / `df_loc` time taken)
+    ## summary of performance benchmark results (metric = `karr_loc` time taken / `df_loc` time taken)
     
                 pandas version
     n_lookups   2.3.3   3.0.1
