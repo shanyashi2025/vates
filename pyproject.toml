@@ -15,6 +15,7 @@ keywords = ["actuarial", "actuarial model", "alm"]
 dependencies = [
     "numpy>=2.2.6",
     "pandas>=2.3.0, <3.0.0",
+    "scipy",
 ]
 
 [project.optional-dependencies]

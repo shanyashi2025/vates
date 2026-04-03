@@ -1,3 +1,0 @@
-﻿item,output_folder,output_file_name
-portfolios_csv,.output/22,efficient_frontier_portfolios.csv
-plot_png,.output/22,efficient_frontier_plot.png
