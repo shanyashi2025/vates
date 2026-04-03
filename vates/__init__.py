@@ -2,7 +2,6 @@ from ._core import (
     cli_main,
     cli_run,
     ProjModelEngine,
-    StochExecutor,
     ConstVariable,
     TDepVariable,
     KeyedArray,
@@ -10,13 +9,13 @@ from ._core import (
 from . import utils
 
 from . import alm
+from . import solvency
 
 __all__ = [
     # core
     'cli_main',
     'cli_run',
     'ProjModelEngine',
-    'StochExecutor',
     'ConstVariable',
     'TDepVariable',
     'KeyedArray',
@@ -24,5 +23,6 @@ __all__ = [
     'utils',
     # libs
     'alm',
+    'solvency',
 
 ]

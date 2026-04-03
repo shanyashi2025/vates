@@ -15,9 +15,6 @@ keywords = ["actuarial", "actuarial model", "alm"]
 dependencies = [
     "numpy>=2.2.6",
     "pandas>=2.3.0, <3.0.0",
-    "pyarrow>=21.0.0",
-    "matplotlib>=3.10",
-    "cvxpy>=1.7.3",
 ]
 
 [project.optional-dependencies]

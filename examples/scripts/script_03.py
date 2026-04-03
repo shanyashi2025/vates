@@ -5,26 +5,21 @@ import time
 # Add 'model' to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'model'))
 
-from em12_stoch_ec_mvl import ECMVL
-from vates import StochExecutor
+from em03_cross_proj import CROSSMinCapProj
 
 def main():
     model_args = {
-        "model_name": "stoch_ec_mvl",
+        "model_name": "cross_proj",
         "start_year": 2024,
         "start_month": 12,
-        "end_year": 2124,
-        "scenario": 'demo',
+        "end_year": 2026,
+        "scenario": "demo",
         "workspace_directory": "examples",
-        "input_directories": ["input/12_stoch_ec_mvl"],
-        "results_directory": "results/script_12_stoch_ec_mvl",
-        "simulations": "1-9",
-        # "simulation": 1,
-        "max_workers": 3,
+        "input_directories": ["input/03_cross_proj", ".output/02/aging_assets"],
+        "results_directory": "results/script_03_cross_proj"
     }
 
-    model = StochExecutor(ECMVL, **model_args)
-    # model = ECMVL(**model_args)
+    model = CROSSMinCapProj(**model_args)
     model.run()
 
 

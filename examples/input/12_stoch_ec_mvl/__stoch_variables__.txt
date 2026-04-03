@@ -1,2 +1,0 @@
-var_group,var_name,included
-fund,BEL,y

@@ -1,5 +1,0 @@
-﻿fund_id,allocation_group,sequence,buysell_approach,purchase_method
-cd_fund,cash,4,residual,not_used
-cd_fund,equity,1,buy_sell,scale_up_existing
-cd_fund,govt_bond,2,buy_hold,purchase_profile
-cd_fund,corp_bond,3,buy_sell,purchase_profile
