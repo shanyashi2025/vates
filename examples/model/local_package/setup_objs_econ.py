@@ -8,7 +8,7 @@ import pandas as pd
 
 from vates import KeyedArray
 from vates.utils import curve_interp, parse_str_to_int_list, df_to_karray
-from vates.alm.econs import YieldCurve, YieldCurveSpecifiedBy, CreditBand, EquityIndex, Currency, MarketInfo
+from vates.alm.econs import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 
 
 @dataclass
@@ -176,19 +176,15 @@ def update_single_yield_curve(yield_curve: YieldCurve, esg_helper: Dict[str, 'Es
     else:
         raise ValueError(f"Invalid {term_type=}, expected 'Y' or 'M'.")
 
-    # determine rate type and process curve data at term 0
+    # determine rate type and process curve data
     if measure == "PRICE":
-        rate_spec = YieldCurveSpecifiedBy.ZCB
         data = np.insert(arr=data, obj=0, values=1)  # let discount_factor = 1 at term 0
+        yield_curve.disc_factors = curve_interp(term, data, interp_method)
     elif measure == "SPOT":
-        rate_spec = YieldCurveSpecifiedBy.SPOT
         data = np.insert(arr=data, obj=0, values=0)  # let spot_rate = 0 at term 0
+        yield_curve.spot_rates = curve_interp(term, data, interp_method)
     else:
         raise ValueError(f"{curve_id}: invalid yield curve input type: MEASURE = {measure}")
-    # curve interpolate
-    rates = curve_interp(term, data, interp_method)
-    # risk-free curve update
-    yield_curve.update(rate_spec, rates)
 
 
 def build_credit_bands(model, credit_bands_df: pd.DataFrame) -> tuple[List['CreditBand'], Dict[str, 'EsgInfo']]:
@@ -501,8 +497,9 @@ def update_market_info(market_info: MarketInfo, market_data_df: pd.DataFrame,
     market_data = {item: market_data_df.loc[item, date_col] for item in market_data_df.index}
     for curve in yield_curves:
         if (item := curve.curve_id) not in market_data:
+            market_data[f'{item}:short_rate'] = market_info.data.get(f'{item}:short_rate_next', 0)
             if curve.last_update != t:
                 warnings.warn(f'{item} is not updated on {t} ({p}), skip update the corresponding short rate.')
                 continue
-            market_data[f'{item}:short_rate'] = (1 + curve.short_rate) ** 12 - 1  # convert to annual effective rates
+            market_data[f'{item}:short_rate_next'] = (1 / curve.disc_factors[1]) ** 12 - 1  # convert to annual effective rates
     market_info.update(market_data)

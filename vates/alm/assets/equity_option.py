@@ -71,7 +71,7 @@ class EquityOption(Asset):
         # validate initial price
         calc_price = BlackScholesCalculator.price(
             call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
-            r=math.log(1 + self._rf_curve.curve_data['spot'][self.os_term_m]),
+            r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
             q=math.log(1 + self._equity_index.dividend_yield_ac) if self._is_pay_dividend else 0.0,
             sigma=self._std_dev, tau=self.os_term_m / 12
         )
@@ -144,7 +144,7 @@ class EquityOption(Asset):
             self._cash_flow = 0.0
             self._price = BlackScholesCalculator.price(
                 call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
-                r=math.log(1 + self._rf_curve.curve_data['spot'][self.os_term_m]),
+                r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
                 q=q, sigma=self._std_dev, tau=self.os_term_m / 12
             )
         else:  # exercise at this month
@@ -168,7 +168,7 @@ class EquityOption(Asset):
         """
         return BlackScholesCalculator.greeks(
             call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
-            r=math.log(1 + self._rf_curve.curve_data['spot'][self.os_term_m]),
+            r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
             q=math.log(1 + self._equity_index.dividend_yield_ac) if self._is_pay_dividend else 0.0,
             sigma=self._std_dev, tau=self.os_term_m / 12
         )

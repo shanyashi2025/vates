@@ -76,7 +76,7 @@ class CROSSMinCapProj(ProjModelEngine):
 
         # --- (2) process economic assumptions ---
         self._update_market_variables()
-        gby_60d_ma = np.array([self.gby_60d_ma_curve.curve_data['spot'][i * 12] for i in range(41)]) # strip year data
+        gby_60d_ma = np.array([self.gby_60d_ma_curve.spot_rates[i * 12] for i in range(41)]) # strip year data
         cross_intba, cross_intup, cross_intdn = interest_risk_discount_curve(gby_60d_ma)
         cross_intba_spot = _interp_monthly_spot(cross_intba)
         cross_intup_spot = _interp_monthly_spot(cross_intup)

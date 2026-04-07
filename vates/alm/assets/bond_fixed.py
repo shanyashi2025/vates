@@ -177,7 +177,7 @@ class BondFixed(Asset):
         Returns:
             npt.NDArray[np.float64]: Risk-adjusted spot rates.
         """
-        rf_spots = self._rf_curve.curve_data["spot"]
+        rf_spots = self._rf_curve.spot_rates
 
         if rf_spots is None:
             raise ValueError("rf_curve.spot_rates is None. Yield curve must be initialized.")

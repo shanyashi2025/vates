@@ -89,7 +89,7 @@ class BondFixedBuilder:
                 self.market_spread = 0
                 warnings.warn(f'{self.asset_id}: market_spread not specified, set to 0.')
 
-            rf_spots = self.rf_curve.curve_data["spot"]
+            rf_spots = self.rf_curve.spot_rates
 
             if self.credit_band:
                 if self.credit_band.last_update != self.t:
@@ -134,7 +134,7 @@ class BondFixedBuilder:
         if self.params.coupon_rate == -9999: raise ValueError('coupon_rate need to be set first.')
         if self.mv_price is None: raise ValueError('mv_price need to be set first.')
         if self.rf_curve.last_update != self.t: raise RuntimeError(f"Risk free curve not updated on {self.t} ({self.p}).")
-        rf_spots = self.rf_curve.curve_data["spot"]
+        rf_spots = self.rf_curve.spot_rates
 
         if self.credit_band:
             spots = calculate_risk_adj_spot(
@@ -161,7 +161,7 @@ class BondFixedBuilder:
         if self.market_spread is None: raise ValueError('market_spread need to be set first.')
         if self.rf_curve.last_update != self.t: raise RuntimeError(f"Risk free curve not updated on {self.t} ({self.p}).")
 
-        rf_spots = self.rf_curve.curve_data["spot"]
+        rf_spots = self.rf_curve.spot_rates
         if self.credit_band:
             spots = calculate_risk_adj_spot(
                 rf_spots=rf_spots,
@@ -185,7 +185,7 @@ class BondFixedBuilder:
         if self.rf_curve.last_update != self.t: raise RuntimeError(f"Risk free curve not updated on {self.t} ({self.p}).")
 
         self.market_spread = 0
-        rf_spots = self.rf_curve.curve_data["spot"]
+        rf_spots = self.rf_curve.spot_rates
         if self.credit_band:
             spots = calculate_risk_adj_spot(
                 rf_spots=rf_spots,

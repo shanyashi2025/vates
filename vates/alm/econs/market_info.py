@@ -15,7 +15,7 @@ class MarketInfo:
         self._model_ref: weakref.ref = weakref.ref(model)
         self.info_id: str = info_id
         self._last_update: int | None = None
-        self._data: dict[str, ...] | None = None
+        self._data: dict[str, ...] = {}
 
     @property
     def time(self) -> int | None:
