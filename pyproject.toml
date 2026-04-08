@@ -5,28 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vates"
 version = "0.1.0"
-description = "Actuarial modeling framework and package"
+description = "Python actuarial model"
 readme = "README.md"
 requires-python = ">=3.12"
-# Set your SPDX license when you publish (e.g. MIT, Apache-2.0).
-# license = { text = "MIT" }
-authors = [{ name = "..." }]
-keywords = ["actuarial", "actuarial model", "alm"]
+license = { text = "MIT" }
+authors = [
+    {name = "Shanya Shi", email = "shanyashi2025@gmail.com"}
+]
+keywords = ["actuarial model", "asset-liability model", "alm"]
 dependencies = [
     "numpy>=2.2.6",
     "pandas>=2.3.0, <3.0.0",
     "scipy",
 ]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-]
-
-# [project.urls]
-# Homepage = "https://github.com/..."
-
-# --- Flat layout: package directory `vates/` lives at repository root ---
 
 [tool.setuptools.packages.find]
 where = ["."]
