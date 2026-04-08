@@ -5,9 +5,9 @@ import pandas as pd
 import warnings
 import weakref
 
-from ..._core import TDepVariable
-from ..enums import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
-from ..assets import Asset, Cash
+from vates._core import TDepVariable
+from vates.alm.enums import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
+from vates.alm.assets import Asset, Cash
 
 
 @dataclass

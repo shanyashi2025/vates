@@ -1,10 +1,10 @@
 import pandas as pd
 
-from ..._core import TDepVariable
-from ...utils import check_calc_time
-from ..enums import AssetClassification
-from ..econs import Currency, MarketInfo
-from .asset_base import Asset
+from vates._core import TDepVariable
+from vates.utils import check_calc_time
+from vates.alm.enums import AssetClassification
+from vates.alm.econs import Currency, MarketInfo
+from vates.alm.assets.asset_base import Asset
 
 
 class Cash(Asset):

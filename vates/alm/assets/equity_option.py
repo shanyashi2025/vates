@@ -1,12 +1,12 @@
 import pandas as pd
 import math
 
-from ..._core import TDepVariable
-from ...utils import check_calc_time
-from ..enums import AssetClassification
-from ..econs import Currency, EquityIndex, YieldCurve
-from .asset_base import Asset
-from ._derivative_pricer import CallOrPut, BlackScholesCalculator
+from vates._core import TDepVariable
+from vates.utils import check_calc_time
+from vates.alm.enums import AssetClassification
+from vates.alm.econs import Currency, EquityIndex, YieldCurve
+from vates.alm.assets.asset_base import Asset
+from vates.alm.assets._derivative_pricer import CallOrPut, BlackScholesCalculator
 
 class EquityOption(Asset):
     """

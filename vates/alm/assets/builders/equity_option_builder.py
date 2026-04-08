@@ -2,9 +2,9 @@ import pandas as pd
 import math
 
 
-from ...econs import Currency, EquityIndex, YieldCurve
-from ..equity_option import EquityOption
-from .._derivative_pricer import CallOrPut, BlackScholesCalculator
+from vates.alm.econs import Currency, EquityIndex, YieldCurve
+from vates.alm.assets.equity_option import EquityOption
+from vates.alm.assets._derivative_pricer import CallOrPut, BlackScholesCalculator
 
 
 class EquityOptionBuilder:

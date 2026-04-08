@@ -1,4 +1,4 @@
-from ._core import (
+from vates._core import (
     cli_main,
     cli_run,
     ProjModelEngine,
@@ -6,10 +6,10 @@ from ._core import (
     TDepVariable,
     KeyedArray,
 )
-from . import utils
+from vates import utils
 
-from . import alm
-from . import solvency
+from vates import alm
+from vates import solvency
 
 __all__ = [
     # core

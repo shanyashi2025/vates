@@ -1,11 +1,11 @@
-from .params import (
+from vates.solvency.cn_cross2.params import (
     AccountType,
     interest_risk_discount_curve,
     base_curve_quadratic_interpolation,
     spread_interpolation,
 )
 
-from .quant_risk_min_cap import (
+from vates.solvency.cn_cross2.quant_risk_min_cap import (
     MinCapInputer,
     MinCapCalculator,
     MinCapUnit,

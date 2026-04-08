@@ -8,9 +8,9 @@ from datetime import datetime
 from abc import abstractmethod
 import operator
 
-from .proj_variables import ProjVariable
-from .utils import ValidatedBool, ValidatedNumber, ValidatedString, ValidatedPeriod, ValidatedList
-from ._html_generator import generate_runlog_html
+from vates._core.proj_variables import ProjVariable
+from vates._core.utils import ValidatedBool, ValidatedNumber, ValidatedString, ValidatedPeriod, ValidatedList
+from vates._core._html_generator import generate_runlog_html
 
 class ProjModelEngine:
     """Actuarial projection model engine.

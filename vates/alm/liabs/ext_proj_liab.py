@@ -1,9 +1,9 @@
 import pandas as pd
 
-from ..._core import TDepVariable
-from ...utils import check_calc_time
-from ..econs import Currency
-from .liab_base import Liab
+from vates._core import TDepVariable
+from vates.utils import check_calc_time
+from vates.alm.econs import Currency
+from vates.alm.liabs.liab_base import Liab
 
 
 class ExtProjLiab(Liab):

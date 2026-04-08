@@ -4,14 +4,8 @@ import numpy.typing as npt
 import pandas as pd
 import weakref
 
-from ..._core import TDepVariable
-from ...utils import (
-    convert_spot_to_disc,
-    convert_disc_to_spot,
-    convert_disc_to_fwrd,
-    convert_disc_to_par,
-    convert_fwrd_to_disc,
-)
+from vates._core import TDepVariable
+from vates.utils import convert_spot_to_disc, convert_disc_to_spot, convert_disc_to_fwrd, convert_disc_to_par, convert_fwrd_to_disc
 
 
 class YieldCurve:

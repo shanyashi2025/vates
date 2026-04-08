@@ -3,7 +3,7 @@ import numpy.typing as npt
 import pandas as pd
 import weakref
 
-from ..._core import TDepVariable
+from vates._core import TDepVariable
 
 
 class CreditBand:

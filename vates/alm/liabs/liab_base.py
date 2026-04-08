@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 import weakref
 
-from ..econs import Currency
+from vates.alm.econs import Currency
 
 class Liab(ABC):
     """

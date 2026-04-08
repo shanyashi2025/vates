@@ -1,7 +1,5 @@
 import warnings
 
-from ..asset_base import Asset
-
 
 _PRECALC_DICT = {
     'market_spread': 'calibrate_market_spread',
@@ -17,7 +15,7 @@ _PRECALC_DICT = {
 }
 
 
-def create_asset(asset_builder_cls, pre_calculations: str | list[str] | None, **kwargs) -> Asset:
+def create_asset(asset_builder_cls, pre_calculations: str | list[str] | None, **kwargs):
     """
     Factory function to create an asset.
 

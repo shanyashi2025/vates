@@ -4,7 +4,7 @@ import numpy.typing as npt
 import warnings
 from dataclasses import dataclass
 
-from ...utils import convert_spot_to_disc, newton_raphson_ytm
+from vates.utils import convert_spot_to_disc, newton_raphson_ytm
 
 
 @dataclass

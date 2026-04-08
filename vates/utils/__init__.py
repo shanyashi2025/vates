@@ -1,4 +1,4 @@
-from .._core.utils import (
+from vates._core.utils import (
     ValidatedBool,
     ValidatedNumber,
     ValidatedString,
@@ -6,9 +6,9 @@ from .._core.utils import (
     ValidatedList,
     parse_str_to_int_list,
 )
-from .._core.keyed_array import df_to_karray
-from .data_classes import NumVarGroup
-from .curve_interpolation import (
+from vates._core.keyed_array import df_to_karray
+from vates.utils.data_classes import NumVarGroup
+from vates.utils.curve_interpolation import (
     curve_interp,
     curve_linear_interp,
     curve_loglinear_interp,
@@ -16,11 +16,11 @@ from .curve_interpolation import (
     curve_next_interp,
     zcb_exponential_interp,
 )
-from .curve_extrapolation import (
+from vates.utils.curve_extrapolation import (
     SmithWilsonExtrapolator,
     smith_wilson_extrap
 )
-from .curve_conversion import (
+from vates.utils.curve_conversion import (
     convert_spot_to_disc,
     convert_fwrd_to_disc,
     convert_disc_to_spot,
@@ -33,17 +33,17 @@ from .curve_conversion import (
     newton_raphson_z_spread,
     calculate_risk_adj_spot
 )
-from .qfi import (
+from vates.utils.qfi import (
     multivariate_standard_normal,
     validate_corr_matrix,
     geometric_brownian_motion,
     search_efficient_frontier,
 )
-from .risk_module import (
+from vates.utils.risk_module import (
     RiskModule,
     SubRisk
 )
-from .uncategorized import (
+from vates.utils.uncategorized import (
     new_business_convolve,
     check_calc_time,
 )

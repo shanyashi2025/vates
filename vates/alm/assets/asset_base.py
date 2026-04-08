@@ -4,8 +4,8 @@ import numpy.typing as npt
 import pandas as pd
 import weakref
 
-from ..enums import AssetRepBasis, AssetClassification
-from ..econs import Currency
+from vates.alm.enums import AssetRepBasis, AssetClassification
+from vates.alm.econs import Currency
 
 class Asset(ABC):
     """

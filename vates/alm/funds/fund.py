@@ -4,12 +4,12 @@ import warnings
 import weakref
 from enum import Enum, unique
 
-from ...utils import check_calc_time
-from ..enums import AssetRepBasis
-from ..assets import Asset, Cash
-from ..liabs import Liab
-from ._asset_allocator import AssetAllocator, RebalancePolicyParams, TargetWeight
-from ._fund_calculator import FundCalculator
+from vates.utils import check_calc_time
+from vates.alm.enums import AssetRepBasis
+from vates.alm.assets import Asset, Cash
+from vates.alm.liabs import Liab
+from vates.alm.funds._asset_allocator import AssetAllocator, RebalancePolicyParams, TargetWeight
+from vates.alm.funds._fund_calculator import FundCalculator
 
 @unique
 class FundSizeType(Enum):

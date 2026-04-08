@@ -1,8 +1,8 @@
-from .currency import Currency
-from .yield_curve import YieldCurve
-from .credit_band import CreditBand
-from .equity_index import EquityIndex
-from .market_info import MarketInfo
+from vates.alm.econs.currency import Currency
+from vates.alm.econs.yield_curve import YieldCurve
+from vates.alm.econs.credit_band import CreditBand
+from vates.alm.econs.equity_index import EquityIndex
+from vates.alm.econs.market_info import MarketInfo
 
 
 __all__ = [

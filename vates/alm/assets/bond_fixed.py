@@ -2,12 +2,12 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from ..._core import TDepVariable
-from ...utils import calculate_risk_adj_spot, check_calc_time
-from ..enums import AssetClassification
-from ..econs import Currency, YieldCurve, CreditBand
-from .asset_base import Asset
-from ._bond_fixed_component import BondFixedParameters, BondFixedCashFlowGenerator, BondFixedPricer, BondFixedRiskCalculator
+from vates._core import TDepVariable
+from vates.utils import calculate_risk_adj_spot, check_calc_time
+from vates.alm.enums import AssetClassification
+from vates.alm.econs import Currency, YieldCurve, CreditBand
+from vates.alm.assets.asset_base import Asset
+from vates.alm.assets._bond_fixed_component import BondFixedParameters, BondFixedCashFlowGenerator, BondFixedPricer, BondFixedRiskCalculator
 
 
 class BondFixed(Asset):

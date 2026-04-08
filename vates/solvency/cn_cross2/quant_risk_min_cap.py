@@ -3,9 +3,9 @@ import pandas as pd
 import weakref
 import warnings
 
-from ..._core import TDepVariable
-from ...utils import RiskModule, SubRisk, NumVarGroup
-from .params import (
+from vates._core import TDepVariable
+from vates.utils import RiskModule, SubRisk, NumVarGroup
+from vates.solvency.cn_cross2.params import (
     AccountType,
     MC_CORR_MATRIX,
     MORB_MC_CORR_MATRIX,

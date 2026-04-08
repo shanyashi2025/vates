@@ -2,11 +2,11 @@ import numpy as np
 import pandas as pd
 import weakref
 
-from ..._core import TDepVariable
-from ...utils import check_calc_time
-from ..enums import AssetRepBasis
-from ..assets import Asset
-from ..liabs import Liab
+from vates._core import TDepVariable
+from vates.utils import check_calc_time
+from vates.alm.enums import AssetRepBasis
+from vates.alm.assets import Asset
+from vates.alm.liabs import Liab
 
 
 class FundCalculator:

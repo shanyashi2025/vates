@@ -1,9 +1,9 @@
-from . import assets
-from . import econs
-from . import liabs
-from . import funds
+from vates.alm import assets
+from vates.alm import econs
+from vates.alm import liabs
+from vates.alm import funds
 
-from .enums import (
+from vates.alm.enums import (
     # enums
     AssetRepBasis,
     AssetClassification,
