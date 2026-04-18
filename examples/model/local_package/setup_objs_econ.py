@@ -6,8 +6,8 @@ from typing import List, Dict
 import numpy as np
 import pandas as pd
 
-from vates import KeyedArray
-from vates.utils import curve_interp, parse_str_to_int_list, df_to_karray
+from vates import KeyedArray, df_to_kr
+from vates.utils import curve_interp, parse_str_to_int_list
 from vates.alm.econs import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 
 
@@ -61,7 +61,7 @@ def update_esg_this_month(p: pd.Period, esg_step: int) -> tuple[bool, str | None
 def build_esg_karr(esg_df: pd.DataFrame, esg_helper_dict: Dict[str, 'EsgInfo']) -> KeyedArray | None:
     df = esg_df[esg_df["CLASS"].isin([v.class_ for k, v in esg_helper_dict.items()])].copy()
     df.set_index(['ECONOMY', 'CLASS', 'MEASURE', 'TERM'], inplace=True)
-    karr = df_to_karray(df=df, unpack_multi_index=True, col_index_name='date_col')
+    karr = df_to_kr(df=df, unpack_multi_index=True, col_index_name='date_col')
     _set_esg_helper_intpos_index(esg_helper_dict, karr)
     return karr
 

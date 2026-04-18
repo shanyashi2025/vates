@@ -1,4 +1,4 @@
-def cli_run(model_cls, stoch_cls = None):
+def run_model(model_cls, stoch_cls = None):
     import argparse
     import json
     parser = argparse.ArgumentParser()
@@ -15,7 +15,7 @@ def cli_run(model_cls, stoch_cls = None):
 
     model_instance.run()
 
-def cli_main(main_func):
+def call_func(func):
     import argparse
     import json
     parser = argparse.ArgumentParser()
@@ -25,4 +25,4 @@ def cli_main(main_func):
     with open(args.args_json_file, 'r', encoding='utf-8') as file:
         model_args = json.load(file)
 
-    main_func(**model_args)
+    func(**model_args)

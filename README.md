@@ -1,91 +1,215 @@
-# Vates Project
 
-Open-source Python framework and sample implementations for actuarial modeling.
+`vates` is an open-source Python package for actuarial models.
 
-### How this repo is organized
+### Installation
 
-1. **`vates/`** — The **standard** library / installable package: reusable framework code (`pip install -e .`).
-2. **`examples/model/`** — **Example / tutorial for model developers** (company builders): reference models (`fund_model.py`, `port_monte_carlo.py`) and local package(s) (`local_package/`).
-3. **Other folders under `examples/`** (`scripts/`, `cli/`, `input/`, …) — **Example / tutorial for most colleagues**: how to run models for analysis and reporting (commands, sample data), without editing framework or model code.
-4. The **`gui/`** app is another way for analysts to run tasks.
+   ```powershell
+   pip install vates
+   ```
 
-## Install the framework (`vates`)
+### Synopsis
 
-Work from the **repository root**.
+#### 1. `ProjModelEngine`
 
-### 1. Create a virtual environment (recommended)
+The `ProjModelEngine` class is the projection model engine.
 
-**PowerShell** (Windows):
+- create a simple model space:
 
-```powershell
-cd path\to\your\project
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+```python
+import vates as vt
+simple_model_space = vt.ProjModelEngine(model_name = 'your_model_name', start_year = 2025, start_month = 12)
 ```
 
-If activation is blocked by execution policy, run once in that window:
+- create your model class: inherit from `ProjModelEngine` and implement three concrete methods - `time_zero_calculations()`, `in_time_calculations()`, and `post_time_calculations()` 
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+- call `.run()` to perform the projection
+
+```python
+import vates as vt
+
+class YourModel(vt.ProjModelEngine):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+    def time_zero_calculations(self):
+        print(f"model name: {self.MODEL_NAME} | scenario: {self.SCENARIO} | simulation: {self.SIMULATION} | start date: {self.START_DATE} | end date: {self.END_DATE}")
+    
+    def in_time_calculations(self):
+        print(f"time: {self.time} | period: {self.period}")
+    
+    def post_time_calculations(self):
+        pass
+
+your_model_instance = YourModel(model_name='your_model_name', start_year=2025, start_month=12, end_year=2026)
+
+your_model_instance.run()
 ```
 
-Then run `Activate.ps1` again.
+#### 2. `TDepVariable` and `ConstVariable`
 
-**Command Prompt** (`cmd.exe`):
+You can set up instances of `TDepVariable` and/or `ConstVariable`, the projected results will be automatically output to the `your_model_name.proj.csv` file.
 
-```bat
-cd path\to\your\project
-python -m venv .venv
-.venv\Scripts\activate.bat
+```python
+import vates as vt
+
+class YourModel(vt.ProjModelEngine):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.const_var1 = vt.ConstVariable(self, 'const_var1_name', 'owner1_name', 'group1_name')
+        self.tdep_var1 = vt.TDepVariable(self, 'tdep_var1_name', 'owner1_name', 'group2_name')
+        self.tdep_var2 = vt.TDepVariable(self, 'tdep_var2_name', 'owner2_name', 'group1_name')
+        
+    def time_zero_calculations(self):
+        self.const_var1[0] = self.START_YEAR * 100 + self.START_MONTH
+        
+    def in_time_calculations(self):
+        t, p = self.time, self.period
+        self.tdep_var1[t] = p.year * 100 + p.month
+        self.tdep_var2[t] = (t / 2) ** 2
+        
+    def post_time_calculations(self):
+        pass
+
+your_model_instance = YourModel(model_name='your_model_name', start_year=2025, start_month=12, end_year=2026)
+
+your_model_instance.run()
 ```
 
-You should see `(.venv)` in the prompt when the environment is active.
+#### 3. `StochExecutor`
 
-### 2. Install `vates` in editable mode
+The `StochExecutor` class is the executor for stochastic model, multiprocessing is supported.
 
-```powershell
-pip install -e .
+- create your stoch executor class: inherit from `StochExecutor` and implement two concrete methods - `pre_stoch_calculations()`, and `post_stoch_calculations()`
+
+```python
+import vates as vt
+
+class YourStochExecutor(vt.StochExecutor):
+    def pre_stoch_calculations(self):
+        print(f"model name: {self.MODEL_NAME} | scenario: {self.SCENARIO} | simulations: {self.SIMULATIONS}")
+
+    def post_stoch_calculations(self):
+        print(f'post stochastic calculations ...')
+
+class YourModel(vt.ProjModelEngine):
+    def time_zero_calculations(self):
+        print(f"model name: {self.MODEL_NAME} | scenario: {self.SCENARIO} | simulation: {self.SIMULATION} | start date: {self.START_DATE} | end date: {self.END_DATE}")
+    def in_time_calculations(self): pass
+    def post_time_calculations(self): pass
+
+if __name__ == '__main__': # must create this '__main__' block for multiprocessing
+    your_stoch_model_instance = YourStochExecutor(
+        model_cls=YourModel,
+        model_name='your_stoch_model_name',
+        start_year=2025,
+        start_month=12,
+        end_year=2026,
+        simulations='1-3, 5',
+        max_workers=4,
+    )
+    
+    your_stoch_model_instance.run()
+
 ```
 
-This installs the distribution **`vates`** in editable mode; import the library as **`import vates`**.
+#### 4. `KeyedArray`
 
-## Project layout
+The `KeyedArray` class can be used as the replacement of `DataFrame` if `.loc` is extensively called to access (lookup) single elements.
 
-| Path                | Role                                             |
-|---------------------|--------------------------------------------------|
-| `vates/`            | Core framework and library (`pip install -e .`). |
-| `examples/model/`   | Reference models and company-style package(s).   |
-| `examples/scripts/` | Python scripts that call the reference models.   |
-| `examples/cli/`     | CLI commands and model args json files.          |
-| `examples/input/`   | Sample CSV input data.                           |
-| `gui/`              | End-user launcher.                               |
-| `docs/`             | Structure notes and discussions.                 |
+The `df_to_kr()` function is to create `KeyedArray` object from `DataFrame`.
 
+```python
+import pandas as pd
+import random
+random.seed(42)
+import vates as vt
 
-## Quick start
+# --- set up the DataFrame ---
+n_idx1, n_idx2, n_cols = 5, 3, 10
 
-### 1) Example Models
+index1, index2 = [], []
+for i in range(n_idx1):
+    for j in range(n_idx2):
+        index1.append(f"a{i}") # a1, a2, ..
+        index2.append(f"b{j}") # b1, b2, ..
 
-| No | Example Model         | Python Script                            | CLI + json                  |
-|----|-----------------------|------------------------------------------|-----------------------------|
-| 1  | 01_asset_proj         | `python .\examples\scripts\script_01.py` | `.\examples\cli\cli_01.bat` |
-| 2  | 02_fund_proj          | `python .\examples\scripts\script_02.py` | `.\examples\cli\cli_02.bat` |
-| 3  | 03_cross_proj         | `python .\examples\scripts\script_11.py` | `.\examples\cli\cli_11.bat` |
-| 5  | 21_smith_wilson       | `python .\examples\scripts\script_21.py` | `.\examples\cli\cli_21.bat` |
+multi_index = pd.MultiIndex.from_arrays([index1, index2], names=['index1', 'index2'])
+columns = [f"col{i}" for i in range(n_cols)] # col1, col2, ..
 
+data = [[random.uniform(1, 100) for i in range(n_cols)] for j in range(n_idx1 * n_idx2)]
 
-- Model output can be found in `.\examples\results\script_*` and/or `.\examples\results\cli_*`
-- CLI is configured via the corresponding json file `.\examples\cli\model_args_*.json`.
+df = pd.DataFrame(data, index=multi_index, columns=columns)
 
+# --- KeyedArray ---
+# 1. create KeyedArray object from DataFrame
+kr = vt.df_to_kr(df)
 
-### 2) GUI
+# 2. get attributes `ndim`, `size`, `shape`, `dtype` just like numpy ndarray
+print(f">>> {kr.ndim=}, {kr.size=}, {kr.shape=}, {kr.dtype=}")
 
-Start GUI:
-```powershell
-.\gui\start.bat
+# 3. use `[]` to access a single element by its integer-position index like numpy ndarray
+print(f">>> {kr[1, 2]=}, {kr[11, 8]=}")
+
+# 4. use `.loc[]` to access a single element by its lable-based index like pandas DataFrame
+print(f">>> {kr.loc[('a0', 'b1'), 'col2']=}, {kr.loc[('a3', 'b2'), 'col8']=}")
+# - specially for 2D array, where the first index/key is a tuple, parentheses can be omitted
+print(f">>> {kr.loc['a0', 'b1', 'col2']=}, {kr.loc['a3', 'b2', 'col8']=}")
+# - display `df.loc` for reference
+print(f">>> {df.loc[('a0', 'b1'), 'col2']=}, {df.loc[('a3', 'b2'), 'col8']=}")
+
+# 5. use `.get()` to access a single element by its lable-based index
+# - positional arguments (*args)
+print(f">>> {kr.get(('a0', 'b1'), 'col2')=}, {kr.get(('a3', 'b2'), 'col8')=}")
+# - if the key is not found, it returns None or a specified default value
+print(f">>> {kr.get(('a999', 'b1'), 'col2')=}, {kr.get(('a999', 'b1'), 'col2', default=-9999)=}")
+# - keyword arguments (**kwargs)"
+print(f">>> {kr.get(row_index=('a0', 'b1'), col_name='col2')=}")
+print(f">>> {kr.get(col_name='col2', row_index=('a0', 'b1'))=}")
 ```
 
-## For model developers
+#### 5. `AutogradCell`
 
-- Treat **`examples/model/`** as a **reference** layout: copy `local_package/` (rename to your company package) and the model files into your own repository.
-- Keep company-specific code **outside** `vates/`; depend on **`vates`** via `pip install` or your dependency mechanism.
+The `AutogradCell` class automates the backpropagation process to compute the gradient (partial derivative)
+
+- `.value` holds the scalar value
+- `.grad` holds the gradient (partial derivative)
+- `.backward()` traverses the graph in reverse, applys the chain rule to compute the gradients 
+
+With respect to actuarial practice, you can employ `AutogradCell` to implement sensitivity testing in a fast way.
+
+```python
+import vates as vt
+
+a = vt.AutogradCell(-4.0)
+b = vt.AutogradCell(2.0)
+c = a + b
+d = a * b + b**3
+c += c + 1
+c += 1 + c + (-a)
+d += d * 2 + (a + b).apply_floor(0)
+d += 3 * d - (a - b).apply_cap(0)
+e = c - d
+f = e**2
+g = f / 2.0
+g += 10.0 / f
+print(f'{g.value:.4f}') # prints 24.7041, the outcome of this forward pass
+g.backward()
+print(f'{a.grad:.4f}') # prints 138.8338, i.e. the numerical value of dg/da
+print(f'{b.grad:.4f}') # prints 645.5773, i.e. the numerical value of dg/db
+```
+
+#### 6. `alm`
+
+The `vates.alm` is the subpackage for asset-liability model.
+
+It includes (but are not limited to) the following classes:
+
+- assets: `Asset`, `Cash`, `Equity`, `BondFixed`, `EquityOption`, `BondFixedBuilder`, `EquityOptionBuilder`
+- econs: `YieldCurve`, `CreditBand`, `EquityIndex`
+- funds: `Fund`, `AssetAllocator`
+- liabs: `Liab`, `ExtProjLiab`
+
+
+### GitHub
+
+GitHub repository: https://github.com/shanyashi2025/vates

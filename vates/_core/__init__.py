@@ -1,16 +1,18 @@
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core.stoch_executor import StochExecutor
 from vates._core.proj_variables import ConstVariable, TDepVariable
-from vates._core.cli import cli_main, cli_run
-from vates._core.keyed_array import KeyedArray
-
+from vates._core.keyed_array import KeyedArray, df_to_kr
+from vates._core.autograd_cell import AutogradCell
+import vates._core.cli as cli
 
 __all__ = [
-    'cli_main',
-    'cli_run',
     'ProjModelEngine',
     'StochExecutor',
     'ConstVariable',
     'TDepVariable',
     'KeyedArray',
+    'df_to_kr',
+    'AutogradCell',
+    'cli',
+
 ]

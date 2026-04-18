@@ -1,5 +1,4 @@
-from vates import ProjModelEngine, alm
-
+import vates as vt
 from local_package import (
     load_file_df,
     build_esg_karr,
@@ -13,7 +12,7 @@ from local_package import (
     build_all_existing_assets,
 )
 
-class AssetModel(ProjModelEngine):
+class AssetModel(vt.ProjModelEngine):
     """
     Performs projection to run off existing assets.
     """
@@ -31,7 +30,7 @@ class AssetModel(ProjModelEngine):
         self.credit_band_karr = build_esg_karr(self.file_df_dict['esg'], self.credit_band_esg_helper)
         self.equity_indices, self.equity_index_esg_helper = build_equity_indices(self, self.file_df_dict['equity_indices'])
         self.equity_indidex_karr = build_esg_karr(self.file_df_dict['esg'], self.equity_index_esg_helper)
-        self.market_info = alm.econs.MarketInfo(self, 'general_market_info')
+        self.market_info = vt.alm.econs.MarketInfo(self, 'general_market_info')
         self.market_dict = {
             'currencies': [],
             'equity_indices': self.equity_indices,
@@ -65,5 +64,4 @@ class AssetModel(ProjModelEngine):
         update_market_info(self.market_info, self.file_df_dict['market_info'], self.yield_curves)
 
 if __name__ == "__main__":
-    from vates import cli_run
-    cli_run(AssetModel)
+    vt.cli.run_model(AssetModel)

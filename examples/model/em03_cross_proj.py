@@ -1,15 +1,6 @@
 import numpy as np
 
-from vates import ProjModelEngine, alm, KeyedArray
-from vates.utils import df_to_karray
-from vates.solvency.cn_cross2 import (
-    MinCapUnit,
-    MinCapInputer,
-    AccountType,
-    MinCapConsolidator,
-    interest_risk_discount_curve
-)
-
+import vates as vt
 from local_package import (
     load_file_df,
     build_esg_karr,
@@ -21,7 +12,7 @@ from local_package import (
 )
 
 
-class CROSSMinCapProj(ProjModelEngine):
+class CROSSMinCapProj(vt.ProjModelEngine):
     """
     C-ROSS minimum capital projection model.
     """
@@ -46,19 +37,19 @@ class CROSSMinCapProj(ProjModelEngine):
         self.asset_filename_list = ['assets_cash', 'assets_equity', 'assets_bond',]
 
         # initialize dictionary of mc unit and mc input for each fund
-        self.mc_unit_dict: dict[str, MinCapUnit] = {}
-        self.mc_input_dict: dict[str, MinCapInputer] = {}
+        self.mc_unit_dict: dict[str, vt.solvency.cn_cross2.MinCapUnit] = {}
+        self.mc_input_dict: dict[str, vt.solvency.cn_cross2.MinCapInputer] = {}
 
         for fund_id in (df := self.file_df_dict['funds']).index:
-            cross_account_type = AccountType(df.loc[fund_id, 'cross_account_type'].upper())
-            self.mc_unit_dict[fund_id] = MinCapUnit(self, fund_id, cross_account_type)
-            self.mc_input_dict[fund_id] = MinCapInputer()
+            cross_account_type = vt.solvency.cn_cross2.AccountType(df.loc[fund_id, 'cross_account_type'].upper())
+            self.mc_unit_dict[fund_id] = vt.solvency.cn_cross2.MinCapUnit(self, fund_id, cross_account_type)
+            self.mc_input_dict[fund_id] = vt.solvency.cn_cross2.MinCapInputer()
 
         # initialize the company result
-        self.company_mc = MinCapConsolidator(self, 'company', [v for _, v in self.mc_unit_dict.items()])
+        self.company_mc = vt.solvency.cn_cross2.MinCapConsolidator(self, 'company', [v for _, v in self.mc_unit_dict.items()])
 
         # epl
-        self.epl_karr = df_to_karray(df=self.file_df_dict['epl'], unpack_multi_index=True, col_index_name='date')
+        self.epl_karr = vt.df_to_kr(df=self.file_df_dict['epl'], unpack_multi_index=True, col_index_name='date')
         del self.file_df_dict['epl']
 
     def time_zero_calculations(self):
@@ -77,7 +68,7 @@ class CROSSMinCapProj(ProjModelEngine):
         # --- (2) process economic assumptions ---
         self._update_market_variables()
         gby_60d_ma = np.array([self.gby_60d_ma_curve.spot_rates[i * 12] for i in range(41)]) # strip year data
-        cross_intba, cross_intup, cross_intdn = interest_risk_discount_curve(gby_60d_ma)
+        cross_intba, cross_intup, cross_intdn = vt.solvency.cn_cross2.interest_risk_discount_curve(gby_60d_ma)
         cross_intba_spot = _interp_monthly_spot(cross_intba)
         cross_intup_spot = _interp_monthly_spot(cross_intup)
         cross_intdn_spot = _interp_monthly_spot(cross_intdn)
@@ -96,9 +87,9 @@ class CROSSMinCapProj(ProjModelEngine):
         for asset in assets_dict['all']:
             fund_id = asset.fund_id
             type_asset = type(asset)
-            if type_asset == alm.assets.Equity:
+            if type_asset == vt.alm.assets.Equity:
                 self.mc_input_dict[fund_id].mc_equity += asset.mv * mc_factor_equity
-            elif type_asset == alm.assets.BondFixed:
+            elif type_asset == vt.alm.assets.BondFixed:
                 self.mc_input_dict[fund_id].aa_int_base += asset.pricer.calculate_market_price(p, cross_intba_spot) * asset.units
                 self.mc_input_dict[fund_id].aa_int_up += asset.pricer.calculate_market_price(p, cross_intup_spot) * asset.units
                 self.mc_input_dict[fund_id].aa_int_dn += asset.pricer.calculate_market_price(p, cross_intdn_spot) * asset.units
@@ -141,7 +132,8 @@ def _interp_monthly_spot(spot_in: np.ndarray) -> np.ndarray:
     return spot_out
 
 
-def _get_cross_liab_mc_input_from_epl_df(mc_input: MinCapInputer, epl_karr:KeyedArray, liab_id: str, date_col: str):
+def _get_cross_liab_mc_input_from_epl_df(mc_input: vt.solvency.cn_cross2.MinCapInputer, epl_karr:vt.KeyedArray,
+                                         liab_id: str, date_col: str):
     mc_input.pv_base += epl_karr.loc[liab_id, 'pv_base', date_col]
     mc_input.pv_mortality += epl_karr.loc[liab_id, 'pv_mortality', date_col]
     mc_input.pv_catastrophe += epl_karr.loc[liab_id, 'pv_catastrophe', date_col]
@@ -161,5 +153,4 @@ def _get_cross_liab_mc_input_from_epl_df(mc_input: MinCapInputer, epl_karr:Keyed
 
 
 if __name__ == '__main__':
-    from vates import cli_run
-    cli_run(CROSSMinCapProj)
+    vt.cli.run_model(CROSSMinCapProj)

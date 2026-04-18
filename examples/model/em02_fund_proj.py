@@ -1,6 +1,4 @@
-from vates import ProjModelEngine, alm
-from vates.utils import df_to_karray
-
+import vates as vt
 from local_package import (
     load_file_df,
     build_esg_karr,
@@ -24,7 +22,7 @@ from local_package import (
     output_aging_assets,
 )
 
-class FundModel(ProjModelEngine):
+class FundModel(vt.ProjModelEngine):
     """
     Performs fund level projection.
     """
@@ -36,7 +34,7 @@ class FundModel(ProjModelEngine):
         file_read_config = self.load_json("_file_read_config")
         self.file_df_dict = load_file_df(self.read_csv, filename_dict, file_read_config)
         # process epl
-        self.epl_karr = df_to_karray(self.file_df_dict['epl'], col_index_name='date')
+        self.epl_karr = vt.df_to_kr(self.file_df_dict['epl'], col_index_name='date')
         # initialize economic variables
         self.yield_curves, self.yield_curve_esg_helper = build_yield_curves(self, self.file_df_dict['yield_curves'])
         self.yield_curve_karr = build_esg_karr(self.file_df_dict['esg'], self.yield_curve_esg_helper)
@@ -44,7 +42,7 @@ class FundModel(ProjModelEngine):
         self.credit_band_karr = build_esg_karr(self.file_df_dict['esg'], self.credit_band_esg_helper)
         self.equity_indices, self.equity_index_esg_helper = build_equity_indices(self, self.file_df_dict['equity_indices'])
         self.equity_indidex_karr = build_esg_karr(self.file_df_dict['esg'], self.equity_index_esg_helper)
-        self.market_info = alm.econs.MarketInfo(self, 'general_market_info')
+        self.market_info = vt.alm.econs.MarketInfo(self, 'general_market_info')
         self.market_dict = {
             'currencies': [],
             'equity_indices': self.equity_indices,
@@ -76,12 +74,12 @@ class FundModel(ProjModelEngine):
             fund_id = str(idx)
             fund_type = row["fund_type"]
             self.fund_rebalance_params[fund_id] = FundrebalanceParams(
-                size_type=alm.funds.FundSizeType[row["fund_size_type"].upper()],
-                size_basis=alm.AssetRepBasis[row["fund_size_basis"].upper()],
+                size_type=vt.alm.funds.FundSizeType[row["fund_size_type"].upper()],
+                size_basis=vt.alm.AssetRepBasis[row["fund_size_basis"].upper()],
                 rebalance_freq=row["fund_rebalance_freq"]  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
             )
             rebalance_policy = build_rebalance_policy(self.file_df_dict['rebalance_policy'].copy(), fund_id)
-            fund = alm.funds.Fund(self, fund_id, rebalance_policy, row["asset_classes_reported"].split(';'))
+            fund = vt.alm.funds.Fund(self, fund_id, rebalance_policy, row["asset_classes_reported"].split(';'))
             self.funds.append(fund)
             if fund_type.lower() not in ('sh', 'shf', 'shareholder'):
                 self.ph_funds.append(fund)
@@ -192,5 +190,4 @@ class FundModel(ProjModelEngine):
         update_market_info(self.market_info, self.file_df_dict['market_info'], self.yield_curves)
 
 if __name__ == "__main__":
-    from vates import cli_run
-    cli_run(FundModel)
+    vt.cli.run_model(FundModel)

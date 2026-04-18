@@ -6,7 +6,6 @@ from vates._core.utils import (
     ValidatedList,
     parse_str_to_int_list,
 )
-from vates._core.keyed_array import df_to_karray
 from vates.utils.data_classes import NumVarGroup
 from vates.utils.curve_interpolation import (
     curve_interp,
@@ -56,7 +55,6 @@ __all__ = [
     'ValidatedPeriod',
     'ValidatedList',
     'parse_str_to_int_list',
-    'df_to_karray',
     # dataclasses
     'NumVarGroup',
     # curve interpolation

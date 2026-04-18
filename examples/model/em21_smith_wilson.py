@@ -1,7 +1,6 @@
 import numpy as np
 import os
-from vates import ProjModelEngine
-from vates.utils import smith_wilson_extrap, convert_spot_to_fwrd
+import vates as vt
 
 
 def _output_spot_curve(sw_curve, output_file_path):
@@ -33,9 +32,9 @@ def _get_output_file_path(wsdir, output_folder, output_file_name):
 
 def main(workspace_directory: str, input_directories: list[str]):
     # Generate the Smith-Wilson extrapolated curve.
-    model_space = ProjModelEngine(
+    model_space = vt.ProjModelEngine(
         model_name = 'smith_wilson',
-        start_year = 2000,  # not uese
+        start_year = 2000,  # not used
         start_month = 12,   # not used
         workspace_directory = workspace_directory,
         input_directories = input_directories,
@@ -56,7 +55,7 @@ def main(workspace_directory: str, input_directories: list[str]):
         convergence_point = sw_param_df.loc[row, 'convergence_point']
         min_alpha = sw_param_df.loc[row, 'min_alpha']
 
-        sw_curves[row] = smith_wilson_extrap(
+        sw_curves[row] = vt.utils.smith_wilson_extrap(
             rates=np.array(market_spot[:llp]),
             maturities=np.arange(1, llp + 1),
             ufr=ufr,
@@ -66,7 +65,7 @@ def main(workspace_directory: str, input_directories: list[str]):
 
         market_curve = {
             'spot': market_spot,
-            'forward': convert_spot_to_fwrd(np.insert(arr=market_spot, obj=0, values=0), "A")[1:]
+            'forward': vt.utils.convert_spot_to_fwrd(np.insert(arr=market_spot, obj=0, values=0), "A")[1:]
         }
         market_curves.append(market_curve)
 
@@ -89,5 +88,4 @@ def main(workspace_directory: str, input_directories: list[str]):
     _output_forward_curve(sw_curves, output_file_path)
 
 if __name__ == "__main__":
-    from vates import cli_main
-    cli_main(main)
+    vt.cli.call_func(main)

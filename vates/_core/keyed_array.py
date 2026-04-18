@@ -211,7 +211,6 @@ class _LocIndexer:
         for axis, key in enumerate(keys):
             pos, valid, kemsg = self.validate_key(axis, key)
             if not valid:
-                warnings.warn(kemsg)
                 return if_not_found
             pos_list.append(pos)
 
@@ -285,8 +284,8 @@ class _LocIndexer:
         self._nparray[pos_tuple] = value
 
 
-def df_to_karray(df: pd.DataFrame, unpack_multi_index: bool = False,
-                 multi_index_name: str = 'row_index', col_index_name: str = 'col_name') -> KeyedArray | None:
+def df_to_kr(df: pd.DataFrame, unpack_multi_index: bool = False,
+             multi_index_name: str = 'row_index', col_index_name: str = 'col_name') -> KeyedArray | None:
     """Convert pandas DataFrame object to KeyedArray object.
 
     Args:

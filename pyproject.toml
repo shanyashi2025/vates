@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vates"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python actuarial model"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,6 +12,10 @@ license = { text = "MIT" }
 authors = [
     {name = "Shanya Shi", email = "shanyashi2025@gmail.com"}
 ]
+
+[project.urls]
+Homepage = "https://github.com/shanyashi2025/vates"
+
 keywords = ["actuarial model", "asset-liability model", "alm"]
 dependencies = [
     "numpy>=2.2.6",
