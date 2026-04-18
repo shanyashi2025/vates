@@ -12,7 +12,6 @@ license = { text = "MIT" }
 authors = [
     {name = "Shanya Shi", email = "shanyashi2025@gmail.com"}
 ]
-
 keywords = ["actuarial model", "asset-liability model", "alm"]
 dependencies = [
     "numpy>=2.2.6",
