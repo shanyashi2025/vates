@@ -13,15 +13,15 @@ authors = [
     {name = "Shanya Shi", email = "shanyashi2025@gmail.com"}
 ]
 
-[project.urls]
-Homepage = "https://github.com/shanyashi2025/vates"
-
 keywords = ["actuarial model", "asset-liability model", "alm"]
 dependencies = [
     "numpy>=2.2.6",
     "pandas>=2.3.0, <3.0.0",
     "scipy",
 ]
+
+[project.urls]
+Homepage = "https://github.com/shanyashi2025/vates"
 
 [tool.setuptools.packages.find]
 where = ["."]
