@@ -10,7 +10,6 @@ import operator
 
 from vates._core.proj_variables import ProjVariable
 from vates._core.utils import ValidatedBool, ValidatedNumber, ValidatedString, ValidatedPeriod, ValidatedList
-from vates._core._html_generator import generate_runlog_html
 
 class ProjModelEngine:
     """Actuarial projection model engine.
@@ -22,11 +21,11 @@ class ProjModelEngine:
 
     I/O:
         - Validates settings on initialization.
-        - Writes CSV outputs with standardized headers and an HTML run log for traceability.
+        - Writes CSV outputs with standardized headers and a markdown (.md) runlog for traceability.
 
     Attributes:
 
-        _exe_start_time (str): Model execution start time.
+        _exec_start_time (str): Model execution start time.
         _model_name (str): Model name.
         _model_desc (str): Model description.
         _start_year (int): Projection start year.
@@ -40,7 +39,7 @@ class ProjModelEngine:
         _enable_proj_result (bool): True/False means enable/dienable writing projection result.
         _stoch_result_mode (Literal[None, 'w', 'a']): Stochastic result file write mode.
         _stoch_result_file_id (None | str): Stochastic result file id.
-        _enable_run_log (bool): True/False means enable/dienable writing run log.
+        _enable_runlog (bool): True/False means enable/dienable writing run log.
         _wsdir (str): Current working directory `os.getcwd().
         _cached_filepath (dict): Dictionary of cached file path.
     """
@@ -58,7 +57,7 @@ class ProjModelEngine:
     _enable_proj_result = ValidatedBool(max_sets=1)
     _stoch_result_mode = ValidatedString(str_literal=['w', 'a'], allow_none=True, max_sets=1)
     _stoch_result_file_id = ValidatedString(allow_none=True, max_sets=1)
-    _enable_run_log = ValidatedBool(max_sets=1)
+    _enable_runlog = ValidatedBool(max_sets=1)
     _time = ValidatedNumber(value_type=int, value_min=0, value_max=6000, allow_none=True)
     _period = ValidatedPeriod(allow_none=True)
 
@@ -78,7 +77,7 @@ class ProjModelEngine:
             enable_proj_result: bool = True,
             stoch_result_mode: Literal['w', 'a', None] = None,
             stoch_result_file_id: str | None = None,
-            enable_run_log: bool = True,
+            enable_runlog: bool = True,
             *args,
             **kwargs
     ) -> None:
@@ -99,9 +98,9 @@ class ProjModelEngine:
             enable_proj_result (bool, optional): Enable writing projection result. Defaults to True.
             stoch_result_mode (Literal['w', 'a'], optional): Stochastic result writer mode. Defaults to None.
             stoch_result_file_id (str, optional): Stochastic result id. Defaults to None.
-            enable_run_log (bool, optional): Enable writing run log. Defaults to True.
+            enable_runlog (bool, optional): Enable writing run log. Defaults to True.
         """
-        self._exe_start_time: str = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        self._exec_start_time: datetime = datetime.now()
         self._model_name: str = model_name
         self._start_year: int = start_year
         self._start_month: int = start_month
@@ -116,7 +115,7 @@ class ProjModelEngine:
         self._enable_proj_result: bool = enable_proj_result
         self._stoch_result_mode: Literal['w', 'a', None] = stoch_result_mode
         self._stoch_result_file_id: str | None = stoch_result_file_id
-        self._enable_run_log: bool = enable_run_log
+        self._enable_runlog: bool = enable_runlog
         if self._results_directory:
             os.makedirs(os.path.join(self._wsdir, self._results_directory), exist_ok=True)
             if is_delete_existing_results:
@@ -127,6 +126,7 @@ class ProjModelEngine:
         self._proj_variables: list[ProjVariable] = []
         self._time: int | None = None
         self._period: pd.Period | None = None
+        self._err_msg: list = []
 
     def run(self):
         """Execute a full projection run.
@@ -135,7 +135,9 @@ class ProjModelEngine:
             1) Call `time_zero_calculations()` at start date.
             2) For each subsequent month: call `in_time_calculations()`.
             3) After the last month: call `post_time_calculations()`.
-            4) Call `_write_projection_results()` to CSV and generate the run log HTML.
+            4) Call `_write_projection_results()` to output `.proj.csv`.
+            5) Call `_write_stochastic_result()` to output `.stoch.csv`.
+            6) Call `_write_runlog()` to output `runlog.md`.
         """
         self._time, self._period = 0, self.START_DATE
         self.time_zero_calculations()
@@ -297,34 +299,73 @@ class ProjModelEngine:
             writer.writerow(fixcol + [f'{variable.name}[{dimstr}]'] + result_lst)
 
     def _write_runlog(self) -> None:
-        if not self._enable_run_log: return
-        result_files = self._scan_results_directory()
-        runlog: dict = {
-            "model_name": self._model_name,
-            "model_desc": self._model_desc,
-            "exe_start_time": self._exe_start_time,
-            "exe_end_time": f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "setting": {
-                "start_year": self._start_year,
-                "start_month": self._start_month,
-                "end_year": self._end_year,
-                "scenario": self._scenario,
-                "simulation": self._simulation,
-                "workspace_directory": self._wsdir,
-                "input_directories": self._input_directories,
-                "results_directory": self._results_directory
-            },
-            "input_files": self.input_files,
-            "proj_result_files": result_files['proj'],
-            "stoch_result_files": result_files['stoch'] | result_files['stoch_stat'],
-            "other_result_files": result_files['other'],
-        }
+        if not self._enable_runlog: return
+        exec_end_time = datetime.now()
 
-        html_content = generate_runlog_html(runlog)
-        runlog_file = self._concat_output_file_path(".runlog.html")
+        def display_seconds(seconds: float) -> str:
+            if seconds < 60: return f"{round(seconds, 1)} seconds"
+            elif seconds < 3600: return f"{round(seconds / 60, 1)} minutes)"
+            else: return f"{round(seconds / 3600, 1)} hours"
 
-        with open(runlog_file, 'w', encoding='utf-8') as f:
-            f.write(html_content)
+        def get_file_info(file_path: str) -> tuple:
+            """Get file modification time and size"""
+            stat_info = os.stat(file_path)
+            file_mtime = datetime.fromtimestamp(stat_info.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            size_bytes = stat_info.st_size
+            if size_bytes < 1024 * 1024: size_str = f"{size_bytes / 1024:.1f} KB"
+            elif size_bytes < 1024 * 1024 * 1024: size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+            else: size_str = f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+            return file_mtime, size_str
+
+        runlog_content = f"""## Run Log
+
+---
+### Basic Information
+- Model Name: **{self._model_name}**
+- Model Description: {self._model_desc}
+- Execution:
+    - Start: {self._exec_start_time.strftime('%Y-%m-%d %H:%M:%S')}
+    - End: {exec_end_time.strftime('%Y-%m-%d %H:%M:%S')}
+    - Duration: {display_seconds((exec_end_time - self._exec_start_time).total_seconds())}
+---
+"""
+
+        runlog_content += "### Run Setting\n"
+        for key, value in self._run_setting.items():
+            if isinstance(value, list):
+                value_str = ', '.join(str(v) for v in value)
+            else:
+                value_str = str(value)
+            runlog_content += f"- `{key}`: {value_str}\n"
+        runlog_content += "---\n"
+
+        runlog_content += """### Input
+| # | File Name | Path | Modified Time | Size |
+|---|-----------|------|---------------|------|
+"""
+        for i, (key, path) in enumerate(self._input_files.items(), 1):
+            mod_time, file_size = get_file_info(path)
+            runlog_content += f"| {i} | {key} | `{path}` | {mod_time} | {file_size} |\n"
+        runlog_content += "---\n"
+
+        runlog_content += """### Output
+| # | File Name | Type | Path | Modified Time | Size |
+|---|-----------|------|------|---------------|------|
+"""
+        for i, (key, (path, output_type)) in enumerate(self._scan_results_directory().items(), 1):
+            if output_type == 'runlog':
+                continue
+            mod_time, file_size = get_file_info(path)
+            runlog_content += f"| {i} | {key} | {output_type} | `{path}` | {mod_time} | {file_size} |\n"
+        runlog_content += "---\n"
+
+        runlog_content += "### Error Message\n"
+        for i, msg in enumerate(self._err_msg, 1):
+            runlog_content += f"{i}. {msg}\n"
+        runlog_content += "\n---\n"
+
+        with open(self._concat_output_file_path(".runlog.md"), 'w', encoding='utf-8') as f:
+            f.write(runlog_content)
 
     def load_json(self, filename: str, encoding='utf-8', allow_not_found: bool = False) -> dict | None:
         import json
@@ -388,28 +429,37 @@ class ProjModelEngine:
                 return filepath
         return None  # return None if file not exists
 
-    def _scan_results_directory(self) -> dict[str, dict]:
+    def _scan_results_directory(self) -> dict[str, tuple[str, str]]:
         files = glob.glob(os.path.join(self._wsdir, self._results_directory, f'{self._model_name}*'))
-        proj, stoch, stoch_stat, log, other = {}, {}, {}, {}, {}
+        output_files = {}
         for file in files:
             filename = os.path.basename(file)
-            if filename.endswith('.proj.csv'):
-                proj[filename] = file
-            elif filename.endswith('.stoch.csv'):
-                stoch[filename] = file
-            elif filename.endswith('.stoch.statistic.csv'):
-                stoch_stat[filename] = file
-            elif filename.endswith('.runlog.html'):
-                log[filename] = file
-            else:
-                other[filename] = file
-        return {'proj': proj, 'stoch': stoch, 'stoch_stat': stoch_stat, 'log': log, 'other': other}
+            if filename.endswith('.proj.csv'): output_type = 'projection'
+            elif filename.endswith('.stoch.csv'): output_type = 'stochastic'
+            elif filename.endswith('.stoch.statistic.csv'): output_type = 'stoch_stat'
+            elif filename.endswith('.runlog.md'): output_type = 'runlog'
+            else: output_type = 'other'
+            output_files[filename] = (file, output_type)
+        return output_files
 
     def _concat_output_file_path(self, name: str) -> str:
         return os.path.join(self._wsdir, self._results_directory, f'{self._model_name}{name}')
 
     @property
-    def input_files(self) -> dict[str, str]:
+    def _run_setting(self) -> dict[str, ...]:
+        return {
+            "start_year": self._start_year,
+            "start_month": self._start_month,
+            "end_year": self._end_year,
+            "scenario": self._scenario,
+            "simulation": self._simulation,
+            "workspace_directory": self._wsdir,
+            "input_directories": self._input_directories,
+            "results_directory": self._results_directory
+        }
+
+    @property
+    def _input_files(self) -> dict[str, str]:
         input_files = {}
         for (filename, extension), filepath in self._cached_filepath.items():
             if filepath is None or filename in ('__proj_variables__', '__stoch_variables__', '__stoch_setting__'):

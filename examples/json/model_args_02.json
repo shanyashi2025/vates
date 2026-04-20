@@ -6,5 +6,5 @@
     "scenario": "demo",
     "workspace_directory": "examples",
     "input_directories": ["input/02_fund_proj"],
-    "results_directory": "results/cli_02_fund_proj"
+    "results_directory": "results/json_02_fund_proj"
 }

@@ -13,7 +13,7 @@ from vates import utils
 from vates import alm
 from vates import solvency
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 __all__ = [
     # core

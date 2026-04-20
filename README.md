@@ -1,11 +1,12 @@
+### About
 
 `vates` is an open-source Python package for actuarial models.
 
 ### Installation
 
-   ```powershell
-   pip install vates
-   ```
+```powershell
+pip install vates
+```
 
 ### Synopsis
 
@@ -13,16 +14,32 @@
 
 The `ProjModelEngine` class is the projection model engine.
 
-- create a simple model space:
+- set up a model instance:
 
 ```python
 import vates as vt
-simple_model_space = vt.ProjModelEngine(model_name = 'your_model_name', start_year = 2025, start_month = 12)
+model_simple_params = vt.ProjModelEngine(model_name='your_model_name', start_year=2025, start_month=12)
+
+model_full_params = vt.ProjModelEngine(
+    model_name='your_model_name', 
+    start_year=2025, 
+    start_month=12,
+    end_year=2026,
+    model_desc='description of your model',
+    scenario='scenario_to_run',
+    simulation=1,
+    workspace_directory='path/to/workspace',
+    input_directories=['path/to/input/folder1', 'path/to/input/folder2'],
+    results_directory='path/to/results/folder'    
+)
 ```
 
-- create your model class: inherit from `ProjModelEngine` and implement three concrete methods - `time_zero_calculations()`, `in_time_calculations()`, and `post_time_calculations()` 
+- create your model class: inherit from `ProjModelEngine` and implement following concrete methods
+    - `time_zero_calculations()`, 
+    - `in_time_calculations()`, and 
+    - `post_time_calculations()` 
 
-- call `.run()` to perform the projection
+- set up a model instance and call `.run()` to perform the projection
 
 ```python
 import vates as vt
@@ -38,7 +55,7 @@ class YourModel(vt.ProjModelEngine):
         print(f"time: {self.time} | period: {self.period}")
     
     def post_time_calculations(self):
-        pass
+        print(f"end of projection")
 
 your_model_instance = YourModel(model_name='your_model_name', start_year=2025, start_month=12, end_year=2026)
 
@@ -79,7 +96,9 @@ your_model_instance.run()
 
 The `StochExecutor` class is the executor for stochastic model, multiprocessing is supported.
 
-- create your stoch executor class: inherit from `StochExecutor` and implement two concrete methods - `pre_stoch_calculations()`, and `post_stoch_calculations()`
+- create your stoch executor class: inherit from `StochExecutor` and implement following concrete methods
+  - `pre_stoch_calculations()`, and 
+  - `post_stoch_calculations()`
 
 ```python
 import vates as vt
@@ -97,7 +116,7 @@ class YourModel(vt.ProjModelEngine):
     def in_time_calculations(self): pass
     def post_time_calculations(self): pass
 
-if __name__ == '__main__': # must create this '__main__' block for multiprocessing
+if __name__ == '__main__': # must create the '__main__' block for multiprocessing
     your_stoch_model_instance = YourStochExecutor(
         model_cls=YourModel,
         model_name='your_stoch_model_name',
@@ -109,12 +128,11 @@ if __name__ == '__main__': # must create this '__main__' block for multiprocessi
     )
     
     your_stoch_model_instance.run()
-
 ```
 
 #### 4. `KeyedArray`
 
-The `KeyedArray` class can be used as the replacement of `DataFrame` if `.loc` is extensively called to access (lookup) single elements.
+The `KeyedArray` class can be used as the replacement of `DataFrame` if `.loc` is massively called to access (lookup) single elements.
 
 The `df_to_kr()` function is to create `KeyedArray` object from `DataFrame`.
 
@@ -198,11 +216,11 @@ print(f'{a.grad:.4f}') # prints 138.8338, i.e. the numerical value of dg/da
 print(f'{b.grad:.4f}') # prints 645.5773, i.e. the numerical value of dg/db
 ```
 
-#### 6. `alm`
+#### 6. Asset-Liability Model (ALM)
 
 The `vates.alm` is the subpackage for asset-liability model.
 
-It includes (but are not limited to) the following classes:
+It includes but are not limited to the following classes:
 
 - assets: `Asset`, `Cash`, `Equity`, `BondFixed`, `EquityOption`, `BondFixedBuilder`, `EquityOptionBuilder`
 - econs: `YieldCurve`, `CreditBand`, `EquityIndex`
@@ -210,6 +228,10 @@ It includes (but are not limited to) the following classes:
 - liabs: `Liab`, `ExtProjLiab`
 
 
-### GitHub
+### See
 
 GitHub repository: https://github.com/shanyashi2025/vates
+
+Documentation and tutorials: https://github.com/shanyashi2025/vates/tree/main/docs
+
+Production-grade models: https://github.com/shanyashi2025/vates/tree/main/examples

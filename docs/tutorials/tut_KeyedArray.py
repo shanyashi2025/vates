@@ -103,7 +103,7 @@ def main():
         lookup_keys = rand_lookup_keys(n_lookups, n_idx1, n_idx2, n_cols)
         t1, t2 = df_loc(df, lookup_keys), kr_loc(kr, lookup_keys)
         print(f"{n_lookups:>10,} | {t1:>6.2f} | {t2:>6.2f} | {t2 / t1:>8.2%}")
-    print(f"! `KeyedArray` significantly outperforms `DataFrame` in extensively using `.loc` to access (lookup) single elements")
+    print(f"! `KeyedArray` significantly outperforms `DataFrame` in massively using `.loc` to access (lookup) single elements")
     print(f"- testing data size: size={kr.size} | shape={kr.shape} | ndim={kr.ndim}")
     print(f"- pandas version: {pd.__version__} (df.loc is much slower in version 3.0.x compared with version 2.3.x)")
 

@@ -7,7 +7,6 @@ import pandas as pd
 from functools import cached_property
 
 from vates._core.proj_model_engine import ProjModelEngine
-from vates._core._html_generator import generate_runlog_html
 from vates._core.utils import ValidatedNumber, ValidatedString, ValidatedList, parse_str_to_int_list
 
 
@@ -43,7 +42,7 @@ class StochExecutor:
             *args,
             **kwargs
     ) -> None:
-        self._exe_start_time: str = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        self._exec_start_time: datetime = datetime.now()
         self._model_cls = model_cls
         self._model_name: str = model_name
         self._model_desc: str = model_desc if model_desc else f'**Stochastic** {self._model_cls.__doc__}'
@@ -64,8 +63,9 @@ class StochExecutor:
         self._max_workers: int = self._parse_max_workers(max_workers)
         self._cached_filepath: dict = {}
         self._input_files: dict = {}
-        self._sim_exe_results = {'success': [], 'fail': []}
         self._init_kwargs: dict = kwargs
+        self._enable_runlog: bool = True
+        self._err_msg: list = []
 
     @staticmethod
     def _parse_max_workers(requested_workers: int | None) -> int:
@@ -112,6 +112,7 @@ class StochExecutor:
     _get_filepath = ProjModelEngine._get_filepath
     _scan_filepath = ProjModelEngine._scan_filepath
     _scan_results_directory = ProjModelEngine._scan_results_directory
+    _write_runlog = ProjModelEngine._write_runlog
 
     @staticmethod
     def _create_batches(simulations: list[int], n_batches: int) -> list[tuple[int, ...]]:
@@ -122,7 +123,7 @@ class StochExecutor:
         return [batch for batch in batched_simulations]
 
     def _run_simulation_batch(self, simulation_batch: tuple[int, ...], batch_id: str):
-        result: dict = {'input_files': {}, 'success': [], 'fail': []}
+        result: dict = {'input_files': {}, 'err_msg': []}
 
         for simulation in simulation_batch:
             try:
@@ -141,15 +142,22 @@ class StochExecutor:
                     enable_proj_result=simulation == self._simulations[0],
                     stoch_result_mode='w' if simulation == simulation_batch[0] else 'a',
                     stoch_result_file_id=batch_id,
-                    enable_run_log=False,
+                    enable_runlog=False,
                     **self._init_kwargs,
                 )
-                res = model_instance.run()
-                result['success'].append((simulation, res))
-                result['input_files'] |= model_instance.input_files
             except Exception as e:
-                result['fail'].append((simulation, str(e)))
-                warnings.warn(f'! simulation {simulation} failed: {str(e)}')
+                sim_err = f'simulation #{simulation} init error: {str(e)}'
+                result['err_msg'].append(sim_err)
+                warnings.warn(f'! {sim_err}')
+                continue # `model_instance` is not successfully initialized, skip `.run()`
+
+            try:
+                res = model_instance.run()
+                result['input_files'] |= model_instance._input_files
+            except Exception as e:
+                sim_err = f'simulation #{simulation} run error: {str(e)}'
+                result['err_msg'].append(sim_err)
+                warnings.warn(f'! {sim_err}')
 
             del model_instance
 
@@ -167,15 +175,8 @@ class StochExecutor:
 
             for future in as_completed(futures):
                 res = future.result()
-                self._sim_exe_results['success'].extend(res['success'])
-                self._sim_exe_results['fail'].extend(res['fail'])
                 self._input_files |= res['input_files']
-
-    # def _run_simulations_singleprocess(self):
-    #     res = self._run_simulation_batch(self._simulations, '1')
-    #     self._sim_exe_results['success'].extend(res['success'])
-    #     self._sim_exe_results['fail'].extend(res['fail'])
-    #     self._input_files |= res['input_files']
+                self._err_msg.extend(res['err_msg'])
 
     def _write_stochastic_statistic(self):
         stoch_setting = self.load_json('__stoch_setting__', allow_not_found=True)
@@ -205,36 +206,19 @@ class StochExecutor:
         output_file = self._concat_output_file_path('.stoch.statistic.csv')
         statistic.to_csv(output_file, index=False)
 
-    def _write_runlog(self):
-        result_files = self._scan_results_directory()
-        runlog: dict = {
-            "model_name": self._model_name,
-            "model_desc": self._model_desc,
-            "exe_start_time": self._exe_start_time,
-            "exe_end_time": f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "failed_simulations": self._sim_exe_results['fail'],
-            "setting": {
-                "start_year": self._start_year,
-                "start_month": self._start_month,
-                "end_year": self._end_year,
-                "scenario": self._scenario,
-                "simulations": self._sims_str,
-                "workspace_directory": self._wsdir,
-                "input_directories": self._input_directories,
-                "results_directory": self._results_directory,
-                "max_workers": self._max_workers,
-            },
-            "input_files": self._input_files,
-            "proj_result_files": result_files['proj'],
-            "stoch_result_files": result_files['stoch'] | result_files['stoch_stat'],
-            "other_result_files": result_files['other'],
+    @property
+    def _run_setting(self) -> dict[str, ...]:
+        return {
+            "start_year": self._start_year,
+            "start_month": self._start_month,
+            "end_year": self._end_year,
+            "scenario": self._scenario,
+            "simulations": self._sims_str,
+            "workspace_directory": self._wsdir,
+            "input_directories": self._input_directories,
+            "results_directory": self._results_directory,
+            "max_workers": self._max_workers,
         }
-
-        html_content = generate_runlog_html(runlog)
-        runlog_file = self._concat_output_file_path(".runlog.html")
-
-        with open(runlog_file, 'w', encoding='utf-8') as f:
-            f.write(html_content)
 
     def list_stoch_file_paths(self) -> list:
         filepath_lst = glob.glob(os.path.join(self._wsdir, self._results_directory, f'{self._model_name}*.stoch.csv'))
