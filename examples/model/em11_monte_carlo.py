@@ -88,7 +88,7 @@ class PortMonteCarloStoch(vt.StochExecutor):
         negatvie_rfawgt_allowed = False
         # parameters
         df = self.read_csv('parameters', index_col="parameter")
-        risk_free_rate = df.loc['risk_free_rate', 'value']
+        risk_free_rate = df.at['risk_free_rate', 'value']
         # assets
         df = self.read_csv('assets', index_col="asset_name")
         asset_name_list = df.index.tolist()
@@ -96,10 +96,10 @@ class PortMonteCarloStoch(vt.StochExecutor):
         mu, sigma, corr_matrix = np.zeros(n_assets), np.zeros(n_assets), np.zeros(shape=(n_assets, n_assets))
         for i in range(n_assets):
             asset_name = asset_name_list[i]
-            mu[i] = math.log(1 + df.loc[asset_name, 'expected_return'])  # convert to continually compounded
-            sigma[i] = df.loc[asset_name, 'standard_deviation']
+            mu[i] = math.log(1 + df.at[asset_name, 'expected_return'])  # convert to continually compounded
+            sigma[i] = df.at[asset_name, 'standard_deviation']
             for j in range(n_assets):
-                corr_matrix[i, j] = df.loc[asset_name, asset_name_list[j]]
+                corr_matrix[i, j] = df.at[asset_name, asset_name_list[j]]
         valid, msg = vt.utils.validate_corr_matrix(corr_matrix)
         if not valid: raise ValueError(msg)
 
@@ -107,9 +107,9 @@ class PortMonteCarloStoch(vt.StochExecutor):
         df = self.read_csv('portfolios', index_col="portfolio_name")
         portfolios: dict[str, dict] = {}
         for port in df.index:
-            init_balance = df.loc[port, 'initial_balance']
-            rebalance_freq = df.loc[port, 'rebalance_freq']
-            weight = np.array([df.loc[port, asset_name_list[i]] for i in range(n_assets)])
+            init_balance = df.at[port, 'initial_balance']
+            rebalance_freq = df.at[port, 'rebalance_freq']
+            weight = np.array([df.at[port, asset_name_list[i]] for i in range(n_assets)])
             rfawgt = 1 - sum(weight)
             if not negative_weight_allowed and any(weight < 0):
                 raise ValueError(f'Negative asset weight is NOT allowed. Please revise input of portfolio {port}.')

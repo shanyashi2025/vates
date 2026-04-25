@@ -3,7 +3,7 @@ import numpy as np
 import vates as vt
 from local_package import (
     load_file_df,
-    build_esg_karr,
+    build_esg_kr,
     build_yield_curves,
     build_credit_bands,
     update_yield_curves,
@@ -25,9 +25,9 @@ class CROSSMinCapProj(vt.ProjModelEngine):
         self.file_df_dict = load_file_df(self.read_csv, filename_dict, file_read_config)
         # initialize market variables
         self.yield_curves, self.yield_curve_esg_helper = build_yield_curves(self, self.file_df_dict['yield_curves'])
-        self.yield_curve_karr = build_esg_karr(self.file_df_dict['esg'], self.yield_curve_esg_helper)
+        self.yield_curve_kr = build_esg_kr(self.file_df_dict['esg'], self.yield_curve_esg_helper)
         self.credit_bands, self.credit_band_esg_helper = build_credit_bands(self, self.file_df_dict['credit_bands'])
-        self.credit_band_karr = build_esg_karr(self.file_df_dict['esg'], self.credit_band_esg_helper)
+        self.credit_band_kr = build_esg_kr(self.file_df_dict['esg'], self.credit_band_esg_helper)
         self.market_dict = {'currencies': [], 'equity_indices': [], 'market_info': [],
                             'yield_curves': self.yield_curves, 'credit_bands': self.credit_bands,}
         # 60-day moving average of government bond yield curve
@@ -49,7 +49,7 @@ class CROSSMinCapProj(vt.ProjModelEngine):
         self.company_mc = vt.solvency.cn_cross2.MinCapConsolidator(self, 'company', [v for _, v in self.mc_unit_dict.items()])
 
         # epl
-        self.epl_karr = vt.df_to_kr(df=self.file_df_dict['epl'], unpack_multi_index=True, col_index_name='date')
+        self.epl_kr = vt.kr_from_df(df=self.file_df_dict['epl'], unpack_multi_index=True, col_index_name='date')
         del self.file_df_dict['epl']
 
     def time_zero_calculations(self):
@@ -103,7 +103,7 @@ class CROSSMinCapProj(vt.ProjModelEngine):
             liab_id, fund_id = row[["liab_id", "fund_id"]]
             _get_cross_liab_mc_input_from_epl_df(
                 mc_input=self.mc_input_dict[fund_id],
-                epl_karr=self.epl_karr,
+                epl_kr=self.epl_kr,
                 liab_id=liab_id,
                 date_col=date_col
             )
@@ -118,8 +118,8 @@ class CROSSMinCapProj(vt.ProjModelEngine):
 
     def _update_market_variables(self):
         col_lookup = str(self.period.year * 100 + self.period.month)
-        update_yield_curves(self.yield_curves, self.yield_curve_esg_helper, self.yield_curve_karr, col_lookup)
-        update_credit_bands(self.credit_bands, self.credit_band_esg_helper, self.credit_band_karr, col_lookup)
+        update_yield_curves(self.yield_curves, self.yield_curve_esg_helper, self.yield_curve_kr, col_lookup)
+        update_credit_bands(self.credit_bands, self.credit_band_esg_helper, self.credit_band_kr, col_lookup)
 
 
 def _interp_monthly_spot(spot_in: np.ndarray) -> np.ndarray:
@@ -132,24 +132,24 @@ def _interp_monthly_spot(spot_in: np.ndarray) -> np.ndarray:
     return spot_out
 
 
-def _get_cross_liab_mc_input_from_epl_df(mc_input: vt.solvency.cn_cross2.MinCapInputer, epl_karr:vt.KeyedArray,
+def _get_cross_liab_mc_input_from_epl_df(mc_input: vt.solvency.cn_cross2.MinCapInputer, epl_kr:vt.KeyedArray,
                                          liab_id: str, date_col: str):
-    mc_input.pv_base += epl_karr.loc[liab_id, 'pv_base', date_col]
-    mc_input.pv_mortality += epl_karr.loc[liab_id, 'pv_mortality', date_col]
-    mc_input.pv_catastrophe += epl_karr.loc[liab_id, 'pv_catastrophe', date_col]
-    mc_input.pv_longevity += epl_karr.loc[liab_id, 'pv_longevity', date_col]
-    mc_input.pv_morb_incidence += epl_karr.loc[liab_id, 'pv_morb_incidence', date_col]
-    mc_input.pv_morb_trend += epl_karr.loc[liab_id, 'pv_morb_trend', date_col]
-    mc_input.pv_health += epl_karr.loc[liab_id, 'pv_health', date_col]
-    mc_input.pv_other_loss += epl_karr.loc[liab_id, 'pv_other_loss', date_col]
-    mc_input.pv_expense += epl_karr.loc[liab_id, 'pv_expense', date_col]
-    mc_input.pv_lapse_up += epl_karr.loc[liab_id, 'pv_lapse_up', date_col]
-    mc_input.pv_lapse_dn += epl_karr.loc[liab_id, 'pv_lapse_dn', date_col]
-    mc_input.pv_lapse_mass += epl_karr.loc[liab_id, 'pv_lapse_mass', date_col]
-    mc_input.pv_int_base += epl_karr.loc[liab_id, 'pv_int_base', date_col]
-    mc_input.pv_int_up += epl_karr.loc[liab_id, 'pv_int_up', date_col]
-    mc_input.pv_int_dn += epl_karr.loc[liab_id, 'pv_int_dn', date_col]
-    mc_input.pv_la_lower_limit += epl_karr.loc[liab_id, 'pv_la_lower_limit', date_col]
+    mc_input.pv_base += epl_kr.at[liab_id, 'pv_base', date_col]
+    mc_input.pv_mortality += epl_kr.at[liab_id, 'pv_mortality', date_col]
+    mc_input.pv_catastrophe += epl_kr.at[liab_id, 'pv_catastrophe', date_col]
+    mc_input.pv_longevity += epl_kr.at[liab_id, 'pv_longevity', date_col]
+    mc_input.pv_morb_incidence += epl_kr.at[liab_id, 'pv_morb_incidence', date_col]
+    mc_input.pv_morb_trend += epl_kr.at[liab_id, 'pv_morb_trend', date_col]
+    mc_input.pv_health += epl_kr.at[liab_id, 'pv_health', date_col]
+    mc_input.pv_other_loss += epl_kr.at[liab_id, 'pv_other_loss', date_col]
+    mc_input.pv_expense += epl_kr.at[liab_id, 'pv_expense', date_col]
+    mc_input.pv_lapse_up += epl_kr.at[liab_id, 'pv_lapse_up', date_col]
+    mc_input.pv_lapse_dn += epl_kr.at[liab_id, 'pv_lapse_dn', date_col]
+    mc_input.pv_lapse_mass += epl_kr.at[liab_id, 'pv_lapse_mass', date_col]
+    mc_input.pv_int_base += epl_kr.at[liab_id, 'pv_int_base', date_col]
+    mc_input.pv_int_up += epl_kr.at[liab_id, 'pv_int_up', date_col]
+    mc_input.pv_int_dn += epl_kr.at[liab_id, 'pv_int_dn', date_col]
+    mc_input.pv_la_lower_limit += epl_kr.at[liab_id, 'pv_la_lower_limit', date_col]
 
 
 if __name__ == '__main__':

@@ -18,7 +18,7 @@ from .setup_objs_asset import (
 )
 
 from .setup_objs_econ import (
-    build_esg_karr,
+    build_esg_kr,
     build_yield_curves,
     build_credit_bands,
     build_equity_indices,
@@ -46,7 +46,7 @@ __all__ = [
     'load_file_df',
 
     # build manager
-    'build_esg_karr',
+    'build_esg_kr',
     'build_yield_curves',
     'build_credit_bands',
     'build_equity_indices',

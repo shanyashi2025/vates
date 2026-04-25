@@ -6,7 +6,7 @@ from typing import List, Dict
 import numpy as np
 import pandas as pd
 
-from vates import KeyedArray, df_to_kr
+from vates import KeyedArray, kr_from_df
 from vates.utils import curve_interp, parse_str_to_int_list
 from vates.alm.econs import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 
@@ -58,29 +58,29 @@ def update_esg_this_month(p: pd.Period, esg_step: int) -> tuple[bool, str | None
         raise ValueError(f'Invalid esg_step: {esg_step}')
 
 
-def build_esg_karr(esg_df: pd.DataFrame, esg_helper_dict: Dict[str, 'EsgInfo']) -> KeyedArray | None:
+def build_esg_kr(esg_df: pd.DataFrame, esg_helper_dict: Dict[str, 'EsgInfo']) -> KeyedArray | None:
     df = esg_df[esg_df["CLASS"].isin([v.class_ for k, v in esg_helper_dict.items()])].copy()
     df.set_index(['ECONOMY', 'CLASS', 'MEASURE', 'TERM'], inplace=True)
-    karr = df_to_kr(df=df, unpack_multi_index=True, col_index_name='date_col')
-    _set_esg_helper_intpos_index(esg_helper_dict, karr)
-    return karr
+    kr = kr_from_df(df=df, unpack_multi_index=True, col_index_name='date_col')
+    _set_esg_helper_intpos_index(esg_helper_dict, kr)
+    return kr
 
 
-def _set_esg_helper_intpos_index(esg_helper_dict: Dict[str, 'EsgInfo'], esg_karr: KeyedArray) -> None:
+def _set_esg_helper_intpos_index(esg_helper_dict: Dict[str, 'EsgInfo'], esg_kr: KeyedArray) -> None:
     for key, info in esg_helper_dict.items():
         if info.measure is None:
             continue
 
         economy, class_, measure, term = info.economy, info.class_, info.measure, info.term
 
-        info.ipos_economy = esg_karr.key_to_pos(dim='ECONOMY', key=economy)
-        info.ipos_class = esg_karr.key_to_pos(dim='CLASS', key=class_)
-        info.ipos_measure = esg_karr.key_to_pos(dim='MEASURE', key=measure)
+        info.ipos_economy = esg_kr.key_to_pos(dim='ECONOMY', key=economy)
+        info.ipos_class = esg_kr.key_to_pos(dim='CLASS', key=class_)
+        info.ipos_measure = esg_kr.key_to_pos(dim='MEASURE', key=measure)
 
         if isinstance(term, int):
-            info.ipos_term = esg_karr.key_to_pos(dim='TERM', key=term)
+            info.ipos_term = esg_kr.key_to_pos(dim='TERM', key=term)
         elif isinstance(term, list):
-            info.ipos_term = [esg_karr.key_to_pos(dim='TERM', key=x) for x in term]
+            info.ipos_term = [esg_kr.key_to_pos(dim='TERM', key=x) for x in term]
         else:
             raise TypeError(f"{key} term: type {type(info.term)} is not allowed, expected 'int' or 'list'.")
 

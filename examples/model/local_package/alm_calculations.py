@@ -35,7 +35,7 @@ def fund_liabs_roll_forward(fund: Fund, **kwargs) -> None:
         return
 
     t, p = fund.time, fund.period
-    epl_karr: KeyedArray = kwargs['epl_karr']
+    epl_kr: KeyedArray = kwargs['epl_kr']
     as_inv_ret = kwargs['as_inv_ret']
     as_cf_ret = kwargs['as_cf_ret']
     date_col = str(p.year * 100 + p.month)
@@ -43,19 +43,19 @@ def fund_liabs_roll_forward(fund: Fund, **kwargs) -> None:
     for liab in fund.liabs:
         liab_id = liab.liab_id
 
-        no_pols_if = epl_karr.loc[liab_id, "no_pols_if", date_col]
-        math_res_if = epl_karr.loc[liab_id, "math_res_if", date_col]
-        surr_val_if = epl_karr.loc[liab_id, "surr_val_if", date_col]
-        prem_inc = epl_karr.loc[liab_id, "prem_inc", date_col]
-        comm_out = epl_karr.loc[liab_id, "comm_out", date_col]
-        exp_out = epl_karr.loc[liab_id, "exp_out", date_col]
-        death_out = epl_karr.loc[liab_id, "death_out", date_col]
-        crben_out = epl_karr.loc[liab_id, "crben_out", date_col]
-        ann_out = epl_karr.loc[liab_id, "ann_out", date_col]
-        surr_out = epl_karr.loc[liab_id, "surr_out", date_col]
-        div_out = epl_karr.loc[liab_id, "div_out", date_col]
-        invexp_out = 0 #epl_karr.loc[liab_id, "invexp_out", date_col]
-        mat_out = epl_karr.loc[liab_id, "mat_out", date_col]
+        no_pols_if = epl_kr.at[liab_id, "no_pols_if", date_col]
+        math_res_if = epl_kr.at[liab_id, "math_res_if", date_col]
+        surr_val_if = epl_kr.at[liab_id, "surr_val_if", date_col]
+        prem_inc = epl_kr.at[liab_id, "prem_inc", date_col]
+        comm_out = epl_kr.at[liab_id, "comm_out", date_col]
+        exp_out = epl_kr.at[liab_id, "exp_out", date_col]
+        death_out = epl_kr.at[liab_id, "death_out", date_col]
+        crben_out = epl_kr.at[liab_id, "crben_out", date_col]
+        ann_out = epl_kr.at[liab_id, "ann_out", date_col]
+        surr_out = epl_kr.at[liab_id, "surr_out", date_col]
+        div_out = epl_kr.at[liab_id, "div_out", date_col]
+        invexp_out = 0 #epl_kr.loc[liab_id, "invexp_out", date_col]
+        mat_out = epl_kr.at[liab_id, "mat_out", date_col]
         acct_value_if = 0.0  # for universal life and unit-linked products
         asset_share_if = 0.0  # for participating products
 

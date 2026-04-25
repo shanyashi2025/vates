@@ -1,7 +1,7 @@
 import vates as vt
 from local_package import (
     load_file_df,
-    build_esg_karr,
+    build_esg_kr,
     build_yield_curves,
     build_credit_bands,
     build_equity_indices,
@@ -34,14 +34,14 @@ class FundModel(vt.ProjModelEngine):
         file_read_config = self.load_json("_file_read_config")
         self.file_df_dict = load_file_df(self.read_csv, filename_dict, file_read_config)
         # process epl
-        self.epl_karr = vt.df_to_kr(self.file_df_dict['epl'], col_index_name='date')
+        self.epl_kr = vt.kr_from_df(self.file_df_dict['epl'], col_index_name='date')
         # initialize economic variables
         self.yield_curves, self.yield_curve_esg_helper = build_yield_curves(self, self.file_df_dict['yield_curves'])
-        self.yield_curve_karr = build_esg_karr(self.file_df_dict['esg'], self.yield_curve_esg_helper)
+        self.yield_curve_kr = build_esg_kr(self.file_df_dict['esg'], self.yield_curve_esg_helper)
         self.credit_bands, self.credit_band_esg_helper = build_credit_bands(self, self.file_df_dict['credit_bands'])
-        self.credit_band_karr = build_esg_karr(self.file_df_dict['esg'], self.credit_band_esg_helper)
+        self.credit_band_kr = build_esg_kr(self.file_df_dict['esg'], self.credit_band_esg_helper)
         self.equity_indices, self.equity_index_esg_helper = build_equity_indices(self, self.file_df_dict['equity_indices'])
-        self.equity_indidex_karr = build_esg_karr(self.file_df_dict['esg'], self.equity_index_esg_helper)
+        self.equity_indidex_kr = build_esg_kr(self.file_df_dict['esg'], self.equity_index_esg_helper)
         self.market_info = vt.alm.econs.MarketInfo(self, 'general_market_info')
         self.market_dict = {
             'currencies': [],
@@ -115,7 +115,7 @@ class FundModel(vt.ProjModelEngine):
 
             # step 2: liabs roll forward
             fund_liabs_roll_forward(
-                fund=fund, epl_karr=self.epl_karr,
+                fund=fund, epl_kr=self.epl_kr,
                 as_inv_ret=fund.rate_of_return_fav_bd(t),
                 as_cf_ret=0 # specify the rate
             )
@@ -184,9 +184,9 @@ class FundModel(vt.ProjModelEngine):
 
     def _update_market_variables(self):
         col_lookup = str(self.period.year * 100 + self.period.month)
-        update_yield_curves(self.yield_curves, self.yield_curve_esg_helper, self.yield_curve_karr, col_lookup)
-        update_credit_bands(self.credit_bands, self.credit_band_esg_helper, self.credit_band_karr, col_lookup)
-        update_equity_indices(self.equity_indices, self.equity_index_esg_helper, self.equity_indidex_karr, col_lookup)
+        update_yield_curves(self.yield_curves, self.yield_curve_esg_helper, self.yield_curve_kr, col_lookup)
+        update_credit_bands(self.credit_bands, self.credit_band_esg_helper, self.credit_band_kr, col_lookup)
+        update_equity_indices(self.equity_indices, self.equity_index_esg_helper, self.equity_indidex_kr, col_lookup)
         update_market_info(self.market_info, self.file_df_dict['market_info'], self.yield_curves)
 
 if __name__ == "__main__":

@@ -48,12 +48,12 @@ def main(workspace_directory: str, input_directories: list[str]):
     output_config_df = model_space.read_csv('_output_config', index_col="item")
 
     for row in sw_param_df.index:
-        market_data_id = sw_param_df.loc[row, 'market_data_id']
+        market_data_id = sw_param_df.at[row, 'market_data_id']
         market_spot = market_data_df[market_data_id].values
-        llp = sw_param_df.loc[row, 'last_liquid_point']
-        ufr = sw_param_df.loc[row, 'ufr']
-        convergence_point = sw_param_df.loc[row, 'convergence_point']
-        min_alpha = sw_param_df.loc[row, 'min_alpha']
+        llp = sw_param_df.at[row, 'last_liquid_point']
+        ufr = sw_param_df.at[row, 'ufr']
+        convergence_point = sw_param_df.at[row, 'convergence_point']
+        min_alpha = sw_param_df.at[row, 'min_alpha']
 
         sw_curves[row] = vt.utils.smith_wilson_extrap(
             rates=np.array(market_spot[:llp]),

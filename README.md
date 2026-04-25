@@ -132,13 +132,14 @@ if __name__ == '__main__': # must create the '__main__' block for multiprocessin
 
 #### 4. `KeyedArray`
 
-The `KeyedArray` class can be used as the replacement of `DataFrame` if `.loc` is massively called to access (lookup) single elements.
+The `KeyedArray` class can be used as the alternative to `DataFrame` if `.at` or `.loc` is massively called for scalar access (lookup).
 
-The `df_to_kr()` function is to create `KeyedArray` object from `DataFrame`.
+The `kr_from_df()` function is to create `KeyedArray` object from `DataFrame`.
 
 ```python
 import pandas as pd
 import random
+
 random.seed(42)
 import vates as vt
 
@@ -147,12 +148,12 @@ n_idx1, n_idx2, n_cols = 5, 3, 10
 
 index1, index2 = [], []
 for i in range(n_idx1):
-    for j in range(n_idx2):
-        index1.append(f"a{i}") # a1, a2, ..
-        index2.append(f"b{j}") # b1, b2, ..
+  for j in range(n_idx2):
+    index1.append(f"a{i}")  # a1, a2, ..
+    index2.append(f"b{j}")  # b1, b2, ..
 
 multi_index = pd.MultiIndex.from_arrays([index1, index2], names=['index1', 'index2'])
-columns = [f"col{i}" for i in range(n_cols)] # col1, col2, ..
+columns = [f"col{i}" for i in range(n_cols)]  # col1, col2, ..
 
 data = [[random.uniform(1, 100) for i in range(n_cols)] for j in range(n_idx1 * n_idx2)]
 
@@ -160,22 +161,22 @@ df = pd.DataFrame(data, index=multi_index, columns=columns)
 
 # --- KeyedArray ---
 # 1. create KeyedArray object from DataFrame
-kr = vt.df_to_kr(df)
+kr = vt.kr_from_df(df)
 
 # 2. get attributes `ndim`, `size`, `shape`, `dtype` just like numpy ndarray
 print(f">>> {kr.ndim=}, {kr.size=}, {kr.shape=}, {kr.dtype=}")
 
-# 3. use `[]` to access a single element by its integer-position index like numpy ndarray
+# 3. use `[]` for scalar access by its integer-position index like numpy ndarray
 print(f">>> {kr[1, 2]=}, {kr[11, 8]=}")
 
-# 4. use `.loc[]` to access a single element by its lable-based index like pandas DataFrame
-print(f">>> {kr.loc[('a0', 'b1'), 'col2']=}, {kr.loc[('a3', 'b2'), 'col8']=}")
+# 4. use `.at[]` for scalar access by its lable-based index like pandas DataFrame
+print(f">>> {kr.at[('a0', 'b1'), 'col2']=}, {kr.at[('a3', 'b2'), 'col8']=}")
 # - specially for 2D array, where the first index/key is a tuple, parentheses can be omitted
-print(f">>> {kr.loc['a0', 'b1', 'col2']=}, {kr.loc['a3', 'b2', 'col8']=}")
-# - display `df.loc` for reference
-print(f">>> {df.loc[('a0', 'b1'), 'col2']=}, {df.loc[('a3', 'b2'), 'col8']=}")
+print(f">>> {kr.at['a0', 'b1', 'col2']=}, {kr.at['a3', 'b2', 'col8']=}")
+# - display `df.at` for reference
+print(f">>> {df.at[('a0', 'b1'), 'col2']=}, {df.at[('a3', 'b2'), 'col8']=}")
 
-# 5. use `.get()` to access a single element by its lable-based index
+# 5. use `.get()` for scalar access by its lable-based index
 # - positional arguments (*args)
 print(f">>> {kr.get(('a0', 'b1'), 'col2')=}, {kr.get(('a3', 'b2'), 'col8')=}")
 # - if the key is not found, it returns None or a specified default value
@@ -234,4 +235,4 @@ GitHub repository: https://github.com/shanyashi2025/vates
 
 Documentation and tutorials: https://github.com/shanyashi2025/vates/tree/main/docs
 
-Production-grade models: https://github.com/shanyashi2025/vates/tree/main/examples
+Example implementations: https://github.com/shanyashi2025/vates/tree/main/examples

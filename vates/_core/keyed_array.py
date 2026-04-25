@@ -8,15 +8,15 @@ import pandas as pd
 class KeyedArray:
     """NumPy array with label-based indexing support.
 
-    This class wraps a NumPy ndarray and provides an additional `.loc`
-    interface for accessing elements using user-defined keys for each dimension.
+    This class wraps a NumPy ndarray and provides an additional `.at`
+    interface for scalar access using user-defined keys for each dimension.
 
     Integer-position-based indexing (`[]`) follows standard NumPy semantics, while
-    label-based (key) indexing is handled via `.loc`.
+    label-based (key) indexing is handled via `.at`.
 
     """
 
-    __slots__ = ('_nparray', '_loc', '_dim_names')
+    __slots__ = ('_nparray', '_at', '_dim_names')
 
     def __init__(self, nparray: np.ndarray, key_pos_pairs: list[dict[Any, int]], dim_names: list[str] | None = None):
         """Initialize a KeyedArray.
@@ -27,7 +27,7 @@ class KeyedArray:
                 for each dimension. Length must match `nparray.ndim`.
         """
         self._nparray: np.ndarray = nparray
-        self._loc: _LocIndexer = _LocIndexer(nparray, key_pos_pairs, dim_names)
+        self._at: _AtIndexer = _AtIndexer(nparray, key_pos_pairs, dim_names)
 
     @property
     def values(self) -> np.ndarray:
@@ -62,18 +62,18 @@ class KeyedArray:
         self._nparray[index] = value
 
     @property
-    def loc(self) -> '_LocIndexer':
-        """Label-based indexer for accessing elements via keys."""
-        return self._loc
+    def at(self) -> '_AtIndexer':
+        """Label-based indexer for scalar access via keys."""
+        return self._at
 
     @property
     def dim_names(self) -> list[str] | None:
-        return self._loc.dim_names
+        return self._at.dim_names
 
     @property
     def key_pos_pairs(self) -> list[dict[Any, int]]:
         """Mapping from keys to integer-position indices for each dimension."""
-        return self._loc.key_pos_pairs
+        return self._at.key_pos_pairs
 
     def key_to_pos(self, dim: int | str, key: Any, if_not_found = None) -> int | None:
         """Return the integer-position index mapped from the key of the dimension.
@@ -89,12 +89,12 @@ class KeyedArray:
         if isinstance(dim, int):
             axis = dim
         elif isinstance(dim, str):
-            axis = self._loc.dim_name_to_axis.get(dim, None)
+            axis = self._at.dim_name_to_axis.get(dim, None)
             if axis is None:
                 return if_not_found
         else:
             return if_not_found
-        pos = self._loc.key_pos_pairs[axis].get(key, None)
+        pos = self._at.key_pos_pairs[axis].get(key, None)
         if pos is None:
             return if_not_found
         return pos
@@ -117,19 +117,19 @@ class KeyedArray:
             raise TypeError("Cannot mix positional and keyword keys.")
 
         if args:
-            return self._loc.get(args, default_value=default)
+            return self._at.get(args, default_value=default)
 
         keys = [None] * self._nparray.ndim
         for dim, val in kwargs.items():
-            axis = self._loc.dim_name_to_axis.get(dim, None)
+            axis = self._at.dim_name_to_axis.get(dim, None)
             if axis is None:
                 return default
             keys[axis] = val
 
-        return self._loc.get(tuple(keys), default_value=default)
+        return self._at.get(tuple(keys), default_value=default)
 
 
-class _LocIndexer:
+class _AtIndexer:
     """Internal label-based indexer for KeyedArray."""
 
     __slots__ = ('_nparray', '_key_pos_pairs', '_dim_names', '_dim_name_to_axis', '_cached_valid_key_pos')
@@ -284,9 +284,9 @@ class _LocIndexer:
         self._nparray[pos_tuple] = value
 
 
-def df_to_kr(df: pd.DataFrame, unpack_multi_index: bool = False,
-             multi_index_name: str = 'row_index', col_index_name: str = 'col_name') -> KeyedArray | None:
-    """Convert pandas DataFrame object to KeyedArray object.
+def kr_from_df(df: pd.DataFrame, unpack_multi_index: bool = False,
+               multi_index_name: str = 'row_index', col_index_name: str = 'col_name') -> KeyedArray | None:
+    """Creat KeyedArray object from pandas DataFrame.
 
     Args:
         df (pd.DataFrame): DataFrame to be processed.

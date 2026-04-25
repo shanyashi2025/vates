@@ -1,7 +1,7 @@
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core.stoch_executor import StochExecutor
 from vates._core.proj_variables import ConstVariable, TDepVariable
-from vates._core.keyed_array import KeyedArray, df_to_kr
+from vates._core.keyed_array import KeyedArray, kr_from_df
 from vates._core.autograd_cell import AutogradCell
 import vates._core.cli as cli
 
@@ -11,7 +11,7 @@ __all__ = [
     'ConstVariable',
     'TDepVariable',
     'KeyedArray',
-    'df_to_kr',
+    'kr_from_df',
     'AutogradCell',
     'cli',
 
