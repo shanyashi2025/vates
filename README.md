@@ -194,27 +194,36 @@ The `AutogradCell` class automates the backpropagation process to compute the gr
 - `.grad` holds the gradient (partial derivative)
 - `.backward()` traverses the graph in reverse, applys the chain rule to compute the gradients 
 
-With respect to actuarial practice, you can employ `AutogradCell` to implement sensitivity testing in a fast way.
+For actuarial practice, you can employ `AutogradCell` to implement sensitivity testing in a fast way.
 
 ```python
 import vates as vt
 
-a = vt.AutogradCell(-4.0)
-b = vt.AutogradCell(2.0)
-c = a + b
-d = a * b + b**3
-c += c + 1
-c += 1 + c + (-a)
-d += d * 2 + (a + b).apply_floor(0)
-d += 3 * d - (a - b).apply_cap(0)
-e = c - d
-f = e**2
-g = f / 2.0
-g += 10.0 / f
-print(f'{g.value:.4f}') # prints 24.7041, the outcome of this forward pass
-g.backward()
-print(f'{a.grad:.4f}') # prints 138.8338, i.e. the numerical value of dg/da
-print(f'{b.grad:.4f}') # prints 645.5773, i.e. the numerical value of dg/db
+mort_rates = [vt.AutogradCell(0.001), vt.AutogradCell(0.002)]
+lapse_rates = [vt.AutogradCell(0.10), vt.AutogradCell(0.05)]
+expense_fixed = vt.AutogradCell(50)
+discount_rate = vt.AutogradCell(0.025)
+discount_factor = 1 / (1 + discount_rate)
+
+no_pols_if = 1
+bel = 0.0
+for t in range(2):
+    prem_income = no_pols_if * 100
+    expn_outgo = no_pols_if * expense_fixed
+    no_deaths = no_pols_if * mort_rates[t]
+    no_lapses = no_pols_if * (1 - mort_rates[t]) * lapse_rates[t]
+    death_outgo = no_deaths * 10000
+    surr_outgo = no_lapses * 100
+    no_pols_if -= no_deaths + no_lapses
+    bel += (-prem_income + expn_outgo) * discount_factor ** t + (death_outgo + surr_outgo) * discount_factor ** (t + 1)
+
+print(f'{bel.value=:.4f}')  # prints -52.9702, the outcome of this forward pass
+bel.backward()
+print("Get sensitivity w.r.t. each assumption in one go:")
+print(f'1. mortality rates: [Y1] {mort_rates[0].grad:.4f}, [Y2] {mort_rates[1].grad:.4f}') # prints 9768.8366, 8553.4844
+print(f'2. lapse rates: [Y1] {lapse_rates[0].grad:.4f}, [Y2] {lapse_rates[1].grad:.4f}')   # prints 122.4331, 85.4065
+print(f'3. expenses: {expense_fixed.grad:.4f}')  # prints 1.8772
+print(f'4. discount rate: {discount_rate.grad:.4f}')  # prints -17.9664
 ```
 
 #### 6. Asset-Liability Model (ALM)
@@ -223,7 +232,7 @@ The `vates.alm` is the subpackage for asset-liability model.
 
 It includes but are not limited to the following classes:
 
-- assets: `Asset`, `Cash`, `Equity`, `BondFixed`, `EquityOption`, `BondFixedBuilder`, `EquityOptionBuilder`
+- assets: `Asset`, `Cash`, `Equity`, `BondFixed`, `EquityOption`
 - econs: `YieldCurve`, `CreditBand`, `EquityIndex`
 - funds: `Fund`, `AssetAllocator`
 - liabs: `Liab`, `ExtProjLiab`
