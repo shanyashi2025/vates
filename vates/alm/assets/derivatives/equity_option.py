@@ -6,7 +6,7 @@ from vates.utils import check_calc_time
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.asset_base import Asset
-from vates.alm.assets._derivative_pricer import CallOrPut, BlackScholesCalculator
+from vates.alm.assets.derivatives._derivative_pricer import CallOrPut, BlackScholesCalculator
 
 class EquityOption(Asset):
     """

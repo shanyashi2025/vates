@@ -31,11 +31,9 @@ class AutogradCell:
         else:
             return AutogradCell(self.value ** other, (self,), (other * self.value ** (other - 1),))
 
-    @property
     def log(self):
         return AutogradCell(math.log(self.value), (self,), (1 / self.value,))
 
-    @property
     def exp(self):
         return AutogradCell(exp_val := math.exp(self.value), (self,), (exp_val,))
 

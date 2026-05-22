@@ -3,8 +3,7 @@ import math
 
 
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
-from vates.alm.assets.equity_option import EquityOption
-from vates.alm.assets._derivative_pricer import CallOrPut, BlackScholesCalculator
+from vates.alm.assets.derivatives import EquityOption, CallOrPut, BlackScholesCalculator
 
 
 class EquityOptionBuilder:
