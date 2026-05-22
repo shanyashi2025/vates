@@ -39,14 +39,14 @@ class Fund:
     """
 
     def __init__(self, model, fund_id: str, rebalance_policy: dict[str, RebalancePolicyParams],
-                 asset_classes_reported: list[str]) -> None:
+                 asset_categories: list[str]) -> None:
         """
         Initialize a Fund object.
 
         Args:
             fund_id (str): Fund identifier.
             rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
-            asset_classes_reported (list[str]): Asset classes to be reported.
+            asset_categories (list[str]): Asset categories to be reported.
         """
         self._model_ref: weakref.ref = weakref.ref(model)
         self.fund_id = fund_id
@@ -57,7 +57,7 @@ class Fund:
         self.liabs: list[Liab] = []
         self._assembled: bool = False
 
-        self.calculator: FundCalculator = FundCalculator(model, fund_id, self.assets, self.liabs, asset_classes_reported)
+        self.calculator: FundCalculator = FundCalculator(model, fund_id, self.assets, self.liabs, asset_categories)
         self.allocator: AssetAllocator = AssetAllocator(model, fund_id, self.assets, self.primary_cash_asset, rebalance_policy)
 
         self.accum_free_proceeds: float = 0.0

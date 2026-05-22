@@ -18,15 +18,15 @@ class Asset(ABC):
         _purchase_date (pd.Period): Purchase date.
         _currency (Currency): Currency of the asset.
         _classification (AssetClassification): Asset classification.
-        _asset_class (str): Asset class.
+        _asset_category (str): Asset category.
         _fund_id (str): Associated fund identifier.
         _allocation_group (str): Allocation group for the asset.
     """
     __slots__ = ('__dict__', '__weakref__', '_model_ref', '_asset_id', '_is_profile', '_units', '_purchase_date',
-                 '_currency', '_classification', '_asset_class', '_fund_id', '_allocation_group', '_lct_dict',)
+                 '_currency', '_classification', '_asset_category', '_fund_id', '_allocation_group', '_lct_dict',)
 
     def __init__(self, model, asset_id: str, is_profile: bool, units: float, purchase_date: pd.Period | None,
-                 currency: Currency | None, classification: AssetClassification, asset_class: str,
+                 currency: Currency | None, classification: AssetClassification, asset_category: str,
                  fund_id: str, allocation_group: str):
         """
         Initialize the Asset.
@@ -39,7 +39,7 @@ class Asset(ABC):
             purchase_date (pd.Period): Purchase date. Set to initilization date if input is None.
             currency (Currency): Asset currency.
             classification (AssetClassification): Asset classification.
-            asset_class (str): Asset class.
+            asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
         """
@@ -50,7 +50,7 @@ class Asset(ABC):
         self._purchase_date: pd.Period = self.period if purchase_date is None else purchase_date
         self._currency: Currency | None = currency
         self._classification: AssetClassification = classification
-        self._asset_class: str = asset_class
+        self._asset_category: str = asset_category
         self._fund_id: str = fund_id
         self._allocation_group: str = allocation_group
         self._lct_dict: dict[str, int] = {"roll_forward": self.time}
@@ -82,8 +82,8 @@ class Asset(ABC):
         return self._currency
 
     @property
-    def asset_class(self) -> str:
-        return self._asset_class
+    def asset_category(self) -> str:
+        return self._asset_category
 
     @property
     def fund_id(self) -> str:

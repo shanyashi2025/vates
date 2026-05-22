@@ -33,7 +33,7 @@ class BondFixed(Asset):
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad',)
 
     
-    def __init__(self, model, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_class: str,
+    def __init__(self, model, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_category: str,
                  fund_id: str, allocation_group: str, classification: AssetClassification, issue_date: pd.Period,
                  maturity_date: pd.Period, redemp_sched: np.ndarray | None, coupon_rate: float, coupon_freq: int,
                  face_value: float, mv_price: float, market_spread: float, abv_price: float, amort_rate: float,
@@ -46,7 +46,7 @@ class BondFixed(Asset):
             is_profile (bool): Ture if profile asset, False if existing asset.
             units (float): Number of bond units.
             currency (Currency): Asset currency.
-            asset_class (str): Asset class.
+            asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
             classification (AssetClassification): Asset classification.
@@ -64,7 +64,7 @@ class BondFixed(Asset):
             credit_band (CreditBand | None): Credit band (to provide assumptions, e.g. default and spread).
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model, asset_id, is_profile, units, purchase_date, currency, classification, asset_class,
+        super().__init__(model, asset_id, is_profile, units, purchase_date, currency, classification, asset_category,
                          fund_id, allocation_group)
         t, p = self.time, self.period
         self._params = BondFixedParameters(

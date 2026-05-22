@@ -27,7 +27,7 @@ class EquityOption(Asset):
                  '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', 'tdv_units_bd', 'tdv_units_ad',
                  'tdv_cash_flow', 'tdv_stock_price', 'tdv_price', 'tdv_mv_bd', 'tdv_mv_ad',)
 
-    def __init__(self, model, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_class: str, 
+    def __init__(self, model, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_category: str,
                  fund_id: str, allocation_group: str, call_or_put: CallOrPut, exercise_date: pd.Period, price: float,
                  stock_price: float, strike_price: float, equity_index: EquityIndex, rf_curve: YieldCurve,
                  std_dev: float, is_pay_dividend: bool, classification: AssetClassification = AssetClassification.FVTPL,
@@ -40,6 +40,7 @@ class EquityOption(Asset):
             is_profile (bool): Ture if profile asset, False if existing asset.
             units (float): Number of equity option units, +ve/-ve means long/short position.
             currency (Currency): Asset currency.
+            asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
             call_or_put (CallOrPut): Call or put option.
@@ -54,7 +55,7 @@ class EquityOption(Asset):
             classification (AssetClassification): Asset classification. Defaults to FVTPL.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model, asset_id, is_profile, units, purchase_date, currency, classification, asset_class,
+        super().__init__(model, asset_id, is_profile, units, purchase_date, currency, classification, asset_category,
                          fund_id, allocation_group)
         t = self.time
         self._call_or_put: CallOrPut = call_or_put

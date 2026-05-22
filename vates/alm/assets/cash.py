@@ -20,7 +20,7 @@ class Cash(Asset):
     """
     __slots__ = ('_nominal', '_market_info', '_ret_id', '_ret_id_short_pos', 'tdv_cash_flow', 'tdv_mv_bd', 'tdv_mv_ad',)
 
-    def __init__(self, model, asset_id: str, currency: Currency | None, asset_class: str, fund_id: str,
+    def __init__(self, model, asset_id: str, currency: Currency | None, asset_category: str, fund_id: str,
                  allocation_group: str, nominal: float, market_info: MarketInfo, ret_id: str, ret_id_short_pos: str,
                  classification: AssetClassification = AssetClassification.FVTPL, purchase_date: pd.Period | None=None):
         """
@@ -29,6 +29,7 @@ class Cash(Asset):
         Args:
             asset_id (str): Asset identifier.
             currency (Currency): Asset currency.
+            asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
             nominal (float): Nominal value.
@@ -38,7 +39,7 @@ class Cash(Asset):
             classification (AssetClassification): Asset classification. Defaults to FVTPL.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model, asset_id, False, 1, purchase_date, currency, classification, asset_class,
+        super().__init__(model, asset_id, False, 1, purchase_date, currency, classification, asset_category,
                          fund_id, allocation_group)
         self._nominal: float = nominal
         self._market_info: MarketInfo = market_info

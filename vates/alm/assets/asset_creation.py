@@ -13,6 +13,7 @@ _ASSET_CLS_MAP = {
     "equity": Equity,
     "bond": BondFixed,
     "bond_fixed": BondFixed,
+    "fixed_bond": BondFixed,
     "equity_option": EquityOption
 }
 

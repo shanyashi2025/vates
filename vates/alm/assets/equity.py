@@ -21,7 +21,7 @@ class Equity(Asset):
     __slots__ = ('_equity_index', '_mv', '_fav', '_cash_flow',
                  'tdv_cash_flow', 'tdv_dividend', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_fav_bd', 'tdv_fav_ad',)
 
-    def __init__(self, model, asset_id: str, is_profile: bool, currency: Currency | None, asset_class: str, fund_id: str,
+    def __init__(self, model, asset_id: str, is_profile: bool, currency: Currency | None, asset_category: str, fund_id: str,
                  allocation_group: str, mv: float, fav: float, equity_index: EquityIndex,
                  classification: AssetClassification, purchase_date: pd.Period | None=None):
         """
@@ -31,6 +31,7 @@ class Equity(Asset):
             asset_id (str): Asset identifier.
             is_profile (bool): Ture if profile asset, False if existing asset.
             currency (Currency): Asset currency.
+            asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
             mv (float): Market value.
@@ -39,7 +40,7 @@ class Equity(Asset):
             classification (AssetClassification): Asset classification.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model, asset_id, is_profile, 1, purchase_date, currency, classification, asset_class,
+        super().__init__(model, asset_id, is_profile, 1, purchase_date, currency, classification, asset_category,
                          fund_id, allocation_group)
         t = self.time
         self._equity_index: EquityIndex = equity_index

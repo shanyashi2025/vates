@@ -22,6 +22,7 @@ class BondFixedBuilder:
             model: Model object.
             is_profile (bool): Ture if profile asset, False if existing asset.
             asset_id (str): Asset identifier.
+            asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group for the bond.
             classification (AssetClassification): Asset classification.
@@ -42,7 +43,7 @@ class BondFixedBuilder:
         """
         self.model = kwargs['model']
         self.asset_id: str = kwargs['asset_id']
-        self.asset_class: str = kwargs['asset_class']
+        self.asset_category: str = kwargs['asset_category']
         self.fund_id: str = kwargs['fund_id']
         self.allocation_group: str = kwargs['allocation_group']
         self.classification: AssetClassification = kwargs['classification']
@@ -229,7 +230,7 @@ class BondFixedBuilder:
         return BondFixed(
             model=self.model,
             asset_id=self.asset_id,
-            asset_class=self.asset_class,
+            asset_category=self.asset_category,
             fund_id=self.fund_id,
             allocation_group=self.allocation_group,
             classification=self.classification,

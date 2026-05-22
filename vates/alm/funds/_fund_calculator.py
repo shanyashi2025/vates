@@ -19,12 +19,12 @@ class FundCalculator:
         assets (list[Asset]): Assets of the fund.
         liabs (list[Liab]): Liabilities of the fund.
     """
-    def __init__(self, model, fund_id: str, assets: list['Asset'], liabs: list['Liab'], asset_classes_reported: list[str]):
+    def __init__(self, model, fund_id: str, assets: list['Asset'], liabs: list['Liab'], asset_categories: list[str]):
         self._model_ref: weakref.ref = weakref.ref(model)
         self.fund_id = fund_id
         self.assets: list['Asset'] = assets
         self.liabs: list['Liab'] = liabs
-        self.asset_classes_enum: dict[str, int] = {item: i for i, item in enumerate(asset_classes_reported)}
+        self.asset_categories_enum: dict[str, int] = {item: i for i, item in enumerate(asset_categories)}
 
         self._lct_dict: dict[str, int] = {}
 
@@ -56,13 +56,13 @@ class FundCalculator:
         self.tdv_totass_inv_ret_ad: TDepVariable = create_var("totass_inv_ret_ad")
         self.tdv_totass_ror_pc_ad: TDepVariable = create_var("totass_ror_pc_ad")
         # dims = AssetClass
-        create_var = lambda name: TDepVariable(model, name, self.fund_id, 'fund', dims=[asset_classes_reported])
+        create_var = lambda name: TDepVariable(model, name, self.fund_id, 'fund', dims=[asset_categories])
         self.tdv_asset_cash_flow: TDepVariable = create_var("asset_cash_flow")
         self.tdv_asset_urgl_bd: TDepVariable = create_var("asset_urgl_bd")
         self.tdv_asset_urgl_ad: TDepVariable = create_var("asset_urgl_ad")
         self.tdv_asset_rgl_ad: TDepVariable = create_var("asset_rgl_ad")
         # dims = AssetClass,AssetRepBasis
-        create_var = lambda name: TDepVariable(model, name, self.fund_id, 'fund', dims=[asset_classes_reported, AssetRepBasis])
+        create_var = lambda name: TDepVariable(model, name, self.fund_id, 'fund', dims=[asset_categories, AssetRepBasis])
         self.tdv_asset_rep_value_bd: TDepVariable = create_var("asset_rep_value_bd")
         self.tdv_asset_rep_value_ad: TDepVariable = create_var("asset_rep_value_ad")
         self.tdv_asset_inv_ret_bd: TDepVariable = create_var("asset_inv_ret_bd")
@@ -89,8 +89,8 @@ class FundCalculator:
         self.aggregate_assets_value("bd")
 
         # Calculate rates of return
-        asset_inv_ret = np.zeros((len(self.asset_classes_enum), len(AssetRepBasis)))
-        asset_ror = np.zeros((len(self.asset_classes_enum), len(AssetRepBasis)))
+        asset_inv_ret = np.zeros((len(self.asset_categories_enum), len(AssetRepBasis)))
+        asset_ror = np.zeros((len(self.asset_categories_enum), len(AssetRepBasis)))
         totass_inv_ret = np.zeros(len(AssetRepBasis))
         totass_ror = np.zeros(len(AssetRepBasis))
 
@@ -101,7 +101,7 @@ class FundCalculator:
                 float(self.tdv_totass_rep_value_bd[t][i])
             )
 
-            for j in range(len(self.asset_classes_enum)):
+            for j in range(len(self.asset_categories_enum)):
                 asset_inv_ret[j, i], asset_ror[j, i] = self._calculate_investment_return(
                     float(self.tdv_asset_rep_value_ad[t - 1][j, i]),
                     float(self.tdv_asset_cash_flow[t][j]),
@@ -127,8 +127,8 @@ class FundCalculator:
         self.tdv_totass_rgl_ad[t] = self.tdv_totass_urgl_bd[t] - self.tdv_totass_urgl_ad[t]
 
         # Calculate rates of return
-        asset_inv_ret = np.zeros((len(self.asset_classes_enum), len(AssetRepBasis)))
-        asset_ror = np.zeros((len(self.asset_classes_enum), len(AssetRepBasis)))
+        asset_inv_ret = np.zeros((len(self.asset_categories_enum), len(AssetRepBasis)))
+        asset_ror = np.zeros((len(self.asset_categories_enum), len(AssetRepBasis)))
         totass_inv_ret = np.zeros(len(AssetRepBasis))
         totass_ror = np.zeros(len(AssetRepBasis))
         mv_index = AssetRepBasis.MV.value
@@ -143,7 +143,7 @@ class FundCalculator:
                 totass_inv_ret[i] = self.tdv_totass_inv_ret_bd[t][i] + gl_from_dealing
                 totass_ror[i] = 0 if totass_inv_ret[i] == 0 else totass_inv_ret[i] / self.tdv_totass_rep_value_ad[t - 1][i]
 
-            for j in range(len(self.asset_classes_enum)):
+            for j in range(len(self.asset_categories_enum)):
                 if i == mv_index:  # asset dealing doesn't impact MV basis
                     asset_inv_ret[j, i] = self.tdv_asset_inv_ret_bd[t][j, i]
                     asset_ror[j, i] = self.tdv_asset_ror_pc_bd[t][j, i] / 100
@@ -170,7 +170,7 @@ class FundCalculator:
             ValueError: If any asset is not rolled for the current period.
         """
         t = self.time
-        cls_cash_flow = np.zeros(len(self.asset_classes_enum))
+        cls_cash_flow = np.zeros(len(self.asset_categories_enum))
         tot_cash_flow = 0.0
 
         for asset in self.assets:
@@ -178,7 +178,7 @@ class FundCalculator:
                 raise ValueError(f"Asset {asset.asset_id} is not rolled on {t} ({self.period}).")
 
             cash_flow = asset.cash_flow
-            cls_cash_flow[self.asset_classes_enum[asset.asset_class],] += cash_flow
+            cls_cash_flow[self.asset_categories_enum[asset.asset_category],] += cash_flow
             tot_cash_flow += cash_flow
 
         self.tdv_asset_cash_flow[t] = cls_cash_flow
@@ -194,7 +194,7 @@ class FundCalculator:
             ValueError: If an asset is not rolled or updated for the current period, or if timing is invalid.
         """
         t = self.time
-        cls_rep_value = np.zeros([len(self.asset_classes_enum), len(AssetRepBasis)])
+        cls_rep_value = np.zeros([len(self.asset_categories_enum), len(AssetRepBasis)])
         tot_rep_value = np.zeros(len(AssetRepBasis))
 
         for asset in self.assets:
@@ -205,7 +205,7 @@ class FundCalculator:
                 raise ValueError(f"Asset {asset.asset_id} is not updated after dealing (ad) on {t} ({self.period}).")
 
             rep_value = asset.rep_value
-            cls_rep_value[self.asset_classes_enum[asset.asset_class],] += rep_value
+            cls_rep_value[self.asset_categories_enum[asset.asset_category],] += rep_value
             tot_rep_value += rep_value
 
         cls_urgl = cls_rep_value[:, AssetRepBasis.MV.value] - cls_rep_value[:, AssetRepBasis.FAV.value]
