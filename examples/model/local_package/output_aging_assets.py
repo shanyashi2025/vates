@@ -3,11 +3,7 @@ import os
 import csv
 import warnings
 
-from vates.alm.assets import (
-    Cash,
-    BondFixed,
-    Equity,
-)
+from vates.alm.assets import Cash, BondFixed, Equity
 
 def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int | str, out_rootfolder: str) -> None:
 
@@ -52,24 +48,23 @@ def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int |
         if not asset.is_alive:
             continue
 
-        type_asset = type(asset)
-        if type_asset == Cash:
+        if type(asset) is Cash:
             if not header_written.get('cash', False):
                 _write_output_file_header(out_file_dict['cash'], header_dict['cash'])
                 header_written['cash'] = True
             output_asset_cash(asset, out_file_dict['cash'], header_dict['cash'])
-        elif type_asset == BondFixed:
+        elif type(asset) is BondFixed:
             if not header_written.get('bond', False):
                 _write_output_file_header(out_file_dict['bond'], header_dict['bond'])
                 header_written['bond'] = True
             output_asset_fixed_bond(asset, out_file_dict['bond'], header_dict['bond'])
-        elif type_asset == Equity:
+        elif type(asset) is Equity:
             if not header_written.get('equity', False):
                 _write_output_file_header(out_file_dict['equity'], header_dict['equity'])
                 header_written['equity'] = True
             output_asset_equity(asset, out_file_dict['equity'], header_dict['equity'])
         else:
-            warnings.warn(f'Output aging assets for asset type {type_asset} not defined, output ingnored.')
+            warnings.warn(f"Output aging assets for asset class '{type(asset)}' not defined, output ingnored.")
 
 def _write_output_file_header(out_file: str, header_list: list[str]) -> None:
     with open(out_file, 'w', newline='', encoding='utf-8-sig') as csvfile:

@@ -1,19 +1,11 @@
-from typing import List
 import pandas as pd
 
 from vates.alm import AssetClassification
-from vates.alm.assets import (
-    Asset,
-    Cash,
-    BondFixed,
-    Equity,
-    create_asset,
-    BondFixedBuilder,
-)
+from vates.alm.assets import create_asset
 from vates.alm.econs import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 
 
-ASSET_CLASSES_REPORTED_MAPPING = {
+ASSET_CATEGORIES_MAPPING = {
     'cash': 'CASH',
     'equity': 'EQUITY',
     'fixed_bond': 'BOND',
@@ -71,7 +63,7 @@ def build_all_existing_assets(model, df_dict: dict[str, pd.DataFrame], market_di
 
 def build_all_profile_assets(
         model, df_dict: dict[str, pd.DataFrame], market_dict: dict[str, ...], fund_id: str
-        ) -> dict[str, list[Asset]]:
+        ) -> dict[str, list]:
     """
     Build profile assets objects from a dictionary of DataFrame.
 
@@ -113,7 +105,7 @@ def build_all_profile_assets(
 
 
 def build_assets_cash(model, df: pd.DataFrame, fund_id: str | None,
-                      currencies: List['Currency'], market_info: MarketInfo) -> List['Cash']:
+                      currencies: list['Currency'], market_info: MarketInfo) -> list:
     """
     Build cash asset objects from a DataFrame and add them to a fund if provided.
 
@@ -136,10 +128,11 @@ def build_assets_cash(model, df: pd.DataFrame, fund_id: str | None,
         currency_id = row["currency_id"]
         currency = next((x for x in currencies if x.currency_id == currency_id), None)
         # create instance
-        cash = Cash(
+        cash = create_asset(
+            asset_cls="cash",
             model=model,
             asset_id=row["asset_id"],
-            asset_class=ASSET_CLASSES_REPORTED_MAPPING["cash"],
+            asset_category=ASSET_CATEGORIES_MAPPING["cash"],
             fund_id=row["fund_id"],
             allocation_group=row["allocation_group"],
             currency=currency,
@@ -159,9 +152,9 @@ def build_assets_cash(model, df: pd.DataFrame, fund_id: str | None,
 
 
 def build_assets_fixed_bond(model, df: pd.DataFrame, fund_id: str | None,
-                            redemp_schedule_df: pd.DataFrame, currencies: List['Currency'],
-                            yield_curves: List['YieldCurve'], credit_bands: List['CreditBand'],
-                            ) -> List[BondFixed]:
+                            redemp_schedule_df: pd.DataFrame, currencies: list['Currency'],
+                            yield_curves: list['YieldCurve'], credit_bands: list['CreditBand'],
+                            ) -> list:
     """
     Build bond asset objects from a DataFrame and add them to a fund if provided.
 
@@ -196,10 +189,10 @@ def build_assets_fixed_bond(model, df: pd.DataFrame, fund_id: str | None,
         # create instance
         fixed_bond = create_asset(
             model=model,
-            asset_builder_cls=BondFixedBuilder,
+            asset_cls="fixed_bond",
             pre_calculations=pre_calc.split(';') if pre_calc.lower() != 'none' else None,
             asset_id=row["asset_id"],
-            asset_class=ASSET_CLASSES_REPORTED_MAPPING['fixed_bond'],
+            asset_category=ASSET_CATEGORIES_MAPPING['fixed_bond'],
             fund_id=row["fund_id"],
             allocation_group=row["allocation_group"],
             currency=currency,
@@ -230,8 +223,8 @@ def build_assets_fixed_bond(model, df: pd.DataFrame, fund_id: str | None,
     return fixed_bond_list
 
 
-def build_profile_fixed_bond(model, df: pd.DataFrame, fund_id: str, currencies: List['Currency'],
-                             yield_curves: List['YieldCurve'], credit_bands: List['CreditBand']) -> List[BondFixed]:
+def build_profile_fixed_bond(model, df: pd.DataFrame, fund_id: str, currencies: list['Currency'],
+                             yield_curves: list['YieldCurve'], credit_bands: list['CreditBand']) -> list:
     """
     Build a profile of bond assets for a fund from a DataFrame.
 
@@ -265,10 +258,10 @@ def build_profile_fixed_bond(model, df: pd.DataFrame, fund_id: str, currencies: 
 
         fixed_bond = create_asset(
             model=model,
-            asset_builder_cls=BondFixedBuilder,
+            asset_cls="fixed_bond",
             pre_calculations=['coupon_rate'],
             asset_id=f"{str_cal_ym}{row["_asset_id"]}",
-            asset_class=ASSET_CLASSES_REPORTED_MAPPING['fixed_bond'],
+            asset_category=ASSET_CATEGORIES_MAPPING['fixed_bond'],
             fund_id=fund_id,
             allocation_group=row["allocation_group"],
             currency=currency,
@@ -297,7 +290,7 @@ def build_profile_fixed_bond(model, df: pd.DataFrame, fund_id: str, currencies: 
 
 
 def build_assets_equity(model, df: pd.DataFrame, fund_id: str | None,
-                        currencies: List['Currency'], equity_indices: List['EquityIndex']) -> List['Equity']:
+                        currencies: list['Currency'], equity_indices: list['EquityIndex']) -> list:
     """
     Build equity asset objects from a DataFrame and add them to a fund if provided.
 
@@ -322,10 +315,11 @@ def build_assets_equity(model, df: pd.DataFrame, fund_id: str | None,
         equity_index_id = row["equity_index_id"]
         equity_index = next((x for x in equity_indices if x.index_id == equity_index_id), None)
         # create instance
-        equity = Equity(
+        equity = create_asset(
+            asset_cls="equity",
             model=model,
             asset_id=row["asset_id"],
-            asset_class=ASSET_CLASSES_REPORTED_MAPPING["equity"],
+            asset_category=ASSET_CATEGORIES_MAPPING["equity"],
             fund_id=row["fund_id"],
             allocation_group=row["allocation_group"],
             classification=AssetClassification(row["asset_classification"]),
@@ -346,7 +340,7 @@ def build_assets_equity(model, df: pd.DataFrame, fund_id: str | None,
 
 
 def build_profile_equity(model, df: pd.DataFrame, fund_id: str,
-                         currencies: List['Currency'], equity_indices: List['EquityIndex']) -> List['Equity']:
+                         currencies: list['Currency'], equity_indices: list['EquityIndex']) -> list:
     """
     Build a profile of equity assets for a fund from a DataFrame.
 
@@ -373,10 +367,11 @@ def build_profile_equity(model, df: pd.DataFrame, fund_id: str,
         equity_index_id = row["equity_index_id"]
         equity_index = next((x for x in equity_indices if x.index_id == equity_index_id), None)
         # create instance
-        equity = Equity(
+        equity = create_asset(
+            asset_cls="equity",
             model=model,
             asset_id=f"{str_cal_ym}{row["_asset_id"]}",
-            asset_class=ASSET_CLASSES_REPORTED_MAPPING['equity'],
+            asset_category=ASSET_CATEGORIES_MAPPING['equity'],
             fund_id=fund_id,
             allocation_group=row["allocation_group"],
             classification=AssetClassification(row["asset_classification"]),

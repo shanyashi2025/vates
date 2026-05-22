@@ -17,7 +17,7 @@ _ASSET_CLS_MAP = {
     "equity_option": EquityOption
 }
 
-_BUILDER_CLS_MAP = {
+_BUILDER_MAP = {
     BondFixed: BondFixedBuilder,
     EquityOption: EquityOptionBuilder,
 }
@@ -44,7 +44,7 @@ def create_asset(asset_cls,
     Factory function to create an asset.
 
     Args:
-        asset_cls: Asset class.
+        asset_cls: Asset class, 'cash', 'equity', 'bond' ('bond_fixed', 'fixed_bond' equivalently), 'equity_option'
         pre_calculations (str | AssetPreCalculation | list[str | AssetPreCalculation] | None): List of pre-calculations.
         **kwargs: Parameters.
 
@@ -52,7 +52,7 @@ def create_asset(asset_cls,
         Asset: The constructed Asset object.
 
     Raises:
-        ValueError: If asset_cls is not a valid asset class name.
+        ValueError: If `asset_cls` is not a valid asset class name.
     """
     if isinstance(asset_cls, str):
         if asset_cls.lower() in _ASSET_CLS_MAP:
@@ -60,8 +60,8 @@ def create_asset(asset_cls,
         else:
             raise ValueError(f"'{asset_cls}' is not a valid asset class name.")
 
-    if asset_cls in _BUILDER_CLS_MAP:
-        return create_asset_by_builder(_BUILDER_CLS_MAP[asset_cls], pre_calculations, **kwargs)
+    if asset_cls in _BUILDER_MAP:
+        return create_asset_by_builder(_BUILDER_MAP[asset_cls], pre_calculations, **kwargs)
 
     return asset_cls(**kwargs)
 
@@ -91,13 +91,14 @@ def create_asset_by_builder(builder_cls,
     if len(pre_calculations) == 0:
         return builder.build()
 
+    pre_calc_names = [c.name for c in AssetPreCalculation]
     for calc in pre_calculations:
         if isinstance(calc, AssetPreCalculation):
             func_name = calc.value
-        elif isinstance(calc, str) and calc.upper() in AssetPreCalculation:
-            func_name = AssetPreCalculation[calc.upper()]
+        elif isinstance(calc, str) and calc.upper() in pre_calc_names:
+            func_name = AssetPreCalculation[calc.upper()].value
         else:  # no further validation
-            func_name = calc
+            func_name = str(calc)
 
         func = getattr(builder, func_name, None)
         if callable(func):
