@@ -158,10 +158,10 @@ def main():
 
     print(f"\n- trained parameter sensitivity is output to file 'tut_AutogradCell_param_sens.csv', "
           f"it can be referenced for more sensitivity scenarios")
-    with open('tut_AutogradCell_param_sens.csv', 'w', newline='') as f:
-        f.writelines('maturity,value,sensitivity')
-        for i, cell in enumerate(spot_curve_cell):
-            f.writelines(f"\n{','.join([str(i), str(cell.value), str(cell.grad)])}")
+    # with open('tut_AutogradCell_param_sens.csv', 'w', newline='') as f:  # output
+    #     f.writelines('maturity,value,sensitivity')
+    #     for i, cell in enumerate(spot_curve_cell):
+    #         f.writelines(f"\n{','.join([str(i), str(cell.value), str(cell.grad)])}")
 
 if __name__ == '__main__':
     main()

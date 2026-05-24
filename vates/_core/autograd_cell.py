@@ -8,7 +8,7 @@ class AutogradCell:
 
     def __init__(self, value, children=(), local_grads=()):
         self.value = value               # scalar value of this node calculated during forward pass
-        self.grad = 0                    # derivative w.r.t. this node, calculated in backward pass
+        self.grad = {}                   # derivative w.r.t. this node, calculated in backward pass
         self._children = children        # children of this node in the computation graph
         self._local_grads = local_grads  # local derivative of this node w.r.t. its children
 
@@ -76,23 +76,23 @@ class AutogradCell:
     def __gt__(self, other) -> bool: return not self <= other
     def __ge__(self, other) -> bool: return not self < other
 
-    def backward(self) -> None:
-        topo = AutogradCell.build_topo(self)
-        self.grad = 1
+    def backward(self, name) -> None:
+        topo = []
+        visited = set()
+        def build_topo(c):
+            if c not in visited:
+                visited.add(c)
+                for cc in c._children:
+                    build_topo(cc)
+                topo.append(c)
+        build_topo(self)
+        self.grad[name] = 1
         for cell in reversed(topo):
             for child, local_grad in zip(cell._children, cell._local_grads):
-                child.grad += local_grad * cell.grad
-
-    @classmethod
-    def build_topo(cls, cell, topo = None, visited = None) -> list['AutogradCell']:
-        if topo is None: topo = []
-        if visited is None: visited = set()
-        if cell not in visited:
-            visited.add(cell)
-            for child in cell._children:
-                cls.build_topo(child, topo, visited)
-            topo.append(cell)
-        return topo
+                if name in child.grad:
+                    child.grad[name] += local_grad * cell.grad[name]
+                else:
+                    child.grad[name] = local_grad * cell.grad[name]
 
     def get_dict(self) -> dict:
         return {s: getattr(self, s) for s in self.__slots__ if hasattr(self, s)}

@@ -194,36 +194,68 @@ The `AutogradCell` class automates the backpropagation process to compute the gr
 - `.grad` holds the gradient (partial derivative)
 - `.backward()` traverses the graph in reverse, applys the chain rule to compute the gradients 
 
-For actuarial practice, you can employ `AutogradCell` to implement sensitivity testing in a fast way.
+For actuarial practice, you can employ `AutogradCell` to implement sensitivity test in a fast way.
 
 ```python
 import vates as vt
 
-mort_rates = [vt.AutogradCell(0.001), vt.AutogradCell(0.002)]
-lapse_rates = [vt.AutogradCell(0.10), vt.AutogradCell(0.05)]
-expense_fixed = vt.AutogradCell(50)
-discount_rate = vt.AutogradCell(0.025)
-discount_factor = 1 / (1 + discount_rate)
+def simple_cashflow_model(mort_rates, lapse_rates, expense_fixed, discount_rates):
+    no_pols_if = 1
+    bel, sumcf = 0.0, 0.0
+    discount_factors = [1] + [0] * len(discount_rates)
+    for t in range(2):
+        prem_income = no_pols_if * 100
+        expn_outgo = no_pols_if * expense_fixed
+        no_deaths = no_pols_if * mort_rates[t]
+        no_lapses = no_pols_if * (1 - mort_rates[t]) * lapse_rates[t]
+        death_outgo = no_deaths * 10000
+        surr_outgo = no_lapses * 100
+        no_pols_if -= no_deaths + no_lapses
+        sumcf += -prem_income + expn_outgo + death_outgo + surr_outgo
+        discount_factors[t + 1] = discount_factors[t] / (1 + discount_rates[t])
+        bel += (-prem_income + expn_outgo) * discount_factors[t] + (death_outgo + surr_outgo) * discount_factors[t + 1]
+    return {"bel": bel, "sumcf": sumcf}
 
-no_pols_if = 1
-bel = 0.0
-for t in range(2):
-    prem_income = no_pols_if * 100
-    expn_outgo = no_pols_if * expense_fixed
-    no_deaths = no_pols_if * mort_rates[t]
-    no_lapses = no_pols_if * (1 - mort_rates[t]) * lapse_rates[t]
-    death_outgo = no_deaths * 10000
-    surr_outgo = no_lapses * 100
-    no_pols_if -= no_deaths + no_lapses
-    bel += (-prem_income + expn_outgo) * discount_factor ** t + (death_outgo + surr_outgo) * discount_factor ** (t + 1)
+mort_rates = [0.001, 0.002]
+lapse_rates = [0.10, 0.05]
+expense_fixed = 50
+discount_rates = [0.025, 0.035]
 
-print(f'{bel.value=:.4f}')  # prints -52.9702, the outcome of this forward pass
-bel.backward()
-print("Get sensitivity w.r.t. each assumption in one go:")
-print(f'1. mortality rates: [Y1] {mort_rates[0].grad:.4f}, [Y2] {mort_rates[1].grad:.4f}') # prints 9768.8366, 8553.4844
-print(f'2. lapse rates: [Y1] {lapse_rates[0].grad:.4f}, [Y2] {lapse_rates[1].grad:.4f}')   # prints 122.4331, 85.4065
-print(f'3. expenses: {expense_fixed.grad:.4f}')  # prints 1.8772
-print(f'4. discount rate: {discount_rate.grad:.4f}')  # prints -17.9664
+mort_rate_mul_sens, mort_rate_add_sens = vt.AutogradCell(1), vt.AutogradCell(0)
+lapse_rate_mul_sens, lapse_rate_add_sens = vt.AutogradCell(1), vt.AutogradCell(0)
+expense_fixed_mul_sens, expense_fixed_add_sens = vt.AutogradCell(1), vt.AutogradCell(0)
+discount_rate_add_sens = vt.AutogradCell(0)
+
+mort_rates = [x * mort_rate_mul_sens + mort_rate_add_sens for x in mort_rates]
+lapse_rates = [x * lapse_rate_mul_sens + lapse_rate_add_sens for x in lapse_rates]
+expense_fixed = expense_fixed * expense_fixed_mul_sens + expense_fixed_add_sens
+discount_rates = [x + discount_rate_add_sens for x in discount_rates]
+
+result = simple_cashflow_model(mort_rates, lapse_rates, expense_fixed, discount_rates)
+print(f'{result["bel"].value=:.4f}')    # prints -53.1769, the outcome of this forward pass
+print(f'{result["sumcf"].value=:.4f}')  # prints -52.4965, the outcome of this forward pass
+
+print("\nGet selected variables sensitivity w.r.t. each assumption in one go:")
+result["bel"].backward("bel")
+result["sumcf"].backward("sumcf")
+for i, name in enumerate(("bel", "sumcf"), 1):
+    print(f"\n{i}. {name}'s sensitivity w.r.t. each assumption")
+    print('a. mortality rates')
+    print(f'   - all year percent : {mort_rate_mul_sens.grad.get(name, 0):.4f}')
+    print(f'   - all year absolute: {mort_rate_add_sens.grad.get(name, 0):.4f}')
+    print(f'   - by year percent  : [{mort_rates[0].grad.get(name, 0) * mort_rates[0].value:.4f}, {mort_rates[1].grad.get(name, 0) * mort_rates[1].value:.4f}]')
+    print(f'   - by year absolute : [{mort_rates[0].grad.get(name, 0):.4f}, {mort_rates[1].grad.get(name, 0):.4f}]')
+    print('b. lapse rates')
+    print(f'   - all year percent : {lapse_rate_mul_sens.grad.get(name, 0):.4f}')
+    print(f'   - all year absolute: {lapse_rate_add_sens.grad.get(name, 0):.4f}')
+    print(f'   - by year percent  : [{lapse_rates[0].grad.get(name, 0) * lapse_rates[0].value:.4f}, {lapse_rates[1].grad.get(name, 0) * lapse_rates[1].value:.4f}]')
+    print(f'   - by year absolute : [{lapse_rates[0].grad.get(name, 0):.4f}, {lapse_rates[1].grad.get(name, 0):.4f}]')
+    print('c. expenses')
+    print(f'   - percent : {expense_fixed_mul_sens.grad.get(name, 0):.4f}')
+    print(f'   - absolute: {expense_fixed_add_sens.grad.get(name, 0):.4f}')
+    print('d. discount rates')
+    print(f'   - all year absolute: {discount_rate_add_sens.grad.get(name, 0):.4f}')
+    print(f'   - by year absolute : [{discount_rates[0].grad.get(name, 0):.4f}, {discount_rates[1].grad.get(name, 0):.4f}]')
 ```
 
 #### 6. Asset-Liability Model (ALM)
