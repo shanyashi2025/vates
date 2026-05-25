@@ -5,7 +5,7 @@ from vates._core import (
     TDepVariable,
     KeyedArray,
     kr_from_df,
-    AutogradCell,
+    autograd,
     cli,
 )
 from vates import utils
@@ -23,7 +23,7 @@ __all__ = [
     'TDepVariable',
     'KeyedArray',
     'kr_from_df',
-    'AutogradCell',
+    'autograd',
     'cli',
     # utils
     'utils',

@@ -135,19 +135,19 @@ def main():
 
     # --- backpropagation approach ---
     print("\n--- backpropagation approach ---")
-    spot_curve_cell = [vt.AutogradCell(x) for x in spot_curve_input]
+    spot_curve_cell = [vt.autograd.Cell(x) for x in spot_curve_input]
     spot_curve = spot_curve_interp(spot_curve_cell)
     back_mv_base = calculate_total_market_value(valn_date, bonds, spot_curve)
     print("-   backward pass: `.backward()`")
-    back_mv_base.backward()
+    back_mv_base.backward("mv")
 
     print("-   (fast) estimate using formula `delta mv = delta param * param sens` ...")
     back_mv_delta = {}
     for key, sens in sens_dict.items():
         back_mv_delta[key] = 0
         for rate_delta, cell in zip(sens, spot_curve_cell):
-            if abs(rate_delta) > 1e-8 and isinstance(cell, vt.AutogradCell):
-                back_mv_delta[key] += rate_delta * cell.grad
+            if abs(rate_delta) > 1e-8 and isinstance(cell, vt.autograd.Cell):
+                back_mv_delta[key] += rate_delta * cell.grad.get("mv", 0)
 
     print("\nSUMMARY: backpropagation approach")
     print(f"{'scenario':^20}| {'mv':^10} | {'delta':^8} | {'delta%':^6}")
@@ -158,10 +158,10 @@ def main():
 
     print(f"\n- trained parameter sensitivity is output to file 'tut_AutogradCell_param_sens.csv', "
           f"it can be referenced for more sensitivity scenarios")
-    # with open('tut_AutogradCell_param_sens.csv', 'w', newline='') as f:  # output
+    # with open('tut_autograd_param_sens.csv', 'w', newline='') as f:  # output
     #     f.writelines('maturity,value,sensitivity')
     #     for i, cell in enumerate(spot_curve_cell):
-    #         f.writelines(f"\n{','.join([str(i), str(cell.value), str(cell.grad)])}")
+    #         f.writelines(f"\n{','.join([str(i), str(cell.value), str(cell.grad.get("mv", 0))])}")
 
 if __name__ == '__main__':
     main()
