@@ -118,7 +118,7 @@ def build_yield_curves(model, yield_curves_df: pd.DataFrame) -> tuple[List['Yiel
 
 
 def _parse_esg_term_list(esg_term_str: str) -> list[int]:
-    term_lst = parse_str_to_int_list(esg_term_str, separator=';', joinner='-', sort_list='asc')
+    term_lst = parse_str_to_int_list(esg_term_str, separator=';', joiner='-', sort_list='asc')
     if (entry:= term_lst[0]) <= 0:
         raise ValueError(f"Esg term entry {entry} <= 0, expected positive integer.")
     if len(term_lst) > 1200:

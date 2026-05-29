@@ -185,9 +185,9 @@ class ValidatedList:
         instance.__dict__[self.name] = value
         self._set_counts[instance] = set_count + 1
 
-def parse_str_to_int_list(str_in: str, separator: str=',', joinner: str= '-',
-                          sort_list: Literal[None, 'ascending', 'asc', 'descending', 'desc']=None,
-                          handler: Literal['keep', 'remove', 'error']= 'error') -> list[int]:
+def parse_str_to_int_list(str_in: str, separator: str = ',', joiner: str = '-',
+                          sort_list: Literal[None, 'ascending', 'asc', 'descending', 'desc'] = None,
+                          handler: Literal['keep', 'remove', 'error'] = 'error') -> list[int]:
     """Parse string to a list of non-negative integers"""
     if not isinstance(str_in, str):
         raise TypeError(f"{str_in}: type {type(str_in)} is not allowed, expected 'str'.")
@@ -199,8 +199,8 @@ def parse_str_to_int_list(str_in: str, separator: str=',', joinner: str= '-',
     for part in parts:
         if not part:
             pass
-        elif re.fullmatch(rf'\d+\s*{joinner}\s*\d+', part):  # range like "1-5"
-            s1, s2 = re.split(rf'\s*{joinner}\s*', part)
+        elif re.fullmatch(rf'\d+\s*{joiner}\s*\d+', part):  # range like "1-5"
+            s1, s2 = re.split(rf'\s*{joiner}\s*', part)
             n1, n2 = int(s1), int(s2)
             n1, n2 = min(n1, n2), max(n1, n2)
             int_lst.extend(range(n1, n2 + 1))
@@ -209,7 +209,7 @@ def parse_str_to_int_list(str_in: str, separator: str=',', joinner: str= '-',
             int_lst.append(n)
         else:
             raise ValueError(f"{part} is not allowed, expected non-negative integer, separated by '{separator}' "
-                             f"and/or a range joined by '{joinner}'.")
+                             f"and/or a range joined by '{joiner}'.")
 
     if sort_list is None:
         pass
