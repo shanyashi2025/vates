@@ -45,14 +45,14 @@ class StochExecutor:
         self._exec_start_time: datetime = datetime.now()
         self._model_cls = model_cls
         self._model_name: str = model_name
-        self._model_desc: str = model_desc if model_desc else f'**Stochastic** {self._model_cls.__doc__}'
+        self._model_desc: str = model_desc or f'**Stochastic** {self._model_cls.__doc__}'
         self._start_year: int = start_year
         self._start_month: int = start_month
         self._end_year: int | None = end_year
         self._scenario: str | None = scenario
         self._sims_str: str | None = simulations
         self._simulations: list[int] = [] if simulations is None else parse_str_to_int_list(simulations)
-        self._wsdir: str = workspace_directory if workspace_directory else os.getcwd()
+        self._wsdir: str = workspace_directory or os.getcwd()
         self._input_directories: list[str] | None = input_directories
         self._results_directory: str = results_directory
         if self._results_directory:
@@ -221,18 +221,11 @@ class StochExecutor:
         }
 
     def list_stoch_file_paths(self) -> list:
-        filepath_lst = glob.glob(os.path.join(self._wsdir, self._results_directory, f'{self._model_name}*.stoch.csv'))
-        if filepath_lst:
-            return filepath_lst
-        else:
-            return []
+        return glob.glob(os.path.join(self._wsdir, self._results_directory, f'{self._model_name}*.stoch.csv')) or []
 
     def get_stoch_stat_file_path(self) -> str | None:
         filepath = self._concat_output_file_path('.stoch.statistic.csv')
-        if os.path.exists(filepath):
-            return filepath
-        else:
-            return None
+        return filepath if os.path.exists(filepath) else None
 
     @property
     def MODEL_NAME(self) -> str:

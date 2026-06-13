@@ -105,11 +105,11 @@ class ProjModelEngine:
         self._start_year: int = start_year
         self._start_month: int = start_month
         self._end_year: int | None = end_year
-        self._model_desc: str = model_desc if model_desc else (f'{self.__doc__}' if type(self) != ProjModelEngine
+        self._model_desc: str = model_desc or (f'{self.__doc__}' if type(self) != ProjModelEngine
                                            else 'Default projection model engine.')
         self._scenario: str | None = scenario
         self._simulation: int | None = simulation
-        self._wsdir: str = workspace_directory if workspace_directory else os.getcwd()
+        self._wsdir: str = workspace_directory or os.getcwd()
         self._input_directories: list[str] | None = input_directories
         self._results_directory: str = results_directory
         self._enable_proj_result: bool = enable_proj_result
@@ -188,10 +188,10 @@ class ProjModelEngine:
         if not variables: return  # empty list
 
         stoch_setting = self.load_json('__stoch_setting__', allow_not_found=True)
-        if stoch_setting is None:
-            noy_mres = 0
-        else:
+        if stoch_setting:
             noy_mres = stoch_setting.get('number_of_years_monthly_results_retained', 0)
+        else:
+            noy_mres = 0
 
         periods = pd.period_range(start=self.START_DATE, end=self.END_DATE, freq='M')
         periods_m = pd.period_range(
