@@ -171,8 +171,8 @@ def newton_raphson_z_spread(target_pv: float, cash_flows: npt.NDArray[np.float64
 
     Args:
         target_pv (float): Target present value.
-        cash_flows (npt.NDArray[np.float64]): Array of cash flows.
-        spots (npt.NDArray[np.float64]): Array of spot rates.
+        cash_flows (npt.NDArray[np.float64]): Array of cash flows, `0, 1, ..., n-1` represents month `1, 2, ..., n`
+        spots (npt.NDArray[np.float64]): Array of spot rates, `1, 2, ..., n` represents month `1, 2, ..., n`
 
     Returns:
         float: Calculated z-spread.
@@ -187,26 +187,32 @@ def newton_raphson_z_spread(target_pv: float, cash_flows: npt.NDArray[np.float64
     if abs(target_pv) < tolerance:
         raise ValueError("Target present value cannot be zero")
 
+    min_spot_val = spots.min()
+    n_months = len(cash_flows)
     z = 0.0  # initial guess
 
     for _ in range(max_iterations):  # max iterations
         spots_plus_z = spots + z
         dfs = convert_spot_to_disc(spots_plus_z, "M")
-        pv = np.dot(cash_flows, dfs[1:len(cash_flows) + 1])
+        pv = np.dot(cash_flows, dfs[1: n_months + 1])
 
         if abs(pv / target_pv - 1) < tolerance:
             return z
 
         # Newton-Raphson approximation
-        delta = epsilon if pv > target_pv else (- epsilon)
+        if pv > target_pv:
+            delta = epsilon
+        else:
+            delta = max(-epsilon, tolerance - 1 - min_spot_val - z)  # ensure (1 + min_spot_val + z + delta) > 0
         dfs_delta = convert_spot_to_disc(spots_plus_z + delta, "M")
-        pv_delta = np.dot(cash_flows, dfs_delta[1:len(cash_flows) + 1])
+        pv_delta = np.dot(cash_flows, dfs_delta[1: n_months + 1])
         derivative = (pv_delta - pv) / delta
 
         if abs(derivative) < tolerance:
             return z
 
         z = z - (pv - target_pv) / derivative
+        z = max(z, tolerance - 1 - min_spot_val)  # ensure (1 + min_spot_val + z) > 0 for edge case
 
     raise ValueError(f"Newton-Raphson method did not converge after {max_iterations} iterations")
 
@@ -218,7 +224,7 @@ def newton_raphson_ytm(target_pv: float, cash_flows: npt.NDArray[np.float64],
 
     Args:
         target_pv (float): Target present value.
-        cash_flows (npt.NDArray[np.float64]): Array of cash flows.
+        cash_flows (npt.NDArray[np.float64]): Array of cash flows, `0, 1, ..., n-1` represents month `1, 2, ..., n`
         freq (int): Payment frequency, [1, 2, 4, 12]
         initial_guess (float, optional): Initial guess for yield to maturity. Defaults to 0.0.
 
@@ -238,11 +244,11 @@ def newton_raphson_ytm(target_pv: float, cash_flows: npt.NDArray[np.float64],
     if abs(target_pv) < tolerance:
         raise ValueError("Target present value cannot be zero")
 
-    periods = np.arange(1, len(cash_flows) + 1)
+    periods = np.arange(1, len(cash_flows) + 1)  # periods in month
     ytm = initial_guess
 
     for _ in range(max_iterations):
-        df = (1 / (1 + ytm / freq)) ** (1 / 12 * freq)
+        df = (1 + ytm / freq) ** (-freq / 12)  # monthly discount factor
         dfs = df ** periods
         pv = np.dot(cash_flows, dfs)
 
@@ -251,7 +257,7 @@ def newton_raphson_ytm(target_pv: float, cash_flows: npt.NDArray[np.float64],
             return ytm
 
         # Calculate numerical derivative
-        df_up = (1 / (1 + (ytm + epsilon) / freq)) ** (1 / 12 * freq)
+        df_up = (1 + (ytm + epsilon) / freq) ** (-freq / 12)
         dfs_up = df_up ** periods
         pv_up = np.dot(cash_flows, dfs_up)
 
@@ -263,6 +269,7 @@ def newton_raphson_ytm(target_pv: float, cash_flows: npt.NDArray[np.float64],
 
         # Newton-Raphson update
         ytm = ytm - (pv - target_pv) / derivative
+        ytm = max(ytm, (tolerance - 1) * freq)  # ensure (1 + ytm / freq) > 0 for edge case
 
     raise ValueError(f"Newton-Raphson method did not converge after {max_iterations} iterations")
 
