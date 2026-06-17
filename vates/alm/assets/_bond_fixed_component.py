@@ -54,6 +54,12 @@ class BondFixedCashFlowGenerator:
             raise ValueError(f'face_value={self._params.face_value} should be positive.')
         if self._params.coupon_freq not in (0, 1, 2, 4, 12):
             raise ValueError(f'Invalid coupon_freq={self._params.coupon_freq}, expected [0, 1, 2, 4, 12].')
+        if self._params.coupon_freq != 0:
+            coupon_interval = 12 // self._params.coupon_freq
+            if (self._params.maturity_date - self._params.issue_date).n % coupon_interval != 0:
+                warnings.warn(f"Months between maturity date ({self._params.maturity_date}) and issue date "
+                              f"{self._params.issue_date} is not divisible by coupon interval ({coupon_interval}). "
+                              f"Note: issue date will be used to determine coupon payment months.")
         if not -0.05 < self._params.coupon_rate < 0.2:
             warnings.warn(f'coupon_rate={self._params.coupon_rate} not in normal range, recommend to check.')
 
