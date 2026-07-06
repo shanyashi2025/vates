@@ -6,16 +6,16 @@ import vates as vt
 
 class PortMonteCarlo(vt.ProjModelEngine):
     """Portfolio Monte Carlo simulation."""
-    def __init__(self, *args, **kwargs):
+    def __init__(self, risk_free_rate, asset_name_list, n_assets, mu, sigma, corr_matrix, portfolios, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.risk_free_rate: float = kwargs['risk_free_rate']
+        self.risk_free_rate: float = risk_free_rate
         self.m_rf_rate: float = (1 + self.risk_free_rate) ** (1/12) - 1
-        self.asset_name_list: list = kwargs['asset_name_list'].copy()
-        self.n_assets: int = kwargs['n_assets']
-        self.mu: np.ndarray = kwargs['mu'].copy()  # continually compounded, i.e. ln(1 + annaul return)
-        self.sigma: np.ndarray = kwargs['sigma'].copy()
-        self.corr_matrix: np.ndarray = kwargs['corr_matrix'].copy()
-        self.portfolios: dict[str, dict] = kwargs['portfolios'].copy()
+        self.asset_name_list: list = asset_name_list.copy()
+        self.n_assets: int = n_assets
+        self.mu: np.ndarray = mu.copy()  # continually compounded, i.e. ln(1 + annaul return)
+        self.sigma: np.ndarray = sigma.copy()
+        self.corr_matrix: np.ndarray = corr_matrix.copy()
+        self.portfolios: dict[str, dict] = portfolios.copy()
 
         for port_name, port_var in self.portfolios.items():
             port_var['asset_amount'] = port_var['init_balance'] * port_var['weight']
@@ -122,17 +122,15 @@ class PortMonteCarloStoch(vt.StochExecutor):
                 'rfawgt': rfawgt,
             }
 
-        self.ALL_SIM_KWARGS.update(
-            {
-                'risk_free_rate': risk_free_rate,
-                'asset_name_list': asset_name_list,
-                'n_assets': n_assets,
-                'mu': mu,
-                'sigma': sigma,
-                'corr_matrix': corr_matrix,
-                'portfolios': portfolios,
-            }
-        )
+        self.ALL_SIM_PARAMS = {
+            'risk_free_rate': risk_free_rate,
+            'asset_name_list': asset_name_list,
+            'n_assets': n_assets,
+            'mu': mu,
+            'sigma': sigma,
+            'corr_matrix': corr_matrix,
+            'portfolios': portfolios,
+        }
 
     def post_stoch_calculations(self):
         pass

@@ -9,7 +9,7 @@ from em02_fund_proj import FundModel
 
 def main():
     model_args = {
-        "model_name": "fund_proj",
+        "name": "fund_proj",
         "start_year": 2024,
         "start_month": 12,
         "end_year": 2026,

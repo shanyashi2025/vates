@@ -33,7 +33,7 @@ def _get_output_file_path(wsdir, output_folder, output_file_name):
 def main(workspace_directory: str, input_directories: list[str]):
     # Generate the Smith-Wilson extrapolated curve.
     model_space = vt.ProjModelEngine(
-        model_name = 'smith_wilson',
+        name='smith_wilson',
         start_year = 2000,  # not used
         start_month = 12,   # not used
         workspace_directory = workspace_directory,

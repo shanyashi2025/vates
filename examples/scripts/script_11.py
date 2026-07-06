@@ -9,7 +9,7 @@ from em11_monte_carlo import PortMonteCarlo, PortMonteCarloStoch
 
 def main():
     model_args = {
-        "model_name": "monte_carlo",
+        "name": "monte_carlo",
         "start_year": 2024,
         "start_month": 12,
         "end_year": 2034,
@@ -21,7 +21,7 @@ def main():
         "max_workers": 4,
     }
 
-    model = PortMonteCarloStoch(PortMonteCarlo, **model_args)
+    model = PortMonteCarloStoch(model_cls = PortMonteCarlo, **model_args)
     model.run()
 
 

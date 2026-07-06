@@ -9,7 +9,7 @@ from em01_asset_proj import AssetModel
 
 def main():
     model_args = {
-        "model_name": "asset_proj",
+        "name": "asset_proj",
         "start_year": 2024,
         "start_month": 12,
         "end_year": 2026,

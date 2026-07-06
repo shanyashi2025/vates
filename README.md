@@ -18,19 +18,20 @@ The `ProjModelEngine` class is the projection model engine.
 
 ```python
 import vates as vt
-model_simple_params = vt.ProjModelEngine(model_name='your_model_name', start_year=2025, start_month=12)
+
+model_simple_params = vt.ProjModelEngine(name='your_model_name', start_year=2025, start_month=12)
 
 model_full_params = vt.ProjModelEngine(
-    model_name='your_model_name', 
-    start_year=2025, 
-    start_month=12,
-    end_year=2026,
-    model_desc='description of your model',
-    scenario='scenario_to_run',
-    simulation=1,
-    workspace_directory='path/to/workspace',
-    input_directories=['path/to/input/folder1', 'path/to/input/folder2'],
-    results_directory='path/to/results/folder'    
+  name='your_model_name',
+  start_year=2025,
+  start_month=12,
+  end_year=2026,
+  description='description of your model',
+  scenario='scenario_to_run',
+  simulation=1,
+  workspace_directory='path/to/workspace',
+  input_directories=['path/to/input/folder1', 'path/to/input/folder2'],
+  results_directory='path/to/results/folder'
 )
 ```
 
@@ -103,31 +104,37 @@ The `StochExecutor` class is the executor for stochastic model, multiprocessing 
 ```python
 import vates as vt
 
-class YourStochExecutor(vt.StochExecutor):
-    def pre_stoch_calculations(self):
-        print(f"model name: {self.MODEL_NAME} | scenario: {self.SCENARIO} | simulations: {self.SIMULATIONS}")
 
-    def post_stoch_calculations(self):
-        print(f'post stochastic calculations ...')
+class YourStochExecutor(vt.StochExecutor):
+  def pre_stoch_calculations(self):
+    print(f"model name: {self.MODEL_NAME} | scenario: {self.SCENARIO} | simulations: {self.SIMULATIONS}")
+
+  def post_stoch_calculations(self):
+    print(f'post stochastic calculations ...')
+
 
 class YourModel(vt.ProjModelEngine):
-    def time_zero_calculations(self):
-        print(f"model name: {self.MODEL_NAME} | scenario: {self.SCENARIO} | simulation: {self.SIMULATION} | start date: {self.START_DATE} | end date: {self.END_DATE}")
-    def in_time_calculations(self): pass
-    def post_time_calculations(self): pass
+  def time_zero_calculations(self):
+    print(
+      f"model name: {self.MODEL_NAME} | scenario: {self.SCENARIO} | simulation: {self.SIMULATION} | start date: {self.START_DATE} | end date: {self.END_DATE}")
 
-if __name__ == '__main__': # must create the '__main__' block for multiprocessing
-    your_stoch_model_instance = YourStochExecutor(
-        model_cls=YourModel,
-        model_name='your_stoch_model_name',
-        start_year=2025,
-        start_month=12,
-        end_year=2026,
-        simulations='1-3, 5',
-        max_workers=4,
-    )
-    
-    your_stoch_model_instance.run()
+  def in_time_calculations(self): pass
+
+  def post_time_calculations(self): pass
+
+
+if __name__ == '__main__':  # must create the '__main__' block for multiprocessing
+  your_stoch_model_instance = YourStochExecutor(
+    model_cls=YourModel,
+    name='your_stoch_model_name',
+    start_year=2025,
+    start_month=12,
+    end_year=2026,
+    simulations='1-3, 5',
+    max_workers=4,
+  )
+
+  your_stoch_model_instance.run()
 ```
 
 #### 4. `KeyedArray`
