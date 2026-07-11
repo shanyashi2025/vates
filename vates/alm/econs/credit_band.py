@@ -1,9 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import weakref
 
-from vates._core import TDepVariable
+from vates._core import ProjModelEngine, TDepVariable
 
 
 class CreditBand:
@@ -18,34 +17,29 @@ class CreditBand:
         tdv_recovery_rate (float): Recovery rate.
     """
 
-    def __init__(self, model, band_id: str) -> None:
+    def __init__(self, model_engine: ProjModelEngine, band_id: str) -> None:
         """
         Initialize a CreditRisk object.
 
         Args:
             band_id (str): credit band identifier.
         """
-        self._model_ref: weakref.ref = weakref.ref(model)
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
+
         self.band_id: str = band_id
         self._spread: npt.NDArray[np.float64] | None = None
         self._spotmult: npt.NDArray[np.float64] | None = None
         self._prob_of_default_ac: float | None = None
         self._recovery_rate: float | None = None
         self._last_update: int | None = None
-        self.tdv_prob_of_default_ac: TDepVariable = TDepVariable(model, "prob_of_default_ac", band_id, 'credit')
-        self.tdv_recovery_rate: TDepVariable = TDepVariable(model, "recovery_rate", band_id, 'credit')
+        self.tdv_prob_of_default_ac: TDepVariable = TDepVariable(model_engine, "prob_of_default_ac", band_id, 'credit')
+        self.tdv_recovery_rate: TDepVariable = TDepVariable(model_engine, "recovery_rate", band_id, 'credit')
 
-    @property
-    def model_proxy(self):
-        return self._model_ref()
-
-    @property
-    def time(self) -> int | None:
-        return self._model_ref().time
-    
-    @property
-    def period(self) -> pd.Period | None:
-        return self._model_ref().period
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     @property
     def last_update(self) -> int | None:

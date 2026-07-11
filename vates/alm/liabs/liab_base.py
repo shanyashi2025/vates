@@ -3,8 +3,8 @@ Defines the abstract Liab class.
 """
 from abc import ABC, abstractmethod
 import pandas as pd
-import weakref
 
+from vates._core import ProjModelEngine
 from vates.alm.econs import Currency
 
 class Liab(ABC):
@@ -22,16 +22,28 @@ class Liab(ABC):
         _acct_value (float): Account value in force.
         _asset_share (float): Asset share in force.
     """
-    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_liab_id', '_fund_id', '_currency', '_entry_date', '_num_pols',
+    __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_liab_id', '_fund_id', '_currency', '_entry_date', '_num_pols',
                  '_surr_val', '_math_res', '_acct_value', '_asset_share', '_cash_flow', '_prem_inc', '_tc_dict')
 
-    def __init__(self, model, liab_id: str, fund_id: str, currency: Currency, entry_date: pd.Period,
-                 no_pols_if: float, surr_val_if: float, math_res_if: float, acct_value_if: float, asset_share_if: float):
+    def __init__(
+        self,
+        model_engine: ProjModelEngine,
+        *,
+        liab_id: str,
+        fund_id: str,
+        currency: Currency,
+        entry_date: pd.Period,
+        no_pols_if: float,
+        surr_val_if: float,
+        math_res_if: float,
+        acct_value_if: float,
+        asset_share_if: float
+    ):
         """
         Initialize a liability object.
 
         Args:
-            model: Model object.
+            model_engine: Model engine object.
             liab_id (str): Liability identifier.
             fund_id (str): Fund identifier.
             currency (Currency): Currency of the liability.
@@ -42,8 +54,9 @@ class Liab(ABC):
             acct_value_if (float): Account value in force.
             asset_share_if (float): Asset share in force.
         """
-        self._model_ref: weakref.ref = weakref.ref(model)
-
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
         self._liab_id: str = liab_id
         self._fund_id: str = fund_id
         self._currency: Currency = currency
@@ -57,17 +70,9 @@ class Liab(ABC):
         self._prem_inc: float = 0.0
         self._tc_dict: dict[str, int] = {"roll_forward": self.time, "update_ad": self.time}
 
-    @property
-    def model_proxy(self):
-        return self._model_ref()
-
-    @property
-    def time(self) -> int | None:
-        return self._model_ref().time
-
-    @property
-    def period(self) -> pd.Period | None:
-        return self._model_ref().period
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     @property
     def liab_id(self) -> str:

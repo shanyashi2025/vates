@@ -1,9 +1,9 @@
 import pandas as pd
 import warnings
-import weakref
 from enum import Enum, unique
 from typing import Optional
 
+from vates._core.proj_model_engine import ProjModelEngine
 from vates.utils import t_checker
 from vates.alm.enums import AssetRepBasis
 from vates.alm.assets import Asset, Cash
@@ -37,8 +37,14 @@ class Fund:
         _accum_free_proceeds (float): Accumulated free proceeds pending investment/transfer.
     """
 
-    def __init__(self, model, *, fund_id: str, rebalance_policy: dict[str, RebalancePolicyParams],
-                 asset_categories: list[str]) -> None:
+    def __init__(
+        self,
+        model_engine: ProjModelEngine,
+        *,
+        fund_id: str,
+        rebalance_policy: dict[str, RebalancePolicyParams],
+        asset_categories: list[str]
+    ) -> None:
         """
         Initialize a Fund object.
 
@@ -47,30 +53,24 @@ class Fund:
             rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
             asset_categories (list[str]): Asset categories to be reported.
         """
-        self._model_ref: weakref.ref = weakref.ref(model)
-        self.fund_id = fund_id
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
 
+        self.fund_id = fund_id
         # Asset and liab collections
         self._container: ALContainer = ALContainer()
         self._primary_cash_asset: Cash | None = None
         self._assembled: bool = False
 
-        self._calculator: FundCalculator = FundCalculator(model, fund_id, self._container, asset_categories)
-        self._allocator: AssetAllocator = AssetAllocator(model, fund_id, self._container, rebalance_policy)
+        self._calculator: FundCalculator = FundCalculator(model_engine, fund_id, self._container, asset_categories)
+        self._allocator: AssetAllocator = AssetAllocator(model_engine, fund_id, self._container, rebalance_policy)
 
         self._accum_free_proceeds: float = 0.0
 
-    @property
-    def model_proxy(self):
-        return self._model_ref()
-
-    @property
-    def time(self) -> int | None:
-        return self._model_ref().time
-    
-    @property
-    def period(self) -> pd.Period | None:
-        return self._model_ref().period
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     @property
     def assets(self) -> list[Asset]:

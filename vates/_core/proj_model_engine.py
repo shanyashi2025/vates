@@ -40,6 +40,7 @@ class ProjModelEngine:
 
         # runtime stuffs
         self._cached_filepath: dict[str, tuple] = {}
+        self._time_observers: list[weakref.ref] = []
         self._proj_variables: list[weakref.ref[ProjVariable]] = []
         self._output_files: set = set()
         self._time: int | None = None
@@ -65,7 +66,7 @@ class ProjModelEngine:
         if self._proj_func is not None:
             msg = (f"{self._proj_func} is already bound. If you are sure you want to reset it, "
                    f"use 'foo._proj_func = None', then call 'foo.bind_proj_func(...)' method.")
-            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
             return self
         if not callable(func):
             raise ValueError(f"Cannot bind un-callable object: {func}.")
@@ -73,7 +74,7 @@ class ProjModelEngine:
         sig_params = inspect.signature(func).parameters
         if len(sig_params) == 0:
             msg = f"The function '{func.__name__}' has no argument, it is bound as a function instead of a method."
-            warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+            warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
             self._proj_func = func
         else:
             first_arg_name, first_arg_param = list(sig_params.keys())[0], list(sig_params.values())[0]
@@ -83,10 +84,10 @@ class ProjModelEngine:
             else:
                 msg = (f"When called, the bound method '{func.__name__}' automatically passes '{self._name}' as the "
                        f"first argument '{first_arg_name}'.")
-                warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+                warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
             self._proj_func = MethodType(func, self)
 
-        self.add_traced_message(f"INFO: The function {func} has been bound to {self}.")
+        self.include_traced_message(f"INFO: The function {func} has been bound to {self}.")
 
         return self
 
@@ -129,7 +130,7 @@ class ProjModelEngine:
         if self._run_config is not None:
             msg = (f"Run configuration is already set. If you are sure you want to reset it, "
                    f"use 'foo._run_config = None', then call 'foo.set_run_config(...)' method.")
-            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
             return self
 
         none_items = []
@@ -171,7 +172,7 @@ class ProjModelEngine:
 
         if len(none_items) > 0:
             msg = f"Following items are set by default: {', '.join(none_items)}."
-            warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+            warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
 
         return self
 
@@ -185,11 +186,16 @@ class ProjModelEngine:
         if self._run_config is None:
             raise ValueError("Run configuration has not been set.")
         proj_func_args = proj_func_args or {}
+
+        if self._time is not None:
+            msg = f"'time={self._time} will be reset to iterate from 0 to {self.MAX_T}."
+            warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
+
         exec_start_time = datetime.now()
         try:
-            for self._time in range(self.MAX_T + 1):
-                self._period = self.START_DATE + self._time
+            for self.time in range(self.MAX_T + 1):
                 self._proj_func(**proj_func_args)
+            self._proj_variables[:] = [ref for ref in self._proj_variables if ref()]  # remove dead
             self._write_results()
             exec_success = True
         except Exception as e:
@@ -209,12 +215,13 @@ class ProjModelEngine:
     def _write_results(self) -> None:
         if self.results_directory.is_dir():
             if self._run_config.is_delete_existing_results:
+                remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
                 for f in glob.glob(str(self.results_directory / f'{self._name}*')):
-                    if f.endswith(('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')):
+                    if f.endswith(remove_pattern):
                         os.remove(f)
                     else:
                         msg = f"Exsiting file NOT deleted: '{f}'."
-                        warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+                        warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
         else:
             os.makedirs(self.results_directory, exist_ok=True)
         self._write_projection_result()
@@ -266,11 +273,11 @@ class ProjModelEngine:
         is_file_exist = output_file.is_file()
         if output_mode == 'w' and is_file_exist:
             msg = f"stoch_result_file_mode='w': existing '{output_file}' will be overwritten."
-            warnings.warn(msg); self.add_traced_message(msg)
+            warnings.warn(msg); self.include_traced_message(msg)
         elif output_mode == 'a' and not is_file_exist:
             output_mode = 'w'
             msg = f"stoch_result_file_mode='a': but 'w' mode will be used because '{output_file}' does not exist."
-            warnings.warn(msg); self.add_traced_message(msg)
+            warnings.warn(msg); self.include_traced_message(msg)
 
         with open(output_file, output_mode, newline='', encoding='utf-8-sig') as csvfile:
             writer = csv.writer(csvfile)
@@ -280,7 +287,26 @@ class ProjModelEngine:
                 self._write_stoch_variable(v, writer, self._run_config.simulation, pos_lst_m, pos_lst_y)
         self._output_files.add(output_file)
 
-    def _include_proj_variable(self, proj_variable: ProjVariable | weakref.ref[ProjVariable]) -> None:
+    def attach_time_observer(self, observer, /) -> None:
+        if isinstance(observer, weakref.ref):
+            self._time_observers.append(observer)
+        else:
+            self._time_observers.append(weakref.ref(observer))
+
+    def _notify_time_sync(self) -> None:
+        alive_observers = []
+        for ref in self._time_observers:
+            obs = ref()
+            if obs is not None:
+                obs.sync_time(self)
+                alive_observers.append(ref)
+
+        total_count = len(self._time_observers)
+        dead_count = total_count - len(alive_observers)
+        if dead_count > 0 and (dead_count > 50 or dead_count / total_count > 0.25):
+            self._time_observers[:] = alive_observers
+
+    def include_proj_variable(self, proj_variable: ProjVariable | weakref.ref[ProjVariable]) -> None:
         """Include a projection variable into `_proj_variables`
 
         Args:
@@ -434,10 +460,11 @@ class ProjModelEngine:
             with open(filepath, 'r', **kwargs) as jsonfile:
                 return json.load(jsonfile)
         elif allow_not_found:
+            self.include_traced_message(f"INFO: JSON file '{filename}' not found, 'None' is return.")
             return None
         else:
             ext_warn = "" if filename.lower().endswith('.json') else "You might forget to include '.json' in filename."
-            raise FileNotFoundError(f"File '{filename}' not exists in input directories. {ext_warn}")
+            raise FileNotFoundError(f"JSON file '{filename}' not exists in input directories. {ext_warn}")
 
     def read_csv(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
                  allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
@@ -445,6 +472,7 @@ class ProjModelEngine:
         if filepath:
             return pd.read_csv(filepath, **kwargs)
         elif allow_not_found:
+            self.include_traced_message(f"INFO: CSV file '{filename}' not found, 'None' is return.")
             return None
         else:
             ext_warn = "" if filename.lower().endswith('.csv') else "You might forget to include '.csv' in filename."
@@ -456,6 +484,7 @@ class ProjModelEngine:
         if filepath:
             return pd.read_excel(filepath, **kwargs)
         elif allow_not_found:
+            self.include_traced_message(f"INFO: Excel file '{filename}' not found, 'None' is return.")
             return None
         else:
             ext_warn = "" if filename.lower().endswith('.xlsx') else "You might forget to include '.xlsx' in filename."
@@ -470,6 +499,7 @@ class ProjModelEngine:
             table = dataset.to_table(**kwargs)
             return table.to_pandas()
         elif allow_not_found:
+            self.include_traced_message(f"INFO: parquet file '{filename}' not found, 'None' is return.")
             return None
         else:
             ext_warn = "" if filename.lower().endswith('.parquet') else "You might forget to include '.parquet' in filename."
@@ -488,7 +518,7 @@ class ProjModelEngine:
             return filepath_tuple[1]
         else:
             msg = f"'first_or_last_seen': value '{first_or_last_seen}' is unkown, use 'first_seen' as fallback."
-            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
             return filepath_tuple[0]
 
     def _search_filepath(self, filename: str) -> tuple[Path | None, Path | None]:
@@ -588,6 +618,7 @@ class ProjModelEngine:
             raise ValueError(f"time: value {value} is not allowed, execpted 0 to {self.MAX_T}.")
         self._time = value
         self._period = self.START_DATE + value
+        self._notify_time_sync()
 
     @property
     def period(self) -> pd.Period | None:
@@ -602,8 +633,9 @@ class ProjModelEngine:
             raise ValueError(f"period: value {value} is not allowed, expected {self.START_DATE}) to {self.END_DATE}.")
         self._period = value
         self._time = (value - self.START_DATE).n
+        self._notify_time_sync()
 
-    def add_traced_message(self, /, msg: str):
+    def include_traced_message(self, /, msg: str):
         frame = inspect.currentframe().f_back
         filename = os.path.abspath(frame.f_code.co_filename)
         lineno = frame.f_lineno
@@ -612,7 +644,11 @@ class ProjModelEngine:
     def __setattr__(self, name, value):
         if hasattr(self, '_initialized'):
             if name in type(self).__dict__:  # check if the attribute name already exists in the class definition
-                raise AttributeError(f"Cannot overwrite protected member '{name}'")
+                obj = type(self).__dict__.get(name)
+                if isinstance(obj, property) and obj.fset is not None:  # check if it is a property and has a setter
+                    pass
+                else:
+                    raise AttributeError(f"Cannot overwrite protected member '{name}'")
             if not hasattr(self, name) and hasattr(self, "_messages"):
-                self.add_traced_message(f"INFO: Add member: '{name}' {type(value)}")
+                self.include_traced_message(f"INFO: Add member: '{name}' {type(value)}")
         super().__setattr__(name, value)

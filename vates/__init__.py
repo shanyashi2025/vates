@@ -1,5 +1,4 @@
 from vates._core import (
-    LightModelSpace,
     ProjModelEngine,
     StochExecutor,
     ConstVariable,
@@ -16,7 +15,6 @@ __version__ = "0.1.4"
 
 __all__ = [
     # core
-    'LightModelSpace',
     'ProjModelEngine',
     'StochExecutor',
     'ConstVariable',

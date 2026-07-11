@@ -2,6 +2,7 @@ from typing import List, Dict
 import pandas as pd
 from dataclasses import dataclass
 
+from vates import ProjModelEngine
 from vates.alm import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.econs import Currency
 from vates.alm.liabs import Liab, ExtProjLiab
@@ -28,7 +29,8 @@ class FundMaster:
     ph_funds: list[Fund] | None = None
     sh_fund: Fund | None = None
 
-def build_fund_master(model, funds_df: pd.DataFrame, rebalance_policy_df: pd.DataFrame) -> FundMaster:
+def build_fund_master(model_engine: ProjModelEngine, funds_df: pd.DataFrame, rebalance_policy_df: pd.DataFrame
+                      ) -> FundMaster:
     funds = []
     ph_funds = []
     sh_fund = None
@@ -37,7 +39,7 @@ def build_fund_master(model, funds_df: pd.DataFrame, rebalance_policy_df: pd.Dat
     for idx, row in funds_df.iterrows():
         fund_id = str(idx)
         fund = Fund(
-            model,
+            model_engine,
             fund_id=fund_id,
             rebalance_policy=build_rebalance_policy(rebalance_policy_df, fund_id),
             asset_categories=row["asset_classes_reported"].split(';')
@@ -58,13 +60,13 @@ def build_fund_master(model, funds_df: pd.DataFrame, rebalance_policy_df: pd.Dat
     return FundMaster(funds=funds, ph_funds=ph_funds, sh_fund=sh_fund, rebalance_params_dict=rebalance_params_dict)
 
 
-def build_liabs(model, df: pd.DataFrame, fund_id: str | None,
+def build_liabs(model_engine: ProjModelEngine, df: pd.DataFrame, fund_id: str | None,
                 currencies: List['Currency']) -> List['Liab']:
     """
     Build liability objects from a DataFrame and add them to a fund if provided.
 
     Args:
-        model: Model object.
+        model_engine: Model engine object.
         df (pd.DataFrame): DataFrame containing liability data.
         fund_id (str | None): Fund id to filter, or None.
         currencies (list): List of Currency objects.
@@ -84,7 +86,7 @@ def build_liabs(model, df: pd.DataFrame, fund_id: str | None,
 
         if liab_class == 'extprojliab':
             liab = ExtProjLiab(
-                model=model,
+                model_engine=model_engine,
                 liab_id=row["liab_id"],
                 fund_id=row["fund_id"],
                 currency=currency,

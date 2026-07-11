@@ -1,33 +1,29 @@
 import pandas as pd
-import weakref
+
+from vates._core import ProjModelEngine
 
 class MarketInfo:
     """
     Represents the market infomration.
     """
-    def __init__(self, model, info_id: str) -> None:
+    def __init__(self, model_engine: ProjModelEngine, info_id: str) -> None:
         """
         Initialize a MarketInfo object.
 
         Args:
             info_id (str): Market infomration identifier.
         """
-        self._model_ref: weakref.ref = weakref.ref(model)
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
+
         self.info_id: str = info_id
         self._last_update: int | None = None
         self._data: dict[str, ...] = {}
 
-    @property
-    def model_proxy(self):
-        return self._model_ref()
-
-    @property
-    def time(self) -> int | None:
-        return self._model_ref().time
-
-    @property
-    def period(self) -> pd.Period | None:
-        return self._model_ref().period
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     @property
     def last_update(self) -> int | None:

@@ -26,7 +26,7 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
     # build esg master
     esg_master = build_esg_master(
-        model=model,
+        model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
         esg_df=model.read_csv(filename_dict["esg"])
     )
@@ -38,13 +38,15 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
         "redemp_schedule": file_df_dict.get("redemp_schedule"),
     }
 
+    assets = []
+
     @model.bind_proj_func
     def assets_projection():
         esg_master.update_econ_data(model.period)
         if model.time == 0:
-            model.assets = build_all_existing_assets(model, assets_df_dict, esg_master, None)['all']
+            assets[:] = build_all_existing_assets(model, assets_df_dict, esg_master, None)['all']
         else:
-            for asset in model.assets:
+            for asset in assets:
                 asset.roll_forward()
                 asset.close_dealing()
 

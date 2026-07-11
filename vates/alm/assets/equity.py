@@ -21,7 +21,7 @@ class Equity(Asset):
     __slots__ = ('_equity_index', '_mv', '_fav', '_cash_flow',
                  'tdv_cash_flow', 'tdv_dividend', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_fav_bd', 'tdv_fav_ad',)
 
-    def __init__(self, model, asset_id: str, is_profile: bool, currency: Currency | None, asset_category: str, fund_id: str,
+    def __init__(self, model_engine, asset_id: str, is_profile: bool, currency: Currency | None, asset_category: str, fund_id: str,
                  allocation_group: str, mv: float, fav: float, equity_index: EquityIndex,
                  classification: AssetClassification, purchase_date: pd.Period | None=None):
         """
@@ -40,8 +40,9 @@ class Equity(Asset):
             classification (AssetClassification): Asset classification.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model, asset_id, is_profile, 1, purchase_date, currency, classification, asset_category,
-                         fund_id, allocation_group)
+        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=1,
+                         purchase_date=purchase_date, currency=currency, classification=classification,
+                         asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
         t = self.time
         self._equity_index: EquityIndex = equity_index
         self._mv: float = mv
@@ -61,12 +62,12 @@ class Equity(Asset):
 
         self._cash_flow: float = 0.0
 
-        self.tdv_cash_flow: TDepVariable = TDepVariable(model, "cash_flow", asset_id, 'equity')
-        self.tdv_dividend: TDepVariable = TDepVariable(model, "dividend", asset_id, 'equity')
-        self.tdv_mv_bd: TDepVariable = TDepVariable(model, "mv_bd", asset_id, 'equity')
-        self.tdv_mv_ad: TDepVariable = TDepVariable(model, "mv_ad", asset_id, 'equity')
-        self.tdv_fav_bd: TDepVariable = TDepVariable(model, "fav_bd", asset_id, 'equity')
-        self.tdv_fav_ad: TDepVariable = TDepVariable(model, "fav_ad", asset_id, 'equity')
+        self.tdv_cash_flow: TDepVariable = TDepVariable(model_engine, "cash_flow", asset_id, 'equity')
+        self.tdv_dividend: TDepVariable = TDepVariable(model_engine, "dividend", asset_id, 'equity')
+        self.tdv_mv_bd: TDepVariable = TDepVariable(model_engine, "mv_bd", asset_id, 'equity')
+        self.tdv_mv_ad: TDepVariable = TDepVariable(model_engine, "mv_ad", asset_id, 'equity')
+        self.tdv_fav_bd: TDepVariable = TDepVariable(model_engine, "fav_bd", asset_id, 'equity')
+        self.tdv_fav_ad: TDepVariable = TDepVariable(model_engine, "fav_ad", asset_id, 'equity')
 
         if not is_profile:
             self.tdv_mv_ad[t] = self._mv

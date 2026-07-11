@@ -3,9 +3,8 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import warnings
-import weakref
 
-from vates._core import TDepVariable
+from vates._core import ProjModelEngine, TDepVariable
 from vates.alm.enums import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.assets import Asset, Cash
 from vates.alm.funds._utils import ALContainer
@@ -50,31 +49,29 @@ class AssetAllocator:
         rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
     """
 
-    def __init__(self, model, fund_id: str, container: ALContainer,
+    def __init__(self, model_engine: ProjModelEngine, fund_id: str, container: ALContainer,
                  rebalance_policy: dict[str, RebalancePolicyParams]):
-        self._model_ref: weakref.ref = weakref.ref(model)
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
         self.fund_id: str = fund_id
         self.container: ALContainer = container
         self.rebalance_policy = rebalance_policy
         self.ag_seq_list = self.list_ag_in_sequence(fund_id, rebalance_policy)
 
-        self.tdv_fund_size: TDepVariable = TDepVariable(model, "fund_size", fund_id, 'rebalance')
-        self.tdv_ag_repval_bd: TDepVariable = TDepVariable(model, "ag_repval_bd", fund_id, 'rebalance',
+        self.tdv_fund_size: TDepVariable = TDepVariable(model_engine, "fund_size", fund_id, 'rebalance')
+        self.tdv_ag_repval_bd: TDepVariable = TDepVariable(model_engine, "ag_repval_bd", fund_id, 'rebalance',
                                                            dims=[self.ag_seq_list, AssetRepBasis])
-        self.tdv_ag_repval_ad: TDepVariable = TDepVariable(model, "ag_repval_ad", fund_id, 'rebalance',
+        self.tdv_ag_repval_ad: TDepVariable = TDepVariable(model_engine, "ag_repval_ad", fund_id, 'rebalance',
                                                            dims=[self.ag_seq_list, AssetRepBasis])
-        self.tdv_ag_alloc_pc_bd: TDepVariable = TDepVariable(model, "ag_alloc_pc_bd", fund_id, 'rebalance',
+        self.tdv_ag_alloc_pc_bd: TDepVariable = TDepVariable(model_engine, "ag_alloc_pc_bd", fund_id, 'rebalance',
                                                              dims=[self.ag_seq_list])
-        self.tdv_ag_alloc_pc_ad: TDepVariable = TDepVariable(model, "ag_alloc_pc_ad", fund_id, 'rebalance',
+        self.tdv_ag_alloc_pc_ad: TDepVariable = TDepVariable(model_engine, "ag_alloc_pc_ad", fund_id, 'rebalance',
                                                              dims=[self.ag_seq_list])
 
-    @property
-    def time(self) -> int | None:
-        return self._model_ref().time
-    
-    @property
-    def period(self) -> pd.Period | None:
-        return self._model_ref().period
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     @staticmethod
     def list_ag_in_sequence(fund_id: str, rebalance_policy: dict[str, RebalancePolicyParams]) -> list[str]:

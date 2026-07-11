@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from vates import KeyedArray, kr_from_df
+from vates import ProjModelEngine, KeyedArray, kr_from_df
 from vates.utils import curve_interp, parse_str_to_int_list
 from vates.alm.econs import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 
@@ -77,13 +77,14 @@ class EsgItem:
 
 class EsgMaster:
 
-    def __init__(self,
-                 yield_curves: list[EsgItem] | None = None,
-                 credit_bands: list[EsgItem] | None = None,
-                 equity_indices: list[EsgItem] | None = None,
-                 currencies: list[EsgItem] | None = None,
-                 market_info: EsgItem | None = None,
-                 ) -> None:
+    def __init__(
+        self,
+        yield_curves: list[EsgItem] | None = None,
+        credit_bands: list[EsgItem] | None = None,
+        equity_indices: list[EsgItem] | None = None,
+        currencies: list[EsgItem] | None = None,
+        market_info: EsgItem | None = None,
+    ) -> None:
         self.yield_curves: list[EsgItem] = yield_curves or []
         self.credit_bands: list[EsgItem] = credit_bands or []
         self.equity_indices: list[EsgItem] = equity_indices or []
@@ -281,12 +282,12 @@ class EsgMaster:
         market_info_obj.update(data)
 
 
-def build_esg_master(model, esg_params: dict, esg_df: pd.DataFrame, market_info_df: pd.DataFrame | None = None
-                     ) -> EsgMaster:
-    yield_curves = build_esg_items(model, econ_cls=YieldCurve, econ_id_attr="curve_id",
+def build_esg_master(model_engine: ProjModelEngine, esg_params: dict, esg_df: pd.DataFrame,
+                     market_info_df: pd.DataFrame | None = None) -> EsgMaster:
+    yield_curves = build_esg_items(model_engine, econ_cls=YieldCurve, econ_id_attr="curve_id",
                                    esg_params=esg_params.get("yield_curves"), esg_df=esg_df,
                                    variable_spec={"rates": ["measure", "term", "term_type", "interp_method"]})
-    credit_bands = build_esg_items(model, econ_cls=CreditBand, econ_id_attr="band_id",
+    credit_bands = build_esg_items(model_engine, econ_cls=CreditBand, econ_id_attr="band_id",
                                    esg_params=esg_params.get("credit_bands"), esg_df=esg_df,
                                    variable_spec={
                                        "prop_of_default": ["measure", "divby", "compound_freq"],
@@ -294,16 +295,16 @@ def build_esg_master(model, esg_params: dict, esg_df: pd.DataFrame, market_info_
                                        "credit_spotmult": ["measure", "divby"],
                                        "credit_spread": ["measure", "divby"],
                                    })
-    equity_indices = build_esg_items(model, econ_cls=EquityIndex, econ_id_attr="index_id",
+    equity_indices = build_esg_items(model_engine, econ_cls=EquityIndex, econ_id_attr="index_id",
                                      esg_params=esg_params.get("equity_indices"), esg_df=esg_df,
                                      variable_spec={
                                        "total_return_index": ["measure"],
                                        "dividend_yield": ["measure", "divby", "compound_freq"],
                                      })
-    currencies = build_esg_items(model, econ_cls=Currency, econ_id_attr="currency_id",
+    currencies = build_esg_items(model_engine, econ_cls=Currency, econ_id_attr="currency_id",
                                  esg_params=esg_params.get("currencies"), esg_df=esg_df,
                                  variable_spec={})
-    market_info = EsgItem(descr="general", econ_obj=MarketInfo(model, "general"), esg_data=market_info_df)
+    market_info = EsgItem(descr="general", econ_obj=MarketInfo(model_engine, "general"), esg_data=market_info_df)
     market_data_provider = EsgMaster(
         yield_curves=yield_curves,
         credit_bands=credit_bands,
@@ -314,13 +315,13 @@ def build_esg_master(model, esg_params: dict, esg_df: pd.DataFrame, market_info_
     return market_data_provider
 
 
-def build_esg_items(model, econ_cls, econ_id_attr: str, esg_params: dict, esg_df: pd.DataFrame,
+def build_esg_items(model_engine: ProjModelEngine, econ_cls, econ_id_attr: str, esg_params: dict, esg_df: pd.DataFrame,
                     variable_spec: dict[str, list]) -> list[EsgItem]:
     """
     Build Econ objects and their ESG variables.
 
     Args:
-        model: Model object.
+        model_engine: Model engine object.
         econ_cls: Econ class (YieldCurve | CreditBand | EquityIndex | Currency).
         econ_id_attr (str): Attribute name for the id.
         esg_params (dict): Dict containing esg params.
@@ -337,7 +338,7 @@ def build_esg_items(model, econ_cls, econ_id_attr: str, esg_params: dict, esg_df
     default_var_attr_dict = esg_params.get("default_variable_attribute") or {}
     for item in esg_params["item_list"]:
         econ_id = item[econ_id_attr]
-        kwargs = {"model": model, econ_id_attr: econ_id}
+        kwargs = {"model_engine": model_engine, econ_id_attr: econ_id}
         obj = econ_cls(**kwargs)
         economy = item["economy"]
         class_ = item["class"]

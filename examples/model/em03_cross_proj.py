@@ -35,7 +35,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
     # build esg master
     esg_master = build_esg_master(
-        model=model,
+        model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
         esg_df=model.read_csv(filename_dict["esg"])
     )

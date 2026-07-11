@@ -33,7 +33,7 @@ class EquityOptionBuilder:
             std_dev (float): Standard deviation, i.e. volatility.
             is_pay_dividend (bool): True if paying dividend, otherwise False.
         """
-        self.model = kwargs['model']
+        self.model_engine = kwargs['model']
         self.asset_id: str = kwargs['asset_id']
         self.asset_category: str = kwargs['asset_category']
         self.fund_id: str = kwargs['fund_id']
@@ -55,11 +55,11 @@ class EquityOptionBuilder:
 
     @property
     def p(self) -> pd.Period:
-        return self.model.period
+        return self.model_engine.period
 
     @property
     def t(self) -> int:
-        return self.model.time
+        return self.model_engine.time
 
     @property
     def os_term_m(self) -> int:
@@ -105,7 +105,7 @@ class EquityOptionBuilder:
         if self.std_dev is None: raise RuntimeError("std_dev is not yet set.")
 
         return EquityOption(
-            model=self.model,
+            model_engine=self.model_engine,
             asset_id=self.asset_id,
             asset_category=self.asset_category,
             fund_id=self.fund_id,

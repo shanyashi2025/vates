@@ -1,3 +1,0 @@
-﻿curve_id,market_data_id,last_liquid_point,ufr,convergence_point,min_alpha
-sw_curve_1,market_curve_1,20,0.042,60,0.05
-sw_curve_2,market_curve_1,10,0.045,60,0.05

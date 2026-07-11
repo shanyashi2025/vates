@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 import pandas as pd
-import weakref
 import warnings
 
-from vates._core import TDepVariable
+from vates._core import ProjModelEngine, TDepVariable
 from vates.utils import RiskModule, SubRisk, NumVarGroup
 from vates.solvency.cn_cross2.params import (
     AccountType,
@@ -50,7 +49,6 @@ class MinCapInputer(NumVarGroup):
 
 class MinCapCalculator:
     def __init__(self, name: str):
-        # self._model_ref: weakref.ref = weakref.ref(model)
         self.name: str = name
         # Set up C-ROSS risk hierarchy
         self._mort: SubRisk = SubRisk(f'{name}:mortality')  # mortality
@@ -210,8 +208,11 @@ class MinCapCalculator:
 
 
 class MinCapUnit:
-    def __init__(self, model, name: str, account_type: AccountType):
-        self._model_ref: weakref.ref = weakref.ref(model)
+    def __init__(self, model_engine: ProjModelEngine, name: str, account_type: AccountType):
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
+
         self.name: str = name
         self._account_type: AccountType = account_type
 
@@ -220,16 +221,20 @@ class MinCapUnit:
         self._min_cap_calculator: MinCapCalculator = MinCapCalculator(name)
         self._last_mc_calc: pd.Period | None = None
 
-        self.tdv_min_cap: TDepVariable = TDepVariable(model, "minimum_capital", name, 'CROSS_MC')
-        self.tdv_life_mc: TDepVariable = TDepVariable(model, "life_mc", name, 'CROSS_MC')
-        self.tdv_nonlife_mc: TDepVariable = TDepVariable(model, "nonlife_mc", name, 'CROSS_MC')
-        self.tdv_market_mc: TDepVariable = TDepVariable(model, "market_mc", name, 'CROSS_MC')
-        self.tdv_credit_mc: TDepVariable = TDepVariable(model, "credit_mc", name, 'CROSS_MC')
-        self.tdv_divers: TDepVariable = TDepVariable(model, "diversification", name, 'CROSS_MC')
-        self.tdv_loss_absorb: TDepVariable = TDepVariable(model, "loss_absorbency", name, 'CROSS_MC')
+        self.tdv_min_cap: TDepVariable = TDepVariable(model_engine, "minimum_capital", name, 'CROSS_MC')
+        self.tdv_life_mc: TDepVariable = TDepVariable(model_engine, "life_mc", name, 'CROSS_MC')
+        self.tdv_nonlife_mc: TDepVariable = TDepVariable(model_engine, "nonlife_mc", name, 'CROSS_MC')
+        self.tdv_market_mc: TDepVariable = TDepVariable(model_engine, "market_mc", name, 'CROSS_MC')
+        self.tdv_credit_mc: TDepVariable = TDepVariable(model_engine, "credit_mc", name, 'CROSS_MC')
+        self.tdv_divers: TDepVariable = TDepVariable(model_engine, "diversification", name, 'CROSS_MC')
+        self.tdv_loss_absorb: TDepVariable = TDepVariable(model_engine, "loss_absorbency", name, 'CROSS_MC')
+
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     def calculate_minimum_capital(self, mc_in: MinCapInputer) -> None:
-        t = self._model_ref().time
+        t = self.time
         self._min_cap_calculator(mc_in)
         if self._account_type in (AccountType.PAR, AccountType.UNIV):
             self._loss_absorbency = calculate_loss_absorbency(
@@ -248,7 +253,7 @@ class MinCapUnit:
         self.tdv_divers[t] = self._min_cap_calculator.overall_risk_module['diversification']
         self.tdv_loss_absorb[t] = self._loss_absorbency
 
-        self._last_mc_calc = self._model_ref().period
+        self._last_mc_calc = self.period
 
     @property
     def account_tpye(self) -> AccountType:
@@ -284,8 +289,11 @@ class MinCapUnit:
 
 
 class MinCapConsolidator:
-    def __init__(self, model, name: str, unit_list: list[MinCapUnit]):
-        self._model_ref: weakref.ref = weakref.ref(model)
+    def __init__(self, model_engine: ProjModelEngine, name: str, unit_list: list[MinCapUnit]):
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
+
         self.name: str = name
         self._unit_list: list[MinCapUnit] = unit_list
 
@@ -295,16 +303,20 @@ class MinCapConsolidator:
         self._min_cap_calculator_la: MinCapCalculator = MinCapCalculator(f'{name}:loss_absorb')
         self._last_mc_calc: pd.Period | None = None
 
-        self.tdv_min_cap: TDepVariable = TDepVariable(model, "minimum_capital", name, 'CROSS_MC')
-        self.tdv_life_mc: TDepVariable = TDepVariable(model, "life_mc", name, 'CROSS_MC')
-        self.tdv_nonlife_mc: TDepVariable = TDepVariable(model, "nonlife_mc", name, 'CROSS_MC')
-        self.tdv_market_mc: TDepVariable = TDepVariable(model, "market_mc", name, 'CROSS_MC')
-        self.tdv_credit_mc: TDepVariable = TDepVariable(model, "credit_mc", name, 'CROSS_MC')
-        self.tdv_divers: TDepVariable = TDepVariable(model, "diversification", name, 'CROSS_MC')
-        self.tdv_loss_absorb: TDepVariable = TDepVariable(model, "loss_absorbency", name, 'CROSS_MC')
+        self.tdv_min_cap: TDepVariable = TDepVariable(model_engine, "minimum_capital", name, 'CROSS_MC')
+        self.tdv_life_mc: TDepVariable = TDepVariable(model_engine, "life_mc", name, 'CROSS_MC')
+        self.tdv_nonlife_mc: TDepVariable = TDepVariable(model_engine, "nonlife_mc", name, 'CROSS_MC')
+        self.tdv_market_mc: TDepVariable = TDepVariable(model_engine, "market_mc", name, 'CROSS_MC')
+        self.tdv_credit_mc: TDepVariable = TDepVariable(model_engine, "credit_mc", name, 'CROSS_MC')
+        self.tdv_divers: TDepVariable = TDepVariable(model_engine, "diversification", name, 'CROSS_MC')
+        self.tdv_loss_absorb: TDepVariable = TDepVariable(model_engine, "loss_absorbency", name, 'CROSS_MC')
+
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     def calculate_minimum_capital(self) -> None:
-        t, p = self._model_ref().time, self._model_ref().period
+        t, p = self.time, self.period
         mc_in, mc_in_la = MinCapInputer(), MinCapInputer()
 
         for unit in self._unit_list:
@@ -335,7 +347,7 @@ class MinCapConsolidator:
         self.tdv_divers[t] = self._min_cap_calculator.overall_risk_module['diversification']
         self.tdv_loss_absorb[t] = self._loss_absorbency
 
-        self._last_mc_calc = self._model_ref().period
+        self._last_mc_calc = self.period
 
     @property
     def minimum_capital(self) -> float:

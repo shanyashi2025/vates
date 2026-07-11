@@ -13,7 +13,7 @@ class ExtProjLiab(Liab):
     __slots__ = ('tdv_cash_flow', 'tdv_prem_inc', 'tdv_num_pols', 'tdv_surr_val', 'tdv_math_res', 'tdv_acct_value_bd',
                  'tdv_acct_value_ad', 'tdv_asset_share_bd', 'tdv_asset_share_ad',)
 
-    def __init__(self, model, liab_id: str, fund_id: str, currency: Currency,
+    def __init__(self, model_engine, liab_id: str, fund_id: str, currency: Currency,
                  entry_date: pd.Period, no_pols_if: float, surr_val_if: float, math_res_if: float,
                  acct_value_if: float=0, asset_share_if: float=0):
         """
@@ -32,17 +32,18 @@ class ExtProjLiab(Liab):
             acct_value_if (float): Account value in force.
             asset_share_if (float): Asset share in force.
         """
-        super().__init__(model, liab_id, fund_id, currency, entry_date, no_pols_if, surr_val_if, math_res_if,
-                         acct_value_if, asset_share_if)
-        self.tdv_cash_flow: TDepVariable = TDepVariable(model, "cash_flow", liab_id, 'liability')
-        self.tdv_prem_inc: TDepVariable = TDepVariable(model, "prem_inc", liab_id, 'liability')
-        self.tdv_num_pols: TDepVariable = TDepVariable(model, "no_pols_if", liab_id, 'liability')
-        self.tdv_surr_val: TDepVariable = TDepVariable(model, "surr_val_if", liab_id, 'liability')
-        self.tdv_math_res: TDepVariable = TDepVariable(model, "math_res_if", liab_id, 'liability')
-        self.tdv_acct_value_bd: TDepVariable = TDepVariable(model, "acct_value_if_bd", liab_id, 'liability')
-        self.tdv_acct_value_ad: TDepVariable = TDepVariable(model, "acct_value_if_ad", liab_id, 'liability')
-        self.tdv_asset_share_bd: TDepVariable = TDepVariable(model, "asset_share_if_bd", liab_id, 'liability')
-        self.tdv_asset_share_ad: TDepVariable = TDepVariable(model, "asset_share_if_ad", liab_id, 'liability')
+        super().__init__(model_engine=model_engine, liab_id=liab_id, fund_id=fund_id, currency=currency,
+                         entry_date=entry_date, no_pols_if=no_pols_if, surr_val_if=surr_val_if, math_res_if=math_res_if,
+                         acct_value_if=acct_value_if, asset_share_if=asset_share_if)
+        self.tdv_cash_flow: TDepVariable = TDepVariable(model_engine, "cash_flow", liab_id, 'liability')
+        self.tdv_prem_inc: TDepVariable = TDepVariable(model_engine, "prem_inc", liab_id, 'liability')
+        self.tdv_num_pols: TDepVariable = TDepVariable(model_engine, "no_pols_if", liab_id, 'liability')
+        self.tdv_surr_val: TDepVariable = TDepVariable(model_engine, "surr_val_if", liab_id, 'liability')
+        self.tdv_math_res: TDepVariable = TDepVariable(model_engine, "math_res_if", liab_id, 'liability')
+        self.tdv_acct_value_bd: TDepVariable = TDepVariable(model_engine, "acct_value_if_bd", liab_id, 'liability')
+        self.tdv_acct_value_ad: TDepVariable = TDepVariable(model_engine, "acct_value_if_ad", liab_id, 'liability')
+        self.tdv_asset_share_bd: TDepVariable = TDepVariable(model_engine, "asset_share_if_bd", liab_id, 'liability')
+        self.tdv_asset_share_ad: TDepVariable = TDepVariable(model_engine, "asset_share_if_ad", liab_id, 'liability')
 
         t = self.time
         self.tdv_num_pols[t] = self._num_pols

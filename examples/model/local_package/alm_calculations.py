@@ -1,10 +1,11 @@
 import pandas as pd
-from vates import KeyedArray
+
+from vates import ProjModelEngine, KeyedArray
 from vates.alm.funds import Fund
-from . import EsgMaster
 
 from .setup_objs_alm import FundRebalanceParams, build_target_allocation
 from .setup_objs_asset import build_all_profile_assets
+from .setup_objs_econ import EsgMaster
 
 def rebalance_this_month(cal_month: int, rebalance_freq: int) -> bool:
     """
@@ -101,13 +102,13 @@ def liabs_update_ad(fund: Fund) -> None:
     fund.process_liabs_after_dealing()
 
 
-def fund_reblance_if_needed(fund: Fund, rebalance_params: FundRebalanceParams,
+def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance_params: FundRebalanceParams,
                             assets_df_dict: dict, econs: dict | EsgMaster, asset_allocation_df: pd.DataFrame):
     fund_id = fund.fund_id
     period = fund.period
 
     if rebalance_this_month(period.month, rebalance_params.rebalance_freq):
-        profile_assets = build_all_profile_assets(fund.model_proxy, assets_df_dict, econs, fund_id)['all']
+        profile_assets = build_all_profile_assets(model_engine, assets_df_dict, econs, fund_id)['all']
         target_allocation = build_target_allocation(asset_allocation_df, fund_id, str(period.year * 100 + period.month))
         fund.rebalance_assets(
             fund_size_type=rebalance_params.size_type,

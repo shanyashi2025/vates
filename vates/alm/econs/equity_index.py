@@ -1,7 +1,6 @@
 import pandas as pd
-import weakref
 
-from vates._core import TDepVariable
+from vates._core import ProjModelEngine, TDepVariable
 
 
 class EquityIndex:
@@ -13,14 +12,17 @@ class EquityIndex:
         tdv_tot_return_index (TDepVariable): Total return index.
         tdv_dividend_yield_ac (float): Dividend yield (annual compounding).
     """
-    def __init__(self, model, index_id: str) -> None:
+    def __init__(self, model_engine: ProjModelEngine, index_id: str) -> None:
         """
         Initialize an EquityIndex object.
 
         Args:
             index_id (str): Equity index identifier.
         """
-        self._model_ref: weakref.ref = weakref.ref(model)
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
+
         self.index_id: str = index_id
         self._total_return: float | None = None
         self._capital_growth: float | None = None
@@ -28,20 +30,12 @@ class EquityIndex:
         self._dividend_yield_ac: float | None = None
         self._total_return_index: float | None = None
         self._last_update: int | None = None
-        self.tdv_tot_return_index: TDepVariable = TDepVariable(model, "tot_return_index", index_id, 'equity_index')
-        self.tdv_dividend_yield_ac: TDepVariable = TDepVariable(model, "dividend_yield_ac", index_id, 'equity_index')
+        self.tdv_tot_return_index: TDepVariable = TDepVariable(model_engine, "tot_return_index", index_id, 'equity_index')
+        self.tdv_dividend_yield_ac: TDepVariable = TDepVariable(model_engine, "dividend_yield_ac", index_id, 'equity_index')
 
-    @property
-    def model_proxy(self):
-        return self._model_ref()
-
-    @property
-    def time(self) -> int | None:
-        return self._model_ref().time
-    
-    @property
-    def period(self) -> pd.Period | None:
-        return self._model_ref().period
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     @property
     def last_update(self) -> int | None:

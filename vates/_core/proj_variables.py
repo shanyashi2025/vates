@@ -1,9 +1,15 @@
+from __future__ import annotations
 import pandas as pd
+import typing
 import numpy as np
 import weakref
 import warnings
 from enum import Enum
 from abc import ABC, abstractmethod
+
+if typing.TYPE_CHECKING:
+    from vates._core.proj_model_engine import ProjModelEngine
+
 
 class ProjVariable(ABC):
     """Container for projection variables used in model output.
@@ -20,12 +26,12 @@ class ProjVariable(ABC):
 
     __slots__ = ('__weakref__', 'name', 'owner', 'group', '_dims', '_ndim',)
 
-    def __init__(self, model, name: str, owner: str, group: str, dims: list | None = None):
+    def __init__(self, model_engine: ProjModelEngine, name: str, owner: str, group: str, dims: list | None = None):
         """
         Initialize the Projection Variable.
 
         Args:
-            model: Model object.
+            model_engine (ProjModelEngine): Model engine object.
             name (str): Variable name.
             owner (str): Variable owner.
             group (str): Variable group.
@@ -36,7 +42,7 @@ class ProjVariable(ABC):
         self.group: str = group
         self._dims: list[list[str]] | None = self._parse_dims(dims)
         self._ndim: int = len(dims) if dims is not None else 0
-        model._include_proj_variable(weakref.ref(self))
+        model_engine.include_proj_variable(weakref.ref(self))
 
     @property
     @abstractmethod
@@ -126,18 +132,18 @@ class ConstVariable(ProjVariable):
     """
     __slots__ = ('_result',)
 
-    def __init__(self, model, name: str, owner: str, group: str, dims: list | None = None):
+    def __init__(self, model_engine: ProjModelEngine, name: str, owner: str, group: str, dims: list | None = None):
         """
         Initialize the Constant Variable.
 
         Args:
-            model: Model object.
+            model_engine (ProjModelEngine): Model engine object.
             name (str): Variable name.
             owner (str): Variable owner.
             group (str): Variable group.
             dims (list|None): Dimensions.
         """
-        super().__init__(model, name, owner, group, dims)
+        super().__init__(model_engine, name, owner, group, dims)
         self._result = None
 
     @property
@@ -182,23 +188,24 @@ class TDepVariable(ProjVariable):
         _assigned (np.ndarray): True if value has been assigned otherwise False.
     """
 
-    __slots__ = ('_model_ref', '_result', '_assigned',)
+    __slots__ = ('_max_t', '_period_time_pairs', '_result', '_assigned',)
 
-    def __init__(self, model, name: str, owner: str, group: str, dims: list | None = None):
+    def __init__(self, model_engine: ProjModelEngine, name: str, owner: str, group: str, dims: list | None = None):
         """
         Initialize the Time-memory Variable.
 
         Args:
-            model: Model object.
+            model_engine (ProjModelEngine): Model engine object.
             name (str): Variable name.
             owner (str): Variable owner.
             group (str): Variable group.
             dims (list|None): Dimensions.
         """
-        super().__init__(model, name, owner, group, dims)
-        self._model_ref: weakref.ref = weakref.ref(model)
+        super().__init__(model_engine, name, owner, group, dims)
+        self._max_t = model_engine.MAX_T
+        self._period_time_pairs = model_engine.period_time_pairs
         self._result = np.zeros(self._shape)
-        self._assigned = np.array([False] * (self._model_ref().MAX_T + 1))
+        self._assigned = np.array([False] * (self._max_t + 1))
 
     @property
     def result(self) -> np.ndarray:
@@ -216,7 +223,7 @@ class TDepVariable(ProjVariable):
         Returns:
             tuple[int]: (max_t+1, [dim1, dim2, dim3]).
         """
-        shape = (self._model_ref().MAX_T + 1,)
+        shape = (self._max_t + 1,)
         if self._ndim > 0:
             for dim in self._dims:
                 shape += (len(dim),)
@@ -233,16 +240,14 @@ class TDepVariable(ProjVariable):
 
         """
         if type(index) == int:
-            max_t = self._model_ref().MAX_T
-            if not (0 <= index <= max_t):
-                warnings.warn(f"Invalid {index=}, expected 0 to {max_t}.")
+            if not (0 <= index <= self._max_t):
+                warnings.warn(f"Invalid {index=}, expected 0 to {self._max_t}.")
                 return None
             t = index
         elif type(index) == pd.Period:
-            t = self._model_ref().period_time_pairs.get(index, None)
+            t = self._period_time_pairs.get(index, None)
             if t is None:
-                warnings.warn(f"Invalid {index=}, expected {self._model_ref().START_DATE} to "
-                              f"{self._model_ref().END_DATE}.")
+                warnings.warn(f"Invalid {index=}.")
                 return None
         else:
             warnings.warn(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
@@ -260,16 +265,14 @@ class TDepVariable(ProjVariable):
             value: Scalar or array whose shape matches the variable's dimensions.
         """
         if type(index) == int:
-            max_t = self._model_ref().MAX_T
-            if not (0 <= index <= max_t):
-                warnings.warn(f"Assignment failed, invalid {index=}, expected 0 to {max_t}.")
+            if not (0 <= index <= self._max_t):
+                warnings.warn(f"Assignment failed, invalid {index=}, expected 0 to {self._max_t}.")
                 return
             t = index
         elif type(index) == pd.Period:
-            t = self._model_ref().period_time_pairs.get(index, None)
+            t = self._period_time_pairs.get(index, None)
             if t is None:
-                warnings.warn(f"Assignment failed, invalid {index=}, expected {self._model_ref().START_DATE} to "
-                              f"{self._model_ref().END_DATE}.")
+                warnings.warn(f"Assignment failed, invalid {index=}.")
                 return
         else:
             warnings.warn(f"Assignment failed, invalid {type(index)=}, expected int or pd.Period.")

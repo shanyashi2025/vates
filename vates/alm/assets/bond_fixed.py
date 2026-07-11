@@ -33,7 +33,7 @@ class BondFixed(Asset):
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad',)
 
     
-    def __init__(self, model, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_category: str,
+    def __init__(self, model_engine, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_category: str,
                  fund_id: str, allocation_group: str, classification: AssetClassification, issue_date: pd.Period,
                  maturity_date: pd.Period, redemp_sched: np.ndarray | None, coupon_rate: float, coupon_freq: int,
                  face_value: float, mv_price: float, market_spread: float, abv_price: float, amort_rate: float,
@@ -64,8 +64,9 @@ class BondFixed(Asset):
             credit_band (CreditBand | None): Credit band (to provide assumptions, e.g. default and spread).
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model, asset_id, is_profile, units, purchase_date, currency, classification, asset_category,
-                         fund_id, allocation_group)
+        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
+                         purchase_date=purchase_date, currency=currency, classification=classification,
+                         asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
         t, p = self.time, self.period
         self._params = BondFixedParameters(
             issue_date=issue_date,
@@ -93,20 +94,20 @@ class BondFixed(Asset):
         self._validate_abv_price(self._abv_price_dirty, p)
 
         # Initialize TDepVariable
-        self.tdv_units_default: TDepVariable = TDepVariable(model, "units_default", asset_id, 'bond')
-        self.tdv_units_maturity: TDepVariable = TDepVariable(model, "units_maturity", asset_id, 'bond')
-        self.tdv_units_bd: TDepVariable = TDepVariable(model, "units_bd", asset_id, 'bond')
-        self.tdv_units_ad: TDepVariable = TDepVariable(model, "units_ad", asset_id, 'bond')
-        self.tdv_cash_flow: TDepVariable = TDepVariable(model, "cash_flow", asset_id, 'bond')
-        self.tdv_interest: TDepVariable = TDepVariable(model, "interest", asset_id, 'bond')
-        self.tdv_principal: TDepVariable = TDepVariable(model, "principal", asset_id, 'bond')
-        self.tdv_default_recovery: TDepVariable = TDepVariable(model, "default_recovery", asset_id, 'bond')
-        self.tdv_mv_price: TDepVariable = TDepVariable(model, "mv_price", asset_id, 'bond')
-        self.tdv_abv_price: TDepVariable = TDepVariable(model, "abv_price", asset_id, 'bond')
-        self.tdv_mv_bd: TDepVariable = TDepVariable(model, "mv_bd", asset_id, 'bond')
-        self.tdv_abv_bd: TDepVariable = TDepVariable(model, "abv_bd", asset_id, 'bond')
-        self.tdv_mv_ad: TDepVariable = TDepVariable(model, "mv_ad", asset_id, 'bond')
-        self.tdv_abv_ad: TDepVariable = TDepVariable(model, "abv_ad", asset_id, 'bond')
+        self.tdv_units_default: TDepVariable = TDepVariable(model_engine, "units_default", asset_id, 'bond')
+        self.tdv_units_maturity: TDepVariable = TDepVariable(model_engine, "units_maturity", asset_id, 'bond')
+        self.tdv_units_bd: TDepVariable = TDepVariable(model_engine, "units_bd", asset_id, 'bond')
+        self.tdv_units_ad: TDepVariable = TDepVariable(model_engine, "units_ad", asset_id, 'bond')
+        self.tdv_cash_flow: TDepVariable = TDepVariable(model_engine, "cash_flow", asset_id, 'bond')
+        self.tdv_interest: TDepVariable = TDepVariable(model_engine, "interest", asset_id, 'bond')
+        self.tdv_principal: TDepVariable = TDepVariable(model_engine, "principal", asset_id, 'bond')
+        self.tdv_default_recovery: TDepVariable = TDepVariable(model_engine, "default_recovery", asset_id, 'bond')
+        self.tdv_mv_price: TDepVariable = TDepVariable(model_engine, "mv_price", asset_id, 'bond')
+        self.tdv_abv_price: TDepVariable = TDepVariable(model_engine, "abv_price", asset_id, 'bond')
+        self.tdv_mv_bd: TDepVariable = TDepVariable(model_engine, "mv_bd", asset_id, 'bond')
+        self.tdv_abv_bd: TDepVariable = TDepVariable(model_engine, "abv_bd", asset_id, 'bond')
+        self.tdv_mv_ad: TDepVariable = TDepVariable(model_engine, "mv_ad", asset_id, 'bond')
+        self.tdv_abv_ad: TDepVariable = TDepVariable(model_engine, "abv_ad", asset_id, 'bond')
 
         self.tdv_mv_price[t] = self._mv_price_dirty
         self.tdv_abv_price[t] = self._abv_price_dirty

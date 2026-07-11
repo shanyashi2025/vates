@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import weakref
 
+from vates._core import ProjModelEngine
 from vates.alm.enums import AssetRepBasis, AssetClassification
 from vates.alm.econs import Currency
 
@@ -22,17 +22,28 @@ class Asset(ABC):
         _fund_id (str): Associated fund identifier.
         _allocation_group (str): Allocation group for the asset.
     """
-    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_asset_id', '_is_profile', '_units', '_purchase_date',
+    __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_asset_id', '_is_profile', '_units', '_purchase_date',
                  '_currency', '_classification', '_asset_category', '_fund_id', '_allocation_group', '_tc_dict')
 
-    def __init__(self, model, asset_id: str, is_profile: bool, units: float, purchase_date: pd.Period | None,
-                 currency: Currency | None, classification: AssetClassification, asset_category: str,
-                 fund_id: str, allocation_group: str):
+    def __init__(
+        self,
+        model_engine: ProjModelEngine,
+        *,
+        asset_id: str,
+        is_profile: bool,
+        units: float,
+        purchase_date: pd.Period | None,
+        currency: Currency | None,
+        classification: AssetClassification,
+        asset_category: str,
+        fund_id: str,
+        allocation_group: str
+    ):
         """
         Initialize the Asset.
 
         Args:
-            model: Model object.
+            model_engine: Model engine object.
             asset_id (str): Asset identifier.
             is_profile (bool): Ture if profile asset, False if existing asset.
             units (float): Number of assets
@@ -43,7 +54,10 @@ class Asset(ABC):
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
         """
-        self._model_ref: weakref.ref = weakref.ref(model)
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
+
         self._asset_id: str = asset_id
         self._is_profile: bool = is_profile
         self._units: float = units
@@ -57,17 +71,9 @@ class Asset(ABC):
         if not self._is_profile:
             self._tc_dict['dealing'] = self.time
 
-    @property
-    def model_proxy(self):
-        return self._model_ref()
-
-    @property
-    def time(self) -> int | None:
-        return self._model_ref().time
-
-    @property
-    def period(self) -> pd.Period | None:
-        return self._model_ref().period
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     @property
     def asset_id(self) -> str:

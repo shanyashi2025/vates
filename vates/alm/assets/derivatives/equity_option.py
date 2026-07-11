@@ -27,7 +27,7 @@ class EquityOption(Asset):
                  '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', 'tdv_units_bd', 'tdv_units_ad',
                  'tdv_cash_flow', 'tdv_stock_price', 'tdv_price', 'tdv_mv_bd', 'tdv_mv_ad',)
 
-    def __init__(self, model, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_category: str,
+    def __init__(self, model_engine, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_category: str,
                  fund_id: str, allocation_group: str, call_or_put: CallOrPut, exercise_date: pd.Period, price: float,
                  stock_price: float, strike_price: float, equity_index: EquityIndex, rf_curve: YieldCurve,
                  std_dev: float, is_pay_dividend: bool, classification: AssetClassification = AssetClassification.FVTPL,
@@ -55,8 +55,9 @@ class EquityOption(Asset):
             classification (AssetClassification): Asset classification. Defaults to FVTPL.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model, asset_id, is_profile, units, purchase_date, currency, classification, asset_category,
-                         fund_id, allocation_group)
+        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
+                         purchase_date=purchase_date, currency=currency, classification=classification,
+                         asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
         t = self.time
         self._call_or_put: CallOrPut = call_or_put
         self._exercise_date: pd.Period = exercise_date
@@ -82,13 +83,13 @@ class EquityOption(Asset):
                              f"based on std_dev, but input price is {price: .4f}.")
 
         # create array variables
-        self.tdv_units_bd: TDepVariable = TDepVariable(model, "units_bd", asset_id, 'equity_option')
-        self.tdv_units_ad: TDepVariable = TDepVariable(model, "units_ad", asset_id, 'equity_option')
-        self.tdv_cash_flow: TDepVariable = TDepVariable(model, "cash_flow", asset_id, 'equity_option')
-        self.tdv_stock_price: TDepVariable = TDepVariable(model, "stock_price", asset_id, 'equity_option')
-        self.tdv_price: TDepVariable = TDepVariable(model, "price", asset_id, 'equity_option')
-        self.tdv_mv_bd: TDepVariable = TDepVariable(model, "mv_bd", asset_id, 'equity_option')
-        self.tdv_mv_ad: TDepVariable = TDepVariable(model, "mv_ad", asset_id, 'equity_option')
+        self.tdv_units_bd: TDepVariable = TDepVariable(model_engine, "units_bd", asset_id, 'equity_option')
+        self.tdv_units_ad: TDepVariable = TDepVariable(model_engine, "units_ad", asset_id, 'equity_option')
+        self.tdv_cash_flow: TDepVariable = TDepVariable(model_engine, "cash_flow", asset_id, 'equity_option')
+        self.tdv_stock_price: TDepVariable = TDepVariable(model_engine, "stock_price", asset_id, 'equity_option')
+        self.tdv_price: TDepVariable = TDepVariable(model_engine, "price", asset_id, 'equity_option')
+        self.tdv_mv_bd: TDepVariable = TDepVariable(model_engine, "mv_bd", asset_id, 'equity_option')
+        self.tdv_mv_ad: TDepVariable = TDepVariable(model_engine, "mv_ad", asset_id, 'equity_option')
 
         if not is_profile:
             self.tdv_units_ad[t] = self._units

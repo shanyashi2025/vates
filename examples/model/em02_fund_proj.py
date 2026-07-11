@@ -39,13 +39,13 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
 
     # build esg master
     esg_master = build_esg_master(
-        model=model,
+        model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
         esg_df=model.read_csv(filename_dict["esg"])
     )
     # build fund master
     fund_master = build_fund_master(
-        model=model,
+        model_engine=model,
         funds_df=file_df_dict['funds'],
         rebalance_policy_df=file_df_dict['rebalance_policy'],
     )
@@ -95,6 +95,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
 
                 # step 3: rebalance if needed
                 fund_reblance_if_needed(
+                    model_engine=model,
                     fund=fund,
                     rebalance_params=rebalance_params,
                     assets_df_dict=assets_df_dict,

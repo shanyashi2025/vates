@@ -17,7 +17,7 @@ from vates._core._utils import parse_str_to_int_list, RunConfig
 class StochExecutor:
     """Stochastic model executor."""
 
-    add_traced_message = ProjModelEngine.add_traced_message
+    include_traced_message = ProjModelEngine.include_traced_message
     load_json = ProjModelEngine.load_json
     read_csv = ProjModelEngine.read_csv
     read_excel = ProjModelEngine.read_excel
@@ -62,9 +62,10 @@ class StochExecutor:
             ValueError: If `func` is not callable.
         """
         if self._proj_func is not None:
-            msg = (f"{self._proj_func} is already bound. If you are sure you want to reset it, "
-                   f"use 'foo._proj_func = None', then call 'foo.bind_proj_func(...)' method.")
-            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            self.include_traced_message(
+                f"WARNING: {self._proj_func} is already bound. If you are sure you want to reset it, "
+                f"use 'foo._proj_func = None', then call 'foo.bind_proj_func(...)' method."
+            )
             return self
         if not callable(func):
             raise ValueError(f"Cannot bind un-callable object: {func}.")
@@ -77,15 +78,16 @@ class StochExecutor:
         proj_cls = get_type_hints(func).get(first_arg_name)
         if proj_cls is not None:
             self._proj_cls = proj_cls
-            self.add_traced_message(f"INFO: {proj_cls} is set as the projection model engine according to type hints of "
-                                    f"first argument '{first_arg_name}'.")
+            self.include_traced_message(
+                f"INFO: {proj_cls} is set as the projection model engine according to type hints of "
+                f"first argument '{first_arg_name}'."
+            )
         else:
-            msg = f"{ProjModelEngine} is set as the projection model engine by default."
-            warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+            self.include_traced_message(f"INFO: {ProjModelEngine} is set as the projection model engine by default.")
             self._proj_cls = ProjModelEngine
 
         self._proj_func = func
-        self.add_traced_message(f"INFO: The function {func} has been bound to {self}.")
+        self.include_traced_message(f"INFO: The function {func} has been bound to {self}.")
         return self
 
     def set_run_config(
@@ -117,9 +119,10 @@ class StochExecutor:
             max_workers (int, optional): Max workers. Defaults to 1.
         """
         if self._run_config is not None:
-            msg = (f"Run configuration is already set. If you are sure you want to reset it, "
-                   f"use 'foo._run_config = None', then call 'foo.set_run_config(...)' method.")
-            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            self.include_traced_message(
+                f"WARNING: Run configuration is already set. If you are sure you want to reset it, "
+                f"use 'foo._run_config = None', then call 'foo.set_run_config(...)' method."
+            )
             return self
 
         none_items = []
@@ -162,21 +165,19 @@ class StochExecutor:
         )
 
         if len(none_items) > 0:
-            msg = f"Following items are set by default: {', '.join(none_items)}."
-            warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+            self.include_traced_message(f"INFO: Following items are set by default: {', '.join(none_items)}.")
 
         return self
 
-    @staticmethod
-    def _parse_max_workers(requested_workers: int | None) -> int:
+    def _parse_max_workers(self, requested_workers: int | None) -> int:
         if requested_workers is None:
-            warnings.warn(f"max_workers is set to 1, reason: max_workers not specified.")
+            self.include_traced_message(f"max_workers is set to 1: max_workers not specified.")
             return 1
         if not isinstance(requested_workers, int):
-            warnings.warn(f"max_workers is set to 1, reason: type <{type(requested_workers)}> is not allowed, expect int.")
+            self.include_traced_message(f"max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
             return 1
         if requested_workers <= 0:
-            warnings.warn(f"max_workers is set to 1, reason: input={requested_workers}, exptect positive.")
+            self.include_traced_message(f"max_workers is set to 1: request={requested_workers}, exptect positive.")
             return 1
 
         from multiprocessing import cpu_count
@@ -184,7 +185,7 @@ class StochExecutor:
         if requested_workers <= _cpu_count:
             return requested_workers
         else:
-            warnings.warn(f"max_workers is set to {_cpu_count}, reason: requested {requested_workers} > cpu count.")
+            self.include_traced_message(f"max_workers is set to {_cpu_count}: requested {requested_workers} > cpu_count.")
             return _cpu_count
 
     def run(
@@ -201,12 +202,12 @@ class StochExecutor:
         proj_func_args = proj_func_args or {}
 
         if self.results_directory.is_dir():
+            remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
             for f in glob.glob(str(self.results_directory / f'{self._name}*')):
-                if f.endswith(('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')):
+                if f.endswith(remove_pattern):
                     os.remove(f)
                 else:
-                    msg = f"Exsiting file NOT deleted: '{f}'."
-                    warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+                    self.include_traced_message(f"INFO: Exsiting file NOT deleted: '{f}'.")
         else:
             os.makedirs(self.results_directory, exist_ok=True)
 
@@ -452,5 +453,5 @@ class StochExecutor:
             if name in type(self).__dict__:  # check if the attribute name already exists in the class definition
                 raise AttributeError(f"Cannot overwrite protected member '{name}'")
             if not hasattr(self, name) and hasattr(self, "_messages"):
-                self.add_traced_message(f"INFO: Add member: '{name}' {type(value)}")
+                self.include_traced_message(f"INFO: Add member: '{name}' {type(value)}")
         super().__setattr__(name, value)

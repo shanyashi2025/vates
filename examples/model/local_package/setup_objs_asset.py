@@ -12,13 +12,13 @@ ASSET_CATEGORIES_MAPPING = {
 }
 
 
-def build_all_existing_assets(model, df_dict: dict[str, pd.DataFrame], econs: dict[str, ...] | EsgMaster,
+def build_all_existing_assets(model_engine, df_dict: dict[str, pd.DataFrame], econs: dict[str, ...] | EsgMaster,
                               fund_id: str | None) -> dict[str, list[...]]:
     """
     Build existing assets objects from a dictionary of DataFrame and add them to a fund if provided.
 
     Args:
-        model: Model object.
+        model_engine: Model engine object.
         df_dict (dict[str, pd.DataFrame]): Dictionary of DataFrame containing asset data.
         econs (dict[str, ...] | EsgMaster): Economic variables.
         fund_id (str | None): Fund id to filter the df, or None.
@@ -45,17 +45,17 @@ def build_all_existing_assets(model, df_dict: dict[str, pd.DataFrame], econs: di
     bond_ls = []
 
     cash_ls = build_assets_cash(
-        model=model, df=df_dict['assets_cash'].copy(), fund_id=fund_id,
+        model_engine=model_engine, df=df_dict['assets_cash'].copy(), fund_id=fund_id,
         currencies=currencies, market_info=market_info
     )
     if df_dict.get(name := 'assets_equity', None) is not None:
         equity_ls = build_assets_equity(
-            model=model, df=df_dict[name].copy(), fund_id=fund_id,
+            model_engine=model_engine, df=df_dict[name].copy(), fund_id=fund_id,
             currencies=currencies, equity_indices=equity_indices
         )
     if df_dict.get(name := 'assets_bond', None) is not None:
         bond_ls = build_assets_fixed_bond(
-            model=model, df=df_dict[name].copy(), fund_id=fund_id,
+            model_engine=model_engine, df=df_dict[name].copy(), fund_id=fund_id,
             redemp_schedule_df= df_dict.get('redemp_schedule', None),
             currencies=currencies, yield_curves=yield_curves, credit_bands=credit_bands
         )
@@ -71,13 +71,13 @@ def build_all_existing_assets(model, df_dict: dict[str, pd.DataFrame], econs: di
 
 
 def build_all_profile_assets(
-        model, df_dict: dict[str, pd.DataFrame], econs: dict[str, ...] | EsgMaster, fund_id: str
+        model_engine, df_dict: dict[str, pd.DataFrame], econs: dict[str, ...] | EsgMaster, fund_id: str
         ) -> dict[str, list]:
     """
     Build profile assets objects from a dictionary of DataFrame.
 
     Args:
-        model: Model object.
+        model_engine: Model engine object.
         df_dict (dict[str, pd.DataFrame]): Dictionary of DataFrame containing asset data.
         econs (dict[str, ...] | EsgMaster): Economic variables.
         fund_id (str): Fund id to filter the df.
@@ -90,13 +90,11 @@ def build_all_profile_assets(
         equity_indices = [item.econ_obj for item in econs.equity_indices]
         yield_curves = [item.econ_obj for item in econs.yield_curves]
         credit_bands = [item.econ_obj for item in econs.credit_bands]
-        market_info = econs.market_info.econ_obj
     elif isinstance(econs, dict):
         currencies = econs['currencies']
         equity_indices = econs['equity_indices']
         yield_curves = econs['yield_curves']
         credit_bands = econs['credit_bands']
-        market_info = econs['market_info']
     else:
         raise TypeError(f"Invalid type of 'market_dict': {econs}, expected 'dict' or 'EsgMaster'.")
 
@@ -105,12 +103,12 @@ def build_all_profile_assets(
 
     if df_dict.get(name := 'profile_equity', None) is not None:
         equity_ls = build_profile_equity(
-            model=model, df=df_dict[name].copy(), fund_id=fund_id,
+            model_engine=model_engine, df=df_dict[name].copy(), fund_id=fund_id,
             currencies=currencies, equity_indices=equity_indices
         )
     if df_dict.get(name := 'profile_bond', None) is not None:
         bond_ls = build_profile_fixed_bond(
-            model=model, df=df_dict[name].copy(), fund_id=fund_id,
+            model_engine=model_engine, df=df_dict[name].copy(), fund_id=fund_id,
             currencies=currencies, yield_curves=yield_curves, credit_bands=credit_bands
         )
 
@@ -123,13 +121,13 @@ def build_all_profile_assets(
     }
 
 
-def build_assets_cash(model, df: pd.DataFrame, fund_id: str | None,
+def build_assets_cash(model_engine, df: pd.DataFrame, fund_id: str | None,
                       currencies: list['Currency'], market_info: MarketInfo) -> list:
     """
     Build cash asset objects from a DataFrame and add them to a fund if provided.
 
     Args:
-        model: Model object.
+        model_engine: Model engine object.
         df (pd.DataFrame): DataFrame containing cash asset data.
         fund_id (str | None): Fund id to filter the df, or None.
         currencies (list): List of Currency objects.
@@ -149,7 +147,7 @@ def build_assets_cash(model, df: pd.DataFrame, fund_id: str | None,
         # create instance
         cash = create_asset(
             asset_cls="cash",
-            model=model,
+            model_engine=model_engine,
             asset_id=row["asset_id"],
             asset_category=ASSET_CATEGORIES_MAPPING["cash"],
             fund_id=row["fund_id"],
@@ -170,7 +168,7 @@ def build_assets_cash(model, df: pd.DataFrame, fund_id: str | None,
     return cash_list
 
 
-def build_assets_fixed_bond(model, df: pd.DataFrame, fund_id: str | None,
+def build_assets_fixed_bond(model_engine, df: pd.DataFrame, fund_id: str | None,
                             redemp_schedule_df: pd.DataFrame, currencies: list['Currency'],
                             yield_curves: list['YieldCurve'], credit_bands: list['CreditBand'],
                             ) -> list:
@@ -178,7 +176,7 @@ def build_assets_fixed_bond(model, df: pd.DataFrame, fund_id: str | None,
     Build bond asset objects from a DataFrame and add them to a fund if provided.
 
     Args:
-        model: Model object.
+        model_engine: Model object.
         df (pd.DataFrame): DataFrame containing bond asset dataF.
         fund_id (str | None): Fund id to filter the df, or None.
         redemp_schedule_df (pd.DataFrame): DataFrame of redemption schedules.
@@ -207,7 +205,7 @@ def build_assets_fixed_bond(model, df: pd.DataFrame, fund_id: str | None,
 
         # create instance
         fixed_bond = create_asset(
-            model=model,
+            model_engine=model_engine,
             asset_cls="fixed_bond",
             pre_calculations=pre_calc.split(';') if pre_calc.lower() != 'none' else None,
             asset_id=row["asset_id"],
@@ -242,13 +240,13 @@ def build_assets_fixed_bond(model, df: pd.DataFrame, fund_id: str | None,
     return fixed_bond_list
 
 
-def build_profile_fixed_bond(model, df: pd.DataFrame, fund_id: str, currencies: list['Currency'],
+def build_profile_fixed_bond(model_engine, df: pd.DataFrame, fund_id: str, currencies: list['Currency'],
                              yield_curves: list['YieldCurve'], credit_bands: list['CreditBand']) -> list:
     """
     Build a profile of bond assets for a fund from a DataFrame.
 
     Args:
-        model: Model object.
+        model_engine: Model object.
         df (pd.DataFrame): DataFrame containing bond profile data.
         fund_id (str): Fund id to filter the df.
         currencies (list): List of Currency objects.
@@ -262,7 +260,7 @@ def build_profile_fixed_bond(model, df: pd.DataFrame, fund_id: str, currencies: 
 
     df_flt: pd.DataFrame = df.copy()
     df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
-    p: pd.Period = model.period
+    p: pd.Period = model_engine.period
     str_cal_ym = str(p.year * 100 + p.month)
 
     # initialize assets profile - bond
@@ -276,7 +274,7 @@ def build_profile_fixed_bond(model, df: pd.DataFrame, fund_id: str, currencies: 
         credit_band = next((x for x in credit_bands if x.band_id == credit_band_id), None)
 
         fixed_bond = create_asset(
-            model=model,
+            model_engine=model_engine,
             asset_cls="fixed_bond",
             pre_calculations=['coupon_rate'],
             asset_id=f"{str_cal_ym}{row["_asset_id"]}",
@@ -308,13 +306,13 @@ def build_profile_fixed_bond(model, df: pd.DataFrame, fund_id: str, currencies: 
     return fixed_bond_list
 
 
-def build_assets_equity(model, df: pd.DataFrame, fund_id: str | None,
+def build_assets_equity(model_engine, df: pd.DataFrame, fund_id: str | None,
                         currencies: list['Currency'], equity_indices: list['EquityIndex']) -> list:
     """
     Build equity asset objects from a DataFrame and add them to a fund if provided.
 
     Args:
-        model: Model object.
+        model_engine: Model object.
         df (pd.DataFrame): DataFrame containing equity asset data.
         fund_id (str | None): Fund id to filter the df, or None.
         currencies (list): List of Currency objects.
@@ -336,7 +334,7 @@ def build_assets_equity(model, df: pd.DataFrame, fund_id: str | None,
         # create instance
         equity = create_asset(
             asset_cls="equity",
-            model=model,
+            model_engine=model_engine,
             asset_id=row["asset_id"],
             asset_category=ASSET_CATEGORIES_MAPPING["equity"],
             fund_id=row["fund_id"],
@@ -358,13 +356,13 @@ def build_assets_equity(model, df: pd.DataFrame, fund_id: str | None,
     return equity_list
 
 
-def build_profile_equity(model, df: pd.DataFrame, fund_id: str,
+def build_profile_equity(model_engine, df: pd.DataFrame, fund_id: str,
                          currencies: list['Currency'], equity_indices: list['EquityIndex']) -> list:
     """
     Build a profile of equity assets for a fund from a DataFrame.
 
     Args:
-        model: Model object.
+        model_engine: Model object.
         df (pd.DataFrame): DataFrame containing equity asset data.
         fund_id (str): Fund id to filter the df.
         currencies (list): List of Currency objects.
@@ -377,7 +375,7 @@ def build_profile_equity(model, df: pd.DataFrame, fund_id: str,
 
     df_flt: pd.DataFrame = df.copy()
     df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
-    p: pd.Period = model.period
+    p: pd.Period = model_engine.period
     str_cal_ym = str(p.year * 100 + p.month)
 
     for _, row in df_flt.iterrows():
@@ -388,7 +386,7 @@ def build_profile_equity(model, df: pd.DataFrame, fund_id: str,
         # create instance
         equity = create_asset(
             asset_cls="equity",
-            model=model,
+            model_engine=model_engine,
             asset_id=f"{str_cal_ym}{row["_asset_id"]}",
             asset_category=ASSET_CATEGORIES_MAPPING['equity'],
             fund_id=fund_id,

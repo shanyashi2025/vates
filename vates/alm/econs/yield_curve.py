@@ -2,9 +2,8 @@ from typing import Optional
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import weakref
 
-from vates._core import TDepVariable
+from vates._core import ProjModelEngine, TDepVariable
 from vates.utils import convert_spot_to_disc, convert_disc_to_spot, convert_disc_to_fwrd, convert_disc_to_par, convert_fwrd_to_disc
 
 
@@ -19,7 +18,7 @@ class YieldCurve:
         _forward_rates: Forward rates.
         _par_yields: Par yields.
     """
-    def __init__(self, model, curve_id: str, output_terms: list[int] | None = None) -> None:
+    def __init__(self, model_engine: ProjModelEngine, curve_id: str, output_terms: list[int] | None = None) -> None:
         """
         Initialize a YieldCurve object.
 
@@ -27,7 +26,10 @@ class YieldCurve:
             curve_id (str): Unique identifier for this yield curve.
             output_terms (list[int] | None): List of terms (in months) to be output.
         """
-        self._model_ref: weakref.ref = weakref.ref(model)
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
+
         self.curve_id = curve_id
         self._spot_rates: npt.NDArray[np.float64] | None = None
         self._disc_factors: npt.NDArray[np.float64] | None = None
@@ -45,20 +47,12 @@ class YieldCurve:
         else:
             self._output_terms = [*range(12, 61, 12), *range(120, 601, 120)]
 
-        self._tdv_spot_rates: TDepVariable = TDepVariable(model, "spot_rate", curve_id, 'yield_curve',
+        self._tdv_spot_rates: TDepVariable = TDepVariable(model_engine, "spot_rate", curve_id, 'yield_curve',
                                                           dims=[self._output_terms])
 
-    @property
-    def model_proxy(self):
-        return self._model_ref()
-
-    @property
-    def time(self) -> int | None:
-        return self._model_ref().time
-
-    @property
-    def period(self) -> pd.Period | None:
-        return self._model_ref().period
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     @property
     def last_update(self) -> int | None:

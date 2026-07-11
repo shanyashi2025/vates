@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
-import weakref
 
-from vates._core import TDepVariable
+from vates._core import ProjModelEngine, TDepVariable
 from vates.utils import t_checker
 from vates.alm.enums import AssetRepBasis
 from vates.alm.funds._utils import ALContainer
@@ -17,8 +16,11 @@ class FundCalculator:
     Attributes:
 
     """
-    def __init__(self, model, fund_id: str, container: ALContainer, asset_categories: list[str]):
-        self._model_ref: weakref.ref = weakref.ref(model)
+    def __init__(self, model_engine: ProjModelEngine, fund_id: str, container: ALContainer, asset_categories: list[str]):
+        model_engine.attach_time_observer(self)
+        self.time: int = model_engine.time
+        self.period: pd.Period = model_engine.period
+
         self.fund_id: str = fund_id
         self.container: ALContainer = container
         self.asset_categories_enum: dict[str, int] = {item: i for i, item in enumerate(asset_categories)}
@@ -27,7 +29,7 @@ class FundCalculator:
 
         # Initialize time-dependent variables used for reporting
         # dims = None
-        create_var = lambda name: TDepVariable(model, name, self.fund_id, 'fund')
+        create_var = lambda name: TDepVariable(model_engine, name, self.fund_id, 'fund')
         self.tdv_totass_cash_flow: TDepVariable = create_var("totass_cash_flow")
         self.tdv_totass_urgl_bd: TDepVariable = create_var("totass_urgl_bd")
         self.tdv_totass_urgl_ad: TDepVariable = create_var("totass_urgl_ad")
@@ -45,7 +47,7 @@ class FundCalculator:
         self.tdv_proceeds_transferred_in: TDepVariable = create_var("proceeds_transferred_in")
         self.tdv_proceeds_transferred_out: TDepVariable = create_var("proceeds_transferred_out")
         # dims = AssetRepBasis
-        create_var = lambda name: TDepVariable(model, name, self.fund_id, 'fund', dims=[AssetRepBasis])
+        create_var = lambda name: TDepVariable(model_engine, name, self.fund_id, 'fund', dims=[AssetRepBasis])
         self.tdv_totass_rep_value_bd: TDepVariable = create_var("totass_rep_value_bd")
         self.tdv_totass_rep_value_ad: TDepVariable = create_var("totass_rep_value_ad")
         self.tdv_totass_inv_ret_bd: TDepVariable = create_var("totass_inv_ret_bd")
@@ -53,13 +55,13 @@ class FundCalculator:
         self.tdv_totass_inv_ret_ad: TDepVariable = create_var("totass_inv_ret_ad")
         self.tdv_totass_ror_pc_ad: TDepVariable = create_var("totass_ror_pc_ad")
         # dims = AssetClass
-        create_var = lambda name: TDepVariable(model, name, self.fund_id, 'fund', dims=[asset_categories])
+        create_var = lambda name: TDepVariable(model_engine, name, self.fund_id, 'fund', dims=[asset_categories])
         self.tdv_asset_cash_flow: TDepVariable = create_var("asset_cash_flow")
         self.tdv_asset_urgl_bd: TDepVariable = create_var("asset_urgl_bd")
         self.tdv_asset_urgl_ad: TDepVariable = create_var("asset_urgl_ad")
         self.tdv_asset_rgl_ad: TDepVariable = create_var("asset_rgl_ad")
         # dims = AssetClass,AssetRepBasis
-        create_var = lambda name: TDepVariable(model, name, self.fund_id, 'fund', dims=[asset_categories, AssetRepBasis])
+        create_var = lambda name: TDepVariable(model_engine, name, self.fund_id, 'fund', dims=[asset_categories, AssetRepBasis])
         self.tdv_asset_rep_value_bd: TDepVariable = create_var("asset_rep_value_bd")
         self.tdv_asset_rep_value_ad: TDepVariable = create_var("asset_rep_value_ad")
         self.tdv_asset_inv_ret_bd: TDepVariable = create_var("asset_inv_ret_bd")
@@ -67,13 +69,9 @@ class FundCalculator:
         self.tdv_asset_inv_ret_ad: TDepVariable = create_var("asset_inv_ret_ad")
         self.tdv_asset_ror_pc_ad: TDepVariable = create_var("asset_ror_pc_ad")
 
-    @property
-    def time(self) -> int | None:
-        return self._model_ref().time
-    
-    @property
-    def period(self) -> pd.Period | None:
-        return self._model_ref().period
+    def sync_time(self, subject: ProjModelEngine) -> None:
+        self.time = subject.time
+        self.period = subject.period
 
     @t_checker({"proc_assets_bd": -1, "proc_assets_ad": -1}, "proc_assets_bd")
     def process_assets_before_dealing(self) -> None:
