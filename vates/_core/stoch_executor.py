@@ -1,70 +1,171 @@
-import os
 import glob
-import warnings
-from pathlib import Path
-from abc import abstractmethod
-from datetime import datetime
+import inspect
+import json
+import os
 import pandas as pd
+import traceback
+import warnings
+from datetime import datetime
 from functools import cached_property
+from pathlib import Path
+from typing import Callable, Self, get_type_hints
 
 from vates._core.proj_model_engine import ProjModelEngine
-from vates._core.utils import ValidatedNumber, ValidatedString, ValidatedList, parse_str_to_int_list
+from vates._core._utils import parse_str_to_int_list, RunConfig
 
 
 class StochExecutor:
     """Stochastic model executor."""
 
-    _name = ValidatedString(len_min=1, max_sets=1)
-    _description = ValidatedString(max_sets=1)
-    _start_year = ValidatedNumber(value_type=int, value_min=1900, value_max=5999, max_sets=1)
-    _start_month = ValidatedNumber(value_type=int, value_lst=range(1, 13), max_sets=1)
-    _end_year = ValidatedNumber(value_type=int, value_min=1900, value_max=5999, max_sets=1)
-    _end_month = ValidatedNumber(value_type=int, value_lst=range(1, 13), max_sets=1)
-    _scenario = ValidatedString(allow_none=True, max_sets=1)
-    _simulations = ValidatedList(item_type=int, len_min=0, len_max=100_000, max_sets=1)
-    _wsdir = ValidatedString(max_sets=1)
-    _input_directories = ValidatedList(item_type=str, allow_none=True, len_min=0, max_sets=1)
-    _results_directory = ValidatedString(max_sets=1)
-    _max_workers = ValidatedNumber(value_type=int, value_min=1, max_sets=1)
+    add_traced_message = ProjModelEngine.add_traced_message
+    load_json = ProjModelEngine.load_json
+    read_csv = ProjModelEngine.read_csv
+    read_excel = ProjModelEngine.read_excel
+    read_parquet = ProjModelEngine.read_parquet
+    _concat_output_file_path = ProjModelEngine._concat_output_file_path
+    get_filepath = ProjModelEngine.get_filepath
+    _search_filepath = ProjModelEngine._search_filepath
 
     def __init__(
-            self,
-            name: str,
-            *,
-            description: str = '...',
-            model_cls,
-            simulations: str,
-            start_year: int,
-            start_month: int = 12,
-            end_year: int | None = None,
-            end_month: int = 12,
-            scenario: str | None = None,
-            workspace_directory: str | None = None,
-            input_directories: list[str] | None = None,
-            results_directory: str = '',
-            max_workers: int | None = None,
+        self,
+        *,
+        name: str,
+        description: str = '...',
     ) -> None:
-        self._exec_start_time: datetime = datetime.now()
-        self._name: str = name
-        self._description: str = description
-        self._model_cls = model_cls
-        self._sims_str: str = simulations
-        self._simulations: list[int] = parse_str_to_int_list(simulations)
-        self._start_year: int = start_year
-        self._start_month: int = start_month
-        self._end_year: int = end_year or start_year
-        self._end_month: int = end_month
-        self._scenario: str | None = scenario
-        self._wsdir: str = workspace_directory or os.getcwd()
-        self._input_directories: list[str] | None = input_directories
-        self._results_directory: str = results_directory
-        self._max_workers: int = self._parse_max_workers(max_workers)
-        self._cached_filepath: dict = {}
-        self._output_files: list = []
-        self._sim_input_files: dict = {}
-        self._sim_output_files: dict = {}
-        self._enable_write_runlog: bool = True
-        self._all_sim_params: dict = {}
+        self._name: str = str(name)
+        self._description: str = str(description)
+
+        self._proj_cls: type[ProjModelEngine] | None = None
+        self._proj_func: Callable | None = None
+        self._run_config: RunConfig | None = None
+
+        # runtime stuffs
+        self._cached_filepath: dict[str, tuple] = {}
+        self._output_files: set = set()
+        self._messages: list[str] = []
+        self._sim_messages: list = []
+        self._runlog: dict | None = None
+
+        self._sims_str: str | None = None
+
+    def bind_proj_func(
+        self,
+        func: Callable,
+        /
+    ) -> Self:
+        """Bind the projection model to the engine.
+
+        Args:
+            func (callable): The projection function.
+
+        Raises:
+            ValueError: If `func` is not callable.
+        """
+        if self._proj_func is not None:
+            msg = (f"{self._proj_func} is already bound. If you are sure you want to reset it, "
+                   f"use 'foo._proj_func = None', then call 'foo.bind_proj_func(...)' method.")
+            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            return self
+        if not callable(func):
+            raise ValueError(f"Cannot bind un-callable object: {func}.")
+
+        sig_params = inspect.signature(func).parameters
+        if len(sig_params) == 0:
+            raise ValueError(f"The function '{func.__name__}' has no argument, cannot be bound.")
+
+        first_arg_name = list(sig_params.keys())[0]
+        proj_cls = get_type_hints(func).get(first_arg_name)
+        if proj_cls is not None:
+            self._proj_cls = proj_cls
+            self.add_traced_message(f"INFO: {proj_cls} is set as the projection model engine according to type hints of "
+                                    f"first argument '{first_arg_name}'.")
+        else:
+            msg = f"{ProjModelEngine} is set as the projection model engine by default."
+            warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+            self._proj_cls = ProjModelEngine
+
+        self._proj_func = func
+        self.add_traced_message(f"INFO: The function {func} has been bound to {self}.")
+        return self
+
+    def set_run_config(
+        self,
+        *,
+        start_year: int | None = None,
+        start_month: int | None = None,
+        end_year: int | None = None,
+        end_month: int | None = None,
+        scenario: str | None = None,
+        simulations: str,
+        workspace_directory: str | None = None,
+        input_directories: list[str] | None = None,
+        results_directory: str | None = None,
+        max_workers: int | None = None,
+    ) -> Self:
+        """Set the configuration for a run.
+
+        Args:
+            start_year (int): Projection start year.
+            start_month (int, optional): Projection start month. Defaults to 12.
+            end_year (int, optional): Projection end year. Defaults to `start_year`.
+            end_month (int, optional): Projection end month. Defaults to 12.
+            scenario (str, optional): Scenario. Defaults to None.
+            simulations: (str, optional): Simulations.
+            workspace_directory (str, optional): Workspace directory. Defaults to `{os.getcwd()}`.
+            input_directories (list[str], optional): List of input directory. Defaults to None.
+            results_directory (str, optional): Results directory. Defaults to 'results/`scenario`'.
+            max_workers (int, optional): Max workers. Defaults to 1.
+        """
+        if self._run_config is not None:
+            msg = (f"Run configuration is already set. If you are sure you want to reset it, "
+                   f"use 'foo._run_config = None', then call 'foo.set_run_config(...)' method.")
+            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            return self
+
+        none_items = []
+
+        if start_year is None:
+            raise ValueError(f"start_year: value 'None' is not allowed.")
+        if start_month is None:
+            start_month = 12
+            none_items.append(f"start_month={start_month}")
+        if end_year is None:
+            end_year = start_year
+            none_items.append(f"end_year={end_year}")
+        if end_month is None:
+            end_month = 12
+            none_items.append(f"end_month={end_month}")
+        if workspace_directory is None:
+            workspace_directory = os.getcwd()
+            none_items.append(f"workspace_directory='{workspace_directory}'")
+        if results_directory is None:
+            results_directory = f"./results/{scenario or ''}"
+            none_items.append(f"results_directory='{results_directory}'")
+        self._sims_str = simulations
+        self._run_config = RunConfig(
+            start_year=start_year,
+            start_month=start_month,
+            end_year=end_year,
+            end_month=end_month,
+            scenario=scenario,
+            simulations=parse_str_to_int_list(simulations),
+            wsdir=workspace_directory,
+            input_directories=input_directories,
+            results_directory=results_directory,
+            is_delete_existing_results=True,
+            enable_write_proj_result=False,
+            stoch_result_file_mode=None,
+            stoch_result_file_id=None,
+            enable_write_runlog=True,
+            max_workers=self._parse_max_workers(max_workers),
+            simulation=None,
+        )
+
+        if len(none_items) > 0:
+            msg = f"Following items are set by default: {', '.join(none_items)}."
+            warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+
+        return self
 
     @staticmethod
     def _parse_max_workers(requested_workers: int | None) -> int:
@@ -86,36 +187,34 @@ class StochExecutor:
             warnings.warn(f"max_workers is set to {_cpu_count}, reason: requested {requested_workers} > cpu count.")
             return _cpu_count
 
-    def run(self) -> dict:
-        self.results_directory.mkdir(parents=True, exist_ok=True)
-        for f in glob.glob(str(self.results_directory / f'{self._name}*')):
-            if f.endswith(('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')):
-                os.remove(f)
-        self.pre_stoch_calculations()
-        self._run_all_simulations()
-        self.post_stoch_calculations()
-        return self._generate_runlog()
+    def run(
+        self,
+        *,
+        proj_func_args: dict[str, ...] | None = None,
+    ) -> dict:
+        if self._proj_func is None:
+            raise ValueError(f"Projection function has not been bound.")
+        if self._proj_cls is None:
+            raise ValueError(f"Projection model engine class is None.")
+        if self._run_config is None:
+            raise ValueError("Run configuration has not been set.")
+        proj_func_args = proj_func_args or {}
 
-    @abstractmethod
-    def pre_stoch_calculations(self):
-        pass
+        if self.results_directory.is_dir():
+            for f in glob.glob(str(self.results_directory / f'{self._name}*')):
+                if f.endswith(('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')):
+                    os.remove(f)
+                else:
+                    msg = f"Exsiting file NOT deleted: '{f}'."
+                    warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+        else:
+            os.makedirs(self.results_directory, exist_ok=True)
 
-    @abstractmethod
-    def post_stoch_calculations(self):
-        pass
-
-    def _run_all_simulations(self):
-        self._run_simulations_multiprocess()
+        exec_start_time = datetime.now()
+        exec_success = self._run_simulations_multiprocess(proj_func_args=proj_func_args)
         self._write_stochastic_statistic()
-
-    load_json = ProjModelEngine.load_json
-    read_csv = ProjModelEngine.read_csv
-    read_excel = ProjModelEngine.read_excel
-    read_parquet = ProjModelEngine.read_parquet
-    _concat_output_file_path = ProjModelEngine._concat_output_file_path
-    _get_filepath = ProjModelEngine._get_filepath
-    _scan_filepath = ProjModelEngine._scan_filepath
-    _generate_runlog = ProjModelEngine._generate_runlog
+        self._dump_runlog(exec_success, exec_start_time, datetime.now())
+        return self._runlog
 
     @staticmethod
     def _create_batches(simulations: list[int], n_batches: int) -> list[tuple[int, ...]]:
@@ -125,70 +224,96 @@ class StochExecutor:
         batched_simulations = batched(simulations, n=quotient + (1 if remainder > 0 else 0))
         return [batch for batch in batched_simulations]
 
-    def _run_simulation_batch(self, simulation_batch: tuple[int, ...], batch_id: str) -> dict:
-        result: dict = {'input_files': {}, 'output_files': {}, 'err_msg': []}
+    def _run_simulation_batch(
+        self,
+        *,
+        simulation_batch: tuple[int, ...],
+        batch_id: str,
+        proj_func_args: dict[str, ...]
+    ) -> tuple[bool, list, list]:
+        success: bool = True
+        result: list = []
+        output_files: list = []
 
         for simulation in simulation_batch:
             try:
-                model_instance = self._model_cls(
+                model_instance = self._proj_cls(
                     name=self._name,
-                    description=self._description,
-                    start_year=self._start_year,
-                    start_month=self._start_month,
-                    end_year=self._end_year,
-                    end_month=self._end_month,
-                    scenario=self._scenario,
+                    description=self._description
+                ).bind_proj_func(
+                    self._proj_func
+                ).set_run_config(
                     simulation=simulation,
-                    workspace_directory=self._wsdir,
-                    input_directories=self._input_directories,
-                    results_directory=self._results_directory,
-                    is_delete_existing_results=False,
-                    enable_write_proj_result=simulation == self._simulations[0],
-                    stoch_result_mode='w' if simulation == simulation_batch[0] else 'a',
                     stoch_result_file_id=batch_id,
+                    stoch_result_file_mode='w' if simulation == simulation_batch[0] else 'a',
+                    enable_write_proj_result=(simulation == self._run_config.simulations[0]),
+                    start_year=self._run_config.start_year,
+                    start_month=self._run_config.start_month,
+                    end_year=self._run_config.end_year,
+                    end_month=self._run_config.end_month,
+                    scenario=self._run_config.scenario,
+                    workspace_directory=self._run_config.wsdir,
+                    input_directories=self._run_config.input_directories,
+                    results_directory=self._run_config.results_directory,
+                    is_delete_existing_results=False,
                     enable_write_runlog=False,
-                    **self._all_sim_params,
                 )
             except Exception as e:
-                sim_err = f'simulation #{simulation} init error: {str(e)}'
-                result['err_msg'].append(sim_err)
-                warnings.warn(f'! {sim_err}')
+                traceback.print_exc()
+                result.append(f"{simulation=}: init error:\n{traceback.format_exc()}")
+                success = False
                 continue # `model_instance` is not successfully initialized, skip `.run()`
 
             try:
-                res = model_instance.run()
-                result['input_files'] |= res.get('input_files', {})
-                result['output_files'] |= res.get('output_files', {})
+                res = model_instance.run(proj_func_args=proj_func_args)
+                result.append(res)
+                output_files.extend(model_instance._output_files)
+
             except Exception as e:
-                sim_err = f'simulation #{simulation} run error: {str(e)}'
-                result['err_msg'].append(sim_err)
-                warnings.warn(f'! {sim_err}')
+                traceback.print_exc()
+                result.append(f"{simulation=}: run error:\n{traceback.format_exc()}")
+                success = False
 
             del model_instance
 
-        return result
+        return success, result, output_files
 
-    def _run_simulations_multiprocess(self):
+    def _run_simulations_multiprocess(
+        self,
+        *,
+        proj_func_args: dict[str, ...]
+    ) -> bool:
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
-        n_workers = min(self._max_workers, len(self._simulations))
-        simulation_batches = self._create_batches(self._simulations, n_workers)
+        n_workers = min(self._run_config.max_workers, len(self._run_config.simulations))
+        simulation_batches = self._create_batches(self._run_config.simulations, n_workers)
+        exec_success = True
 
         with ProcessPoolExecutor(max_workers=n_workers) as executor:
-            futures = [executor.submit(self._run_simulation_batch, batch, str(i))
-                       for i, batch in enumerate(simulation_batches, 1)]
+            futures = [
+                executor.submit(
+                    self._run_simulation_batch,
+                    simulation_batch=batch,
+                    batch_id=str(i),
+                    proj_func_args=proj_func_args
+                )
+                for i, batch in enumerate(simulation_batches, 1)
+            ]
 
             for future in as_completed(futures):
-                res = future.result()
-                self._sim_input_files |= res['input_files']
-                self._sim_output_files |= res['output_files']
+                success, result, output_files = future.result()
+                exec_success = exec_success and success
+                self._sim_messages.extend(result)
+                self._output_files.update(output_files)
+
+        return exec_success
 
     def _write_stochastic_statistic(self):
-        stoch_setting = self.load_json('__stoch_setting__', allow_not_found=True)
+        stoch_setting = self.load_json('__stoch_setting__.json', allow_not_found=True)
         if stoch_setting is None or stoch_setting.get('statistic', None) is None:
             return
 
-        stoch_file_paths = sorted([f for f in self._sim_output_files if f and f.endswith('.stoch.csv')])
+        stoch_file_paths = sorted([f for f in self._output_files if f and str(f).endswith('.stoch.csv')])
         if len(stoch_file_paths) == 0: return
 
         df = pd.concat((pd.read_csv(f) for f in stoch_file_paths), ignore_index=True)
@@ -210,53 +335,60 @@ class StochExecutor:
 
         output_file = self._concat_output_file_path('.stoch.stat.csv')
         statistic.to_csv(output_file, index=False)
-        self._output_files.append(output_file)
+        self._output_files.add(output_file)
 
     @property
-    def _runlog(self) -> dict[str, ...]:
-        def _file_stat(file_path: Path) -> dict[str, str]:
-            """Get file modification time and size"""
-            stat_info = os.stat(file_path)
-            file_mtime = datetime.fromtimestamp(stat_info.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-            size_bytes = stat_info.st_size
-            if size_bytes < 1024 * 1024: file_size = f"{size_bytes / 1024:.1f} KB"
-            elif size_bytes < 1024 * 1024 * 1024: file_size = f"{size_bytes / (1024 * 1024):.1f} MB"
-            else: file_size = f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
-            return {"mtime": file_mtime, "size": file_size}
+    def runlog(self) -> dict[str, ...] | None:
+        return self._runlog
 
-        return {
+    def _dump_runlog(self, exec_success: bool, exec_start_time: datetime, exec_end_time: datetime) -> None:
+        exec_total_seconds = int((exec_end_time - exec_start_time).total_seconds())
+        exec_hours = exec_total_seconds // 3600
+        exec_minutes = (exec_total_seconds % 3600) // 60
+        exec_seconds = exec_total_seconds % 60
+
+        self._runlog = {
             "model": {
                 "name": self._name,
                 "description": self._description,
-                "projection_engine": self._model_cls.__name__,
-                "stochastic_executor": self.__class__.__name__,
+                "projection_function": f"{inspect.getfile(self._proj_func)}:{self._proj_func.__name__}",
+                "projection_engine": "foo", # f"{inspect.getfile(type(self))}:{type(self).__name__}",
+                "stochastic_executor": f"{inspect.getfile(type(self))}:{type(self).__name__}",
             },
             "execution": {
-                "start": self._exec_start_time.strftime('%Y-%m-%d %H:%M:%S'),
-                "end": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "success": exec_success,
+                "start": exec_start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                "end": exec_end_time.strftime('%Y-%m-%d %H:%M:%S'),
+                "duration": f"{exec_hours:02}:{exec_minutes:02}:{exec_seconds:02}",
             },
             "run_setting": {
-                "start_year": self._start_year,
-                "start_month": self._start_month,
-                "end_year": self._end_year,
-                "end_month": self._end_month,
-                "scenario": self._scenario,
+                "start_year": self._run_config.start_year,
+                "start_month": self._run_config.start_month,
+                "end_year": self._run_config.end_year,
+                "end_month": self._run_config.end_month,
+                "scenario": self._run_config.scenario,
                 "simulations": self._sims_str,
                 "workspace_directory": str(self.workspace_directory),
-                "input_directories": self._input_directories,
-                "results_directory": self._results_directory,
-                "max_workers": self._max_workers,
+                "input_directories": self._run_config.input_directories,
+                "results_directory": self._run_config.results_directory,
+                "max_workers": self._run_config.max_workers,
             },
-            "output_files": self._sim_output_files | {str(f): _file_stat(f) for f in self._output_files},
+            "output_files": list(map(str, self._output_files)),
+            "messages": self._messages,
+            "simulation_messages": self._sim_messages
         }
+
+        if self._run_config.enable_write_runlog:
+            with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
+                json.dump(self._runlog, jsonfile, indent=4)
 
     @cached_property
     def workspace_directory(self) -> Path:
-        return Path(self._wsdir).resolve()
+        return Path(self._run_config.wsdir).resolve()
 
     @cached_property
     def results_directory(self) -> Path | None:
-        return (Path(self._wsdir) / self._results_directory).resolve()
+        return (Path(self._run_config.wsdir) / self._run_config.results_directory).resolve()
 
     @property
     def MODEL_NAME(self) -> str:
@@ -266,32 +398,32 @@ class StochExecutor:
     @property
     def SCENARIO(self) -> str | None:
         """str: Scenario code that identifies the set of input used for a run."""
-        return self._scenario
+        return self._run_config.scenario
 
     @property
     def SIMULATIONS(self) -> list[int] | None:
         """int: Simulation."""
-        return self._simulations
+        return self._run_config.simulations
 
     @property
     def START_YEAR(self) -> int:
         """int: Year of the start date of the projection."""
-        return self._start_year
+        return self._run_config.start_year
 
     @property
     def START_MONTH(self) -> int:
         """int: Month (1-12) of the start date of the projection."""
-        return self._start_month
+        return self._run_config.start_month
 
     @property
     def END_YEAR(self) -> int:
         """int: Year of the end date of the projection."""
-        return self._end_year
+        return self._run_config.end_year
 
     @property
     def END_MONTH(self) -> int:
         """int: Month (1-12) of the end date of the projection."""
-        return self._end_month
+        return self._run_config.end_month
 
     @cached_property
     def START_DATE(self) -> pd.Period:
@@ -315,10 +447,10 @@ class StochExecutor:
             raise ValueError(f"Projection period ({self.START_DATE} to {self.END_DATE}) exceeds 500 years.")
         return max_t
 
-    @property
-    def ALL_SIM_PARAMS(self) -> dict:
-        return self._all_sim_params
-
-    @ALL_SIM_PARAMS.setter
-    def ALL_SIM_PARAMS(self, value) -> None:
-        self._all_sim_params = value
+    def __setattr__(self, name, value):
+        if hasattr(self, '_initialized'):
+            if name in type(self).__dict__:  # check if the attribute name already exists in the class definition
+                raise AttributeError(f"Cannot overwrite protected member '{name}'")
+            if not hasattr(self, name) and hasattr(self, "_messages"):
+                self.add_traced_message(f"INFO: Add member: '{name}' {type(value)}")
+        super().__setattr__(name, value)

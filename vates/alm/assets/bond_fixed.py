@@ -3,7 +3,7 @@ import numpy.typing as npt
 import pandas as pd
 
 from vates._core import TDepVariable
-from vates.utils import calculate_risk_adj_spot, check_calc_time
+from vates.utils import calculate_risk_adj_spot, t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.assets.asset_base import Asset
@@ -202,7 +202,7 @@ class BondFixed(Asset):
     def is_alive_beg(self) -> bool:
         return self.period <= self._params.maturity_date
 
-    @check_calc_time({"roll_forward": 0})
+    @t_checker({"roll_forward": 0})
     def calculate_risk_metrics(self, eff_dur_delta: float=0.001):
         """
         Calculate all risk metrics for the bond.
@@ -224,7 +224,7 @@ class BondFixed(Asset):
         else:
             return self.risk_calc.risk_metrics
 
-    @check_calc_time({"roll_forward": -1, "complete_dealing": -1}, "roll_forward")
+    @t_checker({"roll_forward": -1}, "roll_forward")
     def roll_forward(self, **kwargs) -> None:
         """
         Roll the bond forward one period, updating units, prices, and cash flows.
@@ -317,13 +317,12 @@ class BondFixed(Asset):
         if propn > 1: raise ValueError(f"Can not sell >100% proportion of exsiting bonds.")
         self._units -= self._units * propn
 
-    def buy_profile_scale(self, scale: float, list_to_append: list | None=None) -> None:
+    def buy_profile_scale(self, scale: float) -> None:
         """
         Scale the bond profile by a factor.
 
         Args:
             scale (float): Scaling factor.
-            list_to_append (list): Append to list.
 
         Raises:
             ValueError: If scale is negative.
@@ -332,10 +331,9 @@ class BondFixed(Asset):
         if scale < 0: raise ValueError("Can not scale bond profile by a negative number.")
         self._units = self._units * scale
         self._is_profile = False
-        if list_to_append is not None: list_to_append.append(self)
 
-    @check_calc_time({"complete_dealing": -1, "roll_forward": 0}, "complete_dealing")
-    def complete_dealing(self) -> None:
+    @t_checker({"roll_forward": 0}, "dealing")
+    def close_dealing(self) -> None:
         """
         Update the bond after dealing, storing units and values.
         """

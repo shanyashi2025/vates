@@ -1,11 +1,4 @@
-from vates._core.utils import (
-    ValidatedBool,
-    ValidatedNumber,
-    ValidatedString,
-    ValidatedPeriod,
-    ValidatedList,
-    parse_str_to_int_list,
-)
+from vates._core._utils import parse_str_to_int_list
 from vates.utils.data_classes import NumVarGroup
 from vates.utils.curve_interpolation import (
     curve_interp,
@@ -44,16 +37,11 @@ from vates.utils.risk_module import (
 )
 from vates.utils.uncategorized import (
     new_business_convolve,
-    check_calc_time,
+    t_checker,
 )
 
 __all__ = [
     # _core.utils
-    'ValidatedBool',
-    'ValidatedNumber',
-    'ValidatedString',
-    'ValidatedPeriod',
-    'ValidatedList',
     'parse_str_to_int_list',
     # dataclasses
     'NumVarGroup',
@@ -89,6 +77,6 @@ __all__ = [
     'SubRisk',
     # uncategorized
     'new_business_convolve',
-    'check_calc_time',
+    't_checker',
 
 ]

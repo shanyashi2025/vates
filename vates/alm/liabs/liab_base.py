@@ -23,7 +23,7 @@ class Liab(ABC):
         _asset_share (float): Asset share in force.
     """
     __slots__ = ('__dict__', '__weakref__', '_model_ref', '_liab_id', '_fund_id', '_currency', '_entry_date', '_num_pols',
-                 '_surr_val', '_math_res', '_acct_value', '_asset_share', '_cash_flow', '_prem_inc', '_lct_dict',)
+                 '_surr_val', '_math_res', '_acct_value', '_asset_share', '_cash_flow', '_prem_inc', '_tc_dict')
 
     def __init__(self, model, liab_id: str, fund_id: str, currency: Currency, entry_date: pd.Period,
                  no_pols_if: float, surr_val_if: float, math_res_if: float, acct_value_if: float, asset_share_if: float):
@@ -55,7 +55,11 @@ class Liab(ABC):
         self._asset_share: float = asset_share_if
         self._cash_flow: float = 0.0
         self._prem_inc: float = 0.0
-        self._lct_dict: dict[str, int] = {"roll_forward": self.time, "update_ad": self.time}
+        self._tc_dict: dict[str, int] = {"roll_forward": self.time, "update_ad": self.time}
+
+    @property
+    def model_proxy(self):
+        return self._model_ref()
 
     @property
     def time(self) -> int | None:
@@ -84,12 +88,12 @@ class Liab(ABC):
     @property
     def last_roll_forward(self) -> int | None:
         """int | None: Last roll forward time index."""
-        return self._lct_dict['roll_forward']
+        return self._tc_dict['roll_forward']
 
     @property
     def last_update_ad(self) -> int | None:
         """int | None: Last update after dealing time index."""
-        return self._lct_dict['update_ad']
+        return self._tc_dict['update_ad']
 
     @abstractmethod
     def roll_forward(self, *args, **kwargs):

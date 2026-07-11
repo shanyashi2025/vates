@@ -5,21 +5,57 @@ from dataclasses import dataclass
 from vates.alm import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.econs import Currency
 from vates.alm.liabs import Liab, ExtProjLiab
-from vates.alm.funds import FundSizeType, RebalancePolicyParams, TargetWeight
+from vates.alm.funds import Fund, FundSizeType, RebalancePolicyParams, TargetWeight
 
 
 @dataclass
-class FundrebalanceParams:
+class FundRebalanceParams:
     """Parameters for fund rebalance.
 
     Attributes:
         size_type (FundSizeType): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
         size_basis (AssetRepBasis): The basis for assets to match the fund size (usually FAV).
-        rebalance_freq (str): rebalance frequency (1=A, 2=H, 4=Q, 12=M, 0=SKIP).
+        rebalance_freq (int): rebalance frequency (1=A, 2=H, 4=Q, 12=M, 0=SKIP).
     """
     size_type: FundSizeType
     size_basis: AssetRepBasis
-    rebalance_freq: str
+    rebalance_freq: int
+
+@dataclass
+class FundMaster:
+    funds: list[Fund]
+    rebalance_params_dict: dict[str, FundRebalanceParams] | None = None
+    ph_funds: list[Fund] | None = None
+    sh_fund: Fund | None = None
+
+def build_fund_master(model, funds_df: pd.DataFrame, rebalance_policy_df: pd.DataFrame) -> FundMaster:
+    funds = []
+    ph_funds = []
+    sh_fund = None
+    rebalance_params_dict: dict = {}
+
+    for idx, row in funds_df.iterrows():
+        fund_id = str(idx)
+        fund = Fund(
+            model,
+            fund_id=fund_id,
+            rebalance_policy=build_rebalance_policy(rebalance_policy_df, fund_id),
+            asset_categories=row["asset_classes_reported"].split(';')
+        )
+        if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
+            ph_funds.append(fund)
+        else:
+            if sh_fund is not None:
+                raise ValueError("Duplicated shareholder fund.")
+            sh_fund = fund
+        funds.append(fund)
+        rebalance_params_dict[fund_id] = FundRebalanceParams(
+            size_type=FundSizeType[row["fund_size_type"].upper()],
+            size_basis=AssetRepBasis[row["fund_size_basis"].upper()],
+            rebalance_freq=row["fund_rebalance_freq"]  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
+        )
+
+    return FundMaster(funds=funds, ph_funds=ph_funds, sh_fund=sh_fund, rebalance_params_dict=rebalance_params_dict)
 
 
 def build_liabs(model, df: pd.DataFrame, fund_id: str | None,

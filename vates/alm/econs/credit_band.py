@@ -36,6 +36,10 @@ class CreditBand:
         self.tdv_recovery_rate: TDepVariable = TDepVariable(model, "recovery_rate", band_id, 'credit')
 
     @property
+    def model_proxy(self):
+        return self._model_ref()
+
+    @property
     def time(self) -> int | None:
         return self._model_ref().time
     

@@ -32,6 +32,10 @@ class EquityIndex:
         self.tdv_dividend_yield_ac: TDepVariable = TDepVariable(model, "dividend_yield_ac", index_id, 'equity_index')
 
     @property
+    def model_proxy(self):
+        return self._model_ref()
+
+    @property
     def time(self) -> int | None:
         return self._model_ref().time
     

@@ -1,7 +1,7 @@
 import pandas as pd
 
 from vates._core import TDepVariable
-from vates.utils import check_calc_time
+from vates.utils import t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, MarketInfo
 from vates.alm.assets.asset_base import Asset
@@ -68,7 +68,7 @@ class Cash(Asset):
     def ret_id_short_pos(self) -> str:
         return self._ret_id_short_pos
 
-    @check_calc_time({"roll_forward": -1, "complete_dealing": -1}, "roll_forward")
+    @t_checker({"roll_forward": -1}, "roll_forward")
     def roll_forward(self, **kwargs) -> None:
         """
         Roll the cash asset forward one period.
@@ -115,8 +115,8 @@ class Cash(Asset):
         # should never get here
         pass
 
-    @check_calc_time({"complete_dealing": -1, "roll_forward": 0}, "complete_dealing")
-    def complete_dealing(self, **kwargs) -> None:
+    @t_checker({"roll_forward": 0}, "dealing")
+    def close_dealing(self, **kwargs) -> None:
         """
         Update the cash asset after dealing.
         """

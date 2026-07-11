@@ -16,50 +16,54 @@ class KeyedArray:
 
     """
 
-    __slots__ = ('_nparray', '_at', '_dim_names')
+    __slots__ = ('_arr', '_at',)
 
-    def __init__(self, nparray: np.ndarray, key_pos_pairs: list[dict[Any, int]], dim_names: list[str] | None = None):
+    def __init__(self, nparray: np.ndarray, /, *, frozen: bool, key_pos_pairs: list[dict[Any, int]],
+                 dim_names: list[str] | None = None):
         """Initialize a KeyedArray.
 
         Args:
-            nparray: Underlying NumPy array.
-            key_pos_pairs: A list of dictionaries mapping keys to integer-position indices
+            nparray (np.ndarray): Underlying NumPy array.
+            frozen (bool): True if frozen.
+            key_pos_pairs (list): A list of dictionaries mapping keys to integer-position indices
                 for each dimension. Length must match `nparray.ndim`.
+            dim_names (list, optional): A list of string storing dimension names.
         """
-        self._nparray: np.ndarray = nparray
+        self._arr: np.ndarray = nparray
+        self._arr.flags.writeable = not frozen
         self._at: _AtIndexer = _AtIndexer(nparray, key_pos_pairs, dim_names)
 
     @property
     def values(self) -> np.ndarray:
-        return self._nparray
+        return self._arr
 
     @property
     def ndim(self) -> int:
         """Number of array dimensions."""
-        return self._nparray.ndim
+        return self._arr.ndim
 
     @property
     def size(self) -> int:
         """Total number of elements."""
-        return self._nparray.size
+        return self._arr.size
 
     @property
     def shape(self) -> tuple[int]:
         """Shape of the array."""
-        return self._nparray.shape
+        return self._arr.shape
 
     @property
     def dtype(self):
         """Data type of the array."""
-        return self._nparray.dtype
+        return self._arr.dtype
 
     def __getitem__(self, index):
         """Return element(s) using NumPy-style integer-position-based indexing."""
-        return self._nparray[index]
+        return self._arr[index]
 
     def __setitem__(self, index, value):
         """Set element(s) using NumPy-style integer-position-based indexing."""
-        self._nparray[index] = value
+        self._arr[index] = value
 
     @property
     def at(self) -> '_AtIndexer':
@@ -119,7 +123,7 @@ class KeyedArray:
         if args:
             return self._at.get(args, default_value=default)
 
-        keys = [None] * self._nparray.ndim
+        keys = [None] * self._arr.ndim
         for dim, val in kwargs.items():
             axis = self._at.dim_name_to_axis.get(dim, None)
             if axis is None:
@@ -132,7 +136,7 @@ class KeyedArray:
 class _AtIndexer:
     """Internal label-based indexer for KeyedArray."""
 
-    __slots__ = ('_nparray', '_key_pos_pairs', '_dim_names', '_dim_name_to_axis', '_cached_valid_key_pos')
+    __slots__ = ('_nparray', '_key_pos_pairs', '_dim_names', '_dim_name_to_axis', '_cached_key_pos')
 
     def __init__(self, nparray: np.ndarray, key_pos_pairs: list[dict[Any, int]], dim_names: list[str] | None = None):
         """Initialize the indexer.
@@ -140,6 +144,7 @@ class _AtIndexer:
         Args:
             nparray: Underlying NumPy array.
             key_pos_pairs: List of key-to-pos mappings per dimension.
+            dim_names: List of dimension names.
 
         Raises:
             TypeError: If `key_pos_pairs` is not a list.
@@ -158,7 +163,7 @@ class _AtIndexer:
         self._dim_names: list[str] = self._validate_dim_names(dim_names)
         self._dim_name_to_axis: dict[str, int] = {name: i for i, name in enumerate(dim_names)}
         self._key_pos_pairs: list[dict[Any, int]] = key_pos_pairs
-        self._cached_valid_key_pos: dict[tuple[int, Any], tuple[Any, bool, str]] = {}
+        self._cached_key_pos: dict[tuple[int, Any], tuple[Any, bool, str]] = {}
 
     @property
     def dim_names(self) -> list[str]:
@@ -209,17 +214,17 @@ class _AtIndexer:
 
         pos_list: list[int] = []
         for axis, key in enumerate(keys):
-            pos, valid, kemsg = self.validate_key(axis, key)
+            pos, valid, _ = self.resolve_key(axis, key)
             if not valid:
                 return if_not_found
             pos_list.append(pos)
 
         return tuple(pos_list)
 
-    def validate_key(self, axis, key) -> tuple[Any, bool, str]:
-        valid_key = self._cached_valid_key_pos.get((axis, key), None)
-        if valid_key is not None:
-            return valid_key
+    def resolve_key(self, axis, key) -> tuple[Any, bool, str]:
+        resolved = self._cached_key_pos.get((axis, key), None)
+        if resolved is not None:
+            return resolved
 
         pos = self._key_pos_pairs[axis].get(key, None)
 
@@ -232,9 +237,9 @@ class _AtIndexer:
         if not 0 <= pos <= self._nparray.shape[axis] - 1:
             return pos, False, f"position {pos} is out of bounds range(0, {self._nparray.shape[axis]})"
 
-        valid_key = pos, True, ""
-        self._cached_valid_key_pos[(axis, key)] = valid_key
-        return valid_key
+        resolved = pos, True, ""
+        self._cached_key_pos[(axis, key)] = resolved
+        return resolved
 
     def get(self, args, /, *, default_value):
         """Return element by keys, or a default value if not found.
@@ -284,12 +289,13 @@ class _AtIndexer:
         self._nparray[pos_tuple] = value
 
 
-def kr_from_df(df: pd.DataFrame, unpack_multi_index: bool = False,
+def kr_from_df(df: pd.DataFrame, *, frozen: bool = True, unpack_multi_index: bool = False,
                multi_index_name: str = 'row_index', col_index_name: str = 'col_name') -> KeyedArray | None:
     """Creat KeyedArray object from pandas DataFrame.
 
     Args:
         df (pd.DataFrame): DataFrame to be processed.
+        frozen (bool): True if frozen. Defaults to True.
         unpack_multi_index (bool): True if unpacking multi-index, applicable to MultiIndex only.
         multi_index_name (str): Single name for multi-index, applicable only when `unpack_multi_index` is False and
             `df.index.nlevels` > 1, defaults to 'row_index'.
@@ -336,4 +342,4 @@ def kr_from_df(df: pd.DataFrame, unpack_multi_index: bool = False,
 
     arr[indices] = values
 
-    return KeyedArray(nparray=arr, key_pos_pairs=key_pos_pairs, dim_names=dim_names)
+    return KeyedArray(arr, frozen=frozen, key_pos_pairs=key_pos_pairs, dim_names=dim_names)

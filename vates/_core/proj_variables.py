@@ -36,7 +36,7 @@ class ProjVariable(ABC):
         self.group: str = group
         self._dims: list[list[str]] | None = self._parse_dims(dims)
         self._ndim: int = len(dims) if dims is not None else 0
-        model.proj_variables.append(weakref.ref(self))
+        model._include_proj_variable(weakref.ref(self))
 
     @property
     @abstractmethod

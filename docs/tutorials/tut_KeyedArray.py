@@ -4,7 +4,7 @@ import time
 import random
 random.seed(42)
 
-import vates as vt # vt.KeyedArray, vt.kr_from_df
+from vates import KeyedArray, kr_from_df
 
 def create_test_df(n_idx1: int, n_idx2: int, n_cols: int) -> pd.DataFrame:
     np.random.seed(42)
@@ -34,7 +34,7 @@ def df_at(df: pd.DataFrame, lookup_keys: list):
     time_taken = time.time() - s
     return time_taken
 
-def kr_at(kr: vt.KeyedArray, lookup_keys: list):
+def kr_at(kr: KeyedArray, lookup_keys: list):
     s = time.time()
     for key in lookup_keys:
         _ = kr.at[key]
@@ -56,7 +56,7 @@ def main():
     print(f"\n--- Basics of KeyedArray ---")
     print(f"1. crate the `KeyedArray` object from DataFrame")
     print(f">>> vt.kr_from_df(df)")
-    kr = vt.kr_from_df(df)
+    kr = kr_from_df(df)
     print(f">>> {type(kr)=}")
 
     print(f"\n2. get values of the array")

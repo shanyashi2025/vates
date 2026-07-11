@@ -23,7 +23,7 @@ class Asset(ABC):
         _allocation_group (str): Allocation group for the asset.
     """
     __slots__ = ('__dict__', '__weakref__', '_model_ref', '_asset_id', '_is_profile', '_units', '_purchase_date',
-                 '_currency', '_classification', '_asset_category', '_fund_id', '_allocation_group', '_lct_dict',)
+                 '_currency', '_classification', '_asset_category', '_fund_id', '_allocation_group', '_tc_dict')
 
     def __init__(self, model, asset_id: str, is_profile: bool, units: float, purchase_date: pd.Period | None,
                  currency: Currency | None, classification: AssetClassification, asset_category: str,
@@ -53,9 +53,13 @@ class Asset(ABC):
         self._asset_category: str = asset_category
         self._fund_id: str = fund_id
         self._allocation_group: str = allocation_group
-        self._lct_dict: dict[str, int] = {"roll_forward": self.time}
+        self._tc_dict: dict[str, int] = {"roll_forward": self.time}
         if not self._is_profile:
-            self._lct_dict['complete_dealing'] = self.time
+            self._tc_dict['dealing'] = self.time
+
+    @property
+    def model_proxy(self):
+        return self._model_ref()
 
     @property
     def time(self) -> int | None:
@@ -164,12 +168,12 @@ class Asset(ABC):
     @property
     def last_roll_forward(self) -> int:
         """int: Last roll forward time index."""
-        return self._lct_dict.get('roll_forward', None)
+        return self._tc_dict.get('roll_forward', None)
 
     @property
-    def last_complete_dealing(self) -> int:
+    def last_dealing(self) -> int:
         """int: Last update after dealing time index."""
-        return self._lct_dict.get('complete_dealing', None)
+        return self._tc_dict.get('dealing', None)
 
     @abstractmethod
     def roll_forward(self, *args, **kwargs):
@@ -216,7 +220,7 @@ class Asset(ABC):
         pass
 
     @abstractmethod
-    def complete_dealing(self, *args, **kwargs):
+    def close_dealing(self, *args, **kwargs):
         """
         Abstract method to update the asset after dealing.
         """

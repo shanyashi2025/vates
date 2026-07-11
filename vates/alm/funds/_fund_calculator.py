@@ -3,10 +3,9 @@ import pandas as pd
 import weakref
 
 from vates._core import TDepVariable
-from vates.utils import check_calc_time
+from vates.utils import t_checker
 from vates.alm.enums import AssetRepBasis
-from vates.alm.assets import Asset
-from vates.alm.liabs import Liab
+from vates.alm.funds._utils import ALContainer
 
 
 class FundCalculator:
@@ -16,14 +15,12 @@ class FundCalculator:
     stores time-dependent arrays for reporting by class and total.
 
     Attributes:
-        assets (list[Asset]): Assets of the fund.
-        liabs (list[Liab]): Liabilities of the fund.
+
     """
-    def __init__(self, model, fund_id: str, assets: list['Asset'], liabs: list['Liab'], asset_categories: list[str]):
+    def __init__(self, model, fund_id: str, container: ALContainer, asset_categories: list[str]):
         self._model_ref: weakref.ref = weakref.ref(model)
-        self.fund_id = fund_id
-        self.assets: list['Asset'] = assets
-        self.liabs: list['Liab'] = liabs
+        self.fund_id: str = fund_id
+        self.container: ALContainer = container
         self.asset_categories_enum: dict[str, int] = {item: i for i, item in enumerate(asset_categories)}
 
         self._lct_dict: dict[str, int] = {}
@@ -78,7 +75,7 @@ class FundCalculator:
     def period(self) -> pd.Period | None:
         return self._model_ref().period
 
-    @check_calc_time({"proc_assets_bd": -1, "proc_assets_ad": -1}, "proc_assets_bd")
+    @t_checker({"proc_assets_bd": -1, "proc_assets_ad": -1}, "proc_assets_bd")
     def process_assets_before_dealing(self) -> None:
         """Process asset values and returns before dealing (bd).
         """
@@ -113,7 +110,7 @@ class FundCalculator:
         self.tdv_totass_inv_ret_bd[t] = totass_inv_ret
         self.tdv_totass_ror_pc_bd[t] = totass_ror * 100
 
-    @check_calc_time({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
+    @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
     def process_assets_after_dealing(self) -> None:
         """Summarize asset values and returns after dealing (ad).
         """
@@ -173,7 +170,7 @@ class FundCalculator:
         cls_cash_flow = np.zeros(len(self.asset_categories_enum))
         tot_cash_flow = 0.0
 
-        for asset in self.assets:
+        for asset in self.container.assets:
             if asset.last_roll_forward != t:
                 raise ValueError(f"Asset {asset.asset_id} is not rolled on {t} ({self.period}).")
 
@@ -197,11 +194,11 @@ class FundCalculator:
         cls_rep_value = np.zeros([len(self.asset_categories_enum), len(AssetRepBasis)])
         tot_rep_value = np.zeros(len(AssetRepBasis))
 
-        for asset in self.assets:
+        for asset in self.container.assets:
             if asset.last_roll_forward != t:
                 raise ValueError(f"Asset {asset.asset_id} is not rolled on {t} ({self.period}).")
 
-            if timing == "ad" and asset.last_complete_dealing != t:
+            if timing == "ad" and asset.last_dealing != t:
                 raise ValueError(f"Asset {asset.asset_id} is not updated after dealing (ad) on {t} ({self.period}).")
 
             rep_value = asset.rep_value
@@ -224,7 +221,7 @@ class FundCalculator:
         else:
             raise ValueError(f"Invalid asset aggregation {timing=}.")
 
-    @check_calc_time({"proc_liabs_bd": -1, "proc_liabs_ad": -1, "proc_assets_bd": 0}, "proc_liabs_bd", )
+    @t_checker({"proc_liabs_bd": -1, "proc_liabs_ad": -1, "proc_assets_bd": 0}, "proc_liabs_bd", )
     def process_liabs_before_dealing(self) -> None:
         """Process liability values and cash flows before dealing (bd).
         """
@@ -241,14 +238,14 @@ class FundCalculator:
         t = self.time
         tot_cash_flow = 0.0
 
-        for liab in self.liabs:
+        for liab in self.container.liabs:
             if liab.last_roll_forward != t:
                 raise ValueError(f"Liab {liab.liab_id} is not rolled on {t} ({self.period}).")
             tot_cash_flow += liab.cash_flow
 
         self.tdv_totliab_cash_flow[t] = tot_cash_flow
 
-    @check_calc_time({"proc_liabs_ad": -1, "proc_liabs_bd": 0, "proc_assets_ad": 0}, "proc_liabs_ad", )
+    @t_checker({"proc_liabs_ad": -1, "proc_liabs_bd": 0, "proc_assets_ad": 0}, "proc_liabs_ad", )
     def process_liabs_after_dealing(self):
         """Process liability values and cash flows after dealing (ad).
         """
@@ -271,7 +268,7 @@ class FundCalculator:
             tot_acct_value = 0.0
             tot_asset_share = 0.0
 
-            for liab in self.liabs:
+            for liab in self.container.liabs:
                 if liab.last_roll_forward != t:
                     raise ValueError(f"Liab {liab.liab_id} is not rolled on {t} ({self.period}).")
 
@@ -291,7 +288,7 @@ class FundCalculator:
             tot_acct_value = 0.0
             tot_asset_share = 0.0
 
-            for liab in self.liabs:
+            for liab in self.container.liabs:
                 if liab.last_roll_forward != t:
                     raise ValueError(f"Liab {liab.liab_id} is not rolled on {t} ({self.period}).")
 

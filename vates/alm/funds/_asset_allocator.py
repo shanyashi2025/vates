@@ -8,6 +8,7 @@ import weakref
 from vates._core import TDepVariable
 from vates.alm.enums import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.assets import Asset, Cash
+from vates.alm.funds._utils import ALContainer
 
 
 @dataclass
@@ -46,17 +47,14 @@ class AssetAllocator:
     or scale exposure to meet target allocations with tolerances.
 
     Attributes:
-        assets (list[Asset]): Assets in the fund.
-        primary_cash_asset (Cash): Primary cash asset for the fund.
         rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
     """
 
-    def __init__(self, model, fund_id: str, assets: list[Asset], primary_cash_asset: Cash,
+    def __init__(self, model, fund_id: str, container: ALContainer,
                  rebalance_policy: dict[str, RebalancePolicyParams]):
         self._model_ref: weakref.ref = weakref.ref(model)
-        self.fund_id = fund_id
-        self.assets = assets
-        self.primary_cash_asset = primary_cash_asset
+        self.fund_id: str = fund_id
+        self.container: ALContainer = container
         self.rebalance_policy = rebalance_policy
         self.ag_seq_list = self.list_ag_in_sequence(fund_id, rebalance_policy)
 
@@ -145,7 +143,7 @@ class AssetAllocator:
 
         # --- step 1: aggregate existing and profile asset reported value by allocation group ---
         # --- existing asset ---
-        exist_asset_repval, exist_asset_count = self._group_by_alloc_group(self.assets, self.ag_seq_list)
+        exist_asset_repval, exist_asset_count = self._group_by_alloc_group(self.container.assets, self.ag_seq_list)
         self.tdv_ag_repval_bd[t] = np.array([val for val in exist_asset_repval.values()])
         exist_asset_value = {key: arr[size_basis.value] for key, arr in exist_asset_repval.items()}
         self.tdv_ag_alloc_pc_bd[t] = self._calculate_ag_weight(exist_asset_value, fund_size) * 100
@@ -202,7 +200,7 @@ class AssetAllocator:
             realized_gl += rgl
 
         # --- step 4: process residual groups ---
-        exist_asset_repval, _ = self._group_by_alloc_group(self.assets, self.ag_seq_list)
+        exist_asset_repval, _ = self._group_by_alloc_group(self.container.assets, self.ag_seq_list)
         exist_asset_value = {key: arr[size_basis.value] for key, arr in exist_asset_repval.items()}
         total_exist_value = sum(exist_asset_value.values())
         value_gap = fund_size - total_exist_value
@@ -215,14 +213,17 @@ class AssetAllocator:
 
             if res_ag_exist_value == 0:
                 # This would be very extreme case when total residual allocation_group (usually cash) balance is zero.
-                # Utilize primary_cash_asset to safely proceed
-                ag = self.primary_cash_asset.allocation_group
-                if self.rebalance_policy[ag].buysell_approach == AssetBuySellApproach.RESIDUAL:
-                    self.primary_cash_asset.invest_new_money(value_gap)
-                    free_proceeds -= value_gap
-                else:
-                    raise ValueError(f"Fund {self.fund_id}, residual allocation group value is zero and "
-                                     "primary cash is not residual allocation group, can not do scaling.")
+                # Utilize cash asset to safely proceed
+                cash_asset = None
+                for asset in self.container.assets:
+                    if isinstance(asset, Cash) and self.rebalance_policy[
+                        asset.allocation_group].buysell_approach == AssetBuySellApproach.RESIDUAL:
+                        cash_asset = asset
+                        break
+                if cash_asset is None:
+                    raise ValueError(f"Fund {self.fund_id}: no cash asset (allocation group = residual) is available for sclaing.")
+                cash_asset.invest_new_money(value_gap)
+                free_proceeds -= value_gap
             else:  # scale residual allocation_group
                 if value_gap > 0:
                     trade_decn = "buy_scale_exist", value_gap / res_ag_exist_value
@@ -238,7 +239,7 @@ class AssetAllocator:
                         realized_gl += rgl
 
         # step 5: validate if target allocations met
-        exist_asset_repval, _ = self._group_by_alloc_group(self.assets, self.ag_seq_list)
+        exist_asset_repval, _ = self._group_by_alloc_group(self.container.assets, self.ag_seq_list)
         exist_asset_value = {key: arr[size_basis.value] for key, arr in exist_asset_repval.items()}
         self.tdv_ag_repval_ad[t] = np.array([val for val in exist_asset_repval.values()])
         self.tdv_ag_alloc_pc_ad[t] = self._calculate_ag_weight(exist_asset_value, fund_size) * 100
@@ -278,7 +279,7 @@ class AssetAllocator:
         rgl: float = 0.0  # realized gain or loss
 
         if buysell == 'sell':
-            for asset in self.assets:
+            for asset in self.container.assets:
                 if asset.allocation_group == allocation_group:
                     fav_bd, mv_bd = asset.fav, asset.mv
                     asset.sell_propn(propn)
@@ -286,7 +287,7 @@ class AssetAllocator:
                     proceeds += mv_bd - mv_ad
                     rgl += (mv_bd - mv_ad) - (fav_bd - fav_ad)
         elif buysell == 'buy_scale_exist':
-            for asset in self.assets:
+            for asset in self.container.assets:
                 if asset.allocation_group == allocation_group:
                     mv_bd = asset.mv
                     asset.buy_propn(propn)
@@ -296,7 +297,8 @@ class AssetAllocator:
             if not assets_profile: raise ValueError("Can't buy assets from empty profile.")
             for asset in assets_profile:
                 if asset.allocation_group == allocation_group:
-                    asset.buy_profile_scale(scale=propn, list_to_append=self.assets)
+                    asset.buy_profile_scale(scale=propn)
+                    self.container.assets.append(asset)
                     proceeds -= asset.mv
 
         return proceeds, rgl

@@ -3,7 +3,7 @@ import pandas as pd
 from vates.alm import AssetClassification
 from vates.alm.assets import create_asset
 from vates.alm.econs import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
-
+from .setup_objs_econ import EsgMaster
 
 ASSET_CATEGORIES_MAPPING = {
     'cash': 'CASH',
@@ -12,7 +12,7 @@ ASSET_CATEGORIES_MAPPING = {
 }
 
 
-def build_all_existing_assets(model, df_dict: dict[str, pd.DataFrame], market_dict: dict[str, ...],
+def build_all_existing_assets(model, df_dict: dict[str, pd.DataFrame], econs: dict[str, ...] | EsgMaster,
                               fund_id: str | None) -> dict[str, list[...]]:
     """
     Build existing assets objects from a dictionary of DataFrame and add them to a fund if provided.
@@ -20,17 +20,26 @@ def build_all_existing_assets(model, df_dict: dict[str, pd.DataFrame], market_di
     Args:
         model: Model object.
         df_dict (dict[str, pd.DataFrame]): Dictionary of DataFrame containing asset data.
-        market_dict (dict[str, ...]): Dictionary of market variables.
+        econs (dict[str, ...] | EsgMaster): Economic variables.
         fund_id (str | None): Fund id to filter the df, or None.
 
     Returns:
         dict[str, list[Asset]]: Dictionary of list of asset objects.
     """
-    currencies = market_dict['currencies']
-    equity_indices = market_dict['equity_indices']
-    yield_curves = market_dict['yield_curves']
-    credit_bands = market_dict['credit_bands']
-    market_info = market_dict['market_info']
+    if isinstance(econs, EsgMaster):
+        currencies = [item.econ_obj for item in econs.currencies]
+        equity_indices = [item.econ_obj for item in econs.equity_indices]
+        yield_curves = [item.econ_obj for item in econs.yield_curves]
+        credit_bands = [item.econ_obj for item in econs.credit_bands]
+        market_info = econs.market_info.econ_obj
+    elif isinstance(econs, dict):
+        currencies = econs['currencies']
+        equity_indices = econs['equity_indices']
+        yield_curves = econs['yield_curves']
+        credit_bands = econs['credit_bands']
+        market_info = econs['market_info']
+    else:
+        raise TypeError(f"Invalid type of 'market_dict': {econs}, expected 'dict' or 'EsgMaster'.")
 
     equity_ls = []
     bond_ls = []
@@ -62,7 +71,7 @@ def build_all_existing_assets(model, df_dict: dict[str, pd.DataFrame], market_di
 
 
 def build_all_profile_assets(
-        model, df_dict: dict[str, pd.DataFrame], market_dict: dict[str, ...], fund_id: str
+        model, df_dict: dict[str, pd.DataFrame], econs: dict[str, ...] | EsgMaster, fund_id: str
         ) -> dict[str, list]:
     """
     Build profile assets objects from a dictionary of DataFrame.
@@ -70,16 +79,26 @@ def build_all_profile_assets(
     Args:
         model: Model object.
         df_dict (dict[str, pd.DataFrame]): Dictionary of DataFrame containing asset data.
-        market_dict (dict[str, ...]): Dictionary of market variables.
+        econs (dict[str, ...] | EsgMaster): Economic variables.
         fund_id (str): Fund id to filter the df.
 
     Returns:
         dict[str, list[Asset]]: Dictionary of list of asset objects.
     """
-    currencies = market_dict['currencies']
-    equity_indices = market_dict['equity_indices']
-    yield_curves = market_dict['yield_curves']
-    credit_bands = market_dict['credit_bands']
+    if isinstance(econs, EsgMaster):
+        currencies = [item.econ_obj for item in econs.currencies]
+        equity_indices = [item.econ_obj for item in econs.equity_indices]
+        yield_curves = [item.econ_obj for item in econs.yield_curves]
+        credit_bands = [item.econ_obj for item in econs.credit_bands]
+        market_info = econs.market_info.econ_obj
+    elif isinstance(econs, dict):
+        currencies = econs['currencies']
+        equity_indices = econs['equity_indices']
+        yield_curves = econs['yield_curves']
+        credit_bands = econs['credit_bands']
+        market_info = econs['market_info']
+    else:
+        raise TypeError(f"Invalid type of 'market_dict': {econs}, expected 'dict' or 'EsgMaster'.")
 
     equity_ls = []
     bond_ls = []

@@ -49,6 +49,10 @@ class YieldCurve:
                                                           dims=[self._output_terms])
 
     @property
+    def model_proxy(self):
+        return self._model_ref()
+
+    @property
     def time(self) -> int | None:
         return self._model_ref().time
 

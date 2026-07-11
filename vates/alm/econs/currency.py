@@ -25,6 +25,10 @@ class Currency:
         self.tdv_fx_rate: TDepVariable = TDepVariable(model, "fx_rate", currency_id, 'currency')
 
     @property
+    def model_proxy(self):
+        return self._model_ref()
+
+    @property
     def time(self) -> int | None:
         return self._model_ref().time
     

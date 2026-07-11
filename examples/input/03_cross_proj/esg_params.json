@@ -1,0 +1,36 @@
+{
+  "yield_curves": {
+    "default_variable_attribute": {
+      "rates": {"measure": "PRICE", "term": "1-50", "term_type": "Y", "interp_method": "Geometric"}
+    },
+    "item_list": [
+      {"curve_id": "cny_rf", "economy": "CNY", "class": "ZCB"},
+      {"curve_id": "gby_60d_ma", "economy": "CNY", "class": "GBY_60D_MA", "rates": {"term": "1-40"}}
+    ]
+  },
+  "credit_bands": {
+    "default_variable_attribute": {
+      "prop_of_default": {"measure": "DEFAULT_PC", "divby": 100, "compound_freq": "monthly"},
+      "recovery_rate": {"measure": "RECOVERY_PC", "divby": 100},
+      "credit_spotmult": {"measure": "SPOT_MULT_PC", "divby": 100},
+      "credit_spread": {"measure": "SPREAD_BP", "divby": 10000}
+    },
+    "item_list": [
+      {"band_id": "AAA", "economy": "CNY", "class": "RATING_AAA"},
+      {"band_id": "AA", "economy": "CNY", "class": "RATING_AA"}
+    ]
+  },
+  "equity_indices": {
+    "default_variable_attribute": {
+      "total_return_index": {"measure": "RET_IDX"},
+      "dividend_yield": {"measure": "RNY_PC", "divby": 100, "compound_freq": "monthly"}
+    },
+    "item_list": []
+  },
+  "currencies": {
+    "item_list": [
+      {"currency_id": "cny", "economy": "CNY", "class": "EXCHANGE_RATE"}
+    ]
+  }
+}
+

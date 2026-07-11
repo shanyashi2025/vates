@@ -1,182 +1,229 @@
-import os
-import glob
 import csv
+import glob
+import inspect
 import json
+import os
 import pandas as pd
-from pathlib import Path
+import traceback
+import warnings
+import weakref
 from datetime import datetime
-from functools import reduce, cached_property
-from typing import Literal
-from abc import abstractmethod
-import operator
+from functools import cached_property
+from pathlib import Path
+from types import MethodType
+from typing import Callable, Literal, Self
 
 from vates._core.proj_variables import ProjVariable
-from vates._core.utils import ValidatedBool, ValidatedNumber, ValidatedString, ValidatedPeriod, ValidatedList
+from vates._core._utils import RunConfig
 
 class ProjModelEngine:
     """Actuarial projection model engine.
-
-    Lifecycle:
-        - time_zero_calculations(): Initialize state, load inputs, etc.
-        - in_time_calculations(): Perform calculations for each subsequent projection month.
-        - post_time_calculations(): Finalize aggregations and produce any end-of-horizon measures.
-
-    I/O:
-        - Validates settings on initialization.
-        - Writes CSV outputs with standardized headers and a JSON runlog for traceability.
-
-    Attributes:
-
-        _exec_start_time (str): Model execution start time.
-        _name (str): The name of the model.
-        _description (str): The description of the model.
-        _start_year (int): Projection start year.
-        _start_month (int): Projection start month.
-        _end_year (int): Projection end year.
-        _end_month (int): Projection end month.
-        _scenario (str): Projection scenario.
-        _simulation (int | None): Simulation for stochastic runs (None means deterministic).
-        _wsdir (str): Workspace directory.
-        _input_directories (list[str]): Directories to locate model input files.
-        _results_directory (str): Output directory where CSVs and the run log are written.
-        _enable_write_proj_result (bool): True/False means enable/dienable writing projection result.
-        _stoch_result_mode (Literal[None, 'w', 'a']): Stochastic result file write mode.
-        _stoch_result_file_id (None | str): Stochastic result file id.
-        _enable_write_runlog (bool): True/False means enable/dienable writing run log.
-        _wsdir (str): Current working directory `os.getcwd()`.
-        _cached_filepath (dict): Dictionary of cached file path.
     """
 
-    _name = ValidatedString(len_min=1, max_sets=1)
-    _description = ValidatedString(max_sets=1)
-    _start_year = ValidatedNumber(value_type=int, value_min=1900, value_max=5999, max_sets=1)
-    _start_month = ValidatedNumber(value_type=int, value_lst=range(1, 13), max_sets=1)
-    _end_year = ValidatedNumber(value_type=int, value_min=1900, value_max=5999, max_sets=1)
-    _end_month = ValidatedNumber(value_type=int, value_lst=range(1, 13), max_sets=1)
-    _scenario = ValidatedString(allow_none=True, max_sets=1)
-    _simulation = ValidatedNumber(value_type=int, value_min=1, value_max=100_000, allow_none=True, max_sets=1)
-    _input_directories = ValidatedList(item_type=str, allow_none=True, len_min=0, max_sets=1)
-    _results_directory = ValidatedString(max_sets=1)
-    _is_delete_existing_results = ValidatedBool(max_sets=1)
-    _wsdir = ValidatedString(max_sets=1)
-    _enable_write_proj_result = ValidatedBool(max_sets=1)
-    _stoch_result_mode = ValidatedString(str_literal=['w', 'a'], allow_none=True, max_sets=1)
-    _stoch_result_file_id = ValidatedString(allow_none=True, max_sets=1)
-    _enable_write_runlog = ValidatedBool(max_sets=1)
-    _time = ValidatedNumber(value_type=int, value_min=0, value_max=6000, allow_none=True)
-    _period = ValidatedPeriod(allow_none=True)
-
     def __init__(
-            self,
-            name: str,
-            *,
-            description: str = '...',
-            start_year: int,
-            start_month: int = 12,
-            end_year: int | None = None,
-            end_month: int = 12,
-            scenario: str | None = None,
-            simulation: int | None = None,
-            workspace_directory: str | None = None,
-            input_directories: list[str] | None = None,
-            results_directory: str | None = None,
-            is_delete_existing_results: bool = True,
-            enable_write_proj_result: bool = True,
-            stoch_result_mode: Literal['w', 'a', None] = None,
-            stoch_result_file_id: str | None = None,
-            enable_write_runlog: bool = True,
+        self,
+        *,
+        name: str,
+        description: str = '...'
     ) -> None:
-        """
-        Initialize the projection model engine.
+        """Initialize a projection model engine.
 
         Args:
             name (str): The name of the model.
             description (str, optional): The description of the model.
-            start_year (int): Projection start year.
+        """
+        self._name: str = str(name)
+        self._description: str = str(description)
+
+        self._proj_func: Callable | None = None
+        self._run_config: RunConfig | None = None
+
+        # runtime stuffs
+        self._cached_filepath: dict[str, tuple] = {}
+        self._proj_variables: list[weakref.ref[ProjVariable]] = []
+        self._output_files: set = set()
+        self._time: int | None = None
+        self._period: pd.Period | None = None
+        self._messages: list[str] = []
+        self._runlog: dict | None = None
+
+        super().__setattr__('_initialized', True)
+
+    def bind_proj_func(
+        self,
+        func: Callable,
+        /
+    ) -> Self:
+        """Bind the projection model to the engine.
+
+        Args:
+            func (callable): The projection function.
+
+        Raises:
+            ValueError: If `func` is not callable.
+        """
+        if self._proj_func is not None:
+            msg = (f"{self._proj_func} is already bound. If you are sure you want to reset it, "
+                   f"use 'foo._proj_func = None', then call 'foo.bind_proj_func(...)' method.")
+            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            return self
+        if not callable(func):
+            raise ValueError(f"Cannot bind un-callable object: {func}.")
+
+        sig_params = inspect.signature(func).parameters
+        if len(sig_params) == 0:
+            msg = f"The function '{func.__name__}' has no argument, it is bound as a function instead of a method."
+            warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+            self._proj_func = func
+        else:
+            first_arg_name, first_arg_param = list(sig_params.keys())[0], list(sig_params.values())[0]
+            if (first_arg_name == "self" or first_arg_param.annotation is type(self) or
+                    first_arg_param.annotation == type(self).__name__):
+                pass
+            else:
+                msg = (f"When called, the bound method '{func.__name__}' automatically passes '{self._name}' as the "
+                       f"first argument '{first_arg_name}'.")
+                warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+            self._proj_func = MethodType(func, self)
+
+        self.add_traced_message(f"INFO: The function {func} has been bound to {self}.")
+
+        return self
+
+    def set_run_config(
+        self,
+        *,
+        start_year: int,
+        start_month: int | None = None,
+        end_year: int | None = None,
+        end_month: int | None = None,
+        scenario: str | None = None,
+        simulation: int | None = None,
+        workspace_directory: str | None = None,
+        input_directories: list[str] | None = None,
+        results_directory: str | None = None,
+        is_delete_existing_results: bool = True,
+        enable_write_proj_result: bool = True,
+        stoch_result_file_mode: Literal['w', 'a', None] = None,
+        stoch_result_file_id: str | None = None,
+        enable_write_runlog: bool = True,
+    ) -> Self:
+        """Set the configuration for a run.
+
+        Args:
+            start_year (int, optional): Projection start year. Defaults to None.
             start_month (int, optional): Projection start month. Defaults to 12.
-            end_year (int, optional): Projection end year. Defaults to {start_year}.
+            end_year (int, optional): Projection end year. Defaults to `start_year`.
             end_month (int, optional): Projection end month. Defaults to 12.
             scenario (str, optional): Scenario. Defaults to None.
             simulation (int, optional): Simulation (stochastic). Defaults to None.
-            workspace_directory (str, optional): Workspace directory. Defaults to {os.getcwd()}.
+            workspace_directory (str, optional): Workspace directory. Defaults to `{os.getcwd()}`.
             input_directories (list[str], optional): List of input directory. Defaults to None.
-            results_directory (str, optional): Results directory. Defaults to 'results/{scenario}'.
+            results_directory (str, optional): Results directory. Defaults to 'results/`scenario`'.
             is_delete_existing_results (bool, optional): Delete existing results if any. Defaults to True.
             enable_write_proj_result (bool, optional): Enable writing projection result. Defaults to True.
-            stoch_result_mode (Literal['w', 'a'], optional): Stochastic result writer mode. Defaults to None.
+            stoch_result_file_mode (Literal['w', 'a'], optional): Stochastic result writer mode. Defaults to None.
             stoch_result_file_id (str, optional): Stochastic result id. Defaults to None.
             enable_write_runlog (bool, optional): Enable writing run log. Defaults to True.
         """
-        self._exec_start_time: datetime = datetime.now()
-        self._name: str = name
-        self._description: str = description
-        self._start_year: int = start_year
-        self._start_month: int = start_month
-        self._end_year: int = end_year or start_year
-        self._end_month: int = end_month
-        self._scenario: str | None = scenario
-        self._simulation: int | None = simulation
-        self._wsdir: str = workspace_directory or os.getcwd()
-        self._input_directories: list[str] | None = input_directories
-        self._results_directory: str = results_directory or f"results/{self._scenario or ''}"
-        self._is_delete_existing_results: bool = is_delete_existing_results
-        self._enable_write_proj_result: bool = enable_write_proj_result
-        self._stoch_result_mode: Literal['w', 'a', None] = stoch_result_mode
-        self._stoch_result_file_id: str | None = stoch_result_file_id
-        self._enable_write_runlog: bool = enable_write_runlog
-        self._cached_filepath: dict = {}
-        self._proj_variables: list[ProjVariable] = []
-        self._output_files: list = []
-        self._time: int | None = None
-        self._period: pd.Period | None = None
+        if self._run_config is not None:
+            msg = (f"Run configuration is already set. If you are sure you want to reset it, "
+                   f"use 'foo._run_config = None', then call 'foo.set_run_config(...)' method.")
+            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            return self
 
-    def run(self) -> dict:
-        """Execute a full projection run.
+        none_items = []
 
-        Steps:
-            1) Call `time_zero_calculations()` at start date.
-            2) For each subsequent month: call `in_time_calculations()`.
-            3) After the last month: call `post_time_calculations()`.
-            4) Call `_write_projection_results()` to output `.proj.csv`.
-            5) Call `_write_stochastic_result()` to output `.stoch.csv`.
-            6) Call `_generate_runlog()` to output `runlog.json`.
-        """
-        self.results_directory.mkdir(parents=True, exist_ok=True)
-        if self._is_delete_existing_results:
-            for f in glob.glob(str(self.results_directory / f'{self._name}*')):
-                if f.endswith(('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')):
-                    os.remove(f)
+        if start_year is None:
+            raise ValueError(f"start_year: value 'None' is not allowed.")
+        if start_month is None:
+            start_month = 12
+            none_items.append(f"start_month={start_month}")
+        if end_year is None:
+            end_year = start_year
+            none_items.append(f"end_year={end_year}")
+        if end_month is None:
+            end_month = 12
+            none_items.append(f"end_month={end_month}")
+        if workspace_directory is None:
+            workspace_directory = os.getcwd()
+            none_items.append(f"workspace_directory='{workspace_directory}'")
+        if results_directory is None:
+            results_directory = f"./results/{scenario or ''}"
+            none_items.append(f"results_directory='{results_directory}'")
+        self._run_config = RunConfig(
+            start_year=start_year,
+            start_month=start_month,
+            end_year=end_year,
+            end_month=end_month,
+            scenario=scenario,
+            simulation=simulation,
+            wsdir=workspace_directory,
+            input_directories=input_directories,
+            results_directory=results_directory,
+            is_delete_existing_results=is_delete_existing_results,
+            enable_write_proj_result=enable_write_proj_result,
+            stoch_result_file_mode=stoch_result_file_mode,
+            stoch_result_file_id=stoch_result_file_id,
+            enable_write_runlog=enable_write_runlog,
+            simulations=None,
+        )
 
-        self._time, self._period = 0, self.START_DATE
-        self.time_zero_calculations()
-        for self._time in range(1, self.MAX_T + 1):
-            self._period += 1
-            self.in_time_calculations()
-        self._time, self._period = None, None
-        self.post_time_calculations()
+        if len(none_items) > 0:
+            msg = f"Following items are set by default: {', '.join(none_items)}."
+            warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+
+        return self
+
+    def run(
+        self,
+        *,
+        proj_func_args: dict[str, ...] | None = None,
+    ) -> dict:
+        if self._proj_func is None:
+            raise ValueError(f"Projection function has not been bound.")
+        if self._run_config is None:
+            raise ValueError("Run configuration has not been set.")
+        proj_func_args = proj_func_args or {}
+        exec_start_time = datetime.now()
+        try:
+            for self._time in range(self.MAX_T + 1):
+                self._period = self.START_DATE + self._time
+                self._proj_func(**proj_func_args)
+            self._write_results()
+            exec_success = True
+        except Exception as e:
+            traceback.print_exc()
+            self._messages.append(traceback.format_exc())
+            exec_success = False
+        self._dump_runlog(exec_success, exec_start_time, datetime.now())
+        return self._runlog
+
+    def __call__(
+        self,
+        *,
+        proj_func_params: dict[str, ...] | None = None,
+    ) -> dict:
+        return self.run(proj_func_args=proj_func_params)
+
+    def _write_results(self) -> None:
+        if self.results_directory.is_dir():
+            if self._run_config.is_delete_existing_results:
+                for f in glob.glob(str(self.results_directory / f'{self._name}*')):
+                    if f.endswith(('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')):
+                        os.remove(f)
+                    else:
+                        msg = f"Exsiting file NOT deleted: '{f}'."
+                        warnings.warn(msg); self.add_traced_message(f"INFO: {msg}")
+        else:
+            os.makedirs(self.results_directory, exist_ok=True)
         self._write_projection_result()
         self._write_stochastic_result()
-        return self._generate_runlog()
-
-    @abstractmethod
-    def time_zero_calculations(self):
-        """Initialize state and compute for the start of the projection."""
-        pass
-
-    @abstractmethod
-    def in_time_calculations(self):
-        """Compute for each month of the projection."""
-        pass
-
-    @abstractmethod
-    def post_time_calculations(self):
-        """Finalize results after the last projection month."""
-        pass
 
     def _write_projection_result(self) -> None:
         """Write the projection result."""
-        if not self._enable_write_proj_result: return
-        variables = self._select_variables(self._proj_variables,'__proj_variables__', 'full')
+        if not self._run_config.enable_write_proj_result: return
+        variables = self._select_variables(self._proj_variables,'__proj_variables__.txt', 'full')
         if not variables: return  # empty list
 
         periods = pd.period_range(start=self.START_DATE, end=self.END_DATE, freq='M')
@@ -188,15 +235,16 @@ class ProjModelEngine:
             writer.writerow(['group', 'owner', 'variable', 'constant'] + period_col_list)
             for v in variables:
                 self._write_variable(v, writer)
-        self._output_files.append(output_file)
+        self._output_files.add(output_file)
 
     def _write_stochastic_result(self) -> None:
         """Write the stochastic result."""
-        if not self._stoch_result_mode: return
-        variables = self._select_variables(self._proj_variables,'__stoch_variables__', 'none')
+        if not self._run_config.stoch_result_file_mode:
+            return
+        variables = self._select_variables(self._proj_variables,'__stoch_variables__.txt', 'none')
         if not variables: return  # empty list
 
-        stoch_setting = self.load_json('__stoch_setting__', allow_not_found=True)
+        stoch_setting = self.load_json('__stoch_setting__.json', allow_not_found=True)
         noy_mres = stoch_setting.get('number_of_years_monthly_results_retained', 0) if stoch_setting else 0
 
         periods = pd.period_range(start=self.START_DATE, end=self.END_DATE, freq='M')
@@ -210,23 +258,55 @@ class ProjModelEngine:
         pos_lst_y = [period_lst.index(x * 100 + 12) for x in period_lst_y]
         period_col_list = period_lst_m + period_lst_y
 
-        file_id = f'.{self._stoch_result_file_id}' if self._stoch_result_file_id else ''
-        output_file = self._concat_output_file_path(file_id + '.stoch.csv')
+        file_id = self._run_config.stoch_result_file_id
+        file_id += '.' if file_id else ''
+        output_file = self._concat_output_file_path(f'.{file_id}stoch.csv')
 
-        with open(output_file, self._stoch_result_mode, newline='', encoding='utf-8-sig') as csvfile:
+        output_mode = self._run_config.stoch_result_file_mode
+        is_file_exist = output_file.is_file()
+        if output_mode == 'w' and is_file_exist:
+            msg = f"stoch_result_file_mode='w': existing '{output_file}' will be overwritten."
+            warnings.warn(msg); self.add_traced_message(msg)
+        elif output_mode == 'a' and not is_file_exist:
+            output_mode = 'w'
+            msg = f"stoch_result_file_mode='a': but 'w' mode will be used because '{output_file}' does not exist."
+            warnings.warn(msg); self.add_traced_message(msg)
+
+        with open(output_file, output_mode, newline='', encoding='utf-8-sig') as csvfile:
             writer = csv.writer(csvfile)
-            if self._stoch_result_mode == 'w':
+            if output_mode == 'w':  # write header
                 writer.writerow(['simulation', 'group', 'owner', 'variable', 'constant'] + period_col_list)
             for v in variables:
-                self._write_stoch_variable(v, writer, self._simulation, pos_lst_m, pos_lst_y)
-        self._output_files.append(output_file)
+                self._write_stoch_variable(v, writer, self._run_config.simulation, pos_lst_m, pos_lst_y)
+        self._output_files.add(output_file)
 
-    def _select_variables(self, full_list: list, user_select: str,
+    def _include_proj_variable(self, proj_variable: ProjVariable | weakref.ref[ProjVariable]) -> None:
+        """Include a projection variable into `_proj_variables`
+
+        Args:
+            proj_variable (ProjVariable | weakref.ref[ProjVariable]): Projection variable to be included.
+
+        Raises:
+            TypeError: Invalid type.
+            ValueError: Projection variable already included.
+        """
+        if isinstance(proj_variable, weakref.ref) and isinstance(proj_variable(), ProjVariable):
+            proj_var_ref = proj_variable
+        elif isinstance(proj_variable, ProjVariable):
+            proj_var_ref = weakref.ref(proj_variable)
+        else:
+            raise TypeError(f"Invalid type {type(proj_variable)}, expected 'ProjVariable'.")
+        if proj_var_ref in self._proj_variables:
+            raise ValueError(f"Variable is already included: name '{proj_var_ref().name}', "
+                             f"owner '{proj_var_ref().owner}', group '{proj_var_ref().group}'")
+        self._proj_variables.append(proj_var_ref)
+
+    def _select_variables(self, variable_list: list[weakref.ref[ProjVariable]], user_select: str,
                           default_full_or_none: Literal['full', 'none']) -> list | None:
-        df = self.read_csv(user_select, extension='.txt', allow_not_found=True)
+        df = self.read_csv(user_select, allow_not_found=True)
         if df is None:
             if default_full_or_none == 'full':
-                return [r() for r in full_list if r() is not None]
+                return [r() for r in variable_list if r() is not None]
             else:
                 return None
 
@@ -234,7 +314,7 @@ class ProjModelEngine:
         select_spec_dict = {(var_grp, var_name): True if incl.lower() in ['y', 'yes'] else False
                             for (var_grp, var_name, incl) in select_spec_list}
 
-        def _is_select(v) -> bool:
+        def _is_select(v: ProjVariable) -> bool:
             if v is None:
                 return False
             elif (v.group, v.name) in select_spec_dict:
@@ -244,7 +324,7 @@ class ProjModelEngine:
             else:
                 return False
 
-        return [r() for r in full_list if _is_select(r())]
+        return [r() for r in variable_list if _is_select(r())]
 
     def _write_variable(self, variable: ProjVariable, writer: csv.writer) -> None:
         if variable.ndim == 0:
@@ -306,138 +386,135 @@ class ProjModelEngine:
             writer.writerow(fixcol + [f'{variable.name}[{dimstr}]'] + result_lst)
 
     @property
-    def _runlog(self) -> dict[str, ...]:
-        def _file_stat(file_path: Path) -> dict[str, str]:
-            """Get file modification time and size"""
-            stat_info = os.stat(file_path)
-            file_mtime = datetime.fromtimestamp(stat_info.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-            size_bytes = stat_info.st_size
-            if size_bytes < 1024 * 1024: file_size = f"{size_bytes / 1024:.1f} KB"
-            elif size_bytes < 1024 * 1024 * 1024: file_size = f"{size_bytes / (1024 * 1024):.1f} MB"
-            else: file_size = f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
-            return {"mtime": file_mtime, "size": file_size}
+    def runlog(self) -> dict[str, ...] | None:
+        return self._runlog
 
-        return {
+    def _dump_runlog(self, exec_success: bool, exec_start_time: datetime, exec_end_time: datetime) -> None:
+        exec_total_seconds = int((exec_end_time - exec_start_time).total_seconds())
+        exec_hours = exec_total_seconds // 3600
+        exec_minutes = (exec_total_seconds % 3600) // 60
+        exec_seconds = exec_total_seconds % 60
+
+        self._runlog = {
             "model": {
                 "name": self._name,
                 "description": self._description,
-                "projection_engine": self.__class__.__name__,
+                "projection_function": f"{inspect.getfile(self._proj_func)}:{self._proj_func.__name__}",
+                "projection_engine": f"{inspect.getfile(type(self))}:{type(self).__name__}",
             },
             "execution": {
-                "start": self._exec_start_time.strftime('%Y-%m-%d %H:%M:%S'),
-                "end": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "success": exec_success,
+                "start": exec_start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                "end": exec_end_time.strftime('%Y-%m-%d %H:%M:%S'),
+                "duration": f"{exec_hours:02}:{exec_minutes:02}:{exec_seconds:02}",
             },
-            "run_setting": {
-                "start_year": self._start_year,
-                "start_month": self._start_month,
-                "end_year": self._end_year,
-                "end_month": self._end_month,
-                "scenario": self._scenario,
-                "simulation": self._simulation,
+            "run_config": {
+                "start_year": self._run_config.start_year,
+                "start_month": self._run_config.start_month,
+                "end_year": self._run_config.end_year,
+                "end_month": self._run_config.end_month,
+                "scenario": self._run_config.scenario,
+                "simulation": self._run_config.simulation,
                 "workspace_directory": str(self.workspace_directory),
-                "input_directories": self._input_directories,
-                "results_directory": self._results_directory,
+                "input_directories": self._run_config.input_directories,
+                "results_directory": self._run_config.results_directory,
             },
-            "output_files": {str(f): _file_stat(f) for f in self._output_files},
+            "output_files": list(map(str, self._output_files)),
+            "messages": self._messages,
         }
 
-    def _generate_runlog(self) -> dict[str, ...]:
-        runlog = self._runlog
-        if self._enable_write_runlog:
+        if self._run_config.enable_write_runlog:
             with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
-                json.dump(runlog, jsonfile, indent=4)
-        return runlog
+                json.dump(self._runlog, jsonfile, indent=4)
 
-    def load_json(self, filename: str, encoding='utf-8', allow_not_found: bool = False) -> dict | None:
-        filepath = self._get_filepath(filename, '.json')
+    def load_json(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
+                  allow_not_found: bool = False, **kwargs) -> dict | None:
+        filepath = self.get_filepath(filename, first_or_last_seen=first_or_last_seen)
         if filepath:
-            with open(filepath, 'r', encoding=encoding) as jsonfile:
+            with open(filepath, 'r', **kwargs) as jsonfile:
                 return json.load(jsonfile)
         elif allow_not_found:
             return None
         else:
-            raise FileNotFoundError(f"File '{filename}.json' not exists in input directories.")
+            ext_warn = "" if filename.lower().endswith('.json') else "You might forget to include '.json' in filename."
+            raise FileNotFoundError(f"File '{filename}' not exists in input directories. {ext_warn}")
 
-    def read_csv(self, filename: str, extension: str | None = None, encoding: str = 'utf-8',
+    def read_csv(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
                  allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
-        if not isinstance(filename, str): raise ValueError(f"filename: type must be 'str'.")
-        if filename == '': raise ValueError(f"filename: cannot be empty ''.")
-        if isinstance(extension, str):
-            filepath = self._get_filepath(filename, extension)
-        elif extension is None:
-            filepath = self._get_filepath(filename, None) or self._get_filepath(filename, '.csv')
-        else:
-            raise ValueError(f"extension: type must be 'str' or 'None'.")
+        filepath = self.get_filepath(filename, first_or_last_seen=first_or_last_seen)
         if filepath:
-            return pd.read_csv(filepath_or_buffer=filepath, encoding=encoding, **kwargs)
+            return pd.read_csv(filepath, **kwargs)
         elif allow_not_found:
             return None
         else:
-            raise FileNotFoundError(f"CSV file '{filename}' not exists in input directories.")
+            ext_warn = "" if filename.lower().endswith('.csv') else "You might forget to include '.csv' in filename."
+            raise FileNotFoundError(f"CSV file '{filename}' does not exist in input directories. {ext_warn}")
 
-    def read_excel(self, filename: str, sheet_name: str, extension: str | None = None,
+    def read_excel(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
                    allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
-        if not isinstance(filename, str): raise ValueError(f"filename: type must be 'str'.")
-        if filename == '': raise ValueError(f"filename: cannot be empty ''.")
-        if not isinstance(sheet_name, str): raise ValueError(f"sheet_name: type must be 'str'.")
-        if sheet_name == '': raise ValueError(f"sheet_name: cannot be empty ''.")
-        filepath = self._get_filepath(filename, extension)
+        filepath = self.get_filepath(filename, first_or_last_seen=first_or_last_seen)
         if filepath:
-            return pd.read_excel(filepath, sheet_name=sheet_name, **kwargs)
+            return pd.read_excel(filepath, **kwargs)
         elif allow_not_found:
             return None
         else:
-            raise FileNotFoundError(f"Excel file '{filename}' not exists in input directories.")
+            ext_warn = "" if filename.lower().endswith('.xlsx') else "You might forget to include '.xlsx' in filename."
+            raise FileNotFoundError(f"Excel file '{filename}' does not exist in input directories. {ext_warn}")
 
-    def read_parquet(self, filename: str, columns: list[str] | None = None, filter_dict: dict | None = None,
+    def read_parquet(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
                      allow_not_found: bool = True, **kwargs) -> pd.DataFrame | None:
-        if not isinstance(filename, str): raise ValueError(f"filename: type must be 'str'.")
-        if filename == '': raise ValueError(f"filename: cannot be empty ''.")
-        extension = None if filename.endswith('.parquet') else '.parquet'
-        filepath = self._get_filepath(filename, extension)
+        filepath = self.get_filepath(filename, first_or_last_seen=first_or_last_seen)
         if filepath is not None:
             import pyarrow.dataset as ds
             dataset = ds.dataset(filepath, format="parquet")
-            filter_expr = None if filter_dict is None else reduce(operator.and_, [ds.field(k) == v
-                                                                                  for k, v in filter_dict.items()])
-            table = dataset.to_table(columns=columns, filter=filter_expr, **kwargs)
+            table = dataset.to_table(**kwargs)
             return table.to_pandas()
         elif allow_not_found:
             return None
         else:
-            raise FileNotFoundError(f"Parquet file '{filename}' not exists in input directories.")
+            ext_warn = "" if filename.lower().endswith('.parquet') else "You might forget to include '.parquet' in filename."
+            raise FileNotFoundError(f"Parquet file '{filename}' not exists in input directories. {ext_warn}")
 
-    def _get_filepath(self, filename: str, extension: str | None) -> Path | None:
-        if (filename, extension) in self._cached_filepath:
-            return self._cached_filepath[(filename, extension)]
-        if extension is None:
-            filepath = self._scan_filepath(filename)
+    def get_filepath(self, filename: str, /, *, first_or_last_seen: str = "first_seen") -> Path | None:
+        if filename in self._cached_filepath:  # get from cache
+            filepath_tuple = self._cached_filepath[filename]
+        else:  # search
+            filepath_tuple = self._search_filepath(filename)
+            self._cached_filepath[filename] = filepath_tuple
+
+        if first_or_last_seen.lower() in ("first", "first_seen", "first-seen"):
+            return filepath_tuple[0]
+        elif first_or_last_seen.lower() in ("last", "last_seen", "last-seen"):
+            return filepath_tuple[1]
         else:
-            filepath = self._scan_filepath(f'{filename}{'' if extension.startswith('.') else '.'}{extension}')
-        self._cached_filepath[(filename, extension)] = filepath
-        return filepath
+            msg = f"'first_or_last_seen': value '{first_or_last_seen}' is unkown, use 'first_seen' as fallback."
+            warnings.warn(msg); self.add_traced_message(f"WARNING: {msg}")
+            return filepath_tuple[0]
 
-    def _scan_filepath(self, filename: str) -> Path | None:
+    def _search_filepath(self, filename: str) -> tuple[Path | None, Path | None]:
         if (filepath := Path(filename)).is_absolute() and filepath.is_file():  # absolute path
-            return filepath
-        if self._input_directories is None:  # return None if input_directories not specified
-            return None
-        for directory in self._input_directories:  # search input_directories sequentially
-            filepath = (Path(self._wsdir) / directory / filename).resolve()
+            return filepath, filepath
+        if self._run_config.input_directories is None:  # return None if input_directories not specified
+            return None, None
+        first_seen, last_seen = None, None
+        for directory in self._run_config.input_directories:  # search input_directories sequentially
+            filepath = (Path(self._run_config.wsdir) / directory / filename).resolve()
             if filepath.is_file():
-                return filepath
-        return None  # return None if file not exists
+                if first_seen is None:
+                    first_seen = filepath
+                last_seen = filepath
+        return first_seen, last_seen
 
     def _concat_output_file_path(self, name: str) -> Path | None:
         return self.results_directory / f'{self._name}{name}' if self.results_directory else None
 
     @cached_property
     def workspace_directory(self) -> Path:
-        return Path(self._wsdir).resolve()
+        return Path(self._run_config.wsdir or os.getcwd()).resolve()
 
     @cached_property
-    def results_directory(self) -> Path | None:
-        return (Path(self._wsdir) / self._results_directory).resolve()
+    def results_directory(self) -> Path:
+        return (Path(self._run_config.wsdir) / self._run_config.results_directory).resolve()
 
     @property
     def MODEL_NAME(self) -> str:
@@ -447,32 +524,32 @@ class ProjModelEngine:
     @property
     def SCENARIO(self) -> str | None:
         """str: Scenario code that identifies the set of input used for a run."""
-        return self._scenario
+        return self._run_config.scenario
 
     @property
     def SIMULATION(self) -> int | None:
         """int: Simulation."""
-        return self._simulation
+        return self._run_config.simulation
 
     @property
     def START_YEAR(self) -> int:
         """int: Year of the start date of the projection."""
-        return self._start_year
+        return self._run_config.start_year
 
     @property
     def START_MONTH(self) -> int:
         """int: Month (1-12) of the start date of the projection."""
-        return self._start_month
+        return self._run_config.start_month
 
     @property
     def END_YEAR(self) -> int:
         """int: Year of the end date of the projection."""
-        return self._end_year
+        return self._run_config.end_year
 
     @property
     def END_MONTH(self) -> int:
         """int: Month (1-12) of the end date of the projection."""
-        return self._end_month
+        return self._run_config.end_month
 
     @cached_property
     def START_DATE(self) -> pd.Period:
@@ -505,11 +582,10 @@ class ProjModelEngine:
 
     @time.setter
     def time(self, value: int) -> None:
-        """pd.Period: Current projection time index."""
         if not isinstance(value, int):
             raise TypeError(f"time: type {type(value)} is not allowed, expected 'int'.")
-        if value < 0:
-            raise ValueError(f"time: value {value} is not allowed, execpted non-nagative.")
+        if not 0 <= value <= self.MAX_T:
+            raise ValueError(f"time: value {value} is not allowed, execpted 0 to {self.MAX_T}.")
         self._time = value
         self._period = self.START_DATE + value
 
@@ -520,14 +596,23 @@ class ProjModelEngine:
 
     @period.setter
     def period(self, value: pd.Period) -> None :
-        """pd.Period: Current projection period."""
         if not isinstance(value, pd.Period):
             raise TypeError(f"period: type {type(value)} is not allowed, expected 'pd.Period'.")
-        if value < self.START_DATE:
-            raise ValueError(f"period: value {value} ealier than start_date({self.START_DATE}) is not allowed.")
+        if self.START_DATE <= value <= self.END_DATE :
+            raise ValueError(f"period: value {value} is not allowed, expected {self.START_DATE}) to {self.END_DATE}.")
         self._period = value
         self._time = (value - self.START_DATE).n
 
-    @property
-    def proj_variables(self) -> list[ProjVariable]:
-        return self._proj_variables
+    def add_traced_message(self, /, msg: str):
+        frame = inspect.currentframe().f_back
+        filename = os.path.abspath(frame.f_code.co_filename)
+        lineno = frame.f_lineno
+        self._messages.append(f"{filename}:{lineno}: {msg}")
+
+    def __setattr__(self, name, value):
+        if hasattr(self, '_initialized'):
+            if name in type(self).__dict__:  # check if the attribute name already exists in the class definition
+                raise AttributeError(f"Cannot overwrite protected member '{name}'")
+            if not hasattr(self, name) and hasattr(self, "_messages"):
+                self.add_traced_message(f"INFO: Add member: '{name}' {type(value)}")
+        super().__setattr__(name, value)

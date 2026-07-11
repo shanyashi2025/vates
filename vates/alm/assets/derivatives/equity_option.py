@@ -2,7 +2,7 @@ import pandas as pd
 import math
 
 from vates._core import TDepVariable
-from vates.utils import check_calc_time
+from vates.utils import t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.asset_base import Asset
@@ -116,7 +116,7 @@ class EquityOption(Asset):
     def is_alive_beg(self) -> bool:
         return self.period <= self._exercise_date
 
-    @check_calc_time({"roll_forward": -1, "complete_dealing": -1}, "roll_forward")
+    @t_checker({"roll_forward": -1}, "roll_forward")
     def roll_forward(self, **kwargs) -> None:
         """
         Roll the equity option asset forward one period.
@@ -197,21 +197,19 @@ class EquityOption(Asset):
         if propn > 1: raise ValueError("Can not sell >100% proportion of an exsiting equity option.")
         self._units -= self._units * propn
 
-    def buy_profile_scale(self, scale: float, list_to_append: list | None=None) -> None:
+    def buy_profile_scale(self, scale: float) -> None:
         """
         Scale the equity option profile by a factor, positive/negative scale represents long/short.
 
         Args:
             scale (float): Scaling factor.
-            list_to_append (list): Append to list.
         """
         if not self._is_profile: raise ValueError("This equity option object is not a profile.")
         self._units = self._units * scale
         self._is_profile = False
-        if list_to_append is not None: list_to_append.append(self)
 
-    @check_calc_time({"complete_dealing": -1, "roll_forward": 0}, "complete_dealing")
-    def complete_dealing(self, **kwargs) -> None:
+    @t_checker({"roll_forward": 0}, "dealing")
+    def close_dealing(self, **kwargs) -> None:
         """
         Update the equity option asset after dealing.
         """

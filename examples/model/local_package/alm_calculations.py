@@ -1,5 +1,10 @@
+import pandas as pd
 from vates import KeyedArray
 from vates.alm.funds import Fund
+from . import EsgMaster
+
+from .setup_objs_alm import FundRebalanceParams, build_target_allocation
+from .setup_objs_asset import build_all_profile_assets
 
 def rebalance_this_month(cal_month: int, rebalance_freq: int) -> bool:
     """
@@ -16,10 +21,7 @@ def rebalance_this_month(cal_month: int, rebalance_freq: int) -> bool:
         raise ValueError(f"Invalid fund rebalance frequency {rebalance_freq}.")
     if rebalance_freq == 0:
         return False
-    elif cal_month % (12 / rebalance_freq) == 0:
-        return True
-    else:
-        return False
+    return cal_month % (12 / rebalance_freq) == 0
 
 
 def fund_assets_roll_forward(fund: Fund, **kwargs) -> None:
@@ -29,33 +31,31 @@ def fund_assets_roll_forward(fund: Fund, **kwargs) -> None:
     fund.process_assets_before_dealing()
 
 
-def fund_liabs_roll_forward(fund: Fund, **kwargs) -> None:
+def fund_liabs_roll_forward(fund: Fund, epl: KeyedArray | None = None, as_inv_ret: float | None = None,
+                            as_cf_ret: float | None = None) -> None:
     if fund.liabs is None or len(fund.liabs) == 0:
         fund.process_liabs_before_dealing()
         return
 
     t, p = fund.time, fund.period
-    epl_kr: KeyedArray = kwargs['epl_kr']
-    as_inv_ret = kwargs['as_inv_ret']
-    as_cf_ret = kwargs['as_cf_ret']
     date_col = str(p.year * 100 + p.month)
 
     for liab in fund.liabs:
         liab_id = liab.liab_id
 
-        no_pols_if = epl_kr.at[liab_id, "no_pols_if", date_col]
-        math_res_if = epl_kr.at[liab_id, "math_res_if", date_col]
-        surr_val_if = epl_kr.at[liab_id, "surr_val_if", date_col]
-        prem_inc = epl_kr.at[liab_id, "prem_inc", date_col]
-        comm_out = epl_kr.at[liab_id, "comm_out", date_col]
-        exp_out = epl_kr.at[liab_id, "exp_out", date_col]
-        death_out = epl_kr.at[liab_id, "death_out", date_col]
-        crben_out = epl_kr.at[liab_id, "crben_out", date_col]
-        ann_out = epl_kr.at[liab_id, "ann_out", date_col]
-        surr_out = epl_kr.at[liab_id, "surr_out", date_col]
-        div_out = epl_kr.at[liab_id, "div_out", date_col]
-        invexp_out = 0 #epl_kr.loc[liab_id, "invexp_out", date_col]
-        mat_out = epl_kr.at[liab_id, "mat_out", date_col]
+        no_pols_if = epl.at[liab_id, "no_pols_if", date_col]
+        math_res_if = epl.at[liab_id, "math_res_if", date_col]
+        surr_val_if = epl.at[liab_id, "surr_val_if", date_col]
+        prem_inc = epl.at[liab_id, "prem_inc", date_col]
+        comm_out = epl.at[liab_id, "comm_out", date_col]
+        exp_out = epl.at[liab_id, "exp_out", date_col]
+        death_out = epl.at[liab_id, "death_out", date_col]
+        crben_out = epl.at[liab_id, "crben_out", date_col]
+        ann_out = epl.at[liab_id, "ann_out", date_col]
+        surr_out = epl.at[liab_id, "surr_out", date_col]
+        div_out = epl.at[liab_id, "div_out", date_col]
+        invexp_out = 0 #epl.at[liab_id, "invexp_out", date_col]
+        mat_out = epl.at[liab_id, "mat_out", date_col]
         acct_value_if = 0.0  # for universal life and unit-linked products
         asset_share_if = 0.0  # for participating products
 
@@ -99,3 +99,21 @@ def liabs_update_ad(fund: Fund) -> None:
                 liab.update_ad()
 
     fund.process_liabs_after_dealing()
+
+
+def fund_reblance_if_needed(fund: Fund, rebalance_params: FundRebalanceParams,
+                            assets_df_dict: dict, econs: dict | EsgMaster, asset_allocation_df: pd.DataFrame):
+    fund_id = fund.fund_id
+    period = fund.period
+
+    if rebalance_this_month(period.month, rebalance_params.rebalance_freq):
+        profile_assets = build_all_profile_assets(fund.model_proxy, assets_df_dict, econs, fund_id)['all']
+        target_allocation = build_target_allocation(asset_allocation_df, fund_id, str(period.year * 100 + period.month))
+        fund.rebalance_assets(
+            fund_size_type=rebalance_params.size_type,
+            fund_size_basis=rebalance_params.size_basis,
+            target_weight=target_allocation,
+            assets_profile=profile_assets
+        )
+    else:
+        fund.skip_rebalance()

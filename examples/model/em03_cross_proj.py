@@ -1,125 +1,132 @@
+import json
 import numpy as np
-
-import vates as vt
+import sys
+from vates import ProjModelEngine, KeyedArray, kr_from_df, alm
+from vates.solvency import cn_cross2
 from local_package import (
     load_file_df,
-    build_esg_kr,
-    build_yield_curves,
-    build_credit_bands,
-    update_yield_curves,
-    update_credit_bands,
+    build_esg_master,
     build_all_existing_assets,
 )
 
+def cross_model(start_year: int, start_month: int, end_year: int, scenario: str, workspace_directory: str,
+                input_directories: list[str], results_directory: str | None = None,
+                model_name: str = "cross_model", model_description: str = "C-ROSS minimum capital projection."):
+    model = ProjModelEngine(name=model_name, description=model_description)
+    model.set_run_config(
+        start_year=start_year,
+        start_month=start_month,
+        end_year=end_year,
+        end_month=12,
+        scenario=scenario,
+        workspace_directory=workspace_directory,
+        input_directories=input_directories,
+        results_directory=results_directory
+    )
 
-class CROSSMinCapProj(vt.ProjModelEngine):
-    """
-    C-ROSS minimum capital projection model.
-    """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # initialize tables
-        df = self.read_csv("_file_names", index_col="table")
-        filename_dict = {idx: row[self.SCENARIO] for idx, row in df.iterrows()}
-        file_read_config = self.load_json("_file_read_config")
-        self.file_df_dict = load_file_df(self.read_csv, filename_dict, file_read_config)
-        # initialize market variables
-        self.yield_curves, self.yield_curve_esg_helper = build_yield_curves(self, self.file_df_dict['yield_curves'])
-        self.yield_curve_kr = build_esg_kr(self.file_df_dict['esg'], self.yield_curve_esg_helper)
-        self.credit_bands, self.credit_band_esg_helper = build_credit_bands(self, self.file_df_dict['credit_bands'])
-        self.credit_band_kr = build_esg_kr(self.file_df_dict['esg'], self.credit_band_esg_helper)
-        self.market_dict = {'currencies': [], 'equity_indices': [], 'market_info': [],
-                            'yield_curves': self.yield_curves, 'credit_bands': self.credit_bands,}
-        # 60-day moving average of government bond yield curve
-        self.gby_60d_ma_curve = next((x for x in self.yield_curves if x.curve_id == 'gby_60d_ma'), None)
+    df = model.read_csv("_file_names.csv", index_col="table")
+    filename_dict = {idx: row[model.SCENARIO] for idx, row in df.iterrows()}
+    file_read_args = model.load_json("_file_read_config.json")
+    file_df_dict = load_file_df(model.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg"])
 
-        # list of asset file
-        self.asset_filename_list = ['assets_cash', 'assets_equity', 'assets_bond',]
+    # epl
+    epl = kr_from_df(file_df_dict['epl'])
+    del file_df_dict['epl']
 
-        # initialize dictionary of mc unit and mc input for each fund
-        self.mc_unit_dict: dict[str, vt.solvency.cn_cross2.MinCapUnit] = {}
-        self.mc_input_dict: dict[str, vt.solvency.cn_cross2.MinCapInputer] = {}
+    # build esg master
+    esg_master = build_esg_master(
+        model=model,
+        esg_params=model.load_json(filename_dict["esg_params"]),
+        esg_df=model.read_csv(filename_dict["esg"])
+    )
 
-        for fund_id in (df := self.file_df_dict['funds']).index:
-            cross_account_type = vt.solvency.cn_cross2.AccountType(df.loc[fund_id, 'cross_account_type'].upper())
-            self.mc_unit_dict[fund_id] = vt.solvency.cn_cross2.MinCapUnit(self, fund_id, cross_account_type)
-            self.mc_input_dict[fund_id] = vt.solvency.cn_cross2.MinCapInputer()
+    # 60-day moving average of government bond yield curve
+    gby_60d_ma_curve = next((x.econ_obj for x in esg_master.yield_curves if x.econ_obj.curve_id == 'gby_60d_ma'), None)
+    if gby_60d_ma_curve is None:
+        raise ValueError(f"'gby_60d_ma' is not found in {filename_dict["esg_params"]}.")
 
-        # initialize the company result
-        self.company_mc = vt.solvency.cn_cross2.MinCapConsolidator(self, 'company', [v for _, v in self.mc_unit_dict.items()])
+    # list of asset file
+    asset_filename_list = ['assets_cash', 'assets_equity', 'assets_bond',]
 
-        # epl
-        self.epl_kr = vt.kr_from_df(df=self.file_df_dict['epl'], unpack_multi_index=True, col_index_name='date')
-        del self.file_df_dict['epl']
+    # initialize dictionary of mc unit and mc inputer for each fund
+    mc_unit_dict: dict[str, cn_cross2.MinCapUnit] = {}
+    mc_inputer_dict: dict[str, cn_cross2.MinCapInputer] = {}
 
-    def time_zero_calculations(self):
-        pass
+    df = file_df_dict['funds']
+    for fund_id in df.index:
+        cross_account_type = cn_cross2.AccountType(df.loc[fund_id, 'cross_account_type'].upper())
+        mc_unit_dict[fund_id] = cn_cross2.MinCapUnit(model, fund_id, cross_account_type)
+        mc_inputer_dict[fund_id] = cn_cross2.MinCapInputer()
 
-    def in_time_calculations(self):
-        p = self.period
+    # initialize the company result
+    company_mc = cn_cross2.MinCapConsolidator(model, 'company', [v for _, v in mc_unit_dict.items()])
 
-        if (date_index := p.year * 100 + p.month) not in self.file_df_dict['aging_assets_input_filelist'].index:
+    liabs_df = file_df_dict['liabs']
+    aging_assets_input_filelist_df = file_df_dict['aging_assets_input_filelist']
+    cross_mc_factor_df = file_df_dict['cross_mc_factor']
+
+    # ==================================================================================================================
+    @model.bind_proj_func
+    def cross_min_cap_projection():
+        t, p = model.time, model.period
+        date_index = p.year * 100 + p.month
+
+        if date_index not in aging_assets_input_filelist_df.index:
             return
 
         # --- (1) reset asset mc variables ---
-        for _, inputer in self.mc_input_dict.items():
+        for _, inputer in mc_inputer_dict.items():
             inputer.reset()
 
         # --- (2) process economic assumptions ---
-        self._update_market_variables()
-        gby_60d_ma = np.array([self.gby_60d_ma_curve.spot_rates[i * 12] for i in range(41)]) # strip year data
-        cross_intba, cross_intup, cross_intdn = vt.solvency.cn_cross2.interest_risk_discount_curve(gby_60d_ma)
+        esg_master.update_econ_data(p)
+        gby_60d_ma = np.array([gby_60d_ma_curve.spot_rates[i * 12] for i in range(41)])  # strip year data
+        cross_intba, cross_intup, cross_intdn = cn_cross2.interest_risk_discount_curve(gby_60d_ma)
         cross_intba_spot = _interp_monthly_spot(cross_intba)
         cross_intup_spot = _interp_monthly_spot(cross_intup)
         cross_intdn_spot = _interp_monthly_spot(cross_intdn)
 
         # --- (3) build asset objects that are in-force as at the time point ---
-        df = self.file_df_dict['aging_assets_input_filelist']
-        asset_df_dict = {
-            item: self.read_csv(df.loc[date_index, item], keep_default_na=False, allow_not_found=True) for
-            item in self.asset_filename_list
+        aging_assets_df_dict = {
+            item: model.read_csv(
+                aging_assets_input_filelist_df.at[date_index, item], keep_default_na=False, allow_not_found=True) for
+            item in asset_filename_list
         }
-        assets_dict = build_all_existing_assets(self, asset_df_dict, self.market_dict, None)
+        aging_assets_dict = build_all_existing_assets(model, aging_assets_df_dict, esg_master, None)
 
         # --- (4) calculate asset mc input ---
-        mc_factor_equity = self.file_df_dict['cross_mc_factor'].loc[date_index, 'mc_factor_equity']
-        mc_factor_spread = self.file_df_dict['cross_mc_factor'].loc[date_index, 'mc_factor_spread']
-        for asset in assets_dict['all']:
-            fund_id = asset.fund_id
+        mc_factor_equity = cross_mc_factor_df.at[date_index, 'mc_factor_equity']
+        mc_factor_spread = cross_mc_factor_df.at[date_index, 'mc_factor_spread']
+        for asset in aging_assets_dict['all']:
             type_asset = type(asset)
-            if type_asset == vt.alm.assets.Equity:
-                self.mc_input_dict[fund_id].mc_equity += asset.mv * mc_factor_equity
-            elif type_asset == vt.alm.assets.BondFixed:
-                self.mc_input_dict[fund_id].aa_int_base += asset.pricer.calculate_market_price(p, cross_intba_spot) * asset.units
-                self.mc_input_dict[fund_id].aa_int_up += asset.pricer.calculate_market_price(p, cross_intup_spot) * asset.units
-                self.mc_input_dict[fund_id].aa_int_dn += asset.pricer.calculate_market_price(p, cross_intdn_spot) * asset.units
-                self.mc_input_dict[fund_id].mc_spread += asset.mv * mc_factor_spread
+            mc_inputer = mc_inputer_dict[asset.fund_id]
+            if type_asset == alm.assets.Equity:
+                mc_inputer.mc_equity += asset.mv * mc_factor_equity
+            elif type_asset == alm.assets.BondFixed:
+                mc_inputer.aa_int_base += asset.pricer.calculate_market_price(p, cross_intba_spot) * asset.units
+                mc_inputer.aa_int_up += asset.pricer.calculate_market_price(p, cross_intup_spot) * asset.units
+                mc_inputer.aa_int_dn += asset.pricer.calculate_market_price(p, cross_intdn_spot) * asset.units
+                mc_inputer.mc_spread += asset.mv * mc_factor_spread
             # elif type_asset == ...:
             #     ...
 
         # --- (5) collect liability mc input ---
-        date_col=str(p.year * 100 + p.month)
-        for _, row in self.file_df_dict['liabs'].iterrows():
-            liab_id, fund_id = row[["liab_id", "fund_id"]]
-            _get_cross_liab_mc_input_from_epl_df(
-                mc_input=self.mc_input_dict[fund_id],
-                epl_kr=self.epl_kr,
-                liab_id=liab_id,
-                date_col=date_col
+        for _, row in liabs_df.iterrows():
+            _liab_mc_inputer_add_from_epl(
+                mc_inputer=mc_inputer_dict[row["fund_id"]],
+                epl=epl,
+                liab_id=row["liab_id"],
+                date_col=date_index
             )
 
         # --- (6) calculate minimum capital ---
-        for fund_id, unit in self.mc_unit_dict.items():
-            unit.calculate_minimum_capital(self.mc_input_dict[fund_id])
-        self.company_mc.calculate_minimum_capital()
+        for key, unit in mc_unit_dict.items():
+            unit.calculate_minimum_capital(mc_inputer_dict[key])
+        company_mc.calculate_minimum_capital()
 
-    def post_time_calculations(self):
-        pass
+    # ==================================================================================================================
 
-    def _update_market_variables(self):
-        col_lookup = str(self.period.year * 100 + self.period.month)
-        update_yield_curves(self.yield_curves, self.yield_curve_esg_helper, self.yield_curve_kr, col_lookup)
-        update_credit_bands(self.credit_bands, self.credit_band_esg_helper, self.credit_band_kr, col_lookup)
+    model.run()
 
 
 def _interp_monthly_spot(spot_in: np.ndarray) -> np.ndarray:
@@ -132,25 +139,31 @@ def _interp_monthly_spot(spot_in: np.ndarray) -> np.ndarray:
     return spot_out
 
 
-def _get_cross_liab_mc_input_from_epl_df(mc_input: vt.solvency.cn_cross2.MinCapInputer, epl_kr:vt.KeyedArray,
-                                         liab_id: str, date_col: str):
-    mc_input.pv_base += epl_kr.at[liab_id, 'pv_base', date_col]
-    mc_input.pv_mortality += epl_kr.at[liab_id, 'pv_mortality', date_col]
-    mc_input.pv_catastrophe += epl_kr.at[liab_id, 'pv_catastrophe', date_col]
-    mc_input.pv_longevity += epl_kr.at[liab_id, 'pv_longevity', date_col]
-    mc_input.pv_morb_incidence += epl_kr.at[liab_id, 'pv_morb_incidence', date_col]
-    mc_input.pv_morb_trend += epl_kr.at[liab_id, 'pv_morb_trend', date_col]
-    mc_input.pv_health += epl_kr.at[liab_id, 'pv_health', date_col]
-    mc_input.pv_other_loss += epl_kr.at[liab_id, 'pv_other_loss', date_col]
-    mc_input.pv_expense += epl_kr.at[liab_id, 'pv_expense', date_col]
-    mc_input.pv_lapse_up += epl_kr.at[liab_id, 'pv_lapse_up', date_col]
-    mc_input.pv_lapse_dn += epl_kr.at[liab_id, 'pv_lapse_dn', date_col]
-    mc_input.pv_lapse_mass += epl_kr.at[liab_id, 'pv_lapse_mass', date_col]
-    mc_input.pv_int_base += epl_kr.at[liab_id, 'pv_int_base', date_col]
-    mc_input.pv_int_up += epl_kr.at[liab_id, 'pv_int_up', date_col]
-    mc_input.pv_int_dn += epl_kr.at[liab_id, 'pv_int_dn', date_col]
-    mc_input.pv_la_lower_limit += epl_kr.at[liab_id, 'pv_la_lower_limit', date_col]
+def _liab_mc_inputer_add_from_epl(mc_inputer: cn_cross2.MinCapInputer, epl: KeyedArray, liab_id: str, date_col):
+    date_col = str(date_col)
+    mc_inputer.pv_base += epl.at[liab_id, 'pv_base', date_col]
+    mc_inputer.pv_mortality += epl.at[liab_id, 'pv_mortality', date_col]
+    mc_inputer.pv_catastrophe += epl.at[liab_id, 'pv_catastrophe', date_col]
+    mc_inputer.pv_longevity += epl.at[liab_id, 'pv_longevity', date_col]
+    mc_inputer.pv_morb_incidence += epl.at[liab_id, 'pv_morb_incidence', date_col]
+    mc_inputer.pv_morb_trend += epl.at[liab_id, 'pv_morb_trend', date_col]
+    mc_inputer.pv_health += epl.at[liab_id, 'pv_health', date_col]
+    mc_inputer.pv_other_loss += epl.at[liab_id, 'pv_other_loss', date_col]
+    mc_inputer.pv_expense += epl.at[liab_id, 'pv_expense', date_col]
+    mc_inputer.pv_lapse_up += epl.at[liab_id, 'pv_lapse_up', date_col]
+    mc_inputer.pv_lapse_dn += epl.at[liab_id, 'pv_lapse_dn', date_col]
+    mc_inputer.pv_lapse_mass += epl.at[liab_id, 'pv_lapse_mass', date_col]
+    mc_inputer.pv_int_base += epl.at[liab_id, 'pv_int_base', date_col]
+    mc_inputer.pv_int_up += epl.at[liab_id, 'pv_int_up', date_col]
+    mc_inputer.pv_int_dn += epl.at[liab_id, 'pv_int_dn', date_col]
+    mc_inputer.pv_la_lower_limit += epl.at[liab_id, 'pv_la_lower_limit', date_col]
+
+
+def main():
+    with open(sys.argv[1], 'r', encoding='utf-8') as file:
+        kwargs = json.load(file)
+    cross_model(**kwargs)
 
 
 if __name__ == '__main__':
-    vt.cli.run_model(CROSSMinCapProj)
+    main()

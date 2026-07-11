@@ -1,4 +1,4 @@
-import vates as vt # vt.AutogradCell
+from vates._experiment import autograd
 
 def calculate_cash_flows(issue_date: int, maturity_date: int, coupon_rate: float, coupon_freq: int, 
                          face_value: float, valn_date: int) -> list[float] | None:
@@ -135,7 +135,7 @@ def main():
 
     # --- backpropagation approach ---
     print("\n--- backpropagation approach ---")
-    spot_curve_cell = [vt.autograd.Cell(x) for x in spot_curve_input]
+    spot_curve_cell = [autograd.Cell(x) for x in spot_curve_input]
     spot_curve = spot_curve_interp(spot_curve_cell)
     back_mv_base = calculate_total_market_value(valn_date, bonds, spot_curve)
     print("-   backward pass: `.backward()`")
@@ -146,7 +146,7 @@ def main():
     for key, sens in sens_dict.items():
         back_mv_delta[key] = 0
         for rate_delta, cell in zip(sens, spot_curve_cell):
-            if abs(rate_delta) > 1e-8 and isinstance(cell, vt.autograd.Cell):
+            if abs(rate_delta) > 1e-8 and isinstance(cell, autograd.Cell):
                 back_mv_delta[key] += rate_delta * cell.grad.get("mv", 0)
 
     print("\nSUMMARY: backpropagation approach")
