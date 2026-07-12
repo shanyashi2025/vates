@@ -6,12 +6,11 @@ import pandas as pd
 import traceback
 import warnings
 from datetime import datetime
-from functools import cached_property
 from pathlib import Path
 from typing import Callable, Self, get_type_hints
 
 from vates._core.proj_model_engine import ProjModelEngine
-from vates._core._utils import parse_str_to_int_list, RunConfig
+from vates._core._utils import RunConfig
 
 
 class StochExecutor:
@@ -144,15 +143,18 @@ class StochExecutor:
         if results_directory is None:
             results_directory = f"./results/{scenario or ''}"
             none_items.append(f"results_directory='{results_directory}'")
+        if max_workers is None:
+            max_workers = 1
+            none_items.append(f"max_workers='{max_workers}'")
         self._sims_str = simulations
-        self._run_config = RunConfig(
+        self._run_config = RunConfig.create(
             start_year=start_year,
             start_month=start_month,
             end_year=end_year,
             end_month=end_month,
             scenario=scenario,
-            simulations=parse_str_to_int_list(simulations),
-            wsdir=workspace_directory,
+            simulations=simulations,
+            workspace_directory=workspace_directory,
             input_directories=input_directories,
             results_directory=results_directory,
             is_delete_existing_results=True,
@@ -161,7 +163,6 @@ class StochExecutor:
             stoch_result_file_id=None,
             enable_write_runlog=True,
             max_workers=self._parse_max_workers(max_workers),
-            simulation=None,
         )
 
         if len(none_items) > 0:
@@ -170,9 +171,6 @@ class StochExecutor:
         return self
 
     def _parse_max_workers(self, requested_workers: int | None) -> int:
-        if requested_workers is None:
-            self.include_traced_message(f"max_workers is set to 1: max_workers not specified.")
-            return 1
         if not isinstance(requested_workers, int):
             self.include_traced_message(f"max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
             return 1
@@ -201,15 +199,15 @@ class StochExecutor:
             raise ValueError("Run configuration has not been set.")
         proj_func_args = proj_func_args or {}
 
-        if self.results_directory.is_dir():
+        if self.results_directory_path.is_dir():
             remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
-            for f in glob.glob(str(self.results_directory / f'{self._name}*')):
+            for f in glob.glob(str(self.results_directory_path / f'{self._name}*')):
                 if f.endswith(remove_pattern):
                     os.remove(f)
                 else:
                     self.include_traced_message(f"INFO: Exsiting file NOT deleted: '{f}'.")
         else:
-            os.makedirs(self.results_directory, exist_ok=True)
+            os.makedirs(self.results_directory_path, exist_ok=True)
 
         exec_start_time = datetime.now()
         exec_success = self._run_simulations_multiprocess(proj_func_args=proj_func_args)
@@ -248,12 +246,12 @@ class StochExecutor:
                     stoch_result_file_id=batch_id,
                     stoch_result_file_mode='w' if simulation == simulation_batch[0] else 'a',
                     enable_write_proj_result=(simulation == self._run_config.simulations[0]),
-                    start_year=self._run_config.start_year,
-                    start_month=self._run_config.start_month,
-                    end_year=self._run_config.end_year,
-                    end_month=self._run_config.end_month,
-                    scenario=self._run_config.scenario,
-                    workspace_directory=self._run_config.wsdir,
+                    start_year=self.START_YEAR,
+                    start_month=self.START_MONTH,
+                    end_year=self.END_YEAR,
+                    end_month=self.END_MONTH,
+                    scenario=self.SCENARIO,
+                    workspace_directory=self._run_config.workspace_directory,
                     input_directories=self._run_config.input_directories,
                     results_directory=self._run_config.results_directory,
                     is_delete_existing_results=False,
@@ -353,7 +351,7 @@ class StochExecutor:
                 "name": self._name,
                 "description": self._description,
                 "projection_function": f"{inspect.getfile(self._proj_func)}:{self._proj_func.__name__}",
-                "projection_engine": "foo", # f"{inspect.getfile(type(self))}:{type(self).__name__}",
+                "projection_engine": f"{inspect.getfile(self._proj_cls)}:{self._proj_cls.__name__}",
                 "stochastic_executor": f"{inspect.getfile(type(self))}:{type(self).__name__}",
             },
             "execution": {
@@ -369,7 +367,7 @@ class StochExecutor:
                 "end_month": self._run_config.end_month,
                 "scenario": self._run_config.scenario,
                 "simulations": self._sims_str,
-                "workspace_directory": str(self.workspace_directory),
+                "workspace_directory": self._run_config.workspace_directory,
                 "input_directories": self._run_config.input_directories,
                 "results_directory": self._run_config.results_directory,
                 "max_workers": self._run_config.max_workers,
@@ -383,13 +381,13 @@ class StochExecutor:
             with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
                 json.dump(self._runlog, jsonfile, indent=4)
 
-    @cached_property
-    def workspace_directory(self) -> Path:
-        return Path(self._run_config.wsdir).resolve()
+    @property
+    def workspace_directory_path(self) -> Path:
+        return self._run_config.workspace_directory_path
 
-    @cached_property
-    def results_directory(self) -> Path | None:
-        return (Path(self._run_config.wsdir) / self._run_config.results_directory).resolve()
+    @property
+    def results_directory_path(self) -> Path:
+        return self._run_config.results_directory_path
 
     @property
     def MODEL_NAME(self) -> str:
@@ -417,6 +415,11 @@ class StochExecutor:
         return self._run_config.start_month
 
     @property
+    def START_DATE(self) -> pd.Period:
+        """pd.Period: Start date of the projection."""
+        return self._run_config.start_date
+
+    @property
     def END_YEAR(self) -> int:
         """int: Year of the end date of the projection."""
         return self._run_config.end_year
@@ -426,27 +429,15 @@ class StochExecutor:
         """int: Month (1-12) of the end date of the projection."""
         return self._run_config.end_month
 
-    @cached_property
-    def START_DATE(self) -> pd.Period:
-        """pd.Period: Start date of the projection."""
-        return pd.Period(f'{self.START_YEAR}-{self.START_MONTH}', freq='M')
-
-    @cached_property
+    @property
     def END_DATE(self) -> pd.Period | None:
         """pd.Period: End date of the projection."""
-        return pd.Period(f'{self.END_YEAR}-{self.END_MONTH}', freq='M')
+        return self._run_config.end_date
 
-    @cached_property
+    @property
     def MAX_T(self) -> int:
         """int: Number of projection months."""
-        if self.END_DATE is None:
-            return 0
-        max_t = (self.END_DATE - self.START_DATE).n
-        if max_t < 0:
-            raise ValueError(f"END_DATE ({self.END_DATE}) cannot be earlier than START_DATE ({self.START_DATE}).")
-        if max_t > 6000:
-            raise ValueError(f"Projection period ({self.START_DATE} to {self.END_DATE}) exceeds 500 years.")
-        return max_t
+        return self._run_config.max_t
 
     def __setattr__(self, name, value):
         if hasattr(self, '_initialized'):

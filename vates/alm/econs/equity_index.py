@@ -12,17 +12,18 @@ class EquityIndex:
         tdv_tot_return_index (TDepVariable): Total return index.
         tdv_dividend_yield_ac (float): Dividend yield (annual compounding).
     """
-    def __init__(self, model_engine: ProjModelEngine, index_id: str) -> None:
+    def __init__(
+        self,
+        index_id: str,
+        *,
+        model_engine: ProjModelEngine | None = None,
+    ) -> None:
         """
         Initialize an EquityIndex object.
 
         Args:
             index_id (str): Equity index identifier.
         """
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
-
         self.index_id: str = index_id
         self._total_return: float | None = None
         self._capital_growth: float | None = None
@@ -30,10 +31,17 @@ class EquityIndex:
         self._dividend_yield_ac: float | None = None
         self._total_return_index: float | None = None
         self._last_update: int | None = None
-        self.tdv_tot_return_index: TDepVariable = TDepVariable(model_engine, "tot_return_index", index_id, 'equity_index')
-        self.tdv_dividend_yield_ac: TDepVariable = TDepVariable(model_engine, "dividend_yield_ac", index_id, 'equity_index')
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time: int = model_engine.time
+            self._start_date: pd.Period = model_engine.START_DATE
+
+        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=index_id, group='equity_index')
+        self.tdv_tot_return_index: TDepVariable = create_tdv("tot_return_index")
+        self.tdv_dividend_yield_ac: TDepVariable = create_tdv("dividend_yield_ac")
+
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property

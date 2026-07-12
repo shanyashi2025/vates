@@ -17,27 +17,35 @@ class CreditBand:
         tdv_recovery_rate (float): Recovery rate.
     """
 
-    def __init__(self, model_engine: ProjModelEngine, band_id: str) -> None:
+    def __init__(
+        self,
+        band_id: str,
+        *,
+        model_engine: ProjModelEngine | None = None,
+    ) -> None:
         """
         Initialize a CreditRisk object.
 
         Args:
             band_id (str): credit band identifier.
         """
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
-
         self.band_id: str = band_id
         self._spread: npt.NDArray[np.float64] | None = None
         self._spotmult: npt.NDArray[np.float64] | None = None
         self._prob_of_default_ac: float | None = None
         self._recovery_rate: float | None = None
         self._last_update: int | None = None
-        self.tdv_prob_of_default_ac: TDepVariable = TDepVariable(model_engine, "prob_of_default_ac", band_id, 'credit')
-        self.tdv_recovery_rate: TDepVariable = TDepVariable(model_engine, "recovery_rate", band_id, 'credit')
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time: int = model_engine.time
+            self._start_date: pd.Period = model_engine.START_DATE
+
+        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=band_id, group='credit')
+        self.tdv_prob_of_default_ac: TDepVariable = create_tdv("prob_of_default_ac",)
+        self.tdv_recovery_rate: TDepVariable = create_tdv("recovery_rate")
+
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property

@@ -164,10 +164,9 @@ def convert_fwrd_to_spot(fwrds: npt.NDArray[np.float64], term_type: str) -> npt.
     return convert_disc_to_spot(discs, term_type)
 
 
-def newton_raphson_z_spread(target_pv: float, cash_flows: npt.NDArray[np.float64],
-                            spots: npt.NDArray[np.float64]) -> float:
+def solve_z_spread(target_pv: float, cash_flows: npt.NDArray[np.float64], spots: npt.NDArray[np.float64]) -> float:
     """
-    Calculate z-spread using the Newton-Raphson method.
+    Solve z-spread using the Newton-Raphson method.
 
     Args:
         target_pv (float): Target present value.
@@ -175,7 +174,7 @@ def newton_raphson_z_spread(target_pv: float, cash_flows: npt.NDArray[np.float64
         spots (npt.NDArray[np.float64]): Array of spot rates, `1, 2, ..., n` represents month `1, 2, ..., n`
 
     Returns:
-        float: Calculated z-spread.
+        float: Solved z-spread.
 
     Raises:
         ValueError: If the method does not converge or input is invalid.
@@ -217,10 +216,9 @@ def newton_raphson_z_spread(target_pv: float, cash_flows: npt.NDArray[np.float64
     raise ValueError(f"Newton-Raphson method did not converge after {max_iterations} iterations")
 
 
-def newton_raphson_ytm(target_pv: float, cash_flows: npt.NDArray[np.float64],
-                       freq: int, initial_guess: float=0.0) -> float:
+def solve_ytm(target_pv: float, cash_flows: npt.NDArray[np.float64], freq: int = 1, initial_guess: float=0.0) -> float:
     """
-    Calculate yield to maturity using the Newton-Raphson method.
+    Solve yield to maturity using the Newton-Raphson method.
 
     Args:
         target_pv (float): Target present value.
@@ -274,8 +272,8 @@ def newton_raphson_ytm(target_pv: float, cash_flows: npt.NDArray[np.float64],
     raise ValueError(f"Newton-Raphson method did not converge after {max_iterations} iterations")
 
 
-def calculate_risk_adj_spot(rf_spots: npt.NDArray[np.float64], mult: npt.NDArray[np.float64],
-                            add: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+def calculate_risk_adj_spot(rf_spots: npt.NDArray[np.float64], mult: float | npt.NDArray[np.float64],
+                            add: npt.NDArray[np.float64]) -> float | npt.NDArray[np.float64]:
     """
     Calculate risk-adjusted spot rates.
 
@@ -289,16 +287,15 @@ def calculate_risk_adj_spot(rf_spots: npt.NDArray[np.float64], mult: npt.NDArray
     """
     len_spot = len(rf_spots)
 
-    def align_len(arr: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-        len_arr = len(arr)
+    def _align(val: float | npt.NDArray[np.float64]) -> float | npt.NDArray[np.float64]:
+        if isinstance(val, float):
+            return val
+        len_arr = len(val)
         if len_arr == len_spot:
-            return arr
+            return val
         elif len_arr > len_spot:
-            return arr[len_spot]
+            return val[len_spot]  # slicing
         else:  # len_arr < len_spot
-            new_arr = np.full(len_spot, arr[-1])
-            new_arr[:len_arr] = arr
-            return new_arr
+            return np.pad(val, (0, len_spot - len(val)), mode='constant', constant_values=val[-1])  # padding
 
-    mult, add = align_len(mult), align_len(add)
-    return rf_spots * (1 + mult) + add
+    return rf_spots * (1 + _align(mult)) + _align(add)

@@ -1,5 +1,6 @@
 import pandas as pd
 
+from vates import ProjModelEngine
 from vates._core import TDepVariable
 from vates.utils import t_checker
 from vates.alm.enums import AssetClassification
@@ -20,9 +21,22 @@ class Cash(Asset):
     """
     __slots__ = ('_nominal', '_market_info', '_ret_id', '_ret_id_short_pos', 'tdv_cash_flow', 'tdv_mv_bd', 'tdv_mv_ad',)
 
-    def __init__(self, model_engine, asset_id: str, currency: Currency | None, asset_category: str, fund_id: str,
-                 allocation_group: str, nominal: float, market_info: MarketInfo, ret_id: str, ret_id_short_pos: str,
-                 classification: AssetClassification = AssetClassification.FVTPL, purchase_date: pd.Period | None=None):
+    def __init__(
+        self,
+        *,
+        model_engine: ProjModelEngine | None = None,
+        asset_id: str,
+        currency: Currency | None,
+        asset_category: str,
+        fund_id: str,
+        allocation_group: str,
+        nominal: float,
+        market_info: MarketInfo,
+        ret_id: str,
+        ret_id_short_pos: str | None,
+        classification: AssetClassification = AssetClassification.FVTPL,
+        purchase_date: pd.Period | None = None
+    ):
         """
         Initialize a Cash asset.
 
@@ -45,12 +59,12 @@ class Cash(Asset):
         self._nominal: float = nominal
         self._market_info: MarketInfo = market_info
         self._ret_id: str = ret_id
-        self._ret_id_short_pos: str = ret_id_short_pos
+        self._ret_id_short_pos: str = ret_id_short_pos or ret_id
 
-        self.tdv_cash_flow: TDepVariable = TDepVariable(model_engine, "cash_flow", asset_id, 'cash')
-        self.tdv_mv_bd: TDepVariable = TDepVariable(model_engine, "mv_bd", asset_id, 'cash')
-        self.tdv_mv_ad: TDepVariable = TDepVariable(model_engine, "mv_ad", asset_id, 'cash')
-
+        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=asset_id, group='cash')
+        self.tdv_cash_flow: TDepVariable = create_tdv("cash_flow")
+        self.tdv_mv_bd: TDepVariable = create_tdv("mv_bd")
+        self.tdv_mv_ad: TDepVariable = create_tdv("mv_ad")
         self.tdv_mv_ad[self.time] = self.mv
 
     @property
@@ -75,9 +89,10 @@ class Cash(Asset):
         Roll the cash asset forward one period.
         """
         t = self.time
-        if self._market_info.last_update != t:
-            raise ValueError(f"{self._market_info.info_id} is not updated on {t} ({self.period}).")
-        ret = self._market_info.data[self._ret_id if self._nominal >=0 else self._ret_id_short_pos]
+        ret_id = self._ret_id if self._nominal >= 0 else self._ret_id_short_pos
+        if self._market_info.last_update[ret_id] != t:
+            raise ValueError(f"{self._market_info} is not updated on {t} ({self.period}).")
+        ret = self._market_info.get(ret_id)
         self._nominal = self._nominal * (1 + ret) ** (1 / 12)
         self.tdv_cash_flow[t] = 0.0
         self.tdv_mv_bd[t] = self.mv

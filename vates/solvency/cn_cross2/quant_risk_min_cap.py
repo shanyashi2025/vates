@@ -208,10 +208,17 @@ class MinCapCalculator:
 
 
 class MinCapUnit:
-    def __init__(self, model_engine: ProjModelEngine, name: str, account_type: AccountType):
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
+    def __init__(
+        self,
+        *,
+        name: str = "untitled",
+        model_engine: ProjModelEngine | None = None,
+        account_type: AccountType,
+    ):
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time: int = model_engine.time
+            self._start_date: pd.Period = model_engine.START_DATE
 
         self.name: str = name
         self._account_type: AccountType = account_type
@@ -221,15 +228,16 @@ class MinCapUnit:
         self._min_cap_calculator: MinCapCalculator = MinCapCalculator(name)
         self._last_mc_calc: pd.Period | None = None
 
-        self.tdv_min_cap: TDepVariable = TDepVariable(model_engine, "minimum_capital", name, 'CROSS_MC')
-        self.tdv_life_mc: TDepVariable = TDepVariable(model_engine, "life_mc", name, 'CROSS_MC')
-        self.tdv_nonlife_mc: TDepVariable = TDepVariable(model_engine, "nonlife_mc", name, 'CROSS_MC')
-        self.tdv_market_mc: TDepVariable = TDepVariable(model_engine, "market_mc", name, 'CROSS_MC')
-        self.tdv_credit_mc: TDepVariable = TDepVariable(model_engine, "credit_mc", name, 'CROSS_MC')
-        self.tdv_divers: TDepVariable = TDepVariable(model_engine, "diversification", name, 'CROSS_MC')
-        self.tdv_loss_absorb: TDepVariable = TDepVariable(model_engine, "loss_absorbency", name, 'CROSS_MC')
+        create_tdv = lambda varname: TDepVariable(varname, model_engine=model_engine, owner=name, group='CROSS_MC')
+        self.tdv_min_cap: TDepVariable = create_tdv("minimum_capital")
+        self.tdv_life_mc: TDepVariable = create_tdv("life_mc")
+        self.tdv_nonlife_mc: TDepVariable = create_tdv("nonlife_mc")
+        self.tdv_market_mc: TDepVariable = create_tdv("market_mc")
+        self.tdv_credit_mc: TDepVariable = create_tdv("credit_mc")
+        self.tdv_divers: TDepVariable = create_tdv("diversification")
+        self.tdv_loss_absorb: TDepVariable = create_tdv("loss_absorbency")
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property
@@ -292,13 +300,20 @@ class MinCapUnit:
 
 
 class MinCapConsolidator:
-    def __init__(self, model_engine: ProjModelEngine, name: str, unit_list: list[MinCapUnit]):
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
+    def __init__(
+        self,
+        *,
+        name: str = 'untitled',
+        model_engine: ProjModelEngine | None = None,
+        bus_unit_list: list[MinCapUnit]
+    ):
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time: int = model_engine.time
+            self._start_date: pd.Period = model_engine.START_DATE
 
         self.name: str = name
-        self._unit_list: list[MinCapUnit] = unit_list
+        self._bus_unit_list: list[MinCapUnit] = bus_unit_list
 
         self._loss_absorbency: float = 0.0
         self._min_cap: float = 0.0
@@ -306,15 +321,16 @@ class MinCapConsolidator:
         self._min_cap_calculator_la: MinCapCalculator = MinCapCalculator(f'{name}:loss_absorb')
         self._last_mc_calc: pd.Period | None = None
 
-        self.tdv_min_cap: TDepVariable = TDepVariable(model_engine, "minimum_capital", name, 'CROSS_MC')
-        self.tdv_life_mc: TDepVariable = TDepVariable(model_engine, "life_mc", name, 'CROSS_MC')
-        self.tdv_nonlife_mc: TDepVariable = TDepVariable(model_engine, "nonlife_mc", name, 'CROSS_MC')
-        self.tdv_market_mc: TDepVariable = TDepVariable(model_engine, "market_mc", name, 'CROSS_MC')
-        self.tdv_credit_mc: TDepVariable = TDepVariable(model_engine, "credit_mc", name, 'CROSS_MC')
-        self.tdv_divers: TDepVariable = TDepVariable(model_engine, "diversification", name, 'CROSS_MC')
-        self.tdv_loss_absorb: TDepVariable = TDepVariable(model_engine, "loss_absorbency", name, 'CROSS_MC')
+        create_tdv = lambda varname: TDepVariable(varname, model_engine=model_engine, owner=name, group='CROSS_MC')
+        self.tdv_min_cap: TDepVariable = create_tdv("minimum_capital")
+        self.tdv_life_mc: TDepVariable = create_tdv("life_mc")
+        self.tdv_nonlife_mc: TDepVariable = create_tdv("nonlife_mc")
+        self.tdv_market_mc: TDepVariable = create_tdv("market_mc")
+        self.tdv_credit_mc: TDepVariable = create_tdv("credit_mc")
+        self.tdv_divers: TDepVariable = create_tdv("diversification")
+        self.tdv_loss_absorb: TDepVariable = create_tdv("loss_absorbency")
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property
@@ -325,7 +341,7 @@ class MinCapConsolidator:
         t, p = self.time, self.period
         mc_in, mc_in_la = MinCapInputer(), MinCapInputer()
 
-        for unit in self._unit_list:
+        for unit in self._bus_unit_list:
             if unit.last_min_cap_calc != p:
                 warnings.warn(f'{p} {self.name}: min cap result might be incorrect, because min cap is last calculated '
                               f'on {unit.last_min_cap_calc} for {unit.name}.')

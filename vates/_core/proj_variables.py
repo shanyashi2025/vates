@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 
 if typing.TYPE_CHECKING:
     from vates._core.proj_model_engine import ProjModelEngine
+    from vates._core._utils import RunConfig
 
 
 class ProjVariable(ABC):
@@ -26,7 +27,15 @@ class ProjVariable(ABC):
 
     __slots__ = ('__weakref__', 'name', 'owner', 'group', '_dims', '_ndim',)
 
-    def __init__(self, model_engine: ProjModelEngine, name: str, owner: str, group: str, dims: list | None = None):
+    def __init__(
+        self, name: str,
+        /,
+        *,
+        model_engine: ProjModelEngine | None,
+        owner: str,
+        group: str,
+        dims: list | None = None
+    ):
         """
         Initialize the Projection Variable.
 
@@ -42,7 +51,8 @@ class ProjVariable(ABC):
         self.group: str = group
         self._dims: list[list[str]] | None = self._parse_dims(dims)
         self._ndim: int = len(dims) if dims is not None else 0
-        model_engine.include_proj_variable(weakref.ref(self))
+        if model_engine is not None:
+            model_engine.include_proj_variable(weakref.ref(self))
 
     @property
     @abstractmethod
@@ -132,18 +142,26 @@ class ConstVariable(ProjVariable):
     """
     __slots__ = ('_result',)
 
-    def __init__(self, model_engine: ProjModelEngine, name: str, owner: str, group: str, dims: list | None = None):
+    def __init__(
+        self, name: str,
+        /,
+        *,
+        model_engine: ProjModelEngine | None = None,
+        owner: str = 'unowned',
+        group: str = 'ungrouped',
+        dims: list | None = None
+    ):
         """
         Initialize the Constant Variable.
 
         Args:
-            model_engine (ProjModelEngine): Model engine object.
             name (str): Variable name.
+            model_engine (ProjModelEngine): Model engine object.
             owner (str): Variable owner.
             group (str): Variable group.
             dims (list|None): Dimensions.
         """
-        super().__init__(model_engine, name, owner, group, dims)
+        super().__init__(name, model_engine=model_engine, owner=owner, group=group, dims=dims)
         self._result = None
 
     @property
@@ -188,9 +206,35 @@ class TDepVariable(ProjVariable):
         _assigned (np.ndarray): True if value has been assigned otherwise False.
     """
 
-    __slots__ = ('_max_t', '_start_date_ordinal', '_result', '_assigned',)
+    __slots__ = ('_cfg', '_result', '_assigned',)
 
-    def __init__(self, model_engine: ProjModelEngine, name: str, owner: str, group: str, dims: list | None = None):
+    def __new__(
+        cls,
+        name: str,
+        /,
+        *,
+        model_engine: ProjModelEngine | None = None,
+        owner: str = 'unowned',
+        group: str = 'ungrouped',
+        dims: list | None = None
+    ):
+        if model_engine is None:
+            warnings.warn(f"Cannot create 'TDepVariable' {name}: `max_t` is not available because value of argument "
+                          f"'model_engine' is None, a 'ConstVariable' object is returned as fallback.")
+            return ConstVariable(name, model_engine=model_engine, owner=owner, group=group, dims=dims)
+
+        return super().__new__(cls)
+
+    def __init__(
+        self,
+        name: str,
+        /,
+        *,
+        model_engine: ProjModelEngine | None = None,
+        owner: str = 'unowned',
+        group: str = 'ungrouped',
+        dims: list | None = None
+    ):
         """
         Initialize the Time-memory Variable.
 
@@ -201,11 +245,10 @@ class TDepVariable(ProjVariable):
             group (str): Variable group.
             dims (list|None): Dimensions.
         """
-        super().__init__(model_engine, name, owner, group, dims)
-        self._max_t: int = model_engine.MAX_T
-        self._start_date_ordinal: int = model_engine.START_YEAR * 12 + model_engine.START_MONTH  # ordinal encoding
+        super().__init__(name, model_engine=model_engine, owner=owner, group=group, dims=dims)
+        self._cfg: RunConfig = model_engine._run_config
         self._result = np.zeros(self._shape)
-        self._assigned = np.array([False] * (self._max_t + 1))
+        self._assigned = np.array([False] * (self._cfg.max_t + 1))
 
     @property
     def result(self) -> np.ndarray:
@@ -223,7 +266,7 @@ class TDepVariable(ProjVariable):
         Returns:
             tuple[int]: (max_t+1, [dim1, dim2, dim3]).
         """
-        shape = (self._max_t + 1,)
+        shape = (self._cfg.max_t + 1,)
         if self._ndim > 0:
             for dim in self._dims:
                 shape += (len(dim),)
@@ -240,17 +283,15 @@ class TDepVariable(ProjVariable):
 
         """
         if type(index) == int:
-            if not (0 <= index <= self._max_t):
-                warnings.warn(f"Invalid {index=}, expected 0 to {self._max_t}.")
-                return None
             t = index
         elif type(index) == pd.Period:
-            t = index.year * 12 + index.month - self._start_date_ordinal
-            if t is None:
-                warnings.warn(f"Invalid {index=}.")
-                return None
+            t = (index - self._cfg.start_date).n
         else:
             warnings.warn(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
+            return None
+
+        if not (0 <= t <= self._cfg.max_t):
+            warnings.warn(f"Invalid {index=}, expected t: 0 to {self._cfg.max_t} (period: {self._cfg.start_date} to {self._cfg.end_date}).")
             return None
 
         if self._assigned[t]:
@@ -265,17 +306,15 @@ class TDepVariable(ProjVariable):
             value: Scalar or array whose shape matches the variable's dimensions.
         """
         if type(index) == int:
-            if not (0 <= index <= self._max_t):
-                warnings.warn(f"Assignment failed, invalid {index=}, expected 0 to {self._max_t}.")
-                return
             t = index
         elif type(index) == pd.Period:
-            t = index.year * 12 + index.month - self._start_date_ordinal
-            if t is None:
-                warnings.warn(f"Assignment failed, invalid {index=}.")
-                return
+            t = (index - self._cfg.start_date).n
         else:
-            warnings.warn(f"Assignment failed, invalid {type(index)=}, expected int or pd.Period.")
+            warnings.warn(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
+            return
+
+        if not (0 <= t <= self._cfg.max_t):
+            warnings.warn(f"Invalid {index=}, expected t: 0 to {self._cfg.max_t} (period: {self._cfg.start_date} to {self._cfg.end_date}).")
             return
 
         if self._ndim == 0:

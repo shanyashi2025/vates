@@ -1,8 +1,9 @@
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import warnings
 
-from vates._core import TDepVariable
+from vates._core import ProjModelEngine, TDepVariable
 from vates.utils import calculate_risk_adj_spot, t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, YieldCurve, CreditBand
@@ -33,11 +34,33 @@ class BondFixed(Asset):
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad',)
 
     
-    def __init__(self, model_engine, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_category: str,
-                 fund_id: str, allocation_group: str, classification: AssetClassification, issue_date: pd.Period,
-                 maturity_date: pd.Period, redemp_sched: np.ndarray | None, coupon_rate: float, coupon_freq: int,
-                 face_value: float, mv_price: float, market_spread: float, abv_price: float, amort_rate: float,
-                 rf_curve: YieldCurve, credit_band: CreditBand | None, purchase_date: pd.Period | None=None):
+    def __init__(
+        self,
+        *,
+        model_engine: ProjModelEngine | None = None,
+        asset_id: str,
+        is_profile: bool,
+        units: float,
+        currency: Currency | None,
+        asset_category: str,
+        fund_id: str,
+        allocation_group: str,
+        classification: AssetClassification,
+        issue_date: pd.Period,
+        maturity_date: pd.Period,
+        redemp_sched: np.ndarray | None,
+        coupon_rate: float,
+        coupon_freq: int,
+        face_value: float,
+        mv_price: float,
+        market_spread: float,
+        abv_price: float,
+        amort_rate: float,
+        rf_curve: YieldCurve,
+        credit_band: CreditBand | None,
+        purchase_date: pd.Period | None = None,
+        _bypass_init_validation: bool = False,
+    ):
         """
         Initialize a Bond asset.
 
@@ -63,11 +86,12 @@ class BondFixed(Asset):
             rf_curve (YieldCurve): Risk-free yield curve.
             credit_band (CreditBand | None): Credit band (to provide assumptions, e.g. default and spread).
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
+            _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
                          purchase_date=purchase_date, currency=currency, classification=classification,
                          asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
-        t, p = self.time, self.period
+
         self._params = BondFixedParameters(
             issue_date=issue_date,
             maturity_date=maturity_date,
@@ -89,35 +113,52 @@ class BondFixed(Asset):
         self.pricer = BondFixedPricer(self._params, self.cash_flow_gen)
         self.risk_calc = BondFixedRiskCalculator(self._params, self.cash_flow_gen, self.pricer)
 
-        # Validate initial arguments
-        self._validate_mv_price(self._mv_price_dirty, p)
-        self._validate_abv_price(self._abv_price_dirty, p)
-
-        # Initialize TDepVariable
-        self.tdv_units_default: TDepVariable = TDepVariable(model_engine, "units_default", asset_id, 'bond')
-        self.tdv_units_maturity: TDepVariable = TDepVariable(model_engine, "units_maturity", asset_id, 'bond')
-        self.tdv_units_bd: TDepVariable = TDepVariable(model_engine, "units_bd", asset_id, 'bond')
-        self.tdv_units_ad: TDepVariable = TDepVariable(model_engine, "units_ad", asset_id, 'bond')
-        self.tdv_cash_flow: TDepVariable = TDepVariable(model_engine, "cash_flow", asset_id, 'bond')
-        self.tdv_interest: TDepVariable = TDepVariable(model_engine, "interest", asset_id, 'bond')
-        self.tdv_principal: TDepVariable = TDepVariable(model_engine, "principal", asset_id, 'bond')
-        self.tdv_default_recovery: TDepVariable = TDepVariable(model_engine, "default_recovery", asset_id, 'bond')
-        self.tdv_mv_price: TDepVariable = TDepVariable(model_engine, "mv_price", asset_id, 'bond')
-        self.tdv_abv_price: TDepVariable = TDepVariable(model_engine, "abv_price", asset_id, 'bond')
-        self.tdv_mv_bd: TDepVariable = TDepVariable(model_engine, "mv_bd", asset_id, 'bond')
-        self.tdv_abv_bd: TDepVariable = TDepVariable(model_engine, "abv_bd", asset_id, 'bond')
-        self.tdv_mv_ad: TDepVariable = TDepVariable(model_engine, "mv_ad", asset_id, 'bond')
-        self.tdv_abv_ad: TDepVariable = TDepVariable(model_engine, "abv_ad", asset_id, 'bond')
-
-        self.tdv_mv_price[t] = self._mv_price_dirty
-        self.tdv_abv_price[t] = self._abv_price_dirty
-
+        # validate profile price
         if is_profile:
             tolerance = max(max(abs(self._mv_price_dirty), abs(self._abv_price_dirty) * 1e-6), 1e-8)
             if abs(self._abv_price_dirty - self._mv_price_dirty) > tolerance:
-                raise ValueError(f'Bond {self.asset_id} at {p}: abv_price != mv_price at purchase, '
-                                 f'abv={self._abv_price_dirty:.4f}, mv={self._mv_price_dirty:.4f}')
-        else: # not is_profile
+                ValueError(f"Profile bond {self.asset_id}: abv_price={self._abv_price_dirty:.4f} != "
+                           f"mv_price={self._mv_price_dirty:.4f}")
+
+        if model_engine is not None:
+            # validate mv price
+            valid, price = self._validate_current_price("mv", self._mv_price_dirty)
+            if not valid:
+                msg = f"Bond {asset_id} mv_price: input={self._mv_price_dirty:.4f} != calculated={price:.4f}."
+                if _bypass_init_validation:
+                    warnings.warn(msg)
+                else:
+                    raise ValueError(msg)
+            # validate abv price
+            valid, price = self._validate_current_price("abv", self._abv_price_dirty)
+            if not valid:
+                msg = f"Bond {asset_id} abv_price: input={self._abv_price_dirty:.4f} != calculated={price:.4f}."
+                if _bypass_init_validation:
+                    warnings.warn(msg)
+                else:
+                    raise ValueError(msg)
+
+        # Initialize TDepVariable
+        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=asset_id, group='bond')
+        self.tdv_units_default: TDepVariable = create_tdv("units_default")
+        self.tdv_units_maturity: TDepVariable = create_tdv("units_maturity")
+        self.tdv_units_bd: TDepVariable = create_tdv("units_bd")
+        self.tdv_units_ad: TDepVariable = create_tdv("units_ad")
+        self.tdv_cash_flow: TDepVariable = create_tdv("cash_flow")
+        self.tdv_interest: TDepVariable = create_tdv("interest")
+        self.tdv_principal: TDepVariable = create_tdv("principal")
+        self.tdv_default_recovery: TDepVariable = create_tdv("default_recovery")
+        self.tdv_mv_price: TDepVariable = create_tdv("mv_price")
+        self.tdv_abv_price: TDepVariable = create_tdv("abv_price")
+        self.tdv_mv_bd: TDepVariable = create_tdv("mv_bd")
+        self.tdv_abv_bd: TDepVariable = create_tdv("abv_bd")
+        self.tdv_mv_ad: TDepVariable = create_tdv("mv_ad")
+        self.tdv_abv_ad: TDepVariable = create_tdv("abv_ad")
+
+        t = self.time
+        self.tdv_mv_price[t] = self._mv_price_dirty
+        self.tdv_abv_price[t] = self._abv_price_dirty
+        if not is_profile:
             self.tdv_units_ad[t] = self._units
             self.tdv_mv_ad[t] = self.mv
             self.tdv_abv_ad[t] = self.abv
@@ -226,7 +267,7 @@ class BondFixed(Asset):
             return self.risk_calc.risk_metrics
 
     @t_checker({"roll_forward": -1}, "roll_forward")
-    def roll_forward(self, **kwargs) -> None:
+    def roll_forward(self, skip_dcf: bool = False, **kwargs) -> None:
         """
         Roll the bond forward one period, updating units, prices, and cash flows.
         """
@@ -263,9 +304,9 @@ class BondFixed(Asset):
 
         freq = 1 if self._params.coupon_freq == 0 else self._params.coupon_freq  # 1 for zero coupon bond
         self._abv_price_dirty = abv_price_st * (1 + self._amort_rate / freq) ** (freq / 12) - coupon_paid - principal_paid
-        # self._validate_abv_price(self._abv_price_dirty, p)
+        # valid, price = self._validate_current_price("abv", self._abv_price_dirty)
 
-        if not kwargs.get('skip_dcf', False):
+        if not skip_dcf:
             if self._rf_curve.last_update != t:
                 raise ValueError(f"{self._rf_curve.curve_id} is not updated on {t} ({p}).")
             if self._credit_band is not None and self._credit_band.last_update != t:
@@ -343,32 +384,18 @@ class BondFixed(Asset):
         self.tdv_mv_ad[t] = self.mv
         self.tdv_abv_ad[t] = self.abv
 
-    def _validate_mv_price(self, price: float, valn_date: pd.Period) -> None:
+    def _validate_current_price(self, mv_or_abv: str, /, price: float, tolerance: float | None = None
+                                ) -> tuple[bool, float | None]:
         """
-        Validate the market value price.
-        """
-        if price <= 0 and abs(price) > 1e-8:
-            raise ValueError(f"Bond {self.asset_id} mv price={price: .4f}, expect >0.")
-        calc_price = self.pricer.calculate_market_price(valn_date, self.ra_spots)
-        tolerance = max(price * 1e-6, 1e-8)
-        if abs(price - calc_price) > tolerance:
-            raise ValueError(
-                f"{valn_date} bond {self.asset_id}: mv price is calculated as {calc_price: .4f} "
-                f"based on risk free rate, credit spread and market spread, "
-                f"but input mv price is {price: .4f}."
-            )
-
-    def _validate_abv_price(self, price: float, valn_date: pd.Period) -> None:
-        """
-        Validate the amortized book value price.
+        Validate the price.
         """
         if price <= 0 and abs(price) > 1e-8:
-            raise ValueError(f"Bond {self.asset_id} abv price={price: .4f}, expect >0.")
-        calc_price = self.pricer.calculate_amortized_price(valn_date, self._amort_rate)
-        tolerance = max(price * 1e-6, 1e-8)
-        if abs(price - calc_price) > tolerance:
-            raise ValueError(
-                f"{valn_date} bond {self.asset_id}: abv price is calculated as {calc_price: .4f} "
-                f"based on amortized rate {self._amort_rate: .4%}, "
-                f"but input abv price is {price: .4f}."
-            )
+            return False, None
+        if mv_or_abv == "mv":
+            calc_price = self.pricer.calculate_market_price(self.period, self.ra_spots)
+        elif mv_or_abv == "abv":
+            calc_price = self.pricer.calculate_amortized_price(self.period, self._amort_rate)
+        else:
+            return False, None
+        tolerance = tolerance or max(price * 1e-6, 1e-8)
+        return abs(price - calc_price) <= tolerance, calc_price

@@ -55,11 +55,11 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     df = file_df_dict['funds']
     for fund_id in df.index:
         cross_account_type = cn_cross2.AccountType(df.loc[fund_id, 'cross_account_type'].upper())
-        mc_unit_dict[fund_id] = cn_cross2.MinCapUnit(model, fund_id, cross_account_type)
+        mc_unit_dict[fund_id] = cn_cross2.MinCapUnit(name=fund_id, model_engine=model, account_type=cross_account_type)
         mc_inputer_dict[fund_id] = cn_cross2.MinCapInputer()
 
     # initialize the company result
-    company_mc = cn_cross2.MinCapConsolidator(model, 'company', [v for _, v in mc_unit_dict.items()])
+    company_mc = cn_cross2.MinCapConsolidator(name='company',model_engine=model, bus_unit_list=[v for _, v in mc_unit_dict.items()])
 
     liabs_df = file_df_dict['liabs']
     aging_assets_input_filelist_df = file_df_dict['aging_assets_input_filelist']

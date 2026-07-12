@@ -4,7 +4,7 @@ import numpy.typing as npt
 import warnings
 from dataclasses import dataclass
 
-from vates.utils import convert_spot_to_disc, newton_raphson_ytm
+from vates.utils import convert_spot_to_disc, solve_ytm
 
 
 @dataclass
@@ -308,7 +308,7 @@ class BondFixedRiskCalculator:
         """
         freq = 1 if self._params.coupon_freq == 0 else self._params.coupon_freq  # 1 for zero coupon bond
         cash_flows = self._cash_flow_gen.get_future_cash_flows(valn_date)
-        return newton_raphson_ytm(
+        return solve_ytm(
             target_pv=market_price,
             cash_flows=cash_flows,
             freq=freq,

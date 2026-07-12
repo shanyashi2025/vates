@@ -21,8 +21,8 @@ from vates.utils.curve_conversion import (
     convert_spot_to_fwrd,
     convert_spot_to_par,
     convert_fwrd_to_spot,
-    newton_raphson_ytm,
-    newton_raphson_z_spread,
+    solve_ytm,
+    solve_z_spread,
     calculate_risk_adj_spot
 )
 from vates.utils.qfi import (
@@ -64,8 +64,8 @@ __all__ = [
     'convert_spot_to_fwrd',
     'convert_spot_to_par',
     'convert_fwrd_to_spot',
-    'newton_raphson_ytm',
-    'newton_raphson_z_spread',
+    'solve_ytm',
+    'solve_z_spread',
     'calculate_risk_adj_spot',
     # quantitative finance and investment
     'multivariate_standard_normal',

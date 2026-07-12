@@ -23,8 +23,8 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
                 'rebalance_freq': params['rebalance_freq'],
                 'asset_amount': ibal * params['weight'],
                 'rfa_amount': ibal * params['rfawgt'],
-                'balance': TDepVariable(model, "balance", key, 'MonteCarlo'),
-                'return': TDepVariable(model, "return", key, 'MonteCarlo'),
+                'balance': TDepVariable("balance", model_engine=model, owner=key, group='MonteCarlo'),
+                'return': TDepVariable("return", model_engine=model, owner=key, group='MonteCarlo'),
                 'sum_ret': 0.0,
                 'sum_sqret': 0.0
             }
@@ -68,10 +68,10 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
             std_return = std_return * math.sqrt(12)  # annualized
             sharp_ratio = (mean_return - risk_free_rate) / std_return
 
-            port_var['twrr'] = vates.ConstVariable(model, 'twrr', port_name, 'MonteCarlo')
-            port_var['mean_return'] = vates.ConstVariable(model, 'mean_return', port_name, 'MonteCarlo')
-            port_var['std_return'] = vates.ConstVariable(model, 'std_return', port_name, 'MonteCarlo')
-            port_var['sharp_ratio'] = vates.ConstVariable(model, 'sharp_ratio', port_name, 'MonteCarlo')
+            port_var['twrr'] = vates.ConstVariable('twrr', model_engine=model, owner=port_name, group='MonteCarlo')
+            port_var['mean_return'] = vates.ConstVariable('mean_return', model_engine=model, owner=port_name, group='MonteCarlo')
+            port_var['std_return'] = vates.ConstVariable('std_return', model_engine=model, owner=port_name, group='MonteCarlo')
+            port_var['sharp_ratio'] = vates.ConstVariable('sharp_ratio', model_engine=model, owner=port_name, group='MonteCarlo')
 
             port_var['twrr'][t] = twrr
             port_var['mean_return'][t] = mean_return

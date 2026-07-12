@@ -1,7 +1,8 @@
-from typing import Optional
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import warnings
+from typing import Optional
 
 from vates._core import ProjModelEngine, TDepVariable
 from vates.utils import convert_spot_to_disc, convert_disc_to_spot, convert_disc_to_fwrd, convert_disc_to_par, convert_fwrd_to_disc
@@ -18,18 +19,19 @@ class YieldCurve:
         _forward_rates: Forward rates.
         _par_yields: Par yields.
     """
-    def __init__(self, model_engine: ProjModelEngine, curve_id: str, output_terms: list[int] | None = None) -> None:
+    def __init__(
+        self,
+        curve_id: str,
+        model_engine: ProjModelEngine | None = None,
+        tdv_term_dim: list[int] | None = None,
+    ) -> None:
         """
         Initialize a YieldCurve object.
 
         Args:
             curve_id (str): Unique identifier for this yield curve.
-            output_terms (list[int] | None): List of terms (in months) to be output.
+            tdv_term_dim (list[int] | None): List of terms (in months) to be output.
         """
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
-
         self.curve_id = curve_id
         self._spot_rates: npt.NDArray[np.float64] | None = None
         self._disc_factors: npt.NDArray[np.float64] | None = None
@@ -37,20 +39,27 @@ class YieldCurve:
         self._par_yields: dict[int, Optional[npt.NDArray[np.float64]]] = {1: None, 2: None, 4: None, 12: None}
         self._last_update: int | None = None
 
-        if output_terms is not None:
-            for value in output_terms:
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time: int = model_engine.time
+            self._start_date: pd.Period = model_engine.START_DATE
+
+        if tdv_term_dim is not None:
+            for value in tdv_term_dim:
                 if not isinstance(value, int):
-                    raise TypeError(f"Argument 'output_terms': type {type(value)} is not allowed, expected 'int'.")
+                    tdv_term_dim = None
+                    warnings.warn(f"'tdv_term_dim': type {type(value)} is not allowed, expected 'int'. Default is used.")
+                    break
                 if value < 0:
-                    raise ValueError(f"Argument 'output_terms': value {value} is not allowed, expected positive.")
-            self._output_terms = output_terms
-        else:
-            self._output_terms = [*range(12, 61, 12), *range(120, 601, 120)]
+                    tdv_term_dim = None
+                    warnings.warn(f"'tdv_term_dim': value {value} is not allowed, expected positive. Default is used.")
+                    break
+        self._tdv_term_dim = tdv_term_dim or [*range(12, 61, 12), *range(120, 601, 120)] # default: 1/2/3/4/5/10/20/30/40/50Y
 
-        self._tdv_spot_rates: TDepVariable = TDepVariable(model_engine, "spot_rate", curve_id, 'yield_curve',
-                                                          dims=[self._output_terms])
+        self._tdv_spot_rates: TDepVariable = TDepVariable("spot_rate", dims=[self._tdv_term_dim],
+                                                          model_engine=model_engine, owner=curve_id, group='yield_curve')
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property
@@ -129,7 +138,7 @@ class YieldCurve:
     def _complete_update(self) -> None:
         t = self.time
         len_rates = len(self._spot_rates)
-        self._tdv_spot_rates[t] = np.array([0 if i > len_rates else self._spot_rates[i] for i in self._output_terms])
+        self._tdv_spot_rates[t] = np.array([0 if i > len_rates else self._spot_rates[i] for i in self._tdv_term_dim])
         self._last_update = t
 
     def __str__(self) -> str:

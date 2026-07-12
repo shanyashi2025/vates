@@ -49,28 +49,32 @@ class AssetAllocator:
         rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
     """
 
-    def __init__(self, model_engine: ProjModelEngine, fund_id: str, container: ALContainer,
-                 rebalance_policy: dict[str, RebalancePolicyParams]):
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
+    def __init__(
+        self,
+        *,
+        model_engine: ProjModelEngine | None = None,
+        fund_id: str,
+        container: ALContainer,
+        rebalance_policy: dict[str, RebalancePolicyParams]
+    ):
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time: int = model_engine.time
+            self._start_date: pd.Period = model_engine.START_DATE
 
         self.fund_id: str = fund_id
         self.container: ALContainer = container
         self.rebalance_policy = rebalance_policy
         self.ag_seq_list = self.list_ag_in_sequence(fund_id, rebalance_policy)
 
-        self.tdv_fund_size: TDepVariable = TDepVariable(model_engine, "fund_size", fund_id, 'rebalance')
-        self.tdv_ag_repval_bd: TDepVariable = TDepVariable(model_engine, "ag_repval_bd", fund_id, 'rebalance',
-                                                           dims=[self.ag_seq_list, AssetRepBasis])
-        self.tdv_ag_repval_ad: TDepVariable = TDepVariable(model_engine, "ag_repval_ad", fund_id, 'rebalance',
-                                                           dims=[self.ag_seq_list, AssetRepBasis])
-        self.tdv_ag_alloc_pc_bd: TDepVariable = TDepVariable(model_engine, "ag_alloc_pc_bd", fund_id, 'rebalance',
-                                                             dims=[self.ag_seq_list])
-        self.tdv_ag_alloc_pc_ad: TDepVariable = TDepVariable(model_engine, "ag_alloc_pc_ad", fund_id, 'rebalance',
-                                                             dims=[self.ag_seq_list])
+        tdv_kwargs = {"model_engine": model_engine, "owner": fund_id, "group": 'rebalance'}
+        self.tdv_fund_size = TDepVariable("fund_size", **tdv_kwargs)
+        self.tdv_ag_repval_bd = TDepVariable("ag_repval_bd",  dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
+        self.tdv_ag_repval_ad = TDepVariable("ag_repval_ad", dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
+        self.tdv_ag_alloc_pc_bd = TDepVariable("ag_alloc_pc_bd", dims=[self.ag_seq_list], **tdv_kwargs)
+        self.tdv_ag_alloc_pc_ad = TDepVariable("ag_alloc_pc_ad", dims=[self.ag_seq_list], **tdv_kwargs)
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property

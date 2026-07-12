@@ -8,10 +8,9 @@ import traceback
 import warnings
 import weakref
 from datetime import datetime
-from functools import cached_property
 from pathlib import Path
 from types import MethodType
-from typing import Callable, Literal, Self
+from typing import Callable, Literal, Self, get_type_hints
 
 from vates._core.proj_variables import ProjVariable
 from vates._core._utils import RunConfig
@@ -71,23 +70,24 @@ class ProjModelEngine:
         if not callable(func):
             raise ValueError(f"Cannot bind un-callable object: {func}.")
 
+        sig = inspect.signature(func)
+        hints = get_type_hints(func)
+
         sig_params = inspect.signature(func).parameters
-        if len(sig_params) == 0:
-            msg = f"The function '{func.__name__}' has no argument, it is bound as a function instead of a method."
-            warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
+        if len(sig.parameters) == 0:
+            self.include_traced_message(f"INFO: Function '{func.__name__}' has no argument, it will be bound as a "
+                                        f"function instead of a method.")
             self._proj_func = func
         else:
-            first_arg_name, first_arg_param = list(sig_params.keys())[0], list(sig_params.values())[0]
-            if (first_arg_name == "self" or first_arg_param.annotation is type(self) or
-                    first_arg_param.annotation == type(self).__name__):
-                pass
-            else:
-                msg = (f"When called, the bound method '{func.__name__}' automatically passes '{self._name}' as the "
-                       f"first argument '{first_arg_name}'.")
-                warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
+            first_arg_name = list(sig_params.keys())[0]
+            if first_arg_name not in hints:
+                raise ValueError(f"Function '{func.__name__}' first argument '{first_arg_name}': must have annotation.")
+            if hints[first_arg_name] is not type(self):
+                raise ValueError(f"Function '{func.__name__}' first argument '{first_arg_name}': model engine type "
+                                 f"'{type(self)}' inconsistent with type hint '{str(hints[first_arg_name])}'.")
             self._proj_func = MethodType(func, self)
 
-        self.include_traced_message(f"INFO: The function {func} has been bound to {self}.")
+        self.include_traced_message(f"INFO: Function {func} has been bound to {self}.")
 
         return self
 
@@ -152,14 +152,14 @@ class ProjModelEngine:
         if results_directory is None:
             results_directory = f"./results/{scenario or ''}"
             none_items.append(f"results_directory='{results_directory}'")
-        self._run_config = RunConfig(
+        self._run_config = RunConfig.create(
             start_year=start_year,
             start_month=start_month,
             end_year=end_year,
             end_month=end_month,
             scenario=scenario,
             simulation=simulation,
-            wsdir=workspace_directory,
+            workspace_directory=workspace_directory,
             input_directories=input_directories,
             results_directory=results_directory,
             is_delete_existing_results=is_delete_existing_results,
@@ -167,7 +167,6 @@ class ProjModelEngine:
             stoch_result_file_mode=stoch_result_file_mode,
             stoch_result_file_id=stoch_result_file_id,
             enable_write_runlog=enable_write_runlog,
-            simulations=None,
         )
 
         if len(none_items) > 0:
@@ -213,17 +212,17 @@ class ProjModelEngine:
         return self.run(proj_func_args=proj_func_params)
 
     def _write_results(self) -> None:
-        if self.results_directory.is_dir():
+        if self.results_directory_path.is_dir():
             if self._run_config.is_delete_existing_results:
                 remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
-                for f in glob.glob(str(self.results_directory / f'{self._name}*')):
+                for f in glob.glob(str(self.results_directory_path / f'{self._name}*')):
                     if f.endswith(remove_pattern):
                         os.remove(f)
                     else:
                         msg = f"Exsiting file NOT deleted: '{f}'."
                         warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
         else:
-            os.makedirs(self.results_directory, exist_ok=True)
+            os.makedirs(self.results_directory_path, exist_ok=True)
         self._write_projection_result()
         self._write_stochastic_result()
 
@@ -435,13 +434,13 @@ class ProjModelEngine:
                 "duration": f"{exec_hours:02}:{exec_minutes:02}:{exec_seconds:02}",
             },
             "run_config": {
-                "start_year": self._run_config.start_year,
-                "start_month": self._run_config.start_month,
-                "end_year": self._run_config.end_year,
-                "end_month": self._run_config.end_month,
-                "scenario": self._run_config.scenario,
-                "simulation": self._run_config.simulation,
-                "workspace_directory": str(self.workspace_directory),
+                "start_year": self.START_YEAR,
+                "start_month": self.START_MONTH,
+                "end_year": self.END_YEAR,
+                "end_month": self.END_MONTH,
+                "scenario": self.SCENARIO,
+                "simulation": self.SIMULATION,
+                "workspace_directory": self._run_config.workspace_directory,
                 "input_directories": self._run_config.input_directories,
                 "results_directory": self._run_config.results_directory,
             },
@@ -528,23 +527,23 @@ class ProjModelEngine:
             return None, None
         first_seen, last_seen = None, None
         for directory in self._run_config.input_directories:  # search input_directories sequentially
-            filepath = (Path(self._run_config.wsdir) / directory / filename).resolve()
+            filepath = (self.workspace_directory_path / directory / filename).resolve()
             if filepath.is_file():
                 if first_seen is None:
                     first_seen = filepath
                 last_seen = filepath
         return first_seen, last_seen
 
-    def _concat_output_file_path(self, name: str) -> Path | None:
-        return self.results_directory / f'{self._name}{name}' if self.results_directory else None
+    def _concat_output_file_path(self, name: str) -> Path:
+        return self.results_directory_path / f'{self._name}{name}'
 
-    @cached_property
-    def workspace_directory(self) -> Path:
-        return Path(self._run_config.wsdir or os.getcwd()).resolve()
+    @property
+    def workspace_directory_path(self) -> Path:
+        return self._run_config.workspace_directory_path
 
-    @cached_property
-    def results_directory(self) -> Path:
-        return (Path(self._run_config.wsdir) / self._run_config.results_directory).resolve()
+    @property
+    def results_directory_path(self) -> Path:
+        return self._run_config.results_directory_path
 
     @property
     def MODEL_NAME(self) -> str:
@@ -572,6 +571,11 @@ class ProjModelEngine:
         return self._run_config.start_month
 
     @property
+    def START_DATE(self) -> pd.Period:
+        """pd.Period: Start date of the projection."""
+        return self._run_config.start_date
+
+    @property
     def END_YEAR(self) -> int:
         """int: Year of the end date of the projection."""
         return self._run_config.end_year
@@ -581,25 +585,15 @@ class ProjModelEngine:
         """int: Month (1-12) of the end date of the projection."""
         return self._run_config.end_month
 
-    @cached_property
-    def START_DATE(self) -> pd.Period:
-        """pd.Period: Start date of the projection."""
-        return pd.Period(f'{self.START_YEAR}-{self.START_MONTH}', freq='M')
-
-    @cached_property
-    def END_DATE(self) -> pd.Period | None:
+    @property
+    def END_DATE(self) -> pd.Period:
         """pd.Period: End date of the projection."""
-        return pd.Period(f'{self.END_YEAR}-{self.END_MONTH}', freq='M')
+        return self._run_config.end_date
 
-    @cached_property
+    @property
     def MAX_T(self) -> int:
         """int: Number of projection months."""
-        max_t = (self.END_DATE - self.START_DATE).n
-        if max_t < 0:
-            raise ValueError(f"END_DATE ({self.END_DATE}) cannot be earlier than START_DATE ({self.START_DATE}).")
-        if max_t > 6000:
-            raise ValueError(f"Projection period ({self.START_DATE} to {self.END_DATE}) exceeds 500 years.")
-        return max_t
+        return self._run_config.max_t
 
     @property
     def time(self) -> int | None:

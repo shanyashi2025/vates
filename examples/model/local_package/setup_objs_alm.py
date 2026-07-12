@@ -39,8 +39,8 @@ def build_fund_master(model_engine: ProjModelEngine, funds_df: pd.DataFrame, reb
     for idx, row in funds_df.iterrows():
         fund_id = str(idx)
         fund = Fund(
-            model_engine,
             fund_id=fund_id,
+            model_engine=model_engine,
             rebalance_policy=build_rebalance_policy(rebalance_policy_df, fund_id),
             asset_categories=row["asset_classes_reported"].split(';')
         )

@@ -27,8 +27,8 @@ class Asset(ABC):
 
     def __init__(
         self,
-        model_engine: ProjModelEngine,
         *,
+        model_engine: ProjModelEngine = None,
         asset_id: str,
         is_profile: bool,
         units: float,
@@ -54,9 +54,12 @@ class Asset(ABC):
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
         """
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
+        self.time: int | None = None
+        self._start_date: pd.Period | None = None
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time = model_engine.time
+            self._start_date = model_engine.START_DATE
 
         self._asset_id: str = asset_id
         self._is_profile: bool = is_profile
@@ -71,7 +74,7 @@ class Asset(ABC):
         if not self._is_profile:
             self._tt_dict['dealing'] = self.time
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property

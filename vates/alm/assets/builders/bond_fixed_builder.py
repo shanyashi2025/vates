@@ -4,7 +4,7 @@ import pandas as pd
 import warnings
 
 from vates._core import ProjModelEngine
-from vates.utils import newton_raphson_ytm, newton_raphson_z_spread, calculate_risk_adj_spot, convert_spot_to_par
+from vates.utils import solve_ytm, solve_z_spread, calculate_risk_adj_spot, convert_spot_to_par
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.enums import AssetClassification
 from vates.alm.assets.bond_fixed import BondFixed
@@ -151,7 +151,7 @@ class BondFixedBuilder:
         cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
 
         freq = 1 if self.coupon_freq == 0 else self.coupon_freq  # 1 for zero coupon bond
-        self.amort_rate = newton_raphson_ytm(
+        self.amort_rate = solve_ytm(
             target_pv=self.abv_price,
             cash_flows=cash_flow_gen.get_future_cash_flows(self.p),
             freq=freq,
@@ -188,7 +188,7 @@ class BondFixedBuilder:
 
         cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
 
-        self.market_spread = newton_raphson_z_spread(
+        self.market_spread = solve_z_spread(
             target_pv=self.mv_price,
             cash_flows=cash_flow_gen.get_future_cash_flows(self.p),
             spots=spots

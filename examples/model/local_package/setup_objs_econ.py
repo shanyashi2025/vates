@@ -269,17 +269,21 @@ class EsgMaster:
         else:
             data = {}
 
+        # update short rate
         for curve_esg_item in self.yield_curves:
             curve_obj = curve_esg_item.econ_obj
             curve_id = curve_obj.curve_id
-            if curve_id not in data:
-                data[f'{curve_id}:short_rate'] = market_info_obj.data.get(f'{curve_id}:short_rate_next', 0)
+            short_rate_id = f'{curve_id}:short_rate'
+            if short_rate_id not in data:
+                data[short_rate_id] = market_info_obj.get(f'{short_rate_id}:next', 0)
                 if curve_obj.last_update != market_info_obj.time:
-                    print(f"{curve_obj.last_update}")
-                    warnings.warn(f'{curve_id} is not updated on {market_info_obj.time} ({market_info_obj.period}), skip update the corresponding short rate.')
+                    warnings.warn(f'{curve_id} is not updated on {market_info_obj.time} ({market_info_obj.period}), '
+                                  f'skip update the corresponding short rate.')
                     continue
-                data[f'{curve_id}:short_rate_next'] = (1 / curve_obj.disc_factors[1]) ** 12 - 1  # convert to annual effective rates
-        market_info_obj.update(data)
+                data[f'{short_rate_id}:next'] = (1 / curve_obj.disc_factors[1]) ** 12 - 1  # convert to annual effective rates
+
+        for key, value in data.items():
+            market_info_obj[key] = value
 
 
 def build_esg_master(model_engine: ProjModelEngine, esg_params: dict, esg_df: pd.DataFrame,
@@ -304,7 +308,7 @@ def build_esg_master(model_engine: ProjModelEngine, esg_params: dict, esg_df: pd
     currencies = build_esg_items(model_engine, econ_cls=Currency, econ_id_attr="currency_id",
                                  esg_params=esg_params.get("currencies"), esg_df=esg_df,
                                  variable_spec={})
-    market_info = EsgItem(descr="general", econ_obj=MarketInfo(model_engine, "general"), esg_data=market_info_df)
+    market_info = EsgItem(descr="general", econ_obj=MarketInfo(model_engine=model_engine), esg_data=market_info_df)
     market_data_provider = EsgMaster(
         yield_curves=yield_curves,
         credit_bands=credit_bands,

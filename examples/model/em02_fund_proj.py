@@ -120,7 +120,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 assets=all_assets,
                 df_config=aging_assets_output_config_df,
                 date_index=p.year * 100 + p.month,
-                out_rootfolder=str(model.workspace_directory)
+                out_rootfolder=str(model.workspace_directory_path)
             )
 
     _ = model.run()

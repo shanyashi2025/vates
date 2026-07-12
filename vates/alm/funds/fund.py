@@ -39,11 +39,13 @@ class Fund:
 
     def __init__(
         self,
-        model_engine: ProjModelEngine,
-        *,
         fund_id: str,
-        rebalance_policy: dict[str, RebalancePolicyParams],
-        asset_categories: list[str]
+        *,
+        model_engine: ProjModelEngine | None = None,
+        fund_calculator = None,
+        asset_allocator = None,
+        rebalance_policy: dict[str, RebalancePolicyParams] = None,
+        asset_categories: list[str] = None,
     ) -> None:
         """
         Initialize a Fund object.
@@ -53,22 +55,26 @@ class Fund:
             rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
             asset_categories (list[str]): Asset categories to be reported.
         """
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time: int = model_engine.time
+            self._start_date: pd.Period = model_engine.START_DATE
 
         self.fund_id = fund_id
         # Asset and liab collections
         self._container: ALContainer = ALContainer()
         self._primary_cash_asset: Cash | None = None
         self._assembled: bool = False
-
-        self._calculator: FundCalculator = FundCalculator(model_engine, fund_id, self._container, asset_categories)
-        self._allocator: AssetAllocator = AssetAllocator(model_engine, fund_id, self._container, rebalance_policy)
-
         self._accum_free_proceeds: float = 0.0
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+        self._calculator: FundCalculator = fund_calculator or FundCalculator(
+            fund_id=fund_id, model_engine=model_engine, container=self._container, asset_categories=asset_categories
+        )
+        self._allocator: AssetAllocator = asset_allocator or AssetAllocator(
+            fund_id=fund_id, model_engine=model_engine, container=self._container, rebalance_policy=rebalance_policy
+        )
+
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property

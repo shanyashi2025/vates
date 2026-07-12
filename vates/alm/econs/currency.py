@@ -11,22 +11,29 @@ class Currency:
         currency_id (str): Currency identifier.
         tdv_fx_rate (TDepVariable): Current FX rate.
     """
-    def __init__(self, model_engine: ProjModelEngine, currency_id: str) -> None:
+    def __init__(
+        self,
+        currency_id: str,
+        *,
+        model_engine: ProjModelEngine | None = None,
+    ) -> None:
         """
         Initialize a Currency object.
 
         Args:
             currency_id (str): Currency identifier.
         """
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
-
         self.currency_id: str = currency_id
         self._last_update: int | None = None
-        self.tdv_fx_rate: TDepVariable = TDepVariable(model_engine, "fx_rate", currency_id, 'currency')
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time: int = model_engine.time
+            self._start_date: pd.Period = model_engine.START_DATE
+
+        self.tdv_fx_rate: TDepVariable = TDepVariable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
+
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property

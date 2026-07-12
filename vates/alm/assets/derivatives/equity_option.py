@@ -1,7 +1,8 @@
-import pandas as pd
 import math
+import pandas as pd
+import warnings
 
-from vates._core import TDepVariable
+from vates._core import ProjModelEngine, TDepVariable
 from vates.utils import t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
@@ -27,11 +28,30 @@ class EquityOption(Asset):
                  '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', 'tdv_units_bd', 'tdv_units_ad',
                  'tdv_cash_flow', 'tdv_stock_price', 'tdv_price', 'tdv_mv_bd', 'tdv_mv_ad',)
 
-    def __init__(self, model_engine, asset_id: str, is_profile: bool, units: float, currency: Currency | None, asset_category: str,
-                 fund_id: str, allocation_group: str, call_or_put: CallOrPut, exercise_date: pd.Period, price: float,
-                 stock_price: float, strike_price: float, equity_index: EquityIndex, rf_curve: YieldCurve,
-                 std_dev: float, is_pay_dividend: bool, classification: AssetClassification = AssetClassification.FVTPL,
-                 purchase_date: pd.Period | None=None):
+    def __init__(
+        self,
+        *,
+        model_engine: ProjModelEngine | None = None,
+        asset_id: str,
+        is_profile: bool,
+        units: float,
+        currency: Currency | None,
+        asset_category: str,
+        fund_id: str,
+        allocation_group: str,
+        call_or_put: CallOrPut,
+        exercise_date: pd.Period,
+        price: float,
+        stock_price: float,
+        strike_price: float,
+        equity_index: EquityIndex,
+        rf_curve: YieldCurve,
+        std_dev: float,
+        is_pay_dividend: bool,
+        classification: AssetClassification = AssetClassification.FVTPL,
+        purchase_date: pd.Period | None = None,
+        _bypass_init_validation: bool = False,
+    ):
         """
         Initialize an EquityOption asset.
 
@@ -58,7 +78,6 @@ class EquityOption(Asset):
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
                          purchase_date=purchase_date, currency=currency, classification=classification,
                          asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
-        t = self.time
         self._call_or_put: CallOrPut = call_or_put
         self._exercise_date: pd.Period = exercise_date
         self._price: float = price
@@ -70,28 +89,34 @@ class EquityOption(Asset):
         self._is_pay_dividend: bool = is_pay_dividend
         self._cash_flow: float = 0.0
 
-        # validate initial price
-        calc_price = BlackScholesCalculator.price(
-            call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
-            r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-            q=math.log(1 + self._equity_index.dividend_yield_ac) if self._is_pay_dividend else 0.0,
-            sigma=self._std_dev, tau=self.os_term_m / 12
-        )
-        tolerance = max(abs(price) * 1e-6, 1e-8)
-        if abs(price - calc_price) > tolerance:
-            raise ValueError(f"Equity option {self.asset_id}: price is calculated as {calc_price: .4f} "
-                             f"based on std_dev, but input price is {price: .4f}.")
+        if model_engine is not None:
+            # validate initial price
+            calc_price = BlackScholesCalculator.price(
+                call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
+                r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
+                q=math.log(1 + self._equity_index.dividend_yield_ac) if self._is_pay_dividend else 0.0,
+                sigma=self._std_dev, tau=self.os_term_m / 12
+            )
+            tolerance = max(abs(price) * 1e-6, 1e-8)
+            if abs(price - calc_price) > tolerance:
+                msg = f"Equity option {self.asset_id} price: input={price: .4f} != calculated={calc_price: .4f}."
+                if _bypass_init_validation:
+                    warnings.warn(msg)
+                else:
+                    raise ValueError(msg)
 
         # create array variables
-        self.tdv_units_bd: TDepVariable = TDepVariable(model_engine, "units_bd", asset_id, 'equity_option')
-        self.tdv_units_ad: TDepVariable = TDepVariable(model_engine, "units_ad", asset_id, 'equity_option')
-        self.tdv_cash_flow: TDepVariable = TDepVariable(model_engine, "cash_flow", asset_id, 'equity_option')
-        self.tdv_stock_price: TDepVariable = TDepVariable(model_engine, "stock_price", asset_id, 'equity_option')
-        self.tdv_price: TDepVariable = TDepVariable(model_engine, "price", asset_id, 'equity_option')
-        self.tdv_mv_bd: TDepVariable = TDepVariable(model_engine, "mv_bd", asset_id, 'equity_option')
-        self.tdv_mv_ad: TDepVariable = TDepVariable(model_engine, "mv_ad", asset_id, 'equity_option')
+        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=asset_id, group='equity_option')
+        self.tdv_units_bd: TDepVariable = create_tdv("units_bd")
+        self.tdv_units_ad: TDepVariable = create_tdv("units_ad")
+        self.tdv_cash_flow: TDepVariable = create_tdv("cash_flow")
+        self.tdv_stock_price: TDepVariable = create_tdv("stock_price")
+        self.tdv_price: TDepVariable = create_tdv("price")
+        self.tdv_mv_bd: TDepVariable = create_tdv("mv_bd")
+        self.tdv_mv_ad: TDepVariable = create_tdv("mv_ad")
 
         if not is_profile:
+            t = self.time
             self.tdv_units_ad[t] = self._units
             self.tdv_stock_price[t] = self._stock_price
             self.tdv_price[t] = self._price

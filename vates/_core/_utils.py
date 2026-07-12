@@ -1,19 +1,26 @@
+import pandas as pd
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, Any
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RunConfig:
     start_year: int | None
     start_month: int | None
+    start_date: pd.Period | None
     end_year: int | None
     end_month: int | None
+    end_date: pd.Period | None
+    max_t: int
     scenario: str | None
     simulations: list[int] | None
     simulation: int | None
-    wsdir: str
+    workspace_directory: str
+    workspace_directory_path: Path
     input_directories: list[str] | None
     results_directory: str
+    results_directory_path: Path
     is_delete_existing_results: bool
     enable_write_proj_result: bool
     stoch_result_file_mode: Literal['w', 'a', None]
@@ -21,28 +28,84 @@ class RunConfig:
     enable_write_runlog: bool
     max_workers: int | None = None
 
-    def __post_init__(self):
-        if self.start_year is None and self.start_month is None and self.end_year is None and self.end_month is None:
-            pass  # bypass if all dates are `None`
+    @classmethod
+    def create(
+        cls,
+        *,
+        start_year: int | None,
+        start_month: int | None,
+        end_year: int | None,
+        end_month: int | None,
+        scenario: str | None,
+        simulations: str | None = None,
+        simulation: int | None = None,
+        workspace_directory: str,
+        input_directories: list[str] | None = None,
+        results_directory: str,
+        is_delete_existing_results: bool,
+        enable_write_proj_result: bool,
+        stoch_result_file_mode: Literal['w', 'a', None] = None,
+        stoch_result_file_id: str | None = None,
+        enable_write_runlog: bool,
+        max_workers: int | None = None
+    ) -> 'RunConfig':
+
+        if start_year is None and start_month is None and end_year is None and end_month is None:
+            start_date = None
+            end_date = None
+            max_t = 0
         else:
-            self.validate_number("start_year", self.start_year, value_type=int, value_min=1900, value_max=5999)
-            self.validate_number("start_month", self.start_month, value_type=int, value_lst=range(1, 13))
-            self.validate_number("end_year", self.end_year, value_type=int, value_min=1900, value_max=5999)
-            self.validate_number("end_month", self.end_month, value_type=int, value_lst=range(1, 13))
-            if self.end_year * 12 + self.end_month < self.start_year * 12 + self.start_month:
-                raise ValueError(f"end_date ('{self.end_year}-{self.end_month}') < start_date ('{self.start_year}-{self.start_month}')")
-        self.validate_string("scenario", self.scenario, allow_none=True)
-        self.validate_string("workspace_directory", self.wsdir)
-        self.validate_list("input_directories", self.input_directories, item_type=str, allow_none=True)
-        self.validate_string("results_directory", self.results_directory)
-        self.validate_bool("is_delete_existing_results", self.is_delete_existing_results)
-        self.validate_bool("enable_write_proj_result", self.enable_write_proj_result)
-        self.validate_string("stoch_result_file_mode", self.stoch_result_file_mode, str_literal=['w', 'a'], allow_none=True)
-        self.validate_string("stoch_result_file_id", self.stoch_result_file_id, allow_none=True)
-        self.validate_bool("enable_write_runlog", self.enable_write_runlog)
-        self.validate_number("simulation", self.simulation, value_type=int, value_min=1, value_max=100_000, allow_none=True)
-        self.validate_list("simulations", self.simulations, item_type=int, len_min=0, len_max=100_000, allow_none=True)
-        self.validate_number("max_workers", self.max_workers, value_type=int, value_min=1, value_max=999, allow_none=True)
+            cls.validate_number("start_year", start_year, value_type=int, value_min=1900, value_max=5999)
+            cls.validate_number("start_month", start_month, value_type=int, value_lst=range(1, 13))
+            cls.validate_number("end_year", end_year, value_type=int, value_min=1900, value_max=5999)
+            cls.validate_number("end_month", end_month, value_type=int, value_lst=range(1, 13))
+            start_date = pd.Period(f'{start_year}-{start_month}', freq='M')
+            end_date = pd.Period(f'{end_year}-{end_month}', freq='M')
+            max_t = (end_date - start_date).n
+            if max_t < 0:
+                raise ValueError(f"{end_date=} < {start_date=}.')")
+            if max_t > 6000:
+                raise ValueError(f"Projection period '{start_date} to {end_date}' exceeds 500 years.")
+        cls.validate_string("scenario", scenario, allow_none=True)
+        if simulations is not None:
+            simulations = parse_str_to_int_list(simulations)
+            cls.validate_list("simulations", simulations, item_type=int, len_min=0, len_max=100_000)
+        cls.validate_number("simulation", simulation, value_type=int, value_min=1, value_max=100_000, allow_none=True)
+        cls.validate_string("workspace_directory", workspace_directory)
+        workspace_directory_path = Path(workspace_directory).resolve()
+        cls.validate_list("input_directories", input_directories, item_type=str, allow_none=True)
+        cls.validate_string("results_directory", results_directory)
+        results_directory_path = (workspace_directory_path / results_directory).resolve()
+        cls.validate_bool("is_delete_existing_results", is_delete_existing_results)
+        cls.validate_bool("enable_write_proj_result", enable_write_proj_result)
+        cls.validate_string("stoch_result_file_mode", stoch_result_file_mode, str_literal=['w', 'a'], allow_none=True)
+        cls.validate_string("stoch_result_file_id", stoch_result_file_id, allow_none=True)
+        cls.validate_bool("enable_write_runlog", enable_write_runlog)
+        cls.validate_number("max_workers", max_workers, value_type=int, value_min=1, value_max=999, allow_none=True)
+
+        return cls(
+            start_year=start_year,
+            start_month=start_month,
+            start_date=start_date,
+            end_year=end_year,
+            end_month=end_month,
+            end_date=end_date,
+            max_t=max_t,
+            scenario=scenario,
+            simulations=simulations,
+            simulation=simulation,
+            workspace_directory=workspace_directory,
+            workspace_directory_path=workspace_directory_path,
+            input_directories=input_directories,
+            results_directory=results_directory,
+            results_directory_path=results_directory_path,
+            is_delete_existing_results=is_delete_existing_results,
+            enable_write_proj_result=enable_write_proj_result,
+            stoch_result_file_mode=stoch_result_file_mode,
+            stoch_result_file_id=stoch_result_file_id,
+            enable_write_runlog=enable_write_runlog,
+            max_workers=max_workers,
+        )
 
     @staticmethod
     def validate_bool(name: str, value, /) -> None:

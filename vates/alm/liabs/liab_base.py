@@ -28,8 +28,8 @@ class Liab(ABC):
 
     def __init__(
         self,
-        model_engine: ProjModelEngine,
         *,
+        model_engine: ProjModelEngine | None = None,
         liab_id: str,
         fund_id: str,
         currency: Currency,
@@ -55,9 +55,12 @@ class Liab(ABC):
             acct_value_if (float): Account value in force.
             asset_share_if (float): Asset share in force.
         """
-        model_engine.attach_time_observer(self)
-        self.time: int = model_engine.time
-        self._start_date: pd.Period = model_engine.START_DATE
+        self.time: int | None = None
+        self._start_date: pd.Period | None = None
+        if model_engine is not None:
+            model_engine.attach_time_observer(self)
+            self.time: int = model_engine.time
+            self._start_date: pd.Period = model_engine.START_DATE
 
         self._liab_id: str = liab_id
         self._fund_id: str = fund_id
@@ -72,7 +75,7 @@ class Liab(ABC):
         self._prem_inc: float = 0.0
         self._tt_dict: dict[str, int] = {"roll_forward": self.time, "update_ad": self.time}
 
-    def sync_time(self, subject: ProjModelEngine) -> None:
+    def sync_time(self, subject) -> None:
         self.time = subject.time
 
     @property

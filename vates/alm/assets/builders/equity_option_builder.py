@@ -1,7 +1,7 @@
 import pandas as pd
 import math
 
-
+from vates._core import ProjModelEngine
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.derivatives import EquityOption, CallOrPut, BlackScholesCalculator
 
@@ -10,7 +10,28 @@ class EquityOptionBuilder:
     """
     Builder for creating and initializing EquityOption objects.
     """
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        model_engine: ProjModelEngine,
+        asset_id: str,
+        asset_category: str,
+        fund_id: str,
+        allocation_group: str,
+        currency: Currency,
+        is_profile: bool,
+        call_or_put: CallOrPut,
+        exercise_date: pd.Period,
+        units: float,
+        stock_price: float,
+        strike_price: float,
+        equity_index: EquityIndex,
+        rf_curve: YieldCurve,
+        is_pay_dividend: bool,
+        price: float | None = None,
+        std_dev: float | None = None,
+        *args,
+        **kwargs
+    ):
         """
         Initialize a EquityOptionBuilder with all required parameters.
 
@@ -33,25 +54,25 @@ class EquityOptionBuilder:
             std_dev (float): Standard deviation, i.e. volatility.
             is_pay_dividend (bool): True if paying dividend, otherwise False.
         """
-        self.model_engine = kwargs['model']
-        self.asset_id: str = kwargs['asset_id']
-        self.asset_category: str = kwargs['asset_category']
-        self.fund_id: str = kwargs['fund_id']
-        self.allocation_group: str = kwargs['allocation_group']
-        self.currency: Currency = kwargs['currency']
-        self.is_profile: bool = kwargs['is_profile']
-        self.call_or_put: CallOrPut = kwargs['call_or_put']
-        self.exercise_date: pd.Period = kwargs['exercise_date']
-        self.units: float = kwargs['units']
-        self.stock_price: float = kwargs['stock_price']
-        self.strike_price: float = kwargs['strike_price']
-        self.equity_index: EquityIndex = kwargs['equity_index']
-        self.rf_curve: YieldCurve = kwargs['rf_curve']
-        self.is_pay_dividend: bool = kwargs['is_pay_dividend']
+        self.model_engine: ProjModelEngine = model_engine
+        self.asset_id: str = asset_id
+        self.asset_category: str = asset_category
+        self.fund_id: str = fund_id
+        self.allocation_group: str = allocation_group
+        self.currency: Currency = currency
+        self.is_profile: bool = is_profile
+        self.call_or_put: CallOrPut = call_or_put
+        self.exercise_date: pd.Period = exercise_date
+        self.units: float = units
+        self.stock_price: float = stock_price
+        self.strike_price: float = strike_price
+        self.equity_index: EquityIndex = equity_index
+        self.rf_curve: YieldCurve = rf_curve
+        self.is_pay_dividend: bool = is_pay_dividend
         if self.os_term_m <= 0: raise ValueError(f'Equity option {self.asset_id} has alreay expired, can not be built.')
 
-        self.price: float | None = kwargs.get('price', None)
-        self.std_dev: float | None = kwargs.get('std_dev', None)
+        self.price: float | None = price
+        self.std_dev: float | None = std_dev
 
     @property
     def p(self) -> pd.Period:
