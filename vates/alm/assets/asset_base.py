@@ -22,8 +22,8 @@ class Asset(ABC):
         _fund_id (str): Associated fund identifier.
         _allocation_group (str): Allocation group for the asset.
     """
-    __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_asset_id', '_is_profile', '_units', '_purchase_date',
-                 '_currency', '_classification', '_asset_category', '_fund_id', '_allocation_group', '_tc_dict')
+    __slots__ = ('__dict__', '__weakref__', 'time', '_start_date', '_tt_dict', '_asset_id', '_is_profile', '_units',
+                 '_purchase_date', '_currency', '_classification', '_asset_category', '_fund_id', '_allocation_group')
 
     def __init__(
         self,
@@ -56,7 +56,7 @@ class Asset(ABC):
         """
         model_engine.attach_time_observer(self)
         self.time: int = model_engine.time
-        self.period: pd.Period = model_engine.period
+        self._start_date: pd.Period = model_engine.START_DATE
 
         self._asset_id: str = asset_id
         self._is_profile: bool = is_profile
@@ -67,13 +67,16 @@ class Asset(ABC):
         self._asset_category: str = asset_category
         self._fund_id: str = fund_id
         self._allocation_group: str = allocation_group
-        self._tc_dict: dict[str, int] = {"roll_forward": self.time}
+        self._tt_dict: dict[str, int] = {"roll_forward": self.time}
         if not self._is_profile:
-            self._tc_dict['dealing'] = self.time
+            self._tt_dict['dealing'] = self.time
 
     def sync_time(self, subject: ProjModelEngine) -> None:
         self.time = subject.time
-        self.period = subject.period
+
+    @property
+    def period(self) -> pd.Period:
+        return self._start_date + self.time
 
     @property
     def asset_id(self) -> str:
@@ -174,12 +177,12 @@ class Asset(ABC):
     @property
     def last_roll_forward(self) -> int:
         """int: Last roll forward time index."""
-        return self._tc_dict.get('roll_forward', None)
+        return self._tt_dict.get('roll_forward', None)
 
     @property
     def last_dealing(self) -> int:
         """int: Last update after dealing time index."""
-        return self._tc_dict.get('dealing', None)
+        return self._tt_dict.get('dealing', None)
 
     @abstractmethod
     def roll_forward(self, *args, **kwargs):

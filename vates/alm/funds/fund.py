@@ -55,7 +55,7 @@ class Fund:
         """
         model_engine.attach_time_observer(self)
         self.time: int = model_engine.time
-        self.period: pd.Period = model_engine.period
+        self._start_date: pd.Period = model_engine.START_DATE
 
         self.fund_id = fund_id
         # Asset and liab collections
@@ -70,7 +70,10 @@ class Fund:
 
     def sync_time(self, subject: ProjModelEngine) -> None:
         self.time = subject.time
-        self.period = subject.period
+
+    @property
+    def period(self) -> pd.Period:
+        return self._start_date + self.time
 
     @property
     def assets(self) -> list[Asset]:

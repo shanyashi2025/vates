@@ -19,7 +19,7 @@ class FundCalculator:
     def __init__(self, model_engine: ProjModelEngine, fund_id: str, container: ALContainer, asset_categories: list[str]):
         model_engine.attach_time_observer(self)
         self.time: int = model_engine.time
-        self.period: pd.Period = model_engine.period
+        self._start_date: pd.Period = model_engine.START_DATE
 
         self.fund_id: str = fund_id
         self.container: ALContainer = container
@@ -71,7 +71,10 @@ class FundCalculator:
 
     def sync_time(self, subject: ProjModelEngine) -> None:
         self.time = subject.time
-        self.period = subject.period
+
+    @property
+    def period(self) -> pd.Period:
+        return self._start_date + self.time
 
     @t_checker({"proc_assets_bd": -1, "proc_assets_ad": -1}, "proc_assets_bd")
     def process_assets_before_dealing(self) -> None:

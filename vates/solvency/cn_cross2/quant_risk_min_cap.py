@@ -211,7 +211,7 @@ class MinCapUnit:
     def __init__(self, model_engine: ProjModelEngine, name: str, account_type: AccountType):
         model_engine.attach_time_observer(self)
         self.time: int = model_engine.time
-        self.period: pd.Period = model_engine.period
+        self._start_date: pd.Period = model_engine.START_DATE
 
         self.name: str = name
         self._account_type: AccountType = account_type
@@ -231,7 +231,10 @@ class MinCapUnit:
 
     def sync_time(self, subject: ProjModelEngine) -> None:
         self.time = subject.time
-        self.period = subject.period
+
+    @property
+    def period(self) -> pd.Period:
+        return self._start_date + self.time
 
     def calculate_minimum_capital(self, mc_in: MinCapInputer) -> None:
         t = self.time
@@ -292,7 +295,7 @@ class MinCapConsolidator:
     def __init__(self, model_engine: ProjModelEngine, name: str, unit_list: list[MinCapUnit]):
         model_engine.attach_time_observer(self)
         self.time: int = model_engine.time
-        self.period: pd.Period = model_engine.period
+        self._start_date: pd.Period = model_engine.START_DATE
 
         self.name: str = name
         self._unit_list: list[MinCapUnit] = unit_list
@@ -313,7 +316,10 @@ class MinCapConsolidator:
 
     def sync_time(self, subject: ProjModelEngine) -> None:
         self.time = subject.time
-        self.period = subject.period
+
+    @property
+    def period(self) -> pd.Period:
+        return self._start_date + self.time
 
     def calculate_minimum_capital(self) -> None:
         t, p = self.time, self.period

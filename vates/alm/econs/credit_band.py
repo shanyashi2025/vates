@@ -26,7 +26,7 @@ class CreditBand:
         """
         model_engine.attach_time_observer(self)
         self.time: int = model_engine.time
-        self.period: pd.Period = model_engine.period
+        self._start_date: pd.Period = model_engine.START_DATE
 
         self.band_id: str = band_id
         self._spread: npt.NDArray[np.float64] | None = None
@@ -39,7 +39,10 @@ class CreditBand:
 
     def sync_time(self, subject: ProjModelEngine) -> None:
         self.time = subject.time
-        self.period = subject.period
+
+    @property
+    def period(self) -> pd.Period:
+        return self._start_date + self.time
 
     @property
     def last_update(self) -> int | None:

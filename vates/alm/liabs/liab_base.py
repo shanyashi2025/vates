@@ -22,8 +22,9 @@ class Liab(ABC):
         _acct_value (float): Account value in force.
         _asset_share (float): Asset share in force.
     """
-    __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_liab_id', '_fund_id', '_currency', '_entry_date', '_num_pols',
-                 '_surr_val', '_math_res', '_acct_value', '_asset_share', '_cash_flow', '_prem_inc', '_tc_dict')
+    __slots__ = ('__dict__', '__weakref__', 'time', '_start_date', '_tt_dict', '_liab_id', '_fund_id', '_currency',
+                 '_entry_date', '_num_pols', '_surr_val', '_math_res', '_acct_value', '_asset_share', '_cash_flow',
+                 '_prem_inc')
 
     def __init__(
         self,
@@ -56,7 +57,8 @@ class Liab(ABC):
         """
         model_engine.attach_time_observer(self)
         self.time: int = model_engine.time
-        self.period: pd.Period = model_engine.period
+        self._start_date: pd.Period = model_engine.START_DATE
+
         self._liab_id: str = liab_id
         self._fund_id: str = fund_id
         self._currency: Currency = currency
@@ -68,11 +70,14 @@ class Liab(ABC):
         self._asset_share: float = asset_share_if
         self._cash_flow: float = 0.0
         self._prem_inc: float = 0.0
-        self._tc_dict: dict[str, int] = {"roll_forward": self.time, "update_ad": self.time}
+        self._tt_dict: dict[str, int] = {"roll_forward": self.time, "update_ad": self.time}
 
     def sync_time(self, subject: ProjModelEngine) -> None:
         self.time = subject.time
-        self.period = subject.period
+
+    @property
+    def period(self) -> pd.Period:
+        return self._start_date + self.time
 
     @property
     def liab_id(self) -> str:
@@ -93,12 +98,12 @@ class Liab(ABC):
     @property
     def last_roll_forward(self) -> int | None:
         """int | None: Last roll forward time index."""
-        return self._tc_dict['roll_forward']
+        return self._tt_dict['roll_forward']
 
     @property
     def last_update_ad(self) -> int | None:
         """int | None: Last update after dealing time index."""
-        return self._tc_dict['update_ad']
+        return self._tt_dict['update_ad']
 
     @abstractmethod
     def roll_forward(self, *args, **kwargs):

@@ -9,28 +9,35 @@ def new_business_convolve(nb_profile: np.ndarray, nb_premium: float, sales_file:
 
 T_CHECKER_STRICT_LEVEL = "WARNING"  # "ERROR"
 
-def t_checker(checklist: dict[str, int] | None, store_key: str | None = None, lct_dict_name: str = '_tc_dict'):
-    """Check calculation period"""
+def t_checker(checklist: dict[str, int] | None, tracker_key: str | None = None, tt_dict_name: str = '_tt_dict'):
+    """Check if `time` is appropriate for the calculation
+
+    Args:
+        checklist (dict[str, int]): A dictionary containing items to be verified, value (int) represents the time offset.
+        tracker_key (str): Update the time tracker dict once the function called. Defaults to None.
+        tt_dict_name (str): The name of the time tracker dict. Defaults to '_tt_dict'.
+
+    Returns:
+        A decorator.
+    """
     def decorator(func):
         def wrapper(obj, *args, **kwargs):
-            if not hasattr(obj, lct_dict_name):
-                setattr(obj, lct_dict_name, {})
-            lct_dict = getattr(obj, lct_dict_name)
+            if not hasattr(obj, tt_dict_name):
+                setattr(obj, tt_dict_name, {})
+            tt_dict = getattr(obj, tt_dict_name)
             t = obj.time
             if checklist is not None:
                 for key, offset in checklist.items():
-                    lct = lct_dict.get(key, None)
-                    if lct is not None and lct != t + offset:
-                        p = obj.period
-                        lcp = p + (lct - t)
-                        msg = f"'{obj}' on {t} ({p}): '{key}' last calculated on {lct} ({lcp}), expected {t + offset} ({p + offset})."
+                    _t = tt_dict.get(key, None)
+                    if _t is not None and _t != t + offset:
+                        msg = f"'{obj}' on {t}: '{key}' last calculated on {_t}, expected {t + offset}."
                         if T_CHECKER_STRICT_LEVEL.upper() == "ERROR":
                             raise ValueError(msg)
                         else:
                             warnings.warn(msg)
             result = func(obj, *args, **kwargs)
-            if store_key is not None:
-                lct_dict[store_key] = t
+            if tracker_key is not None:
+                tt_dict[tracker_key] = t
             return result
         return wrapper
     return decorator

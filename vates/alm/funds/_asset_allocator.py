@@ -53,7 +53,8 @@ class AssetAllocator:
                  rebalance_policy: dict[str, RebalancePolicyParams]):
         model_engine.attach_time_observer(self)
         self.time: int = model_engine.time
-        self.period: pd.Period = model_engine.period
+        self._start_date: pd.Period = model_engine.START_DATE
+
         self.fund_id: str = fund_id
         self.container: ALContainer = container
         self.rebalance_policy = rebalance_policy
@@ -71,7 +72,10 @@ class AssetAllocator:
 
     def sync_time(self, subject: ProjModelEngine) -> None:
         self.time = subject.time
-        self.period = subject.period
+
+    @property
+    def period(self) -> pd.Period:
+        return self._start_date + self.time
 
     @staticmethod
     def list_ag_in_sequence(fund_id: str, rebalance_policy: dict[str, RebalancePolicyParams]) -> list[str]:

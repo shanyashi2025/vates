@@ -20,7 +20,7 @@ class Currency:
         """
         model_engine.attach_time_observer(self)
         self.time: int = model_engine.time
-        self.period: pd.Period = model_engine.period
+        self._start_date: pd.Period = model_engine.START_DATE
 
         self.currency_id: str = currency_id
         self._last_update: int | None = None
@@ -28,7 +28,10 @@ class Currency:
 
     def sync_time(self, subject: ProjModelEngine) -> None:
         self.time = subject.time
-        self.period = subject.period
+
+    @property
+    def period(self) -> pd.Period:
+        return self._start_date + self.time
 
     @property
     def last_update(self) -> int | None:
