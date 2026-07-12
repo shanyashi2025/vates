@@ -188,7 +188,7 @@ class TDepVariable(ProjVariable):
         _assigned (np.ndarray): True if value has been assigned otherwise False.
     """
 
-    __slots__ = ('_max_t', '_period_time_pairs', '_result', '_assigned',)
+    __slots__ = ('_max_t', '_start_date_ordinal', '_result', '_assigned',)
 
     def __init__(self, model_engine: ProjModelEngine, name: str, owner: str, group: str, dims: list | None = None):
         """
@@ -202,8 +202,8 @@ class TDepVariable(ProjVariable):
             dims (list|None): Dimensions.
         """
         super().__init__(model_engine, name, owner, group, dims)
-        self._max_t = model_engine.MAX_T
-        self._period_time_pairs = model_engine.period_time_pairs
+        self._max_t: int = model_engine.MAX_T
+        self._start_date_ordinal: int = model_engine.START_YEAR * 12 + model_engine.START_MONTH  # ordinal encoding
         self._result = np.zeros(self._shape)
         self._assigned = np.array([False] * (self._max_t + 1))
 
@@ -245,7 +245,7 @@ class TDepVariable(ProjVariable):
                 return None
             t = index
         elif type(index) == pd.Period:
-            t = self._period_time_pairs.get(index, None)
+            t = index.year * 12 + index.month - self._start_date_ordinal
             if t is None:
                 warnings.warn(f"Invalid {index=}.")
                 return None
@@ -270,7 +270,7 @@ class TDepVariable(ProjVariable):
                 return
             t = index
         elif type(index) == pd.Period:
-            t = self._period_time_pairs.get(index, None)
+            t = index.year * 12 + index.month - self._start_date_ordinal
             if t is None:
                 warnings.warn(f"Assignment failed, invalid {index=}.")
                 return

@@ -601,10 +601,6 @@ class ProjModelEngine:
             raise ValueError(f"Projection period ({self.START_DATE} to {self.END_DATE}) exceeds 500 years.")
         return max_t
 
-    @cached_property
-    def period_time_pairs(self) -> dict[pd.Period, int]:
-        return {self.START_DATE + t: t for t in range(0, self.MAX_T + 1)}
-
     @property
     def time(self) -> int | None:
         """pd.Period: Current projection time index."""
