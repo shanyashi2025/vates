@@ -20,7 +20,7 @@ def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int |
 
         'bond': [
             'asset_id', 'is_profile', 'units', 'currency_id', 'fund_id', 'allocation_group', 'asset_classification',
-            'issue_date', 'maturity_date', 'coupon_rate', 'coupon_freq', 'face_value', 'redemp_sched_id',
+            'issue_date', 'maturity_date', 'coupon_rate', 'coupon_freq', 'face_value', 'provided_cash_flow_id',
             'mv_price_dirty', 'market_spread', 'abv_price_dirty', 'amort_rate', 'rf_curve_id', 'credit_band_id',
             'purchase_date', 'pre_calculation',
         ],
@@ -115,7 +115,7 @@ def output_asset_fixed_bond(bond: BondFixed, out_file: str, header: list[str]) -
     data_dict['maturity_date'] = params.maturity_date
     data_dict['coupon_freq'] = params.coupon_freq
     data_dict['face_value'] = params.face_value
-    data_dict['redemp_sched_id'] = getattr(bond, 'redemp_sched_id', 'none')
+    data_dict['provided_cash_flow_id'] = getattr(bond, 'provided_cash_flow_id', 'none')
     data_dict['mv_price_dirty'] = bond.mv_price
     data_dict['market_spread'] = bond.market_spread
     data_dict['abv_price_dirty'] = bond.abv_price

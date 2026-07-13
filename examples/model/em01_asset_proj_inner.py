@@ -35,7 +35,7 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
         "assets_cash": file_df_dict["assets_cash"],
         "assets_bond": file_df_dict.get("assets_bond"),
         "assets_equity": file_df_dict.get("assets_equity"),
-        "redemp_schedule": file_df_dict.get("redemp_schedule"),
+        "bond_provided_cash_flow": file_df_dict.get("bond_provided_cash_flow"),
     }
 
     assets = []

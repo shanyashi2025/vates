@@ -5,5 +5,5 @@
     "credit_bands": {"index_col": "credit_band_id"},
     "equity_indices": {"index_col": "index_id"},
     "market_info": {"index_col": "data_item"},
-    "redemp_schedule": {"allow_not_found": true, "keep_default_na": false}
+    "bond_provided_cash_flow": {"allow_not_found": true, "keep_default_na": false}
 }

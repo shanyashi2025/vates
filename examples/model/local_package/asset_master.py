@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from typing import Self
 
@@ -80,7 +81,7 @@ class AssetMaster:
         if df_dict.get(name := 'assets_bond', None) is not None:
             fixed_bond_ls = cls.build_assets_fixed_bond_from_df(
                 model_engine=model_engine, df=df_dict[name].copy(), fund_id=fund_id,
-                redemp_schedule_df= df_dict.get('redemp_schedule', None),
+                provided_cash_flow_df= df_dict.get('bond_provided_cash_flow', None),
                 currencies=currencies, yield_curves=yield_curves, credit_bands=credit_bands
             )
         else:
@@ -199,7 +200,7 @@ class AssetMaster:
         *,
         model_engine: ProjModelEngine,
         fund_id: str | None,
-        redemp_schedule_df: pd.DataFrame,
+        provided_cash_flow_df: pd.DataFrame | None = None,
         currencies: list['Currency'],
         yield_curves: list['YieldCurve'],
         credit_bands: list['CreditBand'],
@@ -211,7 +212,7 @@ class AssetMaster:
             model_engine: Model object.
             df (pd.DataFrame): DataFrame containing bond asset dataF.
             fund_id (str | None): Fund id to filter the df, or None.
-            redemp_schedule_df (pd.DataFrame): DataFrame of redemption schedules.
+            provided_cash_flow_df (pd.DataFrame): DataFrame of provided cash flow.
             currencies (list): List of Currency objects.
             yield_curves (list): List of YieldCurve objects.
             credit_bands (list): List of CreditBand objects.
@@ -231,8 +232,18 @@ class AssetMaster:
             rf_curve = next((x for x in yield_curves if x.curve_id == rf_curve_id), None)
             credit_band_id = row["credit_band_id"]
             credit_band = next((x for x in credit_bands if x.band_id == credit_band_id), None)
-            redemp_sched_id = row["redemp_sched_id"]
-            redemp_sched = redemp_schedule_df[redemp_sched_id].values if redemp_sched_id.lower() != 'none' else None
+            provided_cash_flow_id = row["provided_cash_flow_id"]
+            is_cash_flow_provided = provided_cash_flow_id.lower() != 'none'
+            if is_cash_flow_provided:
+                provided_cash_flow_dict = cls.get_provided_bond_cash_flow_from_df(
+                    df=provided_cash_flow_df,
+                    provided_cash_flow_id=provided_cash_flow_id,
+                    issue_date=pd.Period(row["issue_date"], freq='M'),
+                    maturity_date=pd.Period(row["maturity_date"], freq='M'),
+                )
+            else:
+                provided_cash_flow_dict = None
+
             pre_calc = row["pre_calculation"]
 
             # create instance
@@ -250,7 +261,7 @@ class AssetMaster:
                 coupon_rate=row["coupon_rate"],
                 coupon_freq=row["coupon_freq"],
                 face_value=row["face_value"],
-                redemp_sched=redemp_sched,
+                provided_cash_flow_dict=provided_cash_flow_dict,
                 units=row["units"],
                 classification=AssetClassification(row["asset_classification"]),
                 rf_curve=rf_curve,
@@ -261,8 +272,8 @@ class AssetMaster:
                 is_profile=False
             )
             # dynamically create attribute(s)
-            if redemp_sched_id.lower() != 'none':
-                setattr(fixed_bond, 'redemp_sched_id', redemp_sched_id)
+            if is_cash_flow_provided:
+                setattr(fixed_bond, 'provided_cash_flow_id', provided_cash_flow_id)
             for col in df_flt.columns:
                 if col.startswith('tag__'):
                     setattr(fixed_bond, col[5:], row[col])
@@ -270,6 +281,29 @@ class AssetMaster:
             fixed_bond_list.append(fixed_bond)
 
         return fixed_bond_list
+
+    @classmethod
+    def get_provided_bond_cash_flow_from_df(
+        cls,
+        df: pd.DataFrame,
+        provided_cash_flow_id: str,
+        *,
+        issue_date: pd.Period,
+        maturity_date: pd.Period
+    ) -> dict[str, np.ndarray]:
+        n_months = (maturity_date - issue_date).n
+        arr_dict = {"principal": np.zeros(n_months), "interest": np.zeros(n_months)}
+
+        df = df.loc[(df["provided_cash_flow_id"] == provided_cash_flow_id)].astype(
+            {"month": int, "principal": float, "interest": float}).set_index("month")
+
+        for i in range(n_months):
+            month = i + 1
+            if month in df.index:
+                arr_dict["principal"][i] = df.at[month, "principal"]
+                arr_dict["interest"][i] = df.at[month, "interest"]
+
+        return arr_dict
 
     @classmethod
     def build_profile_fixed_bond_from_df(

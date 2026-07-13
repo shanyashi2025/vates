@@ -12,5 +12,5 @@ liabs,liabs.csv
 epl,epl.csv
 rebalance_policy,rebalance_policy.csv
 asset_allocation,asset_allocation.csv
-redemp_schedule,redemp_schedule.csv
+bond_provided_cash_flow,bond_provided_cash_flow.csv
 aging_assets_output_config,aging_assets_output_config.csv

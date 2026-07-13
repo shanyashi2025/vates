@@ -2,7 +2,7 @@
     "funds": {"index_col": "fund_id"},
     "yield_curves": {"index_col": "curve_id"},
     "credit_bands": {"index_col": "credit_band_id"},
-    "redemp_schedule": {"allow_not_found": true, "keep_default_na": false},
+    "bond_provided_cash_flow": {"allow_not_found": true, "keep_default_na": false},
     "aging_assets_input_filelist": {"index_col": "date", "allow_not_found": true},
     "epl": {"index_col": ["liab_id", "var_name"]},
     "cross_mc_factor": {"index_col": "date"}

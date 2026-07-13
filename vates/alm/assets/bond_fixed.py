@@ -8,7 +8,13 @@ from vates.utils import calculate_risk_adj_spot, t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.assets.asset_base import Asset
-from vates.alm.assets._bond_fixed_component import BondFixedParameters, BondFixedCashFlowGenerator, BondFixedPricer, BondFixedRiskCalculator
+from vates.alm.assets._bond_fixed_component import (
+    BondFixedParameters,
+    BondFixedCashFlowGenerator,
+    BondFixedCashFlowProvider,
+    BondFixedPricer,
+    BondFixedRiskCalculator
+)
 
 
 class BondFixed(Asset):
@@ -28,7 +34,7 @@ class BondFixed(Asset):
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
     __slots__ = ('_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
-                 '_credit_band', '_cash_flow', 'cash_flow_gen', 'pricer', 'risk_calc',
+                 '_credit_band', '_cash_flow', 'cash_flow_gen', 'pricer', 'risk_calc', '_risk_mectrics'
                  'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
                  'tdv_interest', 'tdv_principal', 'tdv_default_recovery', 'tdv_mv_price', 'tdv_abv_price',
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad',)
@@ -56,7 +62,7 @@ class BondFixed(Asset):
         asset_category: str = "",
         fund_id: str = "",
         allocation_group: str = "",
-        redemp_sched: np.ndarray | None = None,
+        provided_cash_flow_dict: dict[str, np.ndarray] | None = None,
         credit_band: CreditBand | None = None,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
@@ -78,7 +84,7 @@ class BondFixed(Asset):
             coupon_rate (float): Coupon rate.
             coupon_freq (int): Coupon frequency per year, [0, 1, 2, 4, 12].
             face_value (float): Face value of the bond.
-            redemp_sched (np.ndarray | None): Redemption schedule.
+            provided_cash_flow_dict (np.ndarray | None): Dict of provided bond cash flows.
             mv_price (float): Market value price (dirty value).
             market_spread (float): Market spread.
             abv_price (float): Amortized book value price (dirty value).
@@ -98,7 +104,6 @@ class BondFixed(Asset):
             coupon_rate=coupon_rate,
             coupon_freq=coupon_freq,
             face_value=face_value,
-            redemp_sched=redemp_sched
         )
         self._mv_price_dirty: float = mv_price
         self._market_spread: float = market_spread
@@ -107,11 +112,15 @@ class BondFixed(Asset):
         self._rf_curve: YieldCurve = rf_curve
         self._credit_band: CreditBand | None = credit_band
         self._cash_flow: float = 0.0
+        self._risk_mectrics: dict[str, float] | None = None
 
         # Compose with specialized components
-        self.cash_flow_gen = BondFixedCashFlowGenerator(self._params)
-        self.pricer = BondFixedPricer(self._params, self.cash_flow_gen)
-        self.risk_calc = BondFixedRiskCalculator(self._params, self.cash_flow_gen, self.pricer)
+        if provided_cash_flow_dict is None:
+            self.cash_flow_gen = BondFixedCashFlowGenerator(self._params)
+        else:
+            self.cash_flow_gen = BondFixedCashFlowProvider(self._params, provided_cash_flow_dict)
+        self.pricer = BondFixedPricer(self.cash_flow_gen)
+        self.risk_calc = BondFixedRiskCalculator(self.pricer)
 
         # validate profile price
         if is_profile:
@@ -244,7 +253,7 @@ class BondFixed(Asset):
     def is_alive_beg(self) -> bool:
         return self.period <= self._params.maturity_date
 
-    @t_checker({"roll_forward": 0})
+    @t_checker({"roll_forward": 0}, "risk_metrics")
     def calculate_risk_metrics(self, eff_dur_delta: float=0.001):
         """
         Calculate all risk metrics for the bond.
@@ -252,19 +261,13 @@ class BondFixed(Asset):
         Args:
             eff_dur_delta (float): Delta yiled curve for effective duration calculation.
         """
-        self.risk_calc.calculate_all_risk_metrics(self.period, self._mv_price_dirty, self.ra_spots, eff_dur_delta)
+        self._risk_mectrics = self.risk_calc.calculate_all_risk_metrics(
+            valn_date=self.period, market_price=self._mv_price_dirty, spots=self.ra_spots, eff_dur_delta=eff_dur_delta
+        )
 
-    def get_risk_metrics(self, var_name: str=None) -> dict[str, float] | float | None:
-        """
-        Get all calculated risk metrics for the bond.
-
-        Returns:
-            dict[str, float]: dictionary of risk metrics.
-        """
-        if var_name:
-            return None if var_name not in self.risk_calc.risk_metrics else self.risk_calc.risk_metrics[var_name]
-        else:
-            return self.risk_calc.risk_metrics
+    @property
+    def risk_metrics(self) -> dict[str, float] | None:
+        return self._risk_mectrics
 
     @t_checker({"roll_forward": -1}, "roll_forward")
     def roll_forward(self, *, update_mv_price: bool = True, **kwargs) -> None:

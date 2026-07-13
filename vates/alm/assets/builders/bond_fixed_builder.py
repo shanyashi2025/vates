@@ -1,5 +1,4 @@
 import numpy as np
-import numpy.typing as npt
 import pandas as pd
 import warnings
 
@@ -8,7 +7,9 @@ from vates.utils import solve_ytm, solve_z_spread, calculate_risk_adj_spot, conv
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.enums import AssetClassification
 from vates.alm.assets.bond_fixed import BondFixed
-from vates.alm.assets._bond_fixed_component import BondFixedParameters, BondFixedCashFlowGenerator, BondFixedPricer
+from vates.alm.assets._bond_fixed_component import (
+    BondFixedParameters, BondFixedCashFlowGenerator, BondFixedCashFlowProvider, BondFixedPricer
+)
 
 
 class BondFixedBuilder:
@@ -32,7 +33,7 @@ class BondFixedBuilder:
         rf_curve: YieldCurve | None,
         credit_band: CreditBand | None,
         is_profile: bool,
-        redemp_sched: npt.NDArray[np.float64] | None = None,
+        provided_cash_flow_dict: dict[str, np.ndarray] | None = None,
         coupon_rate: float | None = None,
         abv_price: float | None = None,
         amort_rate: float | None = None,
@@ -80,7 +81,7 @@ class BondFixedBuilder:
 
         self.coupon_freq: int = coupon_freq
         self.face_value: float = face_value
-        self.redemp_sched: npt.NDArray[np.float64] | None = redemp_sched
+        self.provided_cash_flow_dict: dict[str, np.ndarray] | None = provided_cash_flow_dict
 
         self.rf_curve: YieldCurve = rf_curve
         self.credit_band: CreditBand | None = credit_band
@@ -145,10 +146,12 @@ class BondFixedBuilder:
             coupon_rate=self.coupon_rate,
             coupon_freq=self.coupon_freq,
             face_value=self.face_value,
-            redemp_sched=self.redemp_sched
         )
 
-        cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
+        if self.provided_cash_flow_dict is None:
+            cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
+        else:
+            cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
 
         freq = 1 if self.coupon_freq == 0 else self.coupon_freq  # 1 for zero coupon bond
         self.amort_rate = solve_ytm(
@@ -183,10 +186,12 @@ class BondFixedBuilder:
             coupon_rate=self.coupon_rate,
             coupon_freq=self.coupon_freq,
             face_value=self.face_value,
-            redemp_sched=self.redemp_sched
         )
 
-        cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
+        if self.provided_cash_flow_dict is None:
+            cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
+        else:
+            cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
 
         self.market_spread = solve_z_spread(
             target_pv=self.mv_price,
@@ -217,10 +222,12 @@ class BondFixedBuilder:
             coupon_rate=self.coupon_rate,
             coupon_freq=self.coupon_freq,
             face_value=self.face_value,
-            redemp_sched=self.redemp_sched
         )
-        cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
-        pricer = BondFixedPricer(bond_params, cash_flow_gen)
+        if self.provided_cash_flow_dict is None:
+            cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
+        else:
+            cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
+        pricer = BondFixedPricer(cash_flow_gen)
 
         self.mv_price = pricer.calculate_market_price(self.p, spots)
 
@@ -248,10 +255,12 @@ class BondFixedBuilder:
             coupon_rate=self.coupon_rate,
             coupon_freq=self.coupon_freq,
             face_value=self.face_value,
-            redemp_sched=self.redemp_sched
         )
-        cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
-        pricer = BondFixedPricer(bond_params, cash_flow_gen)
+        if self.provided_cash_flow_dict is None:
+            cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
+        else:
+            cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
+        pricer = BondFixedPricer(cash_flow_gen)
 
         calc_price = pricer.calculate_market_price(self.p, spots)  # typically > mv_price if market_spread > 0
         self.face_value *= self.mv_price / calc_price  # scale face_value that gives mv_price
@@ -299,7 +308,7 @@ class BondFixedBuilder:
             coupon_rate=self.coupon_rate,
             coupon_freq=self.coupon_freq,
             face_value=self.face_value,
-            redemp_sched=self.redemp_sched,
+            provided_cash_flow_dict=self.provided_cash_flow_dict,
             mv_price=self.mv_price,
             market_spread=self.market_spread,
             abv_price=self.abv_price,

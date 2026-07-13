@@ -5,4 +5,4 @@ assets_bond,assets_bond.csv
 esg,esg.csv
 esg_params,esg_params.json
 market_info,market_info.csv
-redemp_schedule,redemp_schedule.csv
+bond_provided_cash_flow,bond_provided_cash_flow.csv
