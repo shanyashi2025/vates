@@ -493,13 +493,23 @@ class ProjModelEngine:
             raise FileNotFoundError(f"Excel file '{filename}' does not exist in input directories. {ext_warn}")
 
     def read_parquet(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
-                     allow_not_found: bool = True, **kwargs) -> pd.DataFrame | None:
+                     allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
         filepath = self.get_filepath(filename, first_or_last_seen=first_or_last_seen)
         if filepath is not None:
-            import pyarrow.dataset as ds
-            dataset = ds.dataset(filepath, format="parquet")
-            table = dataset.to_table(**kwargs)
-            return table.to_pandas()
+            try:
+                import pyarrow as pa
+                has_pyarrow = True
+            except ImportError:
+                has_pyarrow = False
+                pa = ...
+                msg = f"Need to install 'pyarrow' library (`pip install pyarrow`)."
+                warnings.warn(msg); self.include_traced_message(f"ERROR: {msg}")
+            if has_pyarrow:
+                dataset = pa.dataset.dataset(filepath, format="parquet")
+                table = dataset.to_table(**kwargs)
+                return table.to_pandas()
+            else:
+                return None
         elif allow_not_found:
             self.include_traced_message(f"INFO: parquet file '{filename}' not found, 'None' is return.")
             return None

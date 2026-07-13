@@ -76,7 +76,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 fund.assemble_on_start(existing_assets=existing_assets, existing_liabs=existing_liabs)
 
         else:
-            for fund in fund_master.ph_funds + [fund_master.sh_fund]:  # ensure that sh_fund is the last one
+            for fund in fund_master.ph_funds + ([fund_master.sh_fund] if fund_master.sh_fund else []):  # ensure that sh_fund sit in the last
                 fund_id = fund.fund_id
                 rebalance_params = fund_master.rebalance_params_dict[fund_id]
                 is_sh_fund = fund is fund_master.sh_fund
