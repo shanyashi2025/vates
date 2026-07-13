@@ -31,14 +31,6 @@ class EquityOption(Asset):
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine | None = None,
-        asset_id: str,
-        is_profile: bool,
-        units: float,
-        currency: Currency | None,
-        asset_category: str,
-        fund_id: str,
-        allocation_group: str,
         call_or_put: CallOrPut,
         exercise_date: pd.Period,
         price: float,
@@ -46,8 +38,16 @@ class EquityOption(Asset):
         strike_price: float,
         equity_index: EquityIndex,
         rf_curve: YieldCurve,
-        std_dev: float,
-        is_pay_dividend: bool,
+        std_dev: float = None,
+        is_pay_dividend: bool = False,
+        model_engine: ProjModelEngine | None = None,
+        asset_id: str = "",
+        is_profile: bool = False,
+        units: float = 1.0,
+        currency: Currency | None = None,
+        asset_category: str = "",
+        fund_id: str = "",
+        allocation_group: str = "",
         classification: AssetClassification = AssetClassification.FVTPL,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
@@ -89,7 +89,7 @@ class EquityOption(Asset):
         self._is_pay_dividend: bool = is_pay_dividend
         self._cash_flow: float = 0.0
 
-        if model_engine is not None:
+        if self.time is not None:
             # validate initial price
             calc_price = BlackScholesCalculator.price(
                 call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,

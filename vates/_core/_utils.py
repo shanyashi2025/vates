@@ -1,7 +1,7 @@
 import pandas as pd
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Any
+from typing import Literal, Any, Self
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +28,39 @@ class RunConfig:
     enable_write_runlog: bool
     max_workers: int | None = None
 
+    def __post_init__(self):
+        if self.end_date is None and self.start_date is None and self.start_year is None and self.start_month is None \
+                and self.end_year is None and self.end_month is None:
+            pass  # bypass validations of dates
+        else:
+            self.validate_number("start_year", self.start_year, value_type=int, value_min=1900, value_max=5999)
+            self.validate_number("start_month", self.start_month, value_type=int, value_lst=range(1, 13))
+            self.validate_number("end_year", self.end_year, value_type=int, value_min=1900, value_max=5999)
+            self.validate_number("end_month", self.end_month, value_type=int, value_lst=range(1, 13))
+            self.validate_number("max_t", self.max_t, value_type=int, value_min=0, value_max=2400)
+            self.validate_period("start_date", self.start_date, value_min=pd.Period("1900-1", freq="M"),
+                                 value_max=self.end_date)
+            self.validate_period("end_date", self.end_date, value_min=self.start_date,
+                                 value_max=pd.Period("5999-12", freq="M"))
+            if (self.end_date - self.start_date).n != self.max_t:
+                raise ValueError(f"Number of months from start_date ({self.start_date}) to end_date {self.end_date} is "
+                                 f"inconsistent with max_t {self.max_t}.")
+
+        self.validate_string("scenario", self.scenario, allow_none=True)
+        self.validate_list("simulations", self.simulations, item_type=int, len_min=0, len_max=100_000, allow_none=True)
+        self.validate_number("simulation", self.simulation, value_type=int, value_min=1, value_max=100_000, allow_none=True)
+        self.validate_string("workspace_directory", self.workspace_directory)
+        self.validate_path("workspace_directory_path", self.workspace_directory_path)
+        self.validate_list("input_directories", self.input_directories, item_type=str, allow_none=True)
+        self.validate_string("results_directory", self.results_directory)
+        self.validate_path("results_directory_path", self.results_directory_path)
+        self.validate_bool("is_delete_existing_results", self.is_delete_existing_results)
+        self.validate_bool("enable_write_proj_result", self.enable_write_proj_result)
+        self.validate_string("stoch_result_file_mode", self.stoch_result_file_mode, str_literal=['w', 'a'], allow_none=True)
+        self.validate_string("stoch_result_file_id", self.stoch_result_file_id, allow_none=True)
+        self.validate_bool("enable_write_runlog", self.enable_write_runlog)
+        self.validate_number("max_workers", self.max_workers, value_type=int, value_min=1, value_max=999, allow_none=True)
+
     @classmethod
     def create(
         cls,
@@ -37,7 +70,7 @@ class RunConfig:
         end_year: int | None,
         end_month: int | None,
         scenario: str | None,
-        simulations: str | None = None,
+        simulations: str | list[int] | None = None,
         simulation: int | None = None,
         workspace_directory: str,
         input_directories: list[str] | None = None,
@@ -48,40 +81,22 @@ class RunConfig:
         stoch_result_file_id: str | None = None,
         enable_write_runlog: bool,
         max_workers: int | None = None
-    ) -> 'RunConfig':
+    ) -> Self:
 
         if start_year is None and start_month is None and end_year is None and end_month is None:
             start_date = None
             end_date = None
             max_t = 0
         else:
-            cls.validate_number("start_year", start_year, value_type=int, value_min=1900, value_max=5999)
-            cls.validate_number("start_month", start_month, value_type=int, value_lst=range(1, 13))
-            cls.validate_number("end_year", end_year, value_type=int, value_min=1900, value_max=5999)
-            cls.validate_number("end_month", end_month, value_type=int, value_lst=range(1, 13))
             start_date = pd.Period(f'{start_year}-{start_month}', freq='M')
             end_date = pd.Period(f'{end_year}-{end_month}', freq='M')
             max_t = (end_date - start_date).n
-            if max_t < 0:
-                raise ValueError(f"{end_date=} < {start_date=}.')")
-            if max_t > 6000:
-                raise ValueError(f"Projection period '{start_date} to {end_date}' exceeds 500 years.")
-        cls.validate_string("scenario", scenario, allow_none=True)
-        if simulations is not None:
+
+        if isinstance(simulations, str):
             simulations = parse_str_to_int_list(simulations)
-            cls.validate_list("simulations", simulations, item_type=int, len_min=0, len_max=100_000)
-        cls.validate_number("simulation", simulation, value_type=int, value_min=1, value_max=100_000, allow_none=True)
-        cls.validate_string("workspace_directory", workspace_directory)
+
         workspace_directory_path = Path(workspace_directory).resolve()
-        cls.validate_list("input_directories", input_directories, item_type=str, allow_none=True)
-        cls.validate_string("results_directory", results_directory)
         results_directory_path = (workspace_directory_path / results_directory).resolve()
-        cls.validate_bool("is_delete_existing_results", is_delete_existing_results)
-        cls.validate_bool("enable_write_proj_result", enable_write_proj_result)
-        cls.validate_string("stoch_result_file_mode", stoch_result_file_mode, str_literal=['w', 'a'], allow_none=True)
-        cls.validate_string("stoch_result_file_id", stoch_result_file_id, allow_none=True)
-        cls.validate_bool("enable_write_runlog", enable_write_runlog)
-        cls.validate_number("max_workers", max_workers, value_type=int, value_min=1, value_max=999, allow_none=True)
 
         return cls(
             start_year=start_year,
@@ -155,6 +170,41 @@ class RunConfig:
             raise ValueError(f"{name}: {len(value)=}, expected <={len_max}.")
         if str_literal is not None and value not in str_literal:
             raise ValueError(f"{name}: {value=}, expected in {str_literal}.")
+
+    @staticmethod
+    def validate_period(name: str, value, /, *,
+                        value_min: pd.Period | None = None, value_max: pd.Period | None = None, allow_none: bool = False
+                        ) -> None:
+        if value is None:
+            if not allow_none:
+                raise TypeError(f"{name}: value 'None' is not allowd.")
+            return
+
+        if not isinstance(value, pd.Period):
+            raise TypeError(f"{name}: type '{type(value)}' is not allowed, expected 'Period'.")
+        if value_min is not None and value < value_min:
+            raise ValueError(f"{name}: {value=}, expected >={value_min}.")
+        if value_max is not None and value > value_max:
+            raise ValueError(f"{name}: {value=}, expected <={value_max}.")
+
+    @staticmethod
+    def validate_path(name: str, value, /, *,
+                      dir_or_file: str | None = None, must_exist: bool = False, allow_none: bool = False) -> None:
+        if value is None:
+            if not allow_none:
+                raise TypeError(f"{name}: value 'None' is not allowd.")
+            return
+
+        if not isinstance(value, Path):
+            raise TypeError(f"{name}: type '{type(value)}' is not allowed, expected 'Path'.")
+
+        if must_exist:
+            if not value.exists():
+                raise ValueError(f"Path {name} does not exist.")
+            if dir_or_file == "dir" and not value.is_file():
+                raise ValueError(f"Path {name} is not a directory.")
+            elif dir_or_file == "file":
+                raise ValueError(f"Path {name} is not a file.")
 
     @staticmethod
     def validate_list(name: str, value, /, *,

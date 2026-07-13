@@ -64,7 +64,7 @@ class Asset(ABC):
         self._asset_id: str = asset_id
         self._is_profile: bool = is_profile
         self._units: float = units
-        self._purchase_date: pd.Period = self.period if purchase_date is None else purchase_date
+        self._purchase_date: pd.Period = purchase_date or (self.period if self._is_profile else None)
         self._currency: Currency | None = currency
         self._classification: AssetClassification = classification
         self._asset_category: str = asset_category

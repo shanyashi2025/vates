@@ -73,10 +73,10 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
             port_var['std_return'] = vates.ConstVariable('std_return', model_engine=model, owner=port_name, group='MonteCarlo')
             port_var['sharp_ratio'] = vates.ConstVariable('sharp_ratio', model_engine=model, owner=port_name, group='MonteCarlo')
 
-            port_var['twrr'][t] = twrr
-            port_var['mean_return'][t] = mean_return
-            port_var['std_return'][t] = std_return
-            port_var['sharp_ratio'][t] = sharp_ratio
+            port_var['twrr'][...] = twrr
+            port_var['mean_return'][...] = mean_return
+            port_var['std_return'][...] = std_return
+            port_var['sharp_ratio'][...] = sharp_ratio
 
 
 def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str,

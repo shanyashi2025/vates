@@ -37,18 +37,8 @@ class BondFixed(Asset):
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine | None = None,
-        asset_id: str,
-        is_profile: bool,
-        units: float,
-        currency: Currency | None,
-        asset_category: str,
-        fund_id: str,
-        allocation_group: str,
-        classification: AssetClassification,
         issue_date: pd.Period,
         maturity_date: pd.Period,
-        redemp_sched: np.ndarray | None,
         coupon_rate: float,
         coupon_freq: int,
         face_value: float,
@@ -57,7 +47,17 @@ class BondFixed(Asset):
         abv_price: float,
         amort_rate: float,
         rf_curve: YieldCurve,
-        credit_band: CreditBand | None,
+        classification: AssetClassification,
+        model_engine: ProjModelEngine | None = None,
+        asset_id: str = "",
+        is_profile: bool = False,
+        units: float = 1.0,
+        currency: Currency | None = None,
+        asset_category: str = "",
+        fund_id: str = "",
+        allocation_group: str = "",
+        redemp_sched: np.ndarray | None = None,
+        credit_band: CreditBand | None = None,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
     ):
@@ -120,7 +120,7 @@ class BondFixed(Asset):
                 ValueError(f"Profile bond {self.asset_id}: abv_price={self._abv_price_dirty:.4f} != "
                            f"mv_price={self._mv_price_dirty:.4f}")
 
-        if model_engine is not None:
+        if self.time is not None:
             # validate mv price
             valid, price = self._validate_current_price("mv", self._mv_price_dirty)
             if not valid:
@@ -267,7 +267,7 @@ class BondFixed(Asset):
             return self.risk_calc.risk_metrics
 
     @t_checker({"roll_forward": -1}, "roll_forward")
-    def roll_forward(self, skip_dcf: bool = False, **kwargs) -> None:
+    def roll_forward(self, *, update_mv_price: bool = True, **kwargs) -> None:
         """
         Roll the bond forward one period, updating units, prices, and cash flows.
         """
@@ -306,7 +306,7 @@ class BondFixed(Asset):
         self._abv_price_dirty = abv_price_st * (1 + self._amort_rate / freq) ** (freq / 12) - coupon_paid - principal_paid
         # valid, price = self._validate_current_price("abv", self._abv_price_dirty)
 
-        if not skip_dcf:
+        if update_mv_price:
             if self._rf_curve.last_update != t:
                 raise ValueError(f"{self._rf_curve.curve_id} is not updated on {t} ({p}).")
             if self._credit_band is not None and self._credit_band.last_update != t:

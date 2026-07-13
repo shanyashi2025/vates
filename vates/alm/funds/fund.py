@@ -34,7 +34,6 @@ class Fund:
         _primary_cash_asset (Cash | None): Primary cash asset used for residual cash flows.
         _calculator (FundCalculator): Aggregation/returns calculator.
         _allocator (AssetAllocator): Asset allocator for rebalancing.
-        _accum_free_proceeds (float): Accumulated free proceeds pending investment/transfer.
     """
 
     def __init__(
@@ -42,7 +41,6 @@ class Fund:
         fund_id: str,
         *,
         model_engine: ProjModelEngine | None = None,
-        fund_calculator = None,
         asset_allocator = None,
         rebalance_policy: dict[str, RebalancePolicyParams] = None,
         asset_categories: list[str] = None,
@@ -65,9 +63,8 @@ class Fund:
         self._container: ALContainer = ALContainer()
         self._primary_cash_asset: Cash | None = None
         self._assembled: bool = False
-        self._accum_free_proceeds: float = 0.0
 
-        self._calculator: FundCalculator = fund_calculator or FundCalculator(
+        self._calculator: FundCalculator = FundCalculator(
             fund_id=fund_id, model_engine=model_engine, container=self._container, asset_categories=asset_categories
         )
         self._allocator: AssetAllocator = asset_allocator or AssetAllocator(
@@ -119,8 +116,22 @@ class Fund:
         else:
             self._container.liabs.append(existing_liabs)
 
-        self._container.raise_duplicate_error()
-        self._container.raise_profile_asset_error()
+        # validate if any duplicate asset objects
+        assets_set = set(self._container.assets)
+        if len(self._container.assets) != len(assets_set):
+            dup_lst = [x for x in assets_set if self._container.assets.count(x) > 1]
+            warnings.warn(f"{dup_lst} duplicate asset objects, including '{dup_lst[:min(5, len(dup_lst))]}'.")
+
+        # validate if any duplicate liability objects
+        liabs_set = set(self._container.liabs)
+        if len(self._container.liabs) != len(liabs_set):
+            dup_lst = [x for x in liabs_set if self._container.liabs.count(x) > 1]
+            warnings.warn(f"{dup_lst} duplicate liability objects, including '{dup_lst[:min(5, len(dup_lst))]}'.")
+
+        # validate if any profile asset objects
+        for asset in self._container.assets:
+            if asset.is_profile:
+                warnings.warn(f"Unexpected profile asset '{asset}'")
 
         # Aggregate asset value
         self._calculator.aggregate_assets_value("ad")
@@ -132,7 +143,10 @@ class Fund:
     @property
     def primary_cash_asset(self) -> Cash | None:
         if self._primary_cash_asset is None:
-            self._primary_cash_asset = self._container.first_seen_cash_asset
+            for asset in self._container.assets:
+                if isinstance(asset, Cash):
+                    self._primary_cash_asset = asset
+                    break
             if self._primary_cash_asset is None:
                 warnings.warn(f"No cash assets available.")
         return self._primary_cash_asset
@@ -141,65 +155,58 @@ class Fund:
     def process_assets_before_dealing(self) -> None:
         """Process asset cash flows and reported values before dealing (bd)."""
         self._calculator.process_assets_before_dealing()
-        self._accum_free_proceeds += self._calculator.tdv_totass_cash_flow[self.time]
+        self._container.deposit_free_proceeds(self._calculator.tdv_totass_cash_flow[self.time])
 
     @t_checker({"proc_liabs_bd": -1, "proc_liabs_ad": -1, "proc_assets_bd": 0}, "proc_liabs_bd")
     def process_liabs_before_dealing(self) -> None:
         """Process liability cash flows and balance sheet variables before dealing (bd)."""
         self._calculator.process_liabs_before_dealing()
-        self._accum_free_proceeds += self._calculator.tdv_totliab_cash_flow[self.time]
+        self._container.deposit_free_proceeds(self._calculator.tdv_totliab_cash_flow[self.time])
 
     @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
     def skip_rebalance(self) -> None:
         """Skip asset rebalance and invest free proceeds into primary cash."""
         t = self.time
-        self._calculator.tdv_accum_free_proceeds_bd[t] = self._accum_free_proceeds
-        self._invest_accum_free_proceeds_into_cash()  # just invest accum_free_proceeds into primary cash,
-                                                      # no other rebalance#, accum_free_proceeds is reset to zero
+        self._calculator.tdv_accum_free_proceeds_bd[t] = self._container.accum_free_proceeds
+        # just invest accum_free_proceeds into primary cash, no other rebalance, accum_free_proceeds is reset to zero
+        self.primary_cash_asset.invest_new_money(self._container.withdrawal_accum_free_proceeds())
         for asset in self.assets:
             asset.close_dealing()
-        self._calculator.tdv_accum_free_proceeds_ad[t] = self._accum_free_proceeds # reset to zero
+        self._calculator.tdv_accum_free_proceeds_ad[t] = self._container.accum_free_proceeds # should be zero
         self._calculator.process_assets_after_dealing()
 
-    def _invest_accum_free_proceeds_into_cash(self) -> None:
-        """Invest accumulated free proceeds into the primary cash asset."""
-        if not self.primary_cash_asset: raise RuntimeError(f"{self.fund_id}: primary cash asset is not defined.")
-        self.primary_cash_asset.invest_new_money(self._accum_free_proceeds)
-        self._reset_accum_free_proceeds()
-
     @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
-    def rebalance_assets(self, fund_size_type: FundSizeType, fund_size_basis: AssetRepBasis,
-                         target_weight: dict[str, TargetWeight], assets_profile: list[Asset] | None=None, **kwargs
+    def rebalance_assets(self, *, fund_size_type: FundSizeType, asset_size_basis: AssetRepBasis,
+                         target_weight: dict[str, TargetWeight], assets_profile: list[Asset] | None = None, **kwargs
                          ) -> None:
         """Rebalance assets per target allocation and optional profile.
 
         Args:
             fund_size_type (FundSizeType): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
-            fund_size_basis (AssetRepBasis): Basis for sizing against fund (usually FAV or BSV).
+            asset_size_basis (AssetRepBasis): Basis for sizing against fund (usually FAV or BSV).
             target_weight (dict[str, TargetWeight]): Target allocation by group.
             assets_profile (list[Asset] | None=None): Profile assets for purchases (e.g., bonds).
         """
         t, p = self.time, self.period
 
-        self._calculator.tdv_accum_free_proceeds_bd[t] = self._accum_free_proceeds
+        self._calculator.tdv_accum_free_proceeds_bd[t] = self._container.accum_free_proceeds
         # process rebalance
-        fund_size = self._get_fund_size(fund_size_type, fund_size_basis)
-        free_proceeds, realized_gl = self._allocator.rebalance(
+        fund_size = self._get_fund_size(fund_size_type, asset_size_basis)
+        recon_rgl = self._allocator.rebalance(
             fund_size=fund_size,
-            size_basis = fund_size_basis,
+            asset_size_basis=asset_size_basis,
             target_weight=target_weight,
             assets_profile=assets_profile,
-            kwargs=kwargs
+            **kwargs
         )
         for asset in self.assets:
             asset.close_dealing()
-        self._accum_free_proceeds += free_proceeds
-        self._calculator.tdv_accum_free_proceeds_ad[t] = self._accum_free_proceeds
+        self._calculator.tdv_accum_free_proceeds_ad[t] = self._container.accum_free_proceeds
         self._calculator.process_assets_after_dealing()
         # reconcile realized gain/loss
-        if abs((rgl := self._calculator.tdv_totass_rgl_ad[p]) - realized_gl) > 0.01: raise ValueError(
+        if abs((rgl := self._calculator.tdv_totass_rgl_ad[p]) - recon_rgl) > 0.01: raise ValueError(
             f"Fund {self.fund_id} at {p=} realized gain/loss reconciliation break, "
-            f"calculator: {rgl} <> allocator: {realized_gl}")
+            f"calculator: {rgl} <> allocator: {recon_rgl}")
 
     def _get_fund_size(self, size_type: FundSizeType, size_basis: AssetRepBasis) -> float:
         """Get the fund size based on the fund size type and basis.
@@ -217,7 +224,7 @@ class Fund:
         t = self.time
         if size_type == FundSizeType.FUND:
             # need to include accum_free_proceeds
-            return self._calculator.tdv_totass_rep_value_bd[t][size_basis.value] + self._accum_free_proceeds
+            return self._calculator.tdv_totass_rep_value_bd[t][size_basis.value] + self._container.accum_free_proceeds
         elif size_type == FundSizeType.SURR_VALUE:
             return self._calculator.tdv_tot_surr_val[t]
         elif size_type == FundSizeType.MATH_RES:
@@ -239,8 +246,8 @@ class Fund:
         # note: liab.update_ad() is NOT automatically called here
         self._calculator.process_liabs_after_dealing()
 
-    def _reset_accum_free_proceeds(self) -> None:
-        self._accum_free_proceeds = 0.0
+    # def _reset_accum_free_proceeds(self) -> None:
+    #     self._accum_free_proceeds = 0.0
 
     @t_checker({"proc_assets_ad": 0})
     def transfer_free_proceeds_to_other(self, other: Optional['Fund']) -> None:
@@ -251,16 +258,16 @@ class Fund:
         """
         t = self.time
 
+        amount = self._container.withdrawal_accum_free_proceeds()
         if other is None:
             pass
         elif type(other) == Fund:
-            other.receive_free_proceeds(self._accum_free_proceeds)
+            other.receive_free_proceeds(amount)
         else:
             warnings.warn(f"Invalid {type(other)}, expected <class 'Fund'> ")
 
-        self._calculator.tdv_proceeds_transferred_out[t] = max(self._accum_free_proceeds, 0.0)
-        self._calculator.tdv_proceeds_transferred_in[t] = max(- self._accum_free_proceeds, 0.0)
-        self._reset_accum_free_proceeds()
+        self._calculator.tdv_proceeds_transferred_out[t] = max(amount, 0.0)
+        self._calculator.tdv_proceeds_transferred_in[t] = max(- amount, 0.0)
 
     def receive_free_proceeds(self, amount: float) -> None:
         """Receive free proceeds.
@@ -276,7 +283,7 @@ class Fund:
             self._calculator.tdv_proceeds_transferred_in[t] += max(amount, 0.0)
             self._calculator.tdv_proceeds_transferred_out[t] += max(- amount, 0.0)
 
-        self._accum_free_proceeds += amount
+        self._container.deposit_free_proceeds(amount)
 
     def _rate_of_return_bd(self, t_or_p: int | pd.Period, basis: AssetRepBasis) -> float:
         """Rate of return before dealing.

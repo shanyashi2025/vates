@@ -24,16 +24,16 @@ class Cash(Asset):
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine | None = None,
-        asset_id: str,
-        currency: Currency | None,
-        asset_category: str,
-        fund_id: str,
-        allocation_group: str,
         nominal: float,
-        market_info: MarketInfo,
-        ret_id: str,
-        ret_id_short_pos: str | None,
+        model_engine: ProjModelEngine | None = None,
+        asset_id: str = "",
+        currency: Currency | None = None,
+        asset_category: str = "",
+        fund_id: str = "",
+        allocation_group: str = "",
+        market_info: MarketInfo | None = None,
+        ret_id: str | None = "",
+        ret_id_short_pos: str | None = None,
         classification: AssetClassification = AssetClassification.FVTPL,
         purchase_date: pd.Period | None = None
     ):
@@ -57,7 +57,7 @@ class Cash(Asset):
                          purchase_date=purchase_date, currency=currency, classification=classification,
                          asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
         self._nominal: float = nominal
-        self._market_info: MarketInfo = market_info
+        self._market_info: MarketInfo | None = market_info
         self._ret_id: str = ret_id
         self._ret_id_short_pos: str = ret_id_short_pos or ret_id
 
@@ -84,15 +84,19 @@ class Cash(Asset):
         return self._ret_id_short_pos
 
     @t_checker({"roll_forward": -1}, "roll_forward")
-    def roll_forward(self, **kwargs) -> None:
+    def roll_forward(self, *, ret_rate: float | None = None, ret_rate_pos: float | None = None, **kwargs) -> None:
         """
         Roll the cash asset forward one period.
         """
         t = self.time
-        ret_id = self._ret_id if self._nominal >= 0 else self._ret_id_short_pos
-        if self._market_info.last_update[ret_id] != t:
-            raise ValueError(f"{self._market_info} is not updated on {t} ({self.period}).")
-        ret = self._market_info.get(ret_id)
+
+        ret = ret_rate if self._nominal >= 0 else ret_rate_pos
+        if ret is None:
+            ret_id = self._ret_id if self._nominal >= 0 else self._ret_id_short_pos
+            if self._market_info.last_update[ret_id] != t:
+                raise ValueError(f"{self._market_info} is not updated on {t} ({self.period}).")
+            ret = self._market_info.get(ret_id)
+
         self._nominal = self._nominal * (1 + ret) ** (1 / 12)
         self.tdv_cash_flow[t] = 0.0
         self.tdv_mv_bd[t] = self.mv

@@ -120,14 +120,14 @@ class AssetAllocator:
 
         return ag_list
 
-    def rebalance(self, fund_size: float, size_basis: AssetRepBasis,
+    def rebalance(self, *, fund_size: float, asset_size_basis: AssetRepBasis,
                   target_weight: dict[str, TargetWeight], assets_profile: list[Asset] | None=None,
-                  **kwargs) -> tuple[float, float]:
+                  **kwargs) -> float:
         """Rebalance assets in the fund to match the target allocation.
 
         Args:
             fund_size (float): Total size for allocation.
-            size_basis (AssetRepBasis): Basis for sizing (usually FAV or BSV).
+            asset_size_basis (AssetRepBasis): Basis for sizing (usually FAV or BSV).
             target_weight (dict[str, TargetWeight]): Target allocations weight by group.
             assets_profile (list[Asset] | None): Profile assets for reference.
 
@@ -150,11 +150,11 @@ class AssetAllocator:
         # --- existing asset ---
         exist_asset_repval, exist_asset_count = self._group_by_alloc_group(self.container.assets, self.ag_seq_list)
         self.tdv_ag_repval_bd[t] = np.array([val for val in exist_asset_repval.values()])
-        exist_asset_value = {key: arr[size_basis.value] for key, arr in exist_asset_repval.items()}
+        exist_asset_value = {key: arr[asset_size_basis.value] for key, arr in exist_asset_repval.items()}
         self.tdv_ag_alloc_pc_bd[t] = self._calculate_ag_weight(exist_asset_value, fund_size) * 100
         # --- profile asset ---
         profile_asset_repval, profile_asset_count = self._group_by_alloc_group(assets_profile, self.ag_seq_list)
-        profile_asset_value = {key: arr[size_basis.value] for key, arr in profile_asset_repval.items()}
+        profile_asset_value = {key: arr[asset_size_basis.value] for key, arr in profile_asset_repval.items()}
 
         # --- step 2: cross-validate asset groups ---
         for ag, policy in self.rebalance_policy.items():
@@ -206,7 +206,7 @@ class AssetAllocator:
 
         # --- step 4: process residual groups ---
         exist_asset_repval, _ = self._group_by_alloc_group(self.container.assets, self.ag_seq_list)
-        exist_asset_value = {key: arr[size_basis.value] for key, arr in exist_asset_repval.items()}
+        exist_asset_value = {key: arr[asset_size_basis.value] for key, arr in exist_asset_repval.items()}
         total_exist_value = sum(exist_asset_value.values())
         value_gap = fund_size - total_exist_value
         tolerance = max(abs(fund_size * 1e-6), 0.01)
@@ -245,7 +245,7 @@ class AssetAllocator:
 
         # step 5: validate if target allocations met
         exist_asset_repval, _ = self._group_by_alloc_group(self.container.assets, self.ag_seq_list)
-        exist_asset_value = {key: arr[size_basis.value] for key, arr in exist_asset_repval.items()}
+        exist_asset_value = {key: arr[asset_size_basis.value] for key, arr in exist_asset_repval.items()}
         self.tdv_ag_repval_ad[t] = np.array([val for val in exist_asset_repval.values()])
         self.tdv_ag_alloc_pc_ad[t] = self._calculate_ag_weight(exist_asset_value, fund_size) * 100
 
@@ -259,7 +259,8 @@ class AssetAllocator:
                     f"min={wgt.min_weight: .4f}, max={wgt.max_weight: .4f}, "
                     f"current={current_weight: .4f}.")
 
-        return free_proceeds, realized_gl
+        self.container.deposit_free_proceeds(free_proceeds)
+        return realized_gl
 
     def _trade_asset(self, allocation_group: str, trade_decn: tuple[str, float],
                      assets_profile: list[Asset] | None) -> tuple[float, float]:

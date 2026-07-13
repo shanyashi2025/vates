@@ -20,7 +20,8 @@ class BlackScholesCalculator:
     Equity option Black-Scholes calculator.
     """
     @staticmethod
-    def price(call_or_put: CallOrPut, s: float, k: float, r: float, q: float, sigma: float, tau: float) -> float:
+    def price(*, call_or_put: CallOrPut, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
+              ) -> float:
         """
         Calculate Black-Scholes price.
 
@@ -55,7 +56,7 @@ class BlackScholesCalculator:
             return z * (k * (1 - nd2) - f * (1 - nd1))
 
     @staticmethod
-    def greeks(call_or_put: CallOrPut, s: float, k: float, r: float, q: float, sigma: float, tau: float
+    def greeks(*, call_or_put: CallOrPut, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
                ) -> dict[str, float]:
         """
         Calculate Black-Scholes Greeks.
@@ -106,7 +107,7 @@ class BlackScholesCalculator:
         }
 
     @staticmethod
-    def _price_and_vega(call_or_put: CallOrPut, s: float, k: float, r: float, q: float, sigma: float, tau: float
+    def _price_and_vega(*, call_or_put: CallOrPut, s: float, k: float, r: float, q: float, sigma: float, tau: float
                         ) -> tuple[float, float]:
         """
         Calculate Black-Scholes price and vega.
@@ -146,8 +147,8 @@ class BlackScholesCalculator:
         return price, vega
 
     @staticmethod
-    def implied_volatility(call_or_put: CallOrPut, price: float, s: float, k: float, r: float, q: float, tau: float,
-                           initial_guess: float = 0.2, tol: float = 1e-10, maxiter: int = 100) -> float:
+    def implied_volatility(*, call_or_put: CallOrPut, price: float, s: float, k: float, r: float, q: float = 0.0,
+                           tau: float, initial_guess: float = 0.2, tol: float = 1e-10, maxiter: int = 100) -> float:
         """
         Solve Black-Scholes implied volatility (sigma).
 
@@ -204,7 +205,7 @@ class BlackScholesCalculator:
         # --- Newton-Raphson ---
         sigma = max(1e-12, initial_guess)
         for i in range(maxiter):
-            p, v = _price_and_vega(call_or_put, s, k, r, q, sigma, tau)
+            p, v = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=sigma, tau=tau)
             diff = p - price
             if abs(diff) < 1e-12:
                 return max(0.0, sigma)
@@ -223,14 +224,14 @@ class BlackScholesCalculator:
         # Find bracket [lo, hi] such that price(lo) - market_price and price(hi) - market_price have opposite signs
         lo = 1e-12
         hi = 1.0  # start with 100% vol as upper, expand if necessary
-        p_lo, _ = _price_and_vega(call_or_put, s, k, r, q, lo, tau)
-        p_hi, _ = _price_and_vega(call_or_put, s, k, r, q, hi, tau)
+        p_lo, _ = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=lo, tau=tau)
+        p_hi, _ = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=hi, tau=tau)
 
         # expand hi until sign change or until hi becomes huge
         expand_iter = 0
         while (p_lo - price) * (p_hi - price) > 0 and expand_iter < 50:
             hi *= 2
-            p_hi, _ = _price_and_vega(call_or_put, s, k, r, q, hi, tau)
+            p_hi, _ = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=hi, tau=tau)
             expand_iter += 1
 
         if (p_lo - price) * (p_hi - price) > 0:
@@ -240,7 +241,7 @@ class BlackScholesCalculator:
         # now bisection until tolerance achieved
         for _ in range(200):
             mid = 0.5 * (lo + hi)
-            p_mid, _ = _price_and_vega(call_or_put, s, k, r, q, mid, tau)
+            p_mid, _ = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=mid, tau=tau)
             if abs(p_mid - price) < 1e-12 or (hi - lo) < tol:
                 return max(0.0, mid)
             # decide side

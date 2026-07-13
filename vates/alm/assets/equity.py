@@ -24,17 +24,17 @@ class Equity(Asset):
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine | None = None,
-        asset_id: str,
-        is_profile: bool,
-        currency: Currency | None,
-        asset_category: str,
-        fund_id: str,
-        allocation_group: str,
         mv: float,
-        fav: float,
         equity_index: EquityIndex,
-        classification: AssetClassification,
+        fav: float | None = None,
+        classification: AssetClassification = AssetClassification.FVTPL,
+        model_engine: ProjModelEngine | None = None,
+        asset_id: str = "",
+        is_profile: bool = False,
+        currency: Currency | None = None,
+        asset_category: str = "",
+        fund_id: str = "",
+        allocation_group: str = "",
         purchase_date: pd.Period | None = None
     ):
         """
@@ -58,15 +58,14 @@ class Equity(Asset):
                          asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
         self._equity_index: EquityIndex = equity_index
         self._mv: float = mv
-        self._fav: float = fav
+        self._fav: float = fav or mv
         if self.classification == AssetClassification.FVTPL:
             if abs(self._mv - self._fav) > 1e-8:
-                self._fav = self._mv
-                warnings.warn(f'Equity asset {self.asset_id}: fav is forcedly set to mv for FVTPL.')
+                raise ValueError(f'FVTPL equity {self.asset_id}: fav={self._fav} != mv={self._mv}.')
         elif self.classification == AssetClassification.FVOCI:
             pass
         else:
-            raise ValueError(f'Equity asset {self.asset_id}: invalid asset classification: {self.classification}, '
+            raise ValueError(f'Equity {self.asset_id}: invalid asset classification: {self.classification}, '
                              f'epxected FVTPL or FVOCI')
 
         if abs(self._mv) < 1e-8:

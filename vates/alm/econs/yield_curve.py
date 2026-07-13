@@ -22,6 +22,7 @@ class YieldCurve:
     def __init__(
         self,
         curve_id: str,
+        *,
         model_engine: ProjModelEngine | None = None,
         tdv_term_dim: list[int] | None = None,
     ) -> None:

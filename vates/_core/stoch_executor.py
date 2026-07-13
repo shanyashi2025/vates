@@ -71,7 +71,7 @@ class StochExecutor:
 
         sig_params = inspect.signature(func).parameters
         if len(sig_params) == 0:
-            raise ValueError(f"The function '{func.__name__}' has no argument, cannot be bound.")
+            raise ValueError(f"Function '{func.__name__}' has no argument, cannot be bound.")
 
         first_arg_name = list(sig_params.keys())[0]
         proj_cls = get_type_hints(func).get(first_arg_name)
@@ -86,7 +86,7 @@ class StochExecutor:
             self._proj_cls = ProjModelEngine
 
         self._proj_func = func
-        self.include_traced_message(f"INFO: The function {func} has been bound to {self}.")
+        self.include_traced_message(f"INFO: Function {func} has been bound to {self}.")
         return self
 
     def set_run_config(
