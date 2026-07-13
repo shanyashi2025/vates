@@ -1,6 +1,6 @@
 import json
 import sys
-from vates import ProjModelEngine, kr_from_df
+from vates import ProjModelEngine, KeyedArray
 from local_package import (
     load_file_df,
     build_esg_master,
@@ -34,7 +34,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     filename_dict = {idx: row[model.SCENARIO] for idx, row in df.iterrows()}
     file_read_args = model.load_json("_file_read_config.json")
     file_df_dict = load_file_df(model.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg"])
-    epl = kr_from_df(file_df_dict['epl'])
+    epl = KeyedArray.from_df(file_df_dict['epl'])
     del file_df_dict['epl']
 
     # build esg master

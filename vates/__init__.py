@@ -4,7 +4,6 @@ from vates._core import (
     ConstVariable,
     TDepVariable,
     KeyedArray,
-    kr_from_df,
 )
 from vates import utils
 
@@ -20,7 +19,6 @@ __all__ = [
     'ConstVariable',
     'TDepVariable',
     'KeyedArray',
-    'kr_from_df',
     # utils
     'utils',
     # libs

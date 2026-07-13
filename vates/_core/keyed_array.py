@@ -1,8 +1,7 @@
-import warnings
-from typing import Any
-
 import numpy as np
 import pandas as pd
+import warnings
+from typing import Any, Self
 
 
 class KeyedArray:
@@ -18,13 +17,20 @@ class KeyedArray:
 
     __slots__ = ('_arr', '_at',)
 
-    def __init__(self, nparray: np.ndarray, /, *, frozen: bool, key_pos_pairs: list[dict[Any, int]],
-                 dim_names: list[str] | None = None):
+    def __init__(
+        self,
+        nparray: np.ndarray,
+        /,
+        *,
+        frozen: bool,
+        key_pos_pairs: list[dict[Any, int]],
+        dim_names: list[str] | None = None
+    ):
         """Initialize a KeyedArray.
 
         Args:
             nparray (np.ndarray): Underlying NumPy array.
-            frozen (bool): True if frozen.
+            frozen (bool): True if frozen (`nparray.flags.writeable = False`).
             key_pos_pairs (list): A list of dictionaries mapping keys to integer-position indices
                 for each dimension. Length must match `nparray.ndim`.
             dim_names (list, optional): A list of string storing dimension names.
@@ -131,6 +137,69 @@ class KeyedArray:
             keys[axis] = val
 
         return self._at.get(tuple(keys), default_value=default)
+
+    @classmethod
+    def from_df(
+        cls,
+        df: pd.DataFrame,
+        *,
+        frozen: bool = True,
+        unpack_multi_index: bool = False,
+        multi_index_name: str = 'row_index',
+        col_index_name: str = 'col_name'
+    ) -> Self | None:
+        """Creat KeyedArray object from pandas DataFrame.
+
+        Args:
+            df (pd.DataFrame): DataFrame to be processed.
+            frozen (bool): True if frozen. Defaults to True.
+            unpack_multi_index (bool): True if unpacking multi-index, applicable to MultiIndex only.
+            multi_index_name (str): Single name for multi-index, applicable only when `unpack_multi_index` is False and
+                `df.index.nlevels` > 1, defaults to 'row_index'.
+            col_index_name (str): Name of column index, e.g. 'col_name', 'var_name', 'field_name', defaults to 'col_name'.
+
+        Returns:
+            KeyedArray object: return None for empty DataFrame (`n_rows` is 0).
+
+        """
+        n_rows, n_cols = df.shape
+        if n_rows == 0:
+            return None
+
+        col_key_pos_pair = {key: pos for pos, key in enumerate(df.columns)}
+        values = df.to_numpy().ravel()
+
+        df_index = df.index
+        n_levels = df_index.nlevels
+        if n_levels > 1 and unpack_multi_index:
+            row_codes = df_index.codes
+            dim_sizes = [len(level) for level in df_index.levels] + [n_cols]
+            row_codes_repeated = [np.repeat(code, n_cols) for code in row_codes]
+            col_codes = np.tile(np.arange(n_cols), n_rows)
+            indices = tuple(row_codes_repeated + [col_codes])
+            row_key_pos_pair = [{key: pos for pos, key in enumerate(df_index.levels[i])} for i in range(n_levels)]
+            key_pos_pairs = row_key_pos_pair + [col_key_pos_pair]
+            dim_names = df_index.names + [col_index_name]
+        else:
+            row_codes, uniques = pd.factorize(df_index)
+            row_codes_repeated = np.repeat(row_codes, n_cols)
+            col_codes = np.tile(np.arange(n_cols), n_rows)
+            indices = (row_codes_repeated, col_codes)
+            dim_sizes = [len(uniques), n_cols]
+            row_key_pos_pair = {key: pos for pos, key in enumerate(df_index.unique())}
+            key_pos_pairs = [row_key_pos_pair, col_key_pos_pair]
+            dim_names = (df_index.names if n_levels == 1 else [multi_index_name]) + [col_index_name]
+
+        dtype = values.dtype
+        if dtype in ('i1', 'i2', 'i4', 'i8', 'f2', 'f4', 'f8'):
+            arr = np.full(dim_sizes, np.nan, dtype=np.float64)
+        else:
+            warnings.warn(f"note: {dtype=}!")
+            arr = np.full(dim_sizes, '', dtype=dtype)
+
+        arr[indices] = values
+
+        return KeyedArray(arr, frozen=frozen, key_pos_pairs=key_pos_pairs, dim_names=dim_names)
 
 
 class _AtIndexer:
@@ -287,59 +356,3 @@ class _AtIndexer:
         if pos_tuple is None:
             raise IndexError(f"index {keys} is not valid")
         self._nparray[pos_tuple] = value
-
-
-def kr_from_df(df: pd.DataFrame, *, frozen: bool = True, unpack_multi_index: bool = False,
-               multi_index_name: str = 'row_index', col_index_name: str = 'col_name') -> KeyedArray | None:
-    """Creat KeyedArray object from pandas DataFrame.
-
-    Args:
-        df (pd.DataFrame): DataFrame to be processed.
-        frozen (bool): True if frozen. Defaults to True.
-        unpack_multi_index (bool): True if unpacking multi-index, applicable to MultiIndex only.
-        multi_index_name (str): Single name for multi-index, applicable only when `unpack_multi_index` is False and
-            `df.index.nlevels` > 1, defaults to 'row_index'.
-        col_index_name (str): Name of column index, e.g. 'col_name', 'var_name', 'field_name', defaults to 'col_name'.
-
-    Returns:
-        KeyedArray object: return None for empty DataFrame (`n_rows` is 0).
-
-    """
-    n_rows, n_cols = df.shape
-    if n_rows == 0:
-        return None
-
-    col_key_pos_pair = {key: pos for pos, key in enumerate(df.columns)}
-    values = df.to_numpy().ravel()
-
-    df_index = df.index
-    n_levels = df_index.nlevels
-    if n_levels > 1 and unpack_multi_index:
-        row_codes = df_index.codes
-        dim_sizes = [len(level) for level in df_index.levels] + [n_cols]
-        row_codes_repeated = [np.repeat(code, n_cols) for code in row_codes]
-        col_codes = np.tile(np.arange(n_cols), n_rows)
-        indices = tuple(row_codes_repeated + [col_codes])
-        row_key_pos_pair = [{key: pos for pos, key in enumerate(df_index.levels[i])} for i in range(n_levels)]
-        key_pos_pairs = row_key_pos_pair + [col_key_pos_pair]
-        dim_names = df_index.names + [col_index_name]
-    else:
-        row_codes, uniques = pd.factorize(df_index)
-        row_codes_repeated = np.repeat(row_codes, n_cols)
-        col_codes = np.tile(np.arange(n_cols), n_rows)
-        indices = (row_codes_repeated, col_codes)
-        dim_sizes = [len(uniques), n_cols]
-        row_key_pos_pair = {key: pos for pos, key in enumerate(df_index.unique())}
-        key_pos_pairs = [row_key_pos_pair, col_key_pos_pair]
-        dim_names = (df_index.names if n_levels == 1 else [multi_index_name]) + [col_index_name]
-
-    dtype = values.dtype
-    if dtype in ('i1', 'i2', 'i4', 'i8', 'f2', 'f4', 'f8'):
-        arr = np.full(dim_sizes, np.nan, dtype=np.float64)
-    else:
-        warnings.warn(f"note: {dtype=}!")
-        arr = np.full(dim_sizes, '', dtype=dtype)
-
-    arr[indices] = values
-
-    return KeyedArray(arr, frozen=frozen, key_pos_pairs=key_pos_pairs, dim_names=dim_names)

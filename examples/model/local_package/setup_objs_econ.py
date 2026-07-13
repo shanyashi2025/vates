@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from vates import ProjModelEngine, KeyedArray, kr_from_df
+from vates import ProjModelEngine, KeyedArray
 from vates.utils import curve_interp, parse_str_to_int_list
 from vates.alm.econs import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 
@@ -58,7 +58,7 @@ class EsgItem:
         class_list = [v.class_ for k, v in self.esg_vars.items()]
         df = esg_df[esg_df["CLASS"].isin(class_list)].copy()
         df.set_index(['ECONOMY', 'CLASS', 'MEASURE', 'TERM'], inplace=True)
-        self.esg_data = kr_from_df(df=df, unpack_multi_index=True, col_index_name='date_col')
+        self.esg_data = KeyedArray.from_df(df=df, unpack_multi_index=True, col_index_name='date_col')
         self._set_esg_vars_intpos()
 
     def _set_esg_vars_intpos(self) -> None:

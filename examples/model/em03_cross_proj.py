@@ -1,7 +1,7 @@
 import json
 import numpy as np
 import sys
-from vates import ProjModelEngine, KeyedArray, kr_from_df, alm
+from vates import ProjModelEngine, KeyedArray, alm
 from vates.solvency import cn_cross2
 from local_package import (
     load_file_df,
@@ -30,7 +30,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     file_df_dict = load_file_df(model.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg"])
 
     # epl
-    epl = kr_from_df(file_df_dict['epl'])
+    epl = KeyedArray.from_df(file_df_dict['epl'])
     del file_df_dict['epl']
 
     # build esg master
