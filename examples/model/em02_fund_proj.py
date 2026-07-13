@@ -3,9 +3,9 @@ import sys
 from vates import ProjModelEngine, KeyedArray
 from local_package import (
     load_file_df,
-    build_esg_master,
-    build_fund_master,
-    build_all_existing_assets,
+    EsgMaster,
+    AssetMaster,
+    FundMaster,
     build_liabs,
     fund_assets_roll_forward,
     fund_liabs_roll_forward,
@@ -38,15 +38,15 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     del file_df_dict['epl']
 
     # build esg master
-    esg_master = build_esg_master(
+    esg_master = EsgMaster.from_df(
         model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
         esg_df=model.read_csv(filename_dict["esg"])
     )
     # build fund master
-    fund_master = build_fund_master(
+    fund_master = FundMaster.from_df(
+        df=file_df_dict['funds'],
         model_engine=model,
-        funds_df=file_df_dict['funds'],
         rebalance_policy_df=file_df_dict['rebalance_policy'],
     )
 
@@ -66,7 +66,9 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
         if t == 0:
             for fund in fund_master.funds:
                 fund_id = fund.fund_id
-                existing_assets = build_all_existing_assets(model, assets_df_dict, esg_master, fund_id)['all']
+                existing_assets = AssetMaster.existing_from_df(
+                    assets_df_dict, model_engine=model, econs=esg_master, fund_id=fund_id
+                ).all
                 if fund is not fund_master.sh_fund:
                     existing_liabs = build_liabs(model, liabs_df, fund_id, currencies=[])
                 else:

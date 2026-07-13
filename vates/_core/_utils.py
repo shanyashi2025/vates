@@ -236,9 +236,9 @@ class RunConfig:
                     raise ValueError(f"{name}: item '{item}' type '{type(item)}' is not allowed, expected in {item_type}.")
 
 
-def parse_str_to_int_list(str_in: str, separator: str = ',', joiner: str = '-',
+def parse_str_to_int_list(str_in: str, /, *, separator: str = ',', joiner: str = '-',
                           sort_list: Literal[None, 'ascending', 'asc', 'descending', 'desc'] = None,
-                          handler: Literal['keep', 'remove', 'error'] = 'error') -> list[int]:
+                          on_duplicate: Literal['keep', 'remove', 'error'] = 'error') -> list[int]:
     """Parse string to a list of non-negative integers"""
     if not isinstance(str_in, str):
         raise TypeError(f"{str_in}: type {type(str_in)} is not allowed, expected 'str'.")
@@ -271,12 +271,12 @@ def parse_str_to_int_list(str_in: str, separator: str = ',', joiner: str = '-',
 
     int_set = set(int_lst)
     if len(int_lst) != len(int_set):
-        handler = handler.lower()
-        if handler == 'keep':
+        on_duplicate = on_duplicate.lower()
+        if on_duplicate == 'keep':
             pass
-        elif handler == 'remove':
+        elif on_duplicate == 'remove':
             int_lst = list(int_set)
-        elif handler == 'error':
+        elif on_duplicate == 'error':
             dup_lst = [x for x in int_set if int_lst.count(x) > 1]
             raise ValueError(f"Duplicate entries in '{str_in}': e.g. {dup_lst[:min(5, len(dup_lst))]}. "
                              f"Revise the input, or specify duplicate_handler='keep' or 'remove'.")

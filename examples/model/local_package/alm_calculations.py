@@ -1,11 +1,11 @@
 import pandas as pd
 
 from vates import ProjModelEngine, KeyedArray
-from vates.alm.funds import Fund
+from vates.alm.funds import Fund, TargetWeight
 
-from .setup_objs_alm import FundRebalanceParams, build_target_allocation
-from .setup_objs_asset import build_all_profile_assets
-from .setup_objs_econ import EsgMaster
+from .setup_objs_alm import FundRebalanceParams
+from .asset_master import AssetMaster
+from .econ_master import EsgMaster
 
 def rebalance_this_month(cal_month: int, rebalance_freq: int) -> bool:
     """
@@ -108,7 +108,9 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
     period = fund.period
 
     if rebalance_this_month(period.month, rebalance_params.rebalance_freq):
-        profile_assets = build_all_profile_assets(model_engine, assets_df_dict, econs, fund_id)['all']
+        profile_assets = AssetMaster.profile_from_df(
+            assets_df_dict, model_engine=model_engine, econs=econs, fund_id=fund_id
+        ).all
         target_allocation = build_target_allocation(asset_allocation_df, fund_id, str(period.year * 100 + period.month))
         fund.rebalance_assets(
             fund_size_type=rebalance_params.size_type,
@@ -118,3 +120,30 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
         )
     else:
         fund.skip_rebalance()
+
+
+def build_target_allocation(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[str, 'TargetWeight']:
+    """
+    Build a dictionary of target allocations for a fund from a DataFrame.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing allocation data.
+        fund_id (str): Fund id the target allocations for.
+        date_col (str): String date column to lookup.
+
+    Returns:
+        dict: Mapping of allocation group to TargetAllocation.
+    """
+    target_allocation: dict = {}
+
+    df_flt: pd.DataFrame = df.copy()
+    if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
+
+    for _, row in df_flt.iterrows():
+        allocation_group = row["allocation_group"]
+        tgt_wgt = row[date_col] / 100
+        min_wgt = tgt_wgt + row["lower_allow_pc"] / 100
+        max_wgt = tgt_wgt + row["upper_allow_pc"] / 100
+        target_allocation[allocation_group] = TargetWeight(tgt_weight=tgt_wgt, min_weight=min_wgt, max_weight=max_wgt)
+
+    return target_allocation

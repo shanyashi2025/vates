@@ -1,12 +1,12 @@
-from typing import List, Dict
-import pandas as pd
 from dataclasses import dataclass
+from typing import List, Dict, Self
+import pandas as pd
 
 from vates import ProjModelEngine
 from vates.alm import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.econs import Currency
 from vates.alm.liabs import Liab, ExtProjLiab
-from vates.alm.funds import Fund, FundSizeType, RebalancePolicyParams, TargetWeight
+from vates.alm.funds import Fund, FundSizeType, RebalancePolicyParams
 
 
 @dataclass
@@ -22,43 +22,89 @@ class FundRebalanceParams:
     size_basis: AssetRepBasis
     rebalance_freq: int
 
-@dataclass
+
 class FundMaster:
-    funds: list[Fund]
-    rebalance_params_dict: dict[str, FundRebalanceParams] | None = None
-    ph_funds: list[Fund] | None = None
-    sh_fund: Fund | None = None
 
-def build_fund_master(model_engine: ProjModelEngine, funds_df: pd.DataFrame, rebalance_policy_df: pd.DataFrame
-                      ) -> FundMaster:
-    funds = []
-    ph_funds = []
-    sh_fund = None
-    rebalance_params_dict: dict = {}
+    def __init__(
+        self,
+        *,
+        funds: list[Fund] | None = None,
+        ph_funds: list[Fund] | None = None,
+        sh_fund: Fund | None = None,
+        rebalance_params_dict: dict[str, FundRebalanceParams] | None = None,
 
-    for idx, row in funds_df.iterrows():
-        fund_id = str(idx)
-        fund = Fund(
-            fund_id=fund_id,
-            model_engine=model_engine,
-            rebalance_policy=build_rebalance_policy(rebalance_policy_df, fund_id),
-            asset_categories=row["asset_classes_reported"].split(';')
-        )
-        if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
-            ph_funds.append(fund)
-        else:
-            if sh_fund is not None:
-                raise ValueError("Duplicated shareholder fund.")
-            sh_fund = fund
-        funds.append(fund)
-        rebalance_params_dict[fund_id] = FundRebalanceParams(
-            size_type=FundSizeType[row["fund_size_type"].upper()],
-            size_basis=AssetRepBasis[row["fund_size_basis"].upper()],
-            rebalance_freq=row["fund_rebalance_freq"]  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
-        )
+    ):
+        self.funds: list[Fund] | None = funds or []
+        self.rebalance_params_dict: dict[str, FundRebalanceParams] | None = rebalance_params_dict
+        self.ph_funds: list[Fund] | None = ph_funds
+        self.sh_fund: Fund | None = sh_fund
 
-    return FundMaster(funds=funds, ph_funds=ph_funds, sh_fund=sh_fund, rebalance_params_dict=rebalance_params_dict)
+    @classmethod
+    def from_df(
+        cls,
+        df: pd.DataFrame,
+        *,
+        model_engine: ProjModelEngine,
+        rebalance_policy_df: pd.DataFrame
+    ) -> Self:
+        funds = []
+        ph_funds = []
+        sh_fund = None
+        rebalance_params_dict: dict = {}
 
+        for idx, row in df.iterrows():
+            fund_id = str(idx)
+            fund = Fund(
+                fund_id=fund_id,
+                model_engine=model_engine,
+                rebalance_policy=cls.build_rebalance_policy_from_df(rebalance_policy_df, fund_id=fund_id),
+                asset_categories=row["asset_classes_reported"].split(';')
+            )
+            if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
+                ph_funds.append(fund)
+            else:
+                if sh_fund is not None:
+                    raise ValueError("Duplicated shareholder fund.")
+                sh_fund = fund
+            funds.append(fund)
+            rebalance_params_dict[fund_id] = FundRebalanceParams(
+                size_type=FundSizeType[row["fund_size_type"].upper()],
+                size_basis=AssetRepBasis[row["fund_size_basis"].upper()],
+                rebalance_freq=row["fund_rebalance_freq"]  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
+            )
+
+        return FundMaster(funds=funds, ph_funds=ph_funds, sh_fund=sh_fund, rebalance_params_dict=rebalance_params_dict)
+
+    @classmethod
+    def build_rebalance_policy_from_df(cls, df: pd.DataFrame, *, fund_id: str) -> Dict[str, 'RebalancePolicyParams']:
+        """
+        Build a dictionary of rebalance policy for a fund from a DataFrame.
+
+        Args:
+            df (pd.DataFrame): DataFrame containing rebalance policy parameters.
+            fund_id (str): Fund the rebalance policy for.
+
+        Returns:
+            dict: Mapping of allocation group to AssetStrategyParams.
+        """
+        rebalance_policy: dict = {}
+
+        df_flt: pd.DataFrame = df.copy()
+        df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
+
+        for idx, row in df_flt.iterrows():
+            allocation_group = row["allocation_group"]
+            sequence = row["sequence"]
+            buysell_approach = AssetBuySellApproach(row["buysell_approach"].upper())
+            purchase_method = AssetPurchaseMethod(row["purchase_method"].upper())
+
+            rebalance_policy[allocation_group] = RebalancePolicyParams(
+                sequence=sequence,
+                buysell_approach=buysell_approach,
+                purchase_method=purchase_method,
+            )
+
+        return rebalance_policy
 
 def build_liabs(model_engine: ProjModelEngine, df: pd.DataFrame, fund_id: str | None,
                 currencies: List['Currency']) -> List['Liab']:
@@ -104,61 +150,3 @@ def build_liabs(model_engine: ProjModelEngine, df: pd.DataFrame, fund_id: str | 
         liabs.append(liab)
 
     return liabs
-
-
-def build_rebalance_policy(df: pd.DataFrame, fund_id: str) -> Dict[str, 'RebalancePolicyParams']:
-    """
-    Build a dictionary of rebalance policy for a fund from a DataFrame.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing rebalance policy parameters.
-        fund_id (str): Fund the rebalance policy for.
-
-    Returns:
-        dict: Mapping of allocation group to AssetStrategyParams.
-    """
-    rebalance_policy: dict = {}
-
-    df_flt: pd.DataFrame = df.copy()
-    df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
-
-    for idx, row in df_flt.iterrows():
-        allocation_group = row["allocation_group"]
-        sequence = row["sequence"]
-        buysell_approach = AssetBuySellApproach(row["buysell_approach"].upper())
-        purchase_method = AssetPurchaseMethod(row["purchase_method"].upper())
-
-        rebalance_policy[allocation_group] = RebalancePolicyParams(
-            sequence=sequence,
-            buysell_approach=buysell_approach,
-            purchase_method=purchase_method,
-        )
-
-    return rebalance_policy
-
-
-def build_target_allocation(df: pd.DataFrame, fund_id: str, date_col: str) -> Dict[str, 'TargetWeight']:
-    """
-    Build a dictionary of target allocations for a fund from a DataFrame.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing allocation data.
-        fund_id (str): Fund id the target allocations for.
-        date_col (str): String date column to lookup.
-
-    Returns:
-        dict: Mapping of allocation group to TargetAllocation.
-    """
-    target_allocation: dict = {}
-
-    df_flt: pd.DataFrame = df.copy()
-    if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
-
-    for _, row in df_flt.iterrows():
-        allocation_group = row["allocation_group"]
-        tgt_wgt = row[date_col] / 100
-        min_wgt = tgt_wgt + row["lower_allow_pc"] / 100
-        max_wgt = tgt_wgt + row["upper_allow_pc"] / 100
-        target_allocation[allocation_group] = TargetWeight(tgt_weight=tgt_wgt, min_weight=min_wgt, max_weight=max_wgt)
-
-    return target_allocation

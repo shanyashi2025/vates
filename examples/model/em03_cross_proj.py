@@ -5,8 +5,8 @@ from vates import ProjModelEngine, KeyedArray, alm
 from vates.solvency import cn_cross2
 from local_package import (
     load_file_df,
-    build_esg_master,
-    build_all_existing_assets,
+    EsgMaster,
+    AssetMaster,
 )
 
 def cross_model(start_year: int, start_month: int, end_year: int, scenario: str, workspace_directory: str,
@@ -34,7 +34,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     del file_df_dict['epl']
 
     # build esg master
-    esg_master = build_esg_master(
+    esg_master = EsgMaster.from_df(
         model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
         esg_df=model.read_csv(filename_dict["esg"])
@@ -92,12 +92,12 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
                 aging_assets_input_filelist_df.at[date_index, item], keep_default_na=False, allow_not_found=True) for
             item in asset_filename_list
         }
-        aging_assets_dict = build_all_existing_assets(model, aging_assets_df_dict, esg_master, None)
+        aging_assets_master = AssetMaster.existing_from_df(aging_assets_df_dict, model_engine=model, econs=esg_master)
 
         # --- (4) calculate asset mc input ---
         mc_factor_equity = cross_mc_factor_df.at[date_index, 'mc_factor_equity']
         mc_factor_spread = cross_mc_factor_df.at[date_index, 'mc_factor_spread']
-        for asset in aging_assets_dict['all']:
+        for asset in aging_assets_master.all:
             type_asset = type(asset)
             mc_inputer = mc_inputer_dict[asset.fund_id]
             if type_asset == alm.assets.Equity:

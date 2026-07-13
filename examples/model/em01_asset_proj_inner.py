@@ -1,7 +1,7 @@
 import json
 import sys
 from vates import ProjModelEngine
-from local_package import load_file_df, build_esg_master, build_all_existing_assets
+from local_package import load_file_df, EsgMaster, AssetMaster
 
 
 def asset_model(start_year: int, start_month: int, end_year: int, scenario: str, workspace_directory: str,
@@ -25,7 +25,7 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
     file_df_dict = load_file_df(model.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg"])
 
     # build esg master
-    esg_master = build_esg_master(
+    esg_master = EsgMaster.from_df(
         model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
         esg_df=model.read_csv(filename_dict["esg"])
@@ -44,7 +44,7 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
     def assets_projection():
         esg_master.update_econ_data(model.period)
         if model.time == 0:
-            assets[:] = build_all_existing_assets(model, assets_df_dict, esg_master, None)['all']
+            assets[:] = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=esg_master).all
         else:
             for asset in assets:
                 asset.roll_forward()
