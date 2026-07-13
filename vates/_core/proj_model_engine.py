@@ -229,7 +229,7 @@ class ProjModelEngine:
     def _write_projection_result(self) -> None:
         """Write the projection result."""
         if not self._run_config.enable_write_proj_result: return
-        variables = self._select_variables(self._proj_variables,'__proj_variables__.txt', 'full')
+        variables = self._select_variables(self._proj_variables,'__proj_variables__.json', 'full')
         if not variables: return  # empty list
 
         periods = pd.period_range(start=self.START_DATE, end=self.END_DATE, freq='M')
@@ -247,7 +247,7 @@ class ProjModelEngine:
         """Write the stochastic result."""
         if not self._run_config.stoch_result_file_mode:
             return
-        variables = self._select_variables(self._proj_variables,'__stoch_variables__.txt', 'none')
+        variables = self._select_variables(self._proj_variables,'__stoch_variables__.json', 'none')
         if not variables: return  # empty list
 
         stoch_setting = self.load_json('__stoch_setting__.json', allow_not_found=True)
@@ -328,26 +328,29 @@ class ProjModelEngine:
 
     def _select_variables(self, variable_list: list[weakref.ref[ProjVariable]], user_select: str,
                           default_full_or_none: Literal['full', 'none']) -> list | None:
-        df = self.read_csv(user_select, allow_not_found=True)
-        if df is None:
+        sel_spc_dict = self.load_json(user_select, allow_not_found=True)
+        if sel_spc_dict is None:
             if default_full_or_none == 'full':
                 return [r() for r in variable_list if r() is not None]
             else:
                 return None
 
-        select_spec_list = df[['var_group', 'var_name', 'included']].values.tolist()
-        select_spec_dict = {(var_grp, var_name): True if incl.lower() in ['y', 'yes'] else False
-                            for (var_grp, var_name, incl) in select_spec_list}
-
         def _is_select(v: ProjVariable) -> bool:
             if v is None:
                 return False
-            elif (v.group, v.name) in select_spec_dict:
-                return select_spec_dict[(v.group, v.name)]
-            elif (v.group, "*") in select_spec_dict:
-                return select_spec_dict[(v.group, "*")]
-            else:
+            group_dict = sel_spc_dict.get(v.group)
+            if group_dict is None:
                 return False
+            if not group_dict:  # group key is included and var name is empty: regarded as all var names included
+                return True
+            include, exclude = group_dict.get("include"), group_dict.get("exclude")
+            if include:
+                if isinstance(include, str) and include.upper() == "__ALL__":
+                    return True
+                return isinstance(include, list) and v.name in include
+            if exclude:
+                return isinstance(exclude, list) and v.name not in exclude
+            return True  # dict has key other than 'include' or 'exclude': regarded as all var names included
 
         return [r() for r in variable_list if _is_select(r())]
 

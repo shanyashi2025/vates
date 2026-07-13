@@ -1,7 +1,0 @@
-var_group,var_name,included
-cash,*,y
-cash,cash_flow,n
-bond,*,y
-equity,*,y
-fund,*,y
-rebalance,*,y

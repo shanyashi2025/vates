@@ -1,6 +1,0 @@
-var_group,var_name,included
-cash,*,y
-cash,cash_flow,n
-equity,*,y
-bond,*,y
-yield_curve,spot_rate,y

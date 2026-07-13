@@ -1,0 +1,14 @@
+{
+  "cash": {
+    "exclude": ["cash_flow"]
+  },
+  "bond": {
+    "include": "__ALL__"
+  },
+  "equity": {
+    "include": "__ALL__"
+  },
+  "yield_curve": {
+    "include": ["spot_rate"]
+  }
+}

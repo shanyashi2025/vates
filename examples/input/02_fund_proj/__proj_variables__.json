@@ -1,0 +1,17 @@
+{
+  "cash": {
+    "exclude": ["cash_flow"]
+  },
+  "bond": {
+    "include": "__ALL__"
+  },
+  "equity": {
+    "include": "__ALL__"
+  },
+  "fund": {
+    "include": "__ALL__"
+  },
+  "rebalance": {
+    "include": "__ALL__"
+  }
+}
