@@ -48,7 +48,7 @@ class EquityOption(Asset):
         asset_category: str = "",
         fund_id: str = "",
         allocation_group: str = "",
-        classification: AssetClassification = AssetClassification.FVTPL,
+        classification: AssetClassification | str = AssetClassification.FVTPL,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
     ):

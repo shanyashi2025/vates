@@ -19,7 +19,6 @@ class FundCalculator:
     def __init__(
         self,
         *,
-        fund_id: str,
         model_engine: ProjModelEngine | None = None,
         container: ALContainer,
         asset_categories: list[str]
@@ -29,13 +28,13 @@ class FundCalculator:
             self.time: int = model_engine.time
             self._start_date: pd.Period = model_engine.START_DATE
 
-        self.fund_id: str = fund_id
         self.container: ALContainer = container
         self.asset_categories_enum: dict[str, int] = {item: i for i, item in enumerate(asset_categories)}
 
         # Initialize time-dependent variables used for reporting
+        fund_id = self.container.name
         # dims = None
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=self.fund_id, group='fund')
+        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=fund_id, group='fund')
         self.tdv_totass_cash_flow: TDepVariable = create_tdv("totass_cash_flow")
         self.tdv_totass_urgl_bd: TDepVariable = create_tdv("totass_urgl_bd")
         self.tdv_totass_urgl_ad: TDepVariable = create_tdv("totass_urgl_ad")
@@ -53,7 +52,7 @@ class FundCalculator:
         self.tdv_proceeds_transferred_in: TDepVariable = create_tdv("proceeds_transferred_in")
         self.tdv_proceeds_transferred_out: TDepVariable = create_tdv("proceeds_transferred_out")
         # dims = AssetRepBasis
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=self.fund_id, group='fund', dims=[AssetRepBasis])
+        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[AssetRepBasis])
         self.tdv_totass_rep_value_bd: TDepVariable = create_tdv("totass_rep_value_bd")
         self.tdv_totass_rep_value_ad: TDepVariable = create_tdv("totass_rep_value_ad")
         self.tdv_totass_inv_ret_bd: TDepVariable = create_tdv("totass_inv_ret_bd")
@@ -61,13 +60,13 @@ class FundCalculator:
         self.tdv_totass_inv_ret_ad: TDepVariable = create_tdv("totass_inv_ret_ad")
         self.tdv_totass_ror_pc_ad: TDepVariable = create_tdv("totass_ror_pc_ad")
         # dims = AssetClass
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=self.fund_id, group='fund', dims=[asset_categories])
+        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[asset_categories])
         self.tdv_asset_cash_flow: TDepVariable = create_tdv("asset_cash_flow")
         self.tdv_asset_urgl_bd: TDepVariable = create_tdv("asset_urgl_bd")
         self.tdv_asset_urgl_ad: TDepVariable = create_tdv("asset_urgl_ad")
         self.tdv_asset_rgl_ad: TDepVariable = create_tdv("asset_rgl_ad")
         # dims = AssetClass,AssetRepBasis
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=self.fund_id, group='fund', dims=[asset_categories, AssetRepBasis])
+        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[asset_categories, AssetRepBasis])
         self.tdv_asset_rep_value_bd: TDepVariable = create_tdv("asset_rep_value_bd")
         self.tdv_asset_rep_value_ad: TDepVariable = create_tdv("asset_rep_value_ad")
         self.tdv_asset_inv_ret_bd: TDepVariable = create_tdv("asset_inv_ret_bd")
@@ -333,4 +332,4 @@ class FundCalculator:
             return ret, ret / prev_val
 
     def __str__(self) -> str:
-        return self.fund_id + '<calculator>'
+        return f"{type(self).__name__} - '{self.container.name}'"

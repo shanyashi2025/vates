@@ -34,7 +34,7 @@ class Cash(Asset):
         market_info: MarketInfo | None = None,
         ret_id: str | None = "",
         ret_id_short_pos: str | None = None,
-        classification: AssetClassification = AssetClassification.FVTPL,
+        classification: AssetClassification | str = AssetClassification.FVTPL,
         purchase_date: pd.Period | None = None
     ):
         """

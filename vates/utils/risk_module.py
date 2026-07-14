@@ -4,9 +4,9 @@ from dataclasses import dataclass
 
 def risk_aggregation(sub_risk_vector: np.ndarray, corr_matrix: np.ndarray, is_validate_args: bool=False) -> float:
     if is_validate_args:
-        if type(sub_risk_vector) != np.ndarray:
+        if not isinstance(sub_risk_vector, np.ndarray):
             raise TypeError(f'Invalid {type(sub_risk_vector)=}, expected np.ndarray.')
-        if type(corr_matrix) != np.ndarray:
+        if not isinstance(corr_matrix, np.ndarray):
             raise TypeError(f'Invalid {type(corr_matrix)=}, expected np.ndarray.')
         if corr_matrix.ndim != 2:
             raise ValueError(f'{corr_matrix.ndim=}, expected 2.')
@@ -42,9 +42,9 @@ class RiskModule:
     def calculate_risk_charge(self, recalculate_sub_risk: bool):
         sub_risk_vector = np.zeros(len(self._sub_risk_list))
         for i, risk in enumerate(self._sub_risk_list):
-            if type(risk) == SubRisk:
+            if isinstance(risk, SubRisk):
                 sub_risk_vector[i] = risk.risk_charge
-            elif type(risk) == RiskModule:
+            elif isinstance(risk, RiskModule):
                 if recalculate_sub_risk:
                     risk.calculate_risk_charge(recalculate_sub_risk)
                 sub_risk_vector[i] = risk.risk_charge

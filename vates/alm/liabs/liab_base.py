@@ -222,4 +222,4 @@ class Liab(ABC):
         pass
 
     def __str__(self) -> str:
-        return self._liab_id
+        return f"{type(self).__name__} - '{self._liab_id}'"

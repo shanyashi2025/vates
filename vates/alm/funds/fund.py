@@ -60,15 +60,15 @@ class Fund:
 
         self.fund_id = fund_id
         # Asset and liab collections
-        self._container: ALContainer = ALContainer()
+        self._container: ALContainer = ALContainer(name=fund_id)
         self._primary_cash_asset: Cash | None = None
         self._assembled: bool = False
 
         self._calculator: FundCalculator = FundCalculator(
-            fund_id=fund_id, model_engine=model_engine, container=self._container, asset_categories=asset_categories
+            model_engine=model_engine, container=self._container, asset_categories=asset_categories
         )
         self._allocator: AssetAllocator = asset_allocator or AssetAllocator(
-            fund_id=fund_id, model_engine=model_engine, container=self._container, rebalance_policy=rebalance_policy
+            model_engine=model_engine, container=self._container, rebalance_policy=rebalance_policy
         )
 
     def sync_time(self, subject) -> None:
@@ -164,11 +164,11 @@ class Fund:
         self._container.deposit_free_proceeds(self._calculator.tdv_totliab_cash_flow[self.time])
 
     @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
-    def skip_rebalance(self) -> None:
-        """Skip asset rebalance and invest free proceeds into primary cash."""
+    def no_action_on_rebalance(self) -> None:
+        """Skip asset rebalance, invest free proceeds into primary cash."""
         t = self.time
         self._calculator.tdv_accum_free_proceeds_bd[t] = self._container.accum_free_proceeds
-        # just invest accum_free_proceeds into primary cash, no other rebalance, accum_free_proceeds is reset to zero
+        # just invest accum_free_proceeds into primary cash, no other action, accum_free_proceeds is reset to zero
         self.primary_cash_asset.invest_new_money(self._container.withdrawal_accum_free_proceeds())
         for asset in self.assets:
             asset.close_dealing()
@@ -246,9 +246,6 @@ class Fund:
         # note: liab.update_ad() is NOT automatically called here
         self._calculator.process_liabs_after_dealing()
 
-    # def _reset_accum_free_proceeds(self) -> None:
-    #     self._accum_free_proceeds = 0.0
-
     @t_checker({"proc_assets_ad": 0})
     def transfer_free_proceeds_to_other(self, other: Optional['Fund']) -> None:
         """Transfer free proceeds to the other fund.
@@ -261,7 +258,7 @@ class Fund:
         amount = self._container.withdrawal_accum_free_proceeds()
         if other is None:
             pass
-        elif type(other) == Fund:
+        elif isinstance(other, Fund):
             other.receive_free_proceeds(amount)
         else:
             warnings.warn(f"Invalid {type(other)}, expected <class 'Fund'> ")
@@ -326,4 +323,4 @@ class Fund:
         return self._rate_of_return_ad(t_or_p, AssetRepBasis.FAV)
 
     def __str__(self) -> str:
-        return self.fund_id
+        return f"{type(self).__name__} - '{self.fund_id}'"

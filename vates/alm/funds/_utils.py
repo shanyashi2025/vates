@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from vates.alm.assets import Asset, Cash
+from vates.alm.assets import Asset
 from vates.alm.liabs import Liab
 
 
@@ -9,6 +9,7 @@ class ALContainer:
     """Asset liability container
 
     """
+    name: str
     _assets: list[Asset] = field(default_factory=list)
     _liabs: list[Liab] = field(default_factory=list)
     _accum_free_proceeds: float = 0.0

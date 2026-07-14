@@ -146,6 +146,8 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
         "portfolio_params": portfolio_params,
     })
 
+    # print(model.proj_result())
+
 
 def main():
     with open(sys.argv[1], 'r', encoding='utf-8') as file:

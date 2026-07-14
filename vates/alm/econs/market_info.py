@@ -50,4 +50,4 @@ class MarketInfo:
         return self._data[item]
 
     def __str__(self) -> str:
-        return self.info_id
+        return f"{type(self).__name__} - '{self.info_id}'"

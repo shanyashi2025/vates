@@ -273,14 +273,14 @@ def solve_ytm(target_pv: float, cash_flows: npt.NDArray[np.float64], freq: int =
 
 
 def calculate_risk_adj_spot(rf_spots: npt.NDArray[np.float64], mult: float | npt.NDArray[np.float64],
-                            add: npt.NDArray[np.float64]) -> float | npt.NDArray[np.float64]:
+                            add: float | npt.NDArray[np.float64]) -> float | npt.NDArray[np.float64]:
     """
-    Calculate risk-adjusted spot rates.
+    Calculate risk-adjusted spot rates: `ra = rf * (1 + mult) + add`.
 
     Args:
         rf_spots (npt.NDArray[np.float64]): Risk-free spot rates.
-        mult (npt.NDArray[np.float64]): Multiplicative adjustment factors.
-        add (npt.NDArray[np.float64]): Additive spread adjustments.
+        mult (float, npt.NDArray[np.float64]): Multiplicative adjustment factors.
+        add (float, npt.NDArray[np.float64]): Additive spread adjustments.
 
     Returns:
         npt.NDArray[np.float64]: Risk-adjusted spot rates.

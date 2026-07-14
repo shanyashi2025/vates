@@ -53,7 +53,6 @@ class AssetAllocator:
         self,
         *,
         model_engine: ProjModelEngine | None = None,
-        fund_id: str,
         container: ALContainer,
         rebalance_policy: dict[str, RebalancePolicyParams]
     ):
@@ -62,12 +61,12 @@ class AssetAllocator:
             self.time: int = model_engine.time
             self._start_date: pd.Period = model_engine.START_DATE
 
-        self.fund_id: str = fund_id
         self.container: ALContainer = container
+        self.fund_id: str = self.container.name
         self.rebalance_policy = rebalance_policy
-        self.ag_seq_list = self.list_ag_in_sequence(fund_id, rebalance_policy)
+        self.ag_seq_list = self.list_ag_in_sequence(self.fund_id, rebalance_policy)
 
-        tdv_kwargs = {"model_engine": model_engine, "owner": fund_id, "group": 'rebalance'}
+        tdv_kwargs = {"model_engine": model_engine, "owner": self.fund_id, "group": 'rebalance'}
         self.tdv_fund_size = TDepVariable("fund_size", **tdv_kwargs)
         self.tdv_ag_repval_bd = TDepVariable("ag_repval_bd",  dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
         self.tdv_ag_repval_ad = TDepVariable("ag_repval_ad", dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
@@ -430,4 +429,4 @@ class AssetAllocator:
         return target_met
 
     def __str__(self) -> str:
-        return self.fund_id + "<allocator>"
+        return f"{type(self).__name__} - '{self.fund_id}'"

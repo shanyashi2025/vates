@@ -88,7 +88,7 @@ class EquityIndex:
         """TDepVariable: Dividend yield (annual compounding)."""
         return self.tdv_dividend_yield_ac
 
-    def compound_growth(self) -> None:
+    def compound_growth_on_update(self) -> None:
         """
         Apply compound growth on the total equity index.
         """
@@ -126,4 +126,4 @@ class EquityIndex:
         self._last_update = t
 
     def __str__(self) -> str:
-        return self.index_id
+        return f"{type(self).__name__} - '{self.index_id}'"

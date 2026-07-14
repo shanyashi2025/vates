@@ -99,19 +99,19 @@ class EsgMaster:
             if date_col:
                 self.update_yield_curve(esg_item, date_col)
             else:
-                esg_item.econ_obj.skip_update()
+                esg_item.econ_obj.no_change_on_update()
         # update credit bands
         for esg_item in self.credit_bands:
             if date_col:
                 self.update_credit_band(esg_item, date_col)
             else:
-                esg_item.econ_obj.skip_update()
+                esg_item.econ_obj.no_change_on_update()
         # update equity indices
         for esg_item in self.equity_indices:
             if date_col:
                 self.update_equity_index(esg_item, date_col, esg_step)
             else:
-                esg_item.econ_obj.compound_growth()
+                esg_item.econ_obj.compound_growth_on_update()
         # update currencies
         for esg_item in self.currencies:
             if date_col:

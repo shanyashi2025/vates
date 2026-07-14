@@ -119,7 +119,7 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
             assets_profile=profile_assets
         )
     else:
-        fund.skip_rebalance()
+        fund.no_action_on_rebalance()
 
 
 def build_target_allocation(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[str, 'TargetWeight']:

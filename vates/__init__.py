@@ -4,6 +4,7 @@ from vates._core import (
     ConstVariable,
     TDepVariable,
     KeyedArray,
+    proj_result,
 )
 from vates import utils
 
@@ -19,6 +20,7 @@ __all__ = [
     'ConstVariable',
     'TDepVariable',
     'KeyedArray',
+    'proj_result',
     # utils
     'utils',
     # libs

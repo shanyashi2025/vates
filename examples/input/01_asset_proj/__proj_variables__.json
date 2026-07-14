@@ -10,5 +10,8 @@
   },
   "yield_curve": {
     "include": ["spot_rate"]
+  },
+  "credit": {
+    "include": "__ALL__"
   }
 }

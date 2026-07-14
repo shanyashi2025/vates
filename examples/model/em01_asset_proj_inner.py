@@ -51,6 +51,7 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
                 asset.close_dealing()
 
     _ = model.run()
+    # print(model.proj_result())
 
 
 def main():

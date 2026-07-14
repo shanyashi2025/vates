@@ -24,6 +24,7 @@ class StochExecutor:
     _concat_output_file_path = ProjModelEngine._concat_output_file_path
     get_filepath = ProjModelEngine.get_filepath
     _search_filepath = ProjModelEngine._search_filepath
+    proj_result = ProjModelEngine.proj_result
 
     def __init__(
         self,

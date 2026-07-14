@@ -27,7 +27,7 @@ class Equity(Asset):
         mv: float,
         equity_index: EquityIndex,
         fav: float | None = None,
-        classification: AssetClassification = AssetClassification.FVTPL,
+        classification: AssetClassification | str = AssetClassification.FVTPL,
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,

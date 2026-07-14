@@ -62,4 +62,4 @@ class Currency:
         self._last_update = t
 
     def __str__(self) -> str:
-        return self.currency_id
+        return f"{type(self).__name__} - '{self.currency_id}'"

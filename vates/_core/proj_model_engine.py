@@ -13,7 +13,7 @@ from types import MethodType
 from typing import Callable, Literal, Self, get_type_hints
 
 from vates._core.proj_variables import ProjVariable
-from vates._core._utils import RunConfig
+from vates._core._utils import RunConfig, proj_result
 
 class ProjModelEngine:
     """Actuarial projection model engine.
@@ -647,6 +647,11 @@ class ProjModelEngine:
         filename = os.path.abspath(frame.f_code.co_filename)
         lineno = frame.f_lineno
         self._messages.append(f"{filename}:{lineno}: {msg}")
+
+    def proj_result(self, *, group: str | None = None, owner: str | None = None, variable: str | None = None,
+                    date: str | int | None = None,) -> pd.DataFrame | float:
+        return proj_result(results_directory=self.results_directory_path, model_name=self.MODEL_NAME,
+                           group=group, owner=owner, variable=variable, date=date)
 
     def __setattr__(self, name, value):
         if hasattr(self, '_initialized'):

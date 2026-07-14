@@ -240,4 +240,4 @@ class Asset(ABC):
         pass
 
     def __str__(self) -> str:
-        return self.asset_id
+        return f"{type(self).__name__} - '{self.asset_id}'"

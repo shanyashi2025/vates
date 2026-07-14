@@ -219,7 +219,7 @@ class TDepVariable(ProjVariable):
         dims: list | None = None
     ):
         if model_engine is None:
-            warnings.warn(f"Cannot create TDepVariable '{name}', ConstVariable returned (model_engine is None).")
+            warnings.warn(f"Cannot create 'TDepVariable', a 'ConstVariable' instance returned (model_engine is None).")
             return ConstVariable(name, model_engine=model_engine, owner=owner, group=group, dims=dims)
 
         return super().__new__(cls)

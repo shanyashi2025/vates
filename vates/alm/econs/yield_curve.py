@@ -72,8 +72,8 @@ class YieldCurve:
         """int: Last update time index."""
         return self._last_update
 
-    def skip_update(self) -> None:
-        self._last_update = self.time
+    def no_change_on_update(self) -> None:
+        self._on_exit_update()
 
     @property
     def spot_rates(self) -> npt.NDArray[np.float64]:
@@ -92,7 +92,7 @@ class YieldCurve:
         self._forward_rates = convert_disc_to_fwrd(self._disc_factors, "M")
         for n in self._par_yields:
             self._par_yields[n] = convert_disc_to_par(self._disc_factors, n, "M")
-        self._complete_update()
+        self._on_exit_update()
 
     @property
     def disc_factors(self) -> npt.NDArray[np.float64]:
@@ -111,7 +111,7 @@ class YieldCurve:
         self._forward_rates = convert_disc_to_fwrd(self._disc_factors, "M")
         for n in self._par_yields:
             self._par_yields[n] = convert_disc_to_par(self._disc_factors, n, "M")
-        self._complete_update()
+        self._on_exit_update()
 
     @property
     def forward_rates(self) -> npt.NDArray[np.float64]:
@@ -130,17 +130,17 @@ class YieldCurve:
         self._spot_rates = convert_disc_to_spot(self._disc_factors, "M")
         for n in self._par_yields:
             self._par_yields[n] = convert_disc_to_par(self._disc_factors, n, "M")
-        self._complete_update()
+        self._on_exit_update()
 
     @property
     def par_yields(self) -> dict[int, npt.NDArray[np.float64]]:
         return self._par_yields
 
-    def _complete_update(self) -> None:
+    def _on_exit_update(self) -> None:
         t = self.time
         len_rates = len(self._spot_rates)
         self._tdv_spot_rates[t] = np.array([0 if i > len_rates else self._spot_rates[i] for i in self._tdv_term_dim])
         self._last_update = t
 
     def __str__(self) -> str:
-        return self.curve_id
+        return f"{type(self).__name__} - '{self.curve_id}'"
