@@ -447,6 +447,7 @@ class ProjModelEngine:
                 "input_directories": self._run_config.input_directories,
                 "results_directory": self._run_config.results_directory,
             },
+            "environ": self._environ,
             "output_files": list(map(str, self._output_files)),
             "messages": self._messages,
         }
@@ -454,6 +455,16 @@ class ProjModelEngine:
         if self._run_config.enable_write_runlog:
             with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
                 json.dump(self._runlog, jsonfile, indent=4)
+
+    @property
+    def _environ(self) -> dict[str, str]:
+        return {
+            "COMPUTERNAME": os.getenv("COMPUTERNAME"),
+            "USERNAME": os.getenv("USERNAME"),
+            "USERDOMAIN": os.getenv("USERDOMAIN"),
+            "VIRTUAL_ENV": os.getenv("VIRTUAL_ENV"),
+            "process_id": os.getpid(),
+        }
 
     def load_json(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
                   allow_not_found: bool = False, **kwargs) -> dict | None:

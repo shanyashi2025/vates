@@ -23,7 +23,7 @@ class BondFixedBuilder:
         asset_category: str,
         fund_id: str,
         allocation_group: str,
-        classification: AssetClassification,
+        classification: AssetClassification | str,
         currency: Currency,
         units: float,
         issue_date: pd.Period,

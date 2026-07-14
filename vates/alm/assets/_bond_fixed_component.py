@@ -27,12 +27,12 @@ class BondFixedParameters:
 
     def __post_init__(self):
         if self.issue_date >= self.maturity_date:
-            raise ValueError(f'issue_date {self.issue_date} > maturity_date {self.maturity_date}.')
+            raise ValueError(f'issue_date {self.issue_date} >= maturity_date {self.maturity_date}.')
         if self.face_value <= 0:
-            raise ValueError(f'face_value={self.face_value} should be positive.')
+            raise ValueError(f'face_value={self.face_value}, expected positive.')
         if self.coupon_freq not in (0, 1, 2, 4, 12):
             raise ValueError(f'Invalid coupon_freq={self.coupon_freq}, expected [0, 1, 2, 4, 12].')
-        if self.coupon_interval and (self.maturity_date - self.issue_date).n % self.coupon_interval != 0:
+        if self.coupon_interval and self.lifespan_in_months % self.coupon_interval != 0:
             warnings.warn(f"Months between maturity date ({self.maturity_date}) and issue date {self.issue_date} is not "
                           f"divisible by coupon interval ({self.coupon_interval}). Maturity date will be used in "
                           f"determining months to pay coupon.")
@@ -45,6 +45,11 @@ class BondFixedParameters:
             return 12 // self.coupon_freq
         else:
             return None
+
+    @property
+    def lifespan_in_months(self) -> int:
+        return (self.maturity_date - self.issue_date).n
+
 
 class BondFixedCashFlowGenerator:
     """
@@ -110,7 +115,7 @@ class BondFixedCashFlowGenerator:
         if self._cash_flow_from_issue is not None:
             return self._cash_flow_from_issue
 
-        n_months = (self.params.maturity_date - self.params.issue_date).n
+        n_months = self.params.lifespan_in_months
         arr = np.zeros(n_months)
         coupon_interval = self.params.coupon_interval
 
@@ -364,7 +369,7 @@ class BondFixedCashFlowProvider:
         self.params = bond_params
         self._interest_from_issue: npt.NDArray[np.float64] = provided_cash_flows_dict["interest"]
         self._principal_from_issue: npt.NDArray[np.float64] = provided_cash_flows_dict["principal"]
-        n_months = (self.params.maturity_date - self.params.issue_date).n
+        n_months = self.params.lifespan_in_months
         if len(self._interest_from_issue) != n_months:
             raise ValueError(f"Length of interest cash flow array ({len(self._interest_from_issue)}) inconsistent with "
                              f"maturity_date - issue_date ({n_months}).")

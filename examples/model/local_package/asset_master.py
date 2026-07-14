@@ -3,12 +3,11 @@ import pandas as pd
 from typing import Self
 
 from vates import ProjModelEngine
-from vates.alm import AssetClassification
 from vates.alm.assets import create_asset, Cash, BondFixed, Equity
 from vates.alm.econs import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 from .econ_master import EsgMaster
 
-ASSET_CATEGORIES_MAPPING = {
+ASSET_CATEGORY_MAPPING = {
     'cash': 'CASH',
     'equity': 'EQUITY',
     'fixed_bond': 'BOND',
@@ -175,7 +174,7 @@ class AssetMaster:
                 asset_cls="cash",
                 model_engine=model_engine,
                 asset_id=row["asset_id"],
-                asset_category=ASSET_CATEGORIES_MAPPING["cash"],
+                asset_category=ASSET_CATEGORY_MAPPING["cash"],
                 fund_id=row["fund_id"],
                 allocation_group=row["allocation_group"],
                 currency=currency,
@@ -252,7 +251,7 @@ class AssetMaster:
                 asset_cls="fixed_bond",
                 pre_calculations=pre_calc.split(';') if pre_calc.lower() != 'none' else None,
                 asset_id=row["asset_id"],
-                asset_category=ASSET_CATEGORIES_MAPPING['fixed_bond'],
+                asset_category=ASSET_CATEGORY_MAPPING['fixed_bond'],
                 fund_id=row["fund_id"],
                 allocation_group=row["allocation_group"],
                 currency=currency,
@@ -263,7 +262,7 @@ class AssetMaster:
                 face_value=row["face_value"],
                 provided_cash_flow_dict=provided_cash_flow_dict,
                 units=row["units"],
-                classification=AssetClassification(row["asset_classification"]),
+                classification=row["asset_classification"],
                 rf_curve=rf_curve,
                 credit_band=credit_band,
                 abv_price=row["abv_price_dirty"],
@@ -352,7 +351,7 @@ class AssetMaster:
                 asset_cls="fixed_bond",
                 pre_calculations=['coupon_rate'],
                 asset_id=f"{str_cal_ym}{row["_asset_id"]}",
-                asset_category=ASSET_CATEGORIES_MAPPING['fixed_bond'],
+                asset_category=ASSET_CATEGORY_MAPPING['fixed_bond'],
                 fund_id=fund_id,
                 allocation_group=row["allocation_group"],
                 currency=currency,
@@ -362,7 +361,7 @@ class AssetMaster:
                 face_value=row["face_value"],
                 redemp_sched=None,
                 units=row["units"],
-                classification=AssetClassification(row["asset_classification"]),
+                classification=row["asset_classification"],
                 rf_curve=rf_curve,
                 credit_band=credit_band,
                 abv_price=row["face_value"],
@@ -417,10 +416,10 @@ class AssetMaster:
                 asset_cls="equity",
                 model_engine=model_engine,
                 asset_id=row["asset_id"],
-                asset_category=ASSET_CATEGORIES_MAPPING["equity"],
+                asset_category=ASSET_CATEGORY_MAPPING["equity"],
                 fund_id=row["fund_id"],
                 allocation_group=row["allocation_group"],
-                classification=AssetClassification(row["asset_classification"]),
+                classification=row["asset_classification"],
                 currency=currency,
                 mv=row["mv"],
                 fav=row["fav"],
@@ -476,10 +475,10 @@ class AssetMaster:
                 asset_cls="equity",
                 model_engine=model_engine,
                 asset_id=f"{str_cal_ym}{row["_asset_id"]}",
-                asset_category=ASSET_CATEGORIES_MAPPING['equity'],
+                asset_category=ASSET_CATEGORY_MAPPING['equity'],
                 fund_id=fund_id,
                 allocation_group=row["allocation_group"],
-                classification=AssetClassification(row["asset_classification"]),
+                classification=row["asset_classification"],
                 currency=currency,
                 mv=row["amount"],
                 fav=row["amount"],

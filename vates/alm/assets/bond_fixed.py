@@ -53,7 +53,7 @@ class BondFixed(Asset):
         abv_price: float,
         amort_rate: float,
         rf_curve: YieldCurve,
-        classification: AssetClassification,
+        classification: AssetClassification | str,
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,
@@ -242,19 +242,21 @@ class BondFixed(Asset):
             return rf_spots + self._market_spread
 
     @property
-    def os_term_m(self) -> int:
-        return max((self._params.maturity_date - self.period).n, 0)
+    def os_term_m(self) -> int | None:
+        if self._params.issue_date <= self.period <= self._params.maturity_date:
+            return (self._params.maturity_date - self.period).n  # gives: n, n-1, ..., 1, 0 during lifespan
+        return None
 
     @property
     def is_alive(self) -> bool:
-        return self.period < self._params.maturity_date
+        return self._params.issue_date <= self.period < self._params.maturity_date
 
     @property
     def is_alive_beg(self) -> bool:
-        return self.period <= self._params.maturity_date
+        return self._params.issue_date < self.period <= self._params.maturity_date
 
     @t_checker({"roll_forward": 0}, "risk_metrics")
-    def calculate_risk_metrics(self, eff_dur_delta: float=0.001):
+    def calculate_risk_metrics(self, eff_dur_delta: float = 0.001):
         """
         Calculate all risk metrics for the bond.
 
@@ -267,6 +269,10 @@ class BondFixed(Asset):
 
     @property
     def risk_metrics(self) -> dict[str, float] | None:
+        if self._risk_mectrics is not None:
+            last_calc_time = self._tt_dict["risk_metrics"]
+            if last_calc_time != self.time:
+                warnings.warn(f"Risk metrics are not latest, they were calculated at time {last_calc_time}.")
         return self._risk_mectrics
 
     @t_checker({"roll_forward": -1}, "roll_forward")

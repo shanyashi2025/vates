@@ -372,6 +372,7 @@ class StochExecutor:
                 "results_directory": self._run_config.results_directory,
                 "max_workers": self._run_config.max_workers,
             },
+            "environ": self._environ,
             "output_files": list(map(str, self._output_files)),
             "messages": self._messages,
             "simulation_messages": self._sim_messages
@@ -380,6 +381,16 @@ class StochExecutor:
         if self._run_config.enable_write_runlog:
             with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
                 json.dump(self._runlog, jsonfile, indent=4)
+
+    @property
+    def _environ(self) -> dict[str, str]:
+        return {
+            "COMPUTERNAME": os.getenv("COMPUTERNAME"),
+            "USERNAME": os.getenv("USERNAME"),
+            "USERDOMAIN": os.getenv("USERDOMAIN"),
+            "VIRTUAL_ENV": os.getenv("VIRTUAL_ENV"),
+            "process_id": os.getpid(),
+        }
 
     @property
     def workspace_directory_path(self) -> Path:
