@@ -6,11 +6,7 @@ from typing import Literal, Any, Self
 
 @dataclass(frozen=True, slots=True)
 class RunConfig:
-    start_year: int | None
-    start_month: int | None
     start_date: pd.Period | None
-    end_year: int | None
-    end_month: int | None
     end_date: pd.Period | None
     max_t: int
     scenario: str | None
@@ -29,14 +25,9 @@ class RunConfig:
     max_workers: int | None = None
 
     def __post_init__(self):
-        if self.end_date is None and self.start_date is None and self.start_year is None and self.start_month is None \
-                and self.end_year is None and self.end_month is None:
+        if self.start_date is None and self.end_date is None:
             pass  # bypass validations of dates
         else:
-            self.validate_number("start_year", self.start_year, value_type=int, value_min=1900, value_max=5999)
-            self.validate_number("start_month", self.start_month, value_type=int, value_lst=range(1, 13))
-            self.validate_number("end_year", self.end_year, value_type=int, value_min=1900, value_max=5999)
-            self.validate_number("end_month", self.end_month, value_type=int, value_lst=range(1, 13))
             self.validate_number("max_t", self.max_t, value_type=int, value_min=0, value_max=2400)
             self.validate_period("start_date", self.start_date, value_min=pd.Period("1900-1", freq="M"),
                                  value_max=self.end_date)
@@ -88,8 +79,8 @@ class RunConfig:
             end_date = None
             max_t = 0
         else:
-            start_date = pd.Period(f'{start_year}-{start_month}', freq='M')
-            end_date = pd.Period(f'{end_year}-{end_month}', freq='M')
+            start_date = pd.Period(f'{int(start_year)}-{int(start_month)}', freq='M')
+            end_date = pd.Period(f'{int(end_year)}-{int(end_month)}', freq='M')
             max_t = (end_date - start_date).n
 
         if isinstance(simulations, str):
@@ -99,11 +90,7 @@ class RunConfig:
         results_directory_path = (workspace_directory_path / results_directory).resolve()
 
         return cls(
-            start_year=start_year,
-            start_month=start_month,
             start_date=start_date,
-            end_year=end_year,
-            end_month=end_month,
             end_date=end_date,
             max_t=max_t,
             scenario=scenario,
@@ -172,7 +159,7 @@ class RunConfig:
             raise ValueError(f"{name}: {value=}, expected in {str_literal}.")
 
     @staticmethod
-    def validate_period(name: str, value, /, *,
+    def validate_period(name: str, value: Any, /, *,
                         value_min: pd.Period | None = None, value_max: pd.Period | None = None, allow_none: bool = False
                         ) -> None:
         if value is None:

@@ -361,11 +361,11 @@ class StochExecutor:
                 "duration": f"{exec_hours:02}:{exec_minutes:02}:{exec_seconds:02}",
             },
             "run_setting": {
-                "start_year": self._run_config.start_year,
-                "start_month": self._run_config.start_month,
-                "end_year": self._run_config.end_year,
-                "end_month": self._run_config.end_month,
-                "scenario": self._run_config.scenario,
+                "start_year": self.START_YEAR,
+                "start_month": self.START_MONTH,
+                "end_year": self.END_YEAR,
+                "end_month": self.END_MONTH,
+                "scenario": self.SCENARIO,
                 "simulations": self._sims_str,
                 "workspace_directory": self._run_config.workspace_directory,
                 "input_directories": self._run_config.input_directories,
@@ -418,12 +418,12 @@ class StochExecutor:
     @property
     def START_YEAR(self) -> int:
         """int: Year of the start date of the projection."""
-        return self._run_config.start_year
+        return self._run_config.start_date.year
 
     @property
     def START_MONTH(self) -> int:
         """int: Month (1-12) of the start date of the projection."""
-        return self._run_config.start_month
+        return self._run_config.start_date.month
 
     @property
     def START_DATE(self) -> pd.Period:
@@ -433,12 +433,12 @@ class StochExecutor:
     @property
     def END_YEAR(self) -> int:
         """int: Year of the end date of the projection."""
-        return self._run_config.end_year
+        return self._run_config.end_date.year
 
     @property
     def END_MONTH(self) -> int:
         """int: Month (1-12) of the end date of the projection."""
-        return self._run_config.end_month
+        return self._run_config.end_date.month
 
     @property
     def END_DATE(self) -> pd.Period | None:

@@ -10,4 +10,4 @@
 9,cd2_HFT_23铁道15,2380276,企业债,corp_bond,cny,cd2_fund,2023/9/13,2033/9/14,0.0294,1,none,100,cny_rf,110.745789,0.0005,100.727033,50,AAA,FVTPL,market_spread
 10,trad_HFT_19铁道04,1980221,企业债,corp_bond,cny,trad_fund,2019/7/24,2039/7/25,0.041,1,none,100,cny_rf,128.900209,0.001,101.688335,110,AA,FVTPL,market_spread
 11,cd1_HFT_21铁道18,2180460,企业债,corp_bond,cny,cd1_fund,2021/11/18,2051/11/19,0.0375,1,none,100,cny_rf,134.660393,0.0015,100.307254,20,AAA,FVTPL,market_spread
-12,cd2_HFT_23铁道15,2380276,企业债,corp_bond,cny,cd2_fund,2023/9/13,2033/9/14,0.0294,1,none,100,cny_rf,110.745789,0.0005,100.727033,40,AA,FVTPL,market_spread
+12,cd2_HFT_23铁道15_,2380276,企业债,corp_bond,cny,cd2_fund,2023/9/13,2033/9/14,0.0294,1,none,100,cny_rf,110.745789,0.0005,100.727033,40,AA,FVTPL,market_spread

@@ -16,8 +16,8 @@ def load_file_df(read_func: Callable, filename_dict: dict[str, str], read_args: 
 
         kwargs = read_args.get(key) or {}
         df = read_func(name, **kwargs)
-        if (df is not None) and (not df.index.is_unique):
-            raise ValueError(f"Table {name}: duplicate indexes.")
+        if df is not None:
+            df = df.set_flags(allows_duplicate_labels=False)
         file_df_dict[key] = df
 
     return file_df_dict

@@ -509,18 +509,11 @@ class ProjModelEngine:
         if filepath is not None:
             try:
                 import pyarrow as pa
-                has_pyarrow = True
             except ImportError:
-                has_pyarrow = False
-                pa = ...
-                msg = f"Need to install 'pyarrow' library (`pip install pyarrow`)."
-                warnings.warn(msg); self.include_traced_message(f"ERROR: {msg}")
-            if has_pyarrow:
-                dataset = pa.dataset.dataset(filepath, format="parquet")
-                table = dataset.to_table(**kwargs)
-                return table.to_pandas()
-            else:
-                return None
+                raise ImportError("Need to install 'pyarrow' library (`pip install pyarrow`).")
+            dataset = pa.dataset.dataset(filepath, format="parquet")
+            table = dataset.to_table(**kwargs)
+            return table.to_pandas()
         elif allow_not_found:
             self.include_traced_message(f"INFO: parquet file '{filename}' not found, 'None' is return.")
             return None
@@ -587,12 +580,12 @@ class ProjModelEngine:
     @property
     def START_YEAR(self) -> int:
         """int: Year of the start date of the projection."""
-        return self._run_config.start_year
+        return self._run_config.start_date.year
 
     @property
     def START_MONTH(self) -> int:
         """int: Month (1-12) of the start date of the projection."""
-        return self._run_config.start_month
+        return self._run_config.start_date.month
 
     @property
     def START_DATE(self) -> pd.Period:
@@ -602,12 +595,12 @@ class ProjModelEngine:
     @property
     def END_YEAR(self) -> int:
         """int: Year of the end date of the projection."""
-        return self._run_config.end_year
+        return self._run_config.end_date.year
 
     @property
     def END_MONTH(self) -> int:
         """int: Month (1-12) of the end date of the projection."""
-        return self._run_config.end_month
+        return self._run_config.end_date.month
 
     @property
     def END_DATE(self) -> pd.Period:

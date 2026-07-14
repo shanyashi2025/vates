@@ -13,6 +13,15 @@ ASSET_CATEGORY_MAPPING = {
     'fixed_bond': 'BOND',
 }
 
+ASSET_CLASSIFICATION_MAPPING = {
+    "FVTPL": "FVTPL",
+    "FVOCI": "FVOCI",
+    "AC": "AC",
+    "HFT": "FVTPL",  # Held for Trading
+    "AFS": "FVOCI",  # Available for Sale
+    "HTM": "AC",     # Held for Maturity
+}
+
 class AssetMaster:
 
     def __init__(
@@ -166,14 +175,14 @@ class AssetMaster:
         df_flt: pd.DataFrame = df.copy()
         if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
 
-        for _, row in df_flt.iterrows():
+        for asset_id, row in df_flt.iterrows():
             currency_id = row["currency_id"]
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
             # create instance
             cash = create_asset(
                 asset_cls="cash",
                 model_engine=model_engine,
-                asset_id=row["asset_id"],
+                asset_id=asset_id,
                 asset_category=ASSET_CATEGORY_MAPPING["cash"],
                 fund_id=row["fund_id"],
                 allocation_group=row["allocation_group"],
@@ -224,7 +233,7 @@ class AssetMaster:
         df_flt: pd.DataFrame = df.copy()
         if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
 
-        for _, row in df_flt.iterrows():
+        for asset_id, row in df_flt.iterrows():
             currency_id = row["currency_id"]
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
             rf_curve_id = row["rf_curve_id"]
@@ -250,7 +259,7 @@ class AssetMaster:
                 model_engine=model_engine,
                 asset_cls="fixed_bond",
                 pre_calculations=pre_calc.split(';') if pre_calc.lower() != 'none' else None,
-                asset_id=row["asset_id"],
+                asset_id=asset_id,
                 asset_category=ASSET_CATEGORY_MAPPING['fixed_bond'],
                 fund_id=row["fund_id"],
                 allocation_group=row["allocation_group"],
@@ -262,7 +271,7 @@ class AssetMaster:
                 face_value=row["face_value"],
                 provided_cash_flow_dict=provided_cash_flow_dict,
                 units=row["units"],
-                classification=row["asset_classification"],
+                classification=ASSET_CLASSIFICATION_MAPPING[row["asset_classification"]],
                 rf_curve=rf_curve,
                 credit_band=credit_band,
                 abv_price=row["abv_price_dirty"],
@@ -337,7 +346,7 @@ class AssetMaster:
         str_cal_ym = str(p.year * 100 + p.month)
 
         # initialize assets profile - bond
-        for _, row in df_flt.iterrows():
+        for _asset_id, row in df_flt.iterrows():
             # read profile information
             currency_id = row["currency_id"]
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
@@ -350,7 +359,7 @@ class AssetMaster:
                 model_engine=model_engine,
                 asset_cls="fixed_bond",
                 pre_calculations=['coupon_rate'],
-                asset_id=f"{str_cal_ym}{row["_asset_id"]}",
+                asset_id=f"{str_cal_ym}{_asset_id}",
                 asset_category=ASSET_CATEGORY_MAPPING['fixed_bond'],
                 fund_id=fund_id,
                 allocation_group=row["allocation_group"],
@@ -361,7 +370,7 @@ class AssetMaster:
                 face_value=row["face_value"],
                 redemp_sched=None,
                 units=row["units"],
-                classification=row["asset_classification"],
+                classification=ASSET_CLASSIFICATION_MAPPING[row["asset_classification"]],
                 rf_curve=rf_curve,
                 credit_band=credit_band,
                 abv_price=row["face_value"],
@@ -406,7 +415,7 @@ class AssetMaster:
         df_flt: pd.DataFrame = df.copy()
         if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
 
-        for _, row in df_flt.iterrows():
+        for asset_id, row in df_flt.iterrows():
             currency_id = row["currency_id"]
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
             equity_index_id = row["equity_index_id"]
@@ -415,11 +424,11 @@ class AssetMaster:
             equity = create_asset(
                 asset_cls="equity",
                 model_engine=model_engine,
-                asset_id=row["asset_id"],
+                asset_id=asset_id,
                 asset_category=ASSET_CATEGORY_MAPPING["equity"],
                 fund_id=row["fund_id"],
                 allocation_group=row["allocation_group"],
-                classification=row["asset_classification"],
+                classification=ASSET_CLASSIFICATION_MAPPING[row["asset_classification"]],
                 currency=currency,
                 mv=row["mv"],
                 fav=row["fav"],
@@ -465,7 +474,7 @@ class AssetMaster:
         p: pd.Period = model_engine.period
         str_cal_ym = str(p.year * 100 + p.month)
 
-        for _, row in df_flt.iterrows():
+        for _asset_id, row in df_flt.iterrows():
             currency_id = row["currency_id"]
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
             equity_index_id = row["equity_index_id"]
@@ -474,11 +483,11 @@ class AssetMaster:
             equity = create_asset(
                 asset_cls="equity",
                 model_engine=model_engine,
-                asset_id=f"{str_cal_ym}{row["_asset_id"]}",
+                asset_id=f"{str_cal_ym}{_asset_id}",
                 asset_category=ASSET_CATEGORY_MAPPING['equity'],
                 fund_id=fund_id,
                 allocation_group=row["allocation_group"],
-                classification=row["asset_classification"],
+                classification=ASSET_CLASSIFICATION_MAPPING[row["asset_classification"]],
                 currency=currency,
                 mv=row["amount"],
                 fav=row["amount"],

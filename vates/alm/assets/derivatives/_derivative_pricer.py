@@ -28,7 +28,7 @@ class BlackScholesCalculator:
             raise ImportError("Need to install 'scipy' library (`pip install scipy`).")
 
     @staticmethod
-    def price(*, call_or_put: CallOrPut, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
+    def price(*, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
               ) -> float:
         """
         Calculate Black-Scholes price.
@@ -45,6 +45,8 @@ class BlackScholesCalculator:
         Returns:
             float: Option price.
         """
+        call_or_put = CallOrPut(call_or_put.upper()) if isinstance(call_or_put, str) else call_or_put
+
         if tau < 0:
             raise ValueError(f'{tau=}, must be non-negative.')
 
@@ -66,7 +68,7 @@ class BlackScholesCalculator:
             return z * (k * (1 - nd2) - f * (1 - nd1))
 
     @staticmethod
-    def greeks(*, call_or_put: CallOrPut, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
+    def greeks(*, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
                ) -> dict[str, float]:
         """
         Calculate Black-Scholes Greeks.
@@ -83,6 +85,7 @@ class BlackScholesCalculator:
         Returns:
             dict[str, float]: Dictionary of greeks.
         """
+        call_or_put = CallOrPut(call_or_put.upper()) if isinstance(call_or_put, str) else call_or_put
         if tau < 0: raise ValueError(f'{tau=}, must be non-negative.')
         if tau < 1e-10: return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0, 'rho': 0, }
 
@@ -119,7 +122,7 @@ class BlackScholesCalculator:
         }
 
     @staticmethod
-    def _price_and_vega(*, call_or_put: CallOrPut, s: float, k: float, r: float, q: float, sigma: float, tau: float
+    def _price_and_vega(*, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float, sigma: float, tau: float
                         ) -> tuple[float, float]:
         """
         Calculate Black-Scholes price and vega.
@@ -136,6 +139,7 @@ class BlackScholesCalculator:
         Returns:
             tuple[float, float]: Price and vega (`dPrice/dSigma`).
         """
+        call_or_put = CallOrPut(call_or_put.upper()) if isinstance(call_or_put, str) else call_or_put
         if tau < 0:
             raise ValueError(f'{tau=}, must be non-negative.')
 
@@ -161,7 +165,7 @@ class BlackScholesCalculator:
         return price, vega
 
     @staticmethod
-    def implied_volatility(*, call_or_put: CallOrPut, price: float, s: float, k: float, r: float, q: float = 0.0,
+    def implied_volatility(*, call_or_put: CallOrPut | str, price: float, s: float, k: float, r: float, q: float = 0.0,
                            tau: float, initial_guess: float = 0.2, tol: float = 1e-10, maxiter: int = 100) -> float:
         """
         Solve Black-Scholes implied volatility (sigma).
@@ -186,6 +190,7 @@ class BlackScholesCalculator:
         Returns:
             float: Implied volatility.
         """
+        call_or_put = CallOrPut(call_or_put.upper()) if isinstance(call_or_put, str) else call_or_put
         _price_and_vega = BlackScholesCalculator._price_and_vega
         # --- handle immediate expiry ---
         if tau <= 1e-12:

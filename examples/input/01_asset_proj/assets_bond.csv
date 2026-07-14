@@ -16,5 +16,5 @@
 15,dmy_HTM_redem2606_AC,dmy_redem2606,企业债,govt_bond,cny,trad_fund,2022/6/14,2026/6/15,0.02,1,test_repay,100,cny_rf,102.273363,0,100.995049,1,none,AC,market_spread
 16,24贴现国债69,249969,贴现,govt_bond,cny,trad_fund,2024/11/20,2025/5/22,0,0,none,100,cny_rf,99.493,0.001459431,99.493,1,none,AC,market_spread
 17,24农发31,240431,利随本清,govt_bond,cny,trad_fund,2024/9/26,2025/10/16,0.0148,0,none,100,cny_rf,100.242,0.004024148,100.242,1,none,AC,market_spread
-20,24贴现国债69,249969,贴现,govt_bond,cny,trad_fund,2024/11/20,2025/5/22,0,0,none,100,cny_rf,99.493,0.001459431,99.493,1,none,AC,market_price
-21,24农发31,240431,利随本清,govt_bond,cny,trad_fund,2024/9/26,2025/10/16,0.0148,0,none,100,cny_rf,100.242,0.004024148,100.242,1,none,AC,market_price
+20,24贴现国债69_,249969,贴现,govt_bond,cny,trad_fund,2024/11/20,2025/5/22,0,0,none,100,cny_rf,99.493,0.001459431,99.493,1,none,AC,market_price
+21,24农发31_,240431,利随本清,govt_bond,cny,trad_fund,2024/9/26,2025/10/16,0.0148,0,none,100,cny_rf,100.242,0.004024148,100.242,1,none,AC,market_price

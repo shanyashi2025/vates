@@ -1,6 +1,7 @@
 {
-    "assets_equity": {"allow_not_found": true, "keep_default_na": false},
-    "assets_bond": {"allow_not_found": true, "keep_default_na": false},
+    "assets_cash": {"index_col": "asset_id"},
+    "assets_equity": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
+    "assets_bond": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
     "yield_curves": {"index_col": "curve_id"},
     "credit_bands": {"index_col": "credit_band_id"},
     "equity_indices": {"index_col": "index_id"},
