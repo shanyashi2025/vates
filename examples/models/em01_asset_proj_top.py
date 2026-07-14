@@ -4,11 +4,22 @@ from vates import ProjModelEngine
 from local_package import load_file_df, EsgMaster, AssetMaster
 
 
+def assets_projection(model: ProjModelEngine, assets_df_dict: dict, esg_master: EsgMaster):
+    esg_master.update_econ_data(model.period)
+    if model.time == 0:
+        model.assets = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=esg_master).all
+    else:
+        for asset in model.assets:
+            asset.roll_forward()
+            asset.close_dealing()
+
+
 def asset_model(start_year: int, start_month: int, end_year: int, scenario: str, workspace_directory: str,
                 input_directories: list[str], results_directory: str | None = None,
-                model_name: str = "asset_model_inner", model_description: str = "Run off existing assets"):
+                model_name: str = "asset_model_top", model_description: str = "Run off existing assets"):
     model = ProjModelEngine(name=model_name, description=model_description)
-    model.set_run_config(
+    model.bind_projection(assets_projection)
+    model.configure_run(
         start_year=start_year,
         start_month=start_month,
         end_year=end_year,
@@ -31,27 +42,12 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
         esg_df=model.read_csv(filename_dict["esg"])
     )
 
-    assets_df_dict = {
-        "assets_cash": file_df_dict["assets_cash"],
-        "assets_bond": file_df_dict.get("assets_bond"),
-        "assets_equity": file_df_dict.get("assets_equity"),
-        "bond_provided_cash_flow": file_df_dict.get("bond_provided_cash_flow"),
-    }
-
-    assets = []
-
-    @model.bind_proj_func
-    def assets_projection():
-        esg_master.update_econ_data(model.period)
-        if model.time == 0:
-            assets[:] = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=esg_master).all
-        else:
-            for asset in assets:
-                asset.roll_forward()
-                asset.close_dealing()
-
-    _ = model.run()
-    # print(model.proj_result())
+    _ = model.run(
+        projection_args={
+            "assets_df_dict": file_df_dict,
+            "esg_master": esg_master
+        }
+    )
 
 
 def main():

@@ -13,7 +13,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
                 input_directories: list[str], results_directory: str | None = None,
                 model_name: str = "cross_model", model_description: str = "C-ROSS minimum capital projection."):
     model = ProjModelEngine(name=model_name, description=model_description)
-    model.set_run_config(
+    model.configure_run(
         start_year=start_year,
         start_month=start_month,
         end_year=end_year,
@@ -66,7 +66,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     cross_mc_factor_df = file_df_dict['cross_mc_factor']
 
     # ==================================================================================================================
-    @model.bind_proj_func
+    @model.bind_projection
     def cross_min_cap_projection():
         t, p = model.time, model.period
         date_index = p.year * 100 + p.month

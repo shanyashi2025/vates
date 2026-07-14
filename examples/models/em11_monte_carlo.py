@@ -84,8 +84,8 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
                            max_workers: int | None = None,
                            model_name: str = "monte_carlo", model_description: str = "Portfolio Monte Carlo simulation."):
     model = StochExecutor(name=model_name, description=model_description)
-    model.bind_proj_func(port_monte_carlo_proj)
-    model.set_run_config(
+    model.bind_projection(port_monte_carlo_proj)
+    model.configure_run(
         simulations=simulations,
         start_year=start_year,
         start_month=start_month,
@@ -137,14 +137,16 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
             'rfawgt': rfawgt,
         }
 
-    model.run(proj_func_args={
-        "risk_free_rate": risk_free_rate,
-        "n_assets": n_assets,
-        "mu": mu,
-        "sigma": sigma,
-        "corr_matrix": corr_matrix,
-        "portfolio_params": portfolio_params,
-    })
+    model.run(
+        projection_args={
+            "risk_free_rate": risk_free_rate,
+            "n_assets": n_assets,
+            "mu": mu,
+            "sigma": sigma,
+            "corr_matrix": corr_matrix,
+            "portfolio_params": portfolio_params,
+        }
+    )
 
     # print(model.proj_result())
 

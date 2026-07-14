@@ -5,6 +5,6 @@
     "end_year": 2026,
     "scenario": "demo",
     "workspace_directory": "examples",
-    "input_directories": ["input/03_cross_proj", ".output/02/aging_assets"],
-    "results_directory": "results/json_03_cross_proj"
+    "input_directories": ["inputs/em03_cross_proj", ".output/em02_fund_proj/aging_assets"],
+    "results_directory": "results/em03_cross_proj"
 }

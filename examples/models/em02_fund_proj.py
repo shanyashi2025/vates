@@ -19,7 +19,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                input_directories: list[str], results_directory: str | None = None,
                model_name: str = "fund_model", model_description: str = "Fund level projection."):
     model = ProjModelEngine(name=model_name, description=model_description)
-    model.set_run_config(
+    model.configure_run(
         start_year=start_year,
         start_month=start_month,
         end_year=end_year,
@@ -55,7 +55,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     liabs_df = file_df_dict["liabs"]
     aging_assets_output_config_df = file_df_dict.get("aging_assets_output_config")
 
-    @model.bind_proj_func
+    @model.bind_projection
     def fund_projection():
         t, p = model.time, model.period
         if t is None:

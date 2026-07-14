@@ -36,7 +36,7 @@ class StochExecutor:
         self._description: str = str(description)
 
         self._proj_cls: type[ProjModelEngine] | None = None
-        self._proj_func: Callable | None = None
+        self._projection: Callable | None = None
         self._run_config: RunConfig | None = None
 
         # runtime stuffs
@@ -48,7 +48,7 @@ class StochExecutor:
 
         self._sims_str: str | None = None
 
-    def bind_proj_func(
+    def bind_projection(
         self,
         func: Callable,
         /
@@ -61,10 +61,10 @@ class StochExecutor:
         Raises:
             ValueError: If `func` is not callable.
         """
-        if self._proj_func is not None:
+        if self._projection is not None:
             self.include_traced_message(
-                f"WARNING: {self._proj_func} is already bound. If you are sure you want to reset it, "
-                f"use 'foo._proj_func = None', then call 'foo.bind_proj_func(...)' method."
+                f"WARNING: {self._projection} is already bound. If you are sure you want to reset it, "
+                f"use 'foo._projection = None', then call 'foo.bind_projection(...)'."
             )
             return self
         if not callable(func):
@@ -86,11 +86,11 @@ class StochExecutor:
             self.include_traced_message(f"INFO: {ProjModelEngine} is set as the projection model engine by default.")
             self._proj_cls = ProjModelEngine
 
-        self._proj_func = func
+        self._projection = func
         self.include_traced_message(f"INFO: Function {func} has been bound to {self}.")
         return self
 
-    def set_run_config(
+    def configure_run(
         self,
         *,
         start_year: int | None = None,
@@ -190,15 +190,15 @@ class StochExecutor:
     def run(
         self,
         *,
-        proj_func_args: dict[str, ...] | None = None,
+        projection_args: dict[str, ...] | None = None,
     ) -> dict:
-        if self._proj_func is None:
+        if self._projection is None:
             raise ValueError(f"Projection function has not been bound.")
         if self._proj_cls is None:
             raise ValueError(f"Projection model engine class is None.")
         if self._run_config is None:
             raise ValueError("Run configuration has not been set.")
-        proj_func_args = proj_func_args or {}
+        projection_args = projection_args or {}
 
         if self.results_directory_path.is_dir():
             remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
@@ -211,7 +211,7 @@ class StochExecutor:
             os.makedirs(self.results_directory_path, exist_ok=True)
 
         exec_start_time = datetime.now()
-        exec_success = self._run_simulations_multiprocess(proj_func_args=proj_func_args)
+        exec_success = self._run_simulations_multiprocess(projection_args=projection_args)
         self._write_stochastic_statistic()
         self._dump_runlog(exec_success, exec_start_time, datetime.now())
         return self._runlog
@@ -229,7 +229,7 @@ class StochExecutor:
         *,
         simulation_batch: tuple[int, ...],
         batch_id: str,
-        proj_func_args: dict[str, ...]
+        projection_args: dict[str, ...]
     ) -> tuple[bool, list, list]:
         success: bool = True
         result: list = []
@@ -240,9 +240,9 @@ class StochExecutor:
                 model_instance = self._proj_cls(
                     name=self._name,
                     description=self._description
-                ).bind_proj_func(
-                    self._proj_func
-                ).set_run_config(
+                ).bind_projection(
+                    self._projection
+                ).configure_run(
                     simulation=simulation,
                     stoch_result_file_id=batch_id,
                     stoch_result_file_mode='w' if simulation == simulation_batch[0] else 'a',
@@ -265,7 +265,7 @@ class StochExecutor:
                 continue # `model_instance` is not successfully initialized, skip `.run()`
 
             try:
-                res = model_instance.run(proj_func_args=proj_func_args)
+                res = model_instance.run(projection_args=projection_args)
                 result.append(res)
                 output_files.extend(model_instance._output_files)
 
@@ -281,7 +281,7 @@ class StochExecutor:
     def _run_simulations_multiprocess(
         self,
         *,
-        proj_func_args: dict[str, ...]
+        projection_args: dict[str, ...]
     ) -> bool:
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -295,7 +295,7 @@ class StochExecutor:
                     self._run_simulation_batch,
                     simulation_batch=batch,
                     batch_id=str(i),
-                    proj_func_args=proj_func_args
+                    projection_args=projection_args
                 )
                 for i, batch in enumerate(simulation_batches, 1)
             ]
@@ -351,7 +351,7 @@ class StochExecutor:
             "model": {
                 "name": self._name,
                 "description": self._description,
-                "projection_function": f"{inspect.getfile(self._proj_func)}:{self._proj_func.__name__}",
+                "projection_function": f"{inspect.getfile(self._projection)}:{self._projection.__name__}",
                 "projection_engine": f"{inspect.getfile(self._proj_cls)}:{self._proj_cls.__name__}",
                 "stochastic_executor": f"{inspect.getfile(type(self))}:{type(self).__name__}",
             },

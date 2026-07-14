@@ -34,7 +34,7 @@ class ProjModelEngine:
         self._name: str = str(name)
         self._description: str = str(description)
 
-        self._proj_func: Callable | None = None
+        self._projection: Callable | None = None
         self._run_config: RunConfig | None = None
 
         # runtime stuffs
@@ -49,7 +49,7 @@ class ProjModelEngine:
 
         super().__setattr__('_initialized', True)
 
-    def bind_proj_func(
+    def bind_projection(
         self,
         func: Callable,
         /
@@ -62,9 +62,9 @@ class ProjModelEngine:
         Raises:
             ValueError: If `func` is not callable.
         """
-        if self._proj_func is not None:
-            msg = (f"{self._proj_func} is already bound. If you are sure you want to reset it, "
-                   f"use 'foo._proj_func = None', then call 'foo.bind_proj_func(...)' method.")
+        if self._projection is not None:
+            msg = (f"{self._projection} is already bound. If you are sure you want to reset it, "
+                   f"use 'foo._projection = None', then call 'foo.bind_projection(...)'.")
             warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
             return self
         if not callable(func):
@@ -77,7 +77,7 @@ class ProjModelEngine:
         if len(sig.parameters) == 0:
             self.include_traced_message(f"INFO: Function '{func.__name__}' has no argument, it will be bound as a "
                                         f"function instead of a method.")
-            self._proj_func = func
+            self._projection = func
         else:
             first_arg_name = list(sig_params.keys())[0]
             if first_arg_name not in hints:
@@ -85,13 +85,13 @@ class ProjModelEngine:
             if hints[first_arg_name] is not type(self):
                 raise ValueError(f"Function '{func.__name__}' first argument '{first_arg_name}': model engine type "
                                  f"'{type(self)}' inconsistent with type hint '{str(hints[first_arg_name])}'.")
-            self._proj_func = MethodType(func, self)
+            self._projection = MethodType(func, self)
 
         self.include_traced_message(f"INFO: Function {func} has been bound to {self}.")
 
         return self
 
-    def set_run_config(
+    def configure_run(
         self,
         *,
         start_year: int,
@@ -178,13 +178,13 @@ class ProjModelEngine:
     def run(
         self,
         *,
-        proj_func_args: dict[str, ...] | None = None,
+        projection_args: dict[str, ...] | None = None,
     ) -> dict:
-        if self._proj_func is None:
+        if self._projection is None:
             raise ValueError(f"Projection function has not been bound.")
         if self._run_config is None:
             raise ValueError("Run configuration has not been set.")
-        proj_func_args = proj_func_args or {}
+        projection_args = projection_args or {}
 
         if self._time is not None:
             msg = f"'time={self._time} will be reset to iterate from 0 to {self.MAX_T}."
@@ -193,7 +193,7 @@ class ProjModelEngine:
         exec_start_time = datetime.now()
         try:
             for self.time in range(self.MAX_T + 1):
-                self._proj_func(**proj_func_args)
+                self._projection(**projection_args)
             self._proj_variables[:] = [ref for ref in self._proj_variables if ref()]  # remove dead
             self._write_results()
             exec_success = True
@@ -207,9 +207,9 @@ class ProjModelEngine:
     def __call__(
         self,
         *,
-        proj_func_params: dict[str, ...] | None = None,
+        projection_args: dict[str, ...] | None = None,
     ) -> dict:
-        return self.run(proj_func_args=proj_func_params)
+        return self.run(projection_args=projection_args)
 
     def _write_results(self) -> None:
         if self.results_directory_path.is_dir():
@@ -427,7 +427,7 @@ class ProjModelEngine:
             "model": {
                 "name": self._name,
                 "description": self._description,
-                "projection_function": f"{inspect.getfile(self._proj_func)}:{self._proj_func.__name__}",
+                "projection_function": f"{inspect.getfile(self._projection)}:{self._projection.__name__}",
                 "projection_engine": f"{inspect.getfile(type(self))}:{type(self).__name__}",
             },
             "execution": {
@@ -614,7 +614,7 @@ class ProjModelEngine:
 
     @property
     def time(self) -> int | None:
-        """pd.Period: Current projection time index."""
+        """int: Current projection time index."""
         return self._time
 
     @time.setter
