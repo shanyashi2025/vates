@@ -4,10 +4,11 @@ import pandas as pd
 import warnings
 from typing import Optional
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
 from vates.utils import convert_spot_to_disc, convert_disc_to_spot, convert_disc_to_fwrd, convert_disc_to_par, convert_fwrd_to_disc
 
 
+@add_projection_time_synchronizer
 class YieldCurve:
     """
     Represents a yield curve and its derived rates.
@@ -19,6 +20,12 @@ class YieldCurve:
         _forward_rates: Forward rates.
         _par_yields: Par yields.
     """
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+                 'curve_id', '_spot_rates', '_disc_factors', '_forward_rates', '_par_yields', 'tdv_spot_rates',)
+
     def __init__(
         self,
         curve_id: str,
@@ -40,11 +47,6 @@ class YieldCurve:
         self._par_yields: dict[int, Optional[npt.NDArray[np.float64]]] = {1: None, 2: None, 4: None, 12: None}
         self._last_update: int | None = None
 
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         if tdv_term_dim is not None:
             for value in tdv_term_dim:
                 if not isinstance(value, int):
@@ -55,17 +57,10 @@ class YieldCurve:
                     tdv_term_dim = None
                     warnings.warn(f"'tdv_term_dim': value {value} is not allowed, expected positive. Default is used.")
                     break
-        self._tdv_term_dim = tdv_term_dim or [*range(12, 61, 12), *range(120, 601, 120)] # default: 1/2/3/4/5/10/20/30/40/50Y
+        tdv_term_dim = tdv_term_dim or [*range(12, 61, 12), *range(120, 601, 120)] # default: 1/2/3/4/5/10/20/30/40/50Y
 
-        self._tdv_spot_rates: TDepVariable = TDepVariable("spot_rate", dims=[self._tdv_term_dim],
-                                                          model_engine=model_engine, owner=curve_id, group='yield_curve')
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
+        self.tdv_spot_rates: TDepVariable = TDepVariable("spot_rate", dims=[tdv_term_dim],
+                                                         model_engine=model_engine, owner=curve_id, group='yield_curve')
 
     @property
     def last_update(self) -> int | None:
@@ -139,7 +134,8 @@ class YieldCurve:
     def _on_exit_update(self) -> None:
         t = self.time
         len_rates = len(self._spot_rates)
-        self._tdv_spot_rates[t] = np.array([0 if i > len_rates else self._spot_rates[i] for i in self._tdv_term_dim])
+        tdv_term_dim = (int(i) for i in self.tdv_spot_rates.dims[0])
+        self.tdv_spot_rates[t] = np.array([0 if i > len_rates else self._spot_rates[i] for i in tdv_term_dim])
         self._last_update = t
 
     def __str__(self) -> str:

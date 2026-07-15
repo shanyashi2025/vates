@@ -1,8 +1,9 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
 
 
+@add_projection_time_synchronizer
 class EquityIndex:
     """
     Represents an equity index and its time series.
@@ -12,6 +13,13 @@ class EquityIndex:
         tdv_tot_return_index (TDepVariable): Total return index.
         tdv_dividend_yield_ac (float): Dividend yield (annual compounding).
     """
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+                 'index_id', '_total_return', '_capital_growth', '_dividend_yield', '_dividend_yield_ac', '_total_return_index',
+                 'tdv_tot_return_index', 'tdv_dividend_yield_ac', )
+
     def __init__(
         self,
         index_id: str,
@@ -32,21 +40,9 @@ class EquityIndex:
         self._total_return_index: float | None = None
         self._last_update: int | None = None
 
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=index_id, group='equity_index')
         self.tdv_tot_return_index: TDepVariable = create_tdv("tot_return_index")
         self.tdv_dividend_yield_ac: TDepVariable = create_tdv("dividend_yield_ac")
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     @property
     def last_update(self) -> int | None:

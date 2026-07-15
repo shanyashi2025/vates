@@ -1,9 +1,122 @@
 import pandas as pd
+import warnings
+import weakref
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Any, Self
 
+@dataclass(slots=True)
+class ProjectionTimeSynchronizer:
+    _time: int | None = None
+    _period: pd.Period | None = None
+    _time_observers: list[weakref.ref] = field(default_factory=list)
+
+    @property
+    def time(self) -> int | None:
+        return self._time
+
+    @property
+    def period(self) -> pd.Period | None:
+        return self._period
+
+    def set(self, *, time: int | None = None, period: pd.Period | None = None) -> None:
+        if time is not None:
+            self._time = time
+        if period is not None:
+            self._period = period if isinstance(period, pd.Period) else pd.Period(period, freq="M")
+        self._notify_on_time_change()
+
+    def elapse(self, n: int = 1, /) -> None:
+        if self.time is not None:
+            self._time += n
+        if self.period is not None:
+            self._period += n
+        self._notify_on_time_change()
+
+    def attach_time_observer(self, observer, /) -> None:
+        if isinstance(observer, weakref.ref):
+            self._time_observers.append(observer)
+        else:
+            self._time_observers.append(weakref.ref(observer))
+
+    def _notify_on_time_change(self) -> None:
+        alive_observers = []
+        for ref in self._time_observers:
+            obs = ref()
+            if obs is not None:
+                obs.sync_time(self)
+                alive_observers.append(ref)
+
+        total_count = len(self._time_observers)
+        dead_count = total_count - len(alive_observers)
+        if dead_count > 0 and (dead_count > 50 or dead_count / total_count > 0.25):  # currently adopt a naive strategy
+            self._time_observers[:] = alive_observers
+
+
+def add_projection_time_synchronizer(_cls=None, *, allow_overwrite=False):
+    """Add the attribute/field `_time_synchronizer`, and two properties `time` and `period` for the class, specifically:
+
+    - `_time_synchronizer` (a ProjectionTimeSynchronizer instance object):
+        (a) model_engine.time_synchronizer: if `model_engine` (usually a ProjModelEngine instance object) in kwargs, and
+        has attribute `time_synchronizer`;
+        (b) ProjectionTimeSynchronizer(): otherwise.
+
+    - `time`: self._time_synchronizer.time
+    - `period`: self._time_synchronizer.period
+
+    Args:
+        _cls: the class object to be decorated
+        allow_overwrite (bool): True to overwrite the property `time` and/or property `period` if explicitly defined in
+            the class body.
+
+    Returns:
+        (a) The decorated class if _cls is provided and allow_overwrite is not provided, e.g.
+            @add_projection_time_synchronizer  # no parentheses
+            class A:
+                ...
+        (b) The decorator if _cls is not provided and allow_overwrite is provided, e.g.
+            @add_projection_time_synchronizer(allow_overwrite=True)
+            class A:
+                ...
+
+    """
+
+    def decorator(cls):
+        original_init = getattr(cls, "__init__", None)
+
+        def new_init(self, *args, **kwargs):
+            obj = kwargs.get("model_engine")
+            if obj is not None:
+                val = getattr(obj, "time_synchronizer", None)
+                if val is None:
+                    warnings.warn(f"add_projection_time_synchronizer: {type(obj)} does\'t has attribute 'time_synchronizer'.")
+                    val = ProjectionTimeSynchronizer()
+            else:
+                val = ProjectionTimeSynchronizer()
+
+            setattr(self, "_time_synchronizer", val)
+
+            if original_init and original_init is not object.__init__:
+                original_init(self, *args, **kwargs)
+
+        cls.__init__ = new_init
+
+        if hasattr(cls, "time") and not allow_overwrite:
+            warnings.warn(f"add_projection_time_synchronizer: {cls} property 'time' is not allowed to be overwritten.")
+        else:
+            setattr(cls, "time", property(fget=lambda self: getattr(self, "_time_synchronizer").time))
+        if hasattr(cls, "period") and not allow_overwrite:
+            warnings.warn(f"add_projection_time_synchronizer: {cls} property 'period' is not allowed to be overwritten.")
+        else:
+            setattr(cls, "period", property(fget=lambda self: getattr(self, "_time_synchronizer").period))
+
+        return cls
+
+    if _cls is None:
+        return decorator
+
+    return decorator(_cls)
 
 @dataclass(frozen=True, slots=True)
 class RunConfig:
@@ -279,7 +392,7 @@ def proj_result(
     group: str | None = None,
     owner: str | None = None,
     variable: str | None = None,
-    date: str | int | None = None,
+    date: str | int | pd.Period | None = None,
 ) -> pd.DataFrame | float:
 
     df = ProjResultFileReader.load_proj_result(Path(results_directory) / f"{model_name}.proj.csv")
@@ -293,7 +406,12 @@ def proj_result(
         raise IndexError(f"Missing arguments: {missing}")
 
     row_label = (group, owner, variable)
-    col_label = "constant" if date is None else str(date)
+    if date is None:
+        col_label = "constant"
+    elif isinstance(date, pd.Period):
+        col_label = str(date.year * 100 + date.month)
+    else:
+        col_label = str(date)
 
     try:
         value = df.at[row_label, col_label]

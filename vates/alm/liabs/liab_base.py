@@ -4,9 +4,10 @@ Defines the abstract Liab class.
 from abc import ABC, abstractmethod
 import pandas as pd
 
-from vates._core import ProjModelEngine
+from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.alm.econs import Currency
 
+@add_projection_time_synchronizer
 class Liab(ABC):
     """
     Abstract base class for all liability types.
@@ -22,14 +23,17 @@ class Liab(ABC):
         _acct_value (float): Account value in force.
         _asset_share (float): Asset share in force.
     """
-    __slots__ = ('__dict__', '__weakref__', 'time', '_start_date', '_tt_dict', '_liab_id', '_fund_id', '_currency',
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', '_liab_id', '_fund_id', '_currency',
                  '_entry_date', '_num_pols', '_surr_val', '_math_res', '_acct_value', '_asset_share', '_cash_flow',
                  '_prem_inc')
 
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine | None = None,
+        model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `has_time_synchronizer`
         liab_id: str,
         fund_id: str,
         currency: Currency,
@@ -55,13 +59,6 @@ class Liab(ABC):
             acct_value_if (float): Account value in force.
             asset_share_if (float): Asset share in force.
         """
-        self.time: int | None = None
-        self._start_date: pd.Period | None = None
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         self._liab_id: str = liab_id
         self._fund_id: str = fund_id
         self._currency: Currency = currency
@@ -74,13 +71,6 @@ class Liab(ABC):
         self._cash_flow: float = 0.0
         self._prem_inc: float = 0.0
         self._tt_dict: dict[str, int] = {"roll_forward": self.time, "update_ad": self.time}
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     @property
     def liab_id(self) -> str:

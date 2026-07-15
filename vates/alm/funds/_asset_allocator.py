@@ -4,7 +4,7 @@ import numpy.typing as npt
 import pandas as pd
 import warnings
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
 from vates.alm.enums import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.assets import Asset, Cash
 from vates.alm.funds._utils import ALContainer
@@ -39,6 +39,7 @@ class TargetWeight:
     max_weight: float
 
 
+@add_projection_time_synchronizer
 class AssetAllocator:
     """Manages asset allocation and rebalancing for a fund.
 
@@ -48,6 +49,12 @@ class AssetAllocator:
     Attributes:
         rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
     """
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer',
+                 'fund_id', 'container', 'rebalance_policy', 'ag_seq_list',
+                 'tdv_fund_size', 'tdv_ag_repval_bd', 'tdv_ag_repval_ad', 'tdv_ag_alloc_pc_bd', 'tdv_ag_alloc_pc_ad',)
 
     def __init__(
         self,
@@ -56,11 +63,6 @@ class AssetAllocator:
         container: ALContainer,
         rebalance_policy: dict[str, RebalancePolicyParams]
     ):
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         self.container: ALContainer = container
         self.fund_id: str = self.container.name
         self.rebalance_policy = rebalance_policy
@@ -72,13 +74,6 @@ class AssetAllocator:
         self.tdv_ag_repval_ad = TDepVariable("ag_repval_ad", dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
         self.tdv_ag_alloc_pc_bd = TDepVariable("ag_alloc_pc_bd", dims=[self.ag_seq_list], **tdv_kwargs)
         self.tdv_ag_alloc_pc_ad = TDepVariable("ag_alloc_pc_ad", dims=[self.ag_seq_list], **tdv_kwargs)
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     @staticmethod
     def list_ag_in_sequence(fund_id: str, rebalance_policy: dict[str, RebalancePolicyParams]) -> list[str]:

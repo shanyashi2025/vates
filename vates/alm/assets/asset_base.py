@@ -3,10 +3,11 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from vates._core import ProjModelEngine
+from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.alm.enums import AssetRepBasis, AssetClassification
 from vates.alm.econs import Currency
 
+@add_projection_time_synchronizer
 class Asset(ABC):
     """
     Abstract base class for all financial assets.
@@ -22,13 +23,16 @@ class Asset(ABC):
         _fund_id (str): Associated fund identifier.
         _allocation_group (str): Allocation group for the asset.
     """
-    __slots__ = ('__dict__', '__weakref__', 'time', '_start_date', '_tt_dict', '_asset_id', '_is_profile', '_units',
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', '_asset_id', '_is_profile', '_units',
                  '_purchase_date', '_currency', '_classification', '_asset_category', '_fund_id', '_allocation_group')
 
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine = None,
+        model_engine: ProjModelEngine = None,  # will be referenced by decorator `has_time_synchronizer`
         asset_id: str,
         is_profile: bool,
         units: float,
@@ -54,13 +58,6 @@ class Asset(ABC):
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
         """
-        self.time: int | None = None
-        self._start_date: pd.Period | None = None
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time = model_engine.time
-            self._start_date = model_engine.START_DATE
-
         self._asset_id: str = asset_id
         self._is_profile: bool = is_profile
         self._units: float = units
@@ -74,13 +71,6 @@ class Asset(ABC):
         self._tt_dict: dict[str, int] = {"roll_forward": self.time}
         if not self._is_profile:
             self._tt_dict['dealing'] = self.time
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     @property
     def asset_id(self) -> str:

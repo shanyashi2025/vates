@@ -2,9 +2,10 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
 
 
+@add_projection_time_synchronizer
 class CreditBand:
     """
     Represents credit information for a financial instrument.
@@ -16,6 +17,12 @@ class CreditBand:
         tdv_prob_of_default_ac (float): Probability of default (annual compounding).
         tdv_recovery_rate (float): Recovery rate.
     """
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+                 'band_id', '_spread', '_spotmult', '_prob_of_default_ac', '_recovery_rate',
+                 'tdv_prob_of_default_ac', 'tdv_recovery_rate', 'tdv_spread', 'tdv_spotmult',)
 
     def __init__(
         self,
@@ -38,33 +45,19 @@ class CreditBand:
         self._recovery_rate: float | None = None
         self._last_update: int | None = None
 
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=band_id, group='credit')
         self.tdv_prob_of_default_ac: TDepVariable = create_tdv("prob_of_default_ac")
         self.tdv_recovery_rate: TDepVariable = create_tdv("recovery_rate")
-        self._tdv_spread_term_dim = tdv_spread_term_dim
-        self._tdv_spotmult_term_dim = tdv_spotmult_term_dim
         if tdv_spread_term_dim is None:
             self.tdv_spread: TDepVariable = create_tdv("credit_spread")
         else:  # has term structure
-            self.tdv_spread: TDepVariable = TDepVariable("credit_spread", dims=[self._tdv_spread_term_dim],
+            self.tdv_spread: TDepVariable = TDepVariable("credit_spread", dims=[tdv_spread_term_dim],
                                                          model_engine=model_engine, owner=band_id, group='credit')
         if tdv_spotmult_term_dim is None:
             self.tdv_spotmult: TDepVariable = create_tdv("credit_spotmult")
         else: # has term structure
-            self.tdv_spotmult: TDepVariable = TDepVariable("credit_spotmult", dims=[self._tdv_spotmult_term_dim],
+            self.tdv_spotmult: TDepVariable = TDepVariable("credit_spotmult", dims=[tdv_spotmult_term_dim],
                                                            model_engine=model_engine, owner=band_id, group='credit')
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     @property
     def last_update(self) -> int | None:
@@ -115,32 +108,34 @@ class CreditBand:
         t = self.time
         self.tdv_prob_of_default_ac[t] = self._prob_of_default_ac
         self.tdv_recovery_rate[t] = self._recovery_rate
+
         # tdv_spread
         arr_len = len(self._spread) if isinstance(self._spread, np.ndarray) else 0
-        if arr_len == 0:
-            if self._tdv_spread_term_dim is None:
+        tdv_term_dim = [int(i) for i in self.tdv_spread.dims[0]] if self.tdv_spread.dims else None
+        if arr_len == 0: # scalar
+            if tdv_term_dim is None:
                 self.tdv_spread[t] = self._spread  # most often seen case, store a scalar value
             else:
-                self.tdv_spread[t] = np.full(len(self._tdv_spread_term_dim), self._spread)
+                self.tdv_spread[t] = np.full(len(tdv_term_dim), self._spread)
         else: # has term structure
-            if self._tdv_spread_term_dim is None:
+            if tdv_term_dim is None:
                 self.tdv_spread[t] = self._spread[min(arr_len, 12)]  # store first year value only
             else:
-                self.tdv_spread[t] = np.array([0 if i > arr_len else self._spread[i]
-                                               for i in self._tdv_spread_term_dim])
+                self.tdv_spread[t] = np.array([0 if i > arr_len else self._spread[i] for i in tdv_term_dim])
+
         # tdv_spotmult
         arr_len = len(self._spotmult) if isinstance(self._spotmult, np.ndarray) else 0
-        if arr_len == 0:
-            if self._tdv_spotmult_term_dim is None:
+        tdv_term_dim = [int(i) for i in self.tdv_spotmult.dims[0]] if self.tdv_spotmult.dims else None
+        if arr_len == 0: # scalar
+            if tdv_term_dim is None:
                 self.tdv_spotmult[t] = self._spotmult  # most often seen case, store a scalar value
             else:
-                self.tdv_spotmult[t] = np.full(len(self._tdv_spotmult_term_dim), self._spotmult)
+                self.tdv_spotmult[t] = np.full(len(tdv_term_dim), self._spotmult)
         else: # has term structure
-            if self._tdv_spotmult_term_dim is None:
+            if tdv_term_dim is None:
                 self.tdv_spotmult[t] = self._spotmult[min(arr_len, 12)]  # store first year value only
             else:
-                self.tdv_spotmult[t] = np.array([0 if i > arr_len else self._spotmult[i]
-                                                 for i in self._tdv_spotmult_term_dim])
+                self.tdv_spotmult[t] = np.array([0 if i > arr_len else self._spotmult[i] for i in tdv_term_dim])
         self._last_update = t
 
     def __str__(self) -> str:

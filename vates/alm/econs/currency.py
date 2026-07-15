@@ -1,8 +1,9 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
 
 
+@add_projection_time_synchronizer
 class Currency:
     """
     Represents a currency and its FX rate time series.
@@ -11,6 +12,12 @@ class Currency:
         currency_id (str): Currency identifier.
         tdv_fx_rate (TDepVariable): Current FX rate.
     """
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+                 'currency_id', 'tdv_fx_rate', )
+
     def __init__(
         self,
         currency_id: str,
@@ -26,19 +33,7 @@ class Currency:
         self.currency_id: str = currency_id
         self._last_update: int | None = None
 
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         self.tdv_fx_rate: TDepVariable = TDepVariable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     @property
     def last_update(self) -> int | None:

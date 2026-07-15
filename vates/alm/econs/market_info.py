@@ -1,16 +1,23 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine
+from vates._core import ProjModelEngine, add_projection_time_synchronizer
 
+
+@add_projection_time_synchronizer
 class MarketInfo:
     """
     Represents the market infomration.
     """
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update', 'info_id', '_data', )
+
     def __init__(
         self,
         info_id: str = 'untitled',
         *,
-        model_engine: ProjModelEngine | None = None,
+        model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `has_time_synchronizer`
     ) -> None:
         """
         Initialize a MarketInfo object.
@@ -21,18 +28,6 @@ class MarketInfo:
         self.info_id: str = info_id
         self._data: dict[str, ...] = {}
         self._last_update: dict[str, int] = {}
-
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     @property
     def last_update(self) -> dict[str, int]:

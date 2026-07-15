@@ -13,7 +13,7 @@ from types import MethodType
 from typing import Callable, Literal, Self, get_type_hints
 
 from vates._core.proj_variables import ProjVariable
-from vates._core._utils import RunConfig, proj_result
+from vates._core._utils import RunConfig, ProjectionTimeSynchronizer, proj_result
 
 class ProjModelEngine:
     """Actuarial projection model engine.
@@ -39,11 +39,9 @@ class ProjModelEngine:
 
         # runtime stuffs
         self._cached_filepath: dict[str, tuple] = {}
-        self._time_observers: list[weakref.ref] = []
         self._proj_variables: list[weakref.ref[ProjVariable]] = []
         self._output_files: set = set()
-        self._time: int | None = None
-        self._period: pd.Period | None = None
+        self._time_synchronizer: ProjectionTimeSynchronizer = ProjectionTimeSynchronizer()
         self._messages: list[str] = []
         self._runlog: dict | None = None
 
@@ -186,13 +184,18 @@ class ProjModelEngine:
             raise ValueError("Run configuration has not been set.")
         projection_args = projection_args or {}
 
-        if self._time is not None:
-            msg = f"'time={self._time} will be reset to iterate from 0 to {self.MAX_T}."
+        if self.time is not None:
+            msg = f"'time={self.time} will be reset to iterate from 0 to {self.MAX_T}."
             warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
 
         exec_start_time = datetime.now()
         try:
-            for self.time in range(self.MAX_T + 1):
+            time_step = 1  # might allow different time step in the future
+            for t in range(self.MAX_T + 1):
+                if t == 0:
+                    self._time_synchronizer.set(time=0, period=self.START_DATE)
+                else:
+                    self._time_synchronizer.elapse(time_step)
                 self._projection(**projection_args)
             self._proj_variables[:] = [ref for ref in self._proj_variables if ref()]  # remove dead
             self._write_results()
@@ -287,23 +290,7 @@ class ProjModelEngine:
         self._output_files.add(output_file)
 
     def attach_time_observer(self, observer, /) -> None:
-        if isinstance(observer, weakref.ref):
-            self._time_observers.append(observer)
-        else:
-            self._time_observers.append(weakref.ref(observer))
-
-    def _notify_time_sync(self) -> None:
-        alive_observers = []
-        for ref in self._time_observers:
-            obs = ref()
-            if obs is not None:
-                obs.sync_time(self)
-                alive_observers.append(ref)
-
-        total_count = len(self._time_observers)
-        dead_count = total_count - len(alive_observers)
-        if dead_count > 0 and (dead_count > 50 or dead_count / total_count > 0.25):
-            self._time_observers[:] = alive_observers
+        self._time_synchronizer.attach_time_observer(observer)
 
     def include_proj_variable(self, proj_variable: ProjVariable | weakref.ref[ProjVariable]) -> None:
         """Include a projection variable into `_proj_variables`
@@ -613,9 +600,13 @@ class ProjModelEngine:
         return self._run_config.max_t
 
     @property
+    def time_synchronizer(self) -> ProjectionTimeSynchronizer:
+        return self._time_synchronizer
+
+    @property
     def time(self) -> int | None:
         """int: Current projection time index."""
-        return self._time
+        return self._time_synchronizer.time
 
     @time.setter
     def time(self, value: int) -> None:
@@ -623,24 +614,22 @@ class ProjModelEngine:
             raise TypeError(f"time: type {type(value)} is not allowed, expected 'int'.")
         if not 0 <= value <= self.MAX_T:
             raise ValueError(f"time: value {value} is not allowed, execpted 0 to {self.MAX_T}.")
-        self._time = value
-        self._period = self.START_DATE + value
-        self._notify_time_sync()
+        self._time_synchronizer.set(time=value, period=self.START_DATE + value)
 
     @property
     def period(self) -> pd.Period | None:
         """pd.Period: Current projection period."""
-        return self._period
+        return self._time_synchronizer.period
 
     @period.setter
-    def period(self, value: pd.Period) -> None :
+    def period(self, value: pd.Period | str) -> None:
+        if isinstance(value, str):
+            value = pd.Period(value, freq="M")
         if not isinstance(value, pd.Period):
             raise TypeError(f"period: type {type(value)} is not allowed, expected 'pd.Period'.")
         if self.START_DATE <= value <= self.END_DATE :
             raise ValueError(f"period: value {value} is not allowed, expected {self.START_DATE}) to {self.END_DATE}.")
-        self._period = value
-        self._time = (value - self.START_DATE).n
-        self._notify_time_sync()
+        self._time_synchronizer.set(period=value, time=(value - self.START_DATE).n)
 
     def include_traced_message(self, /, msg: str):
         frame = inspect.currentframe().f_back

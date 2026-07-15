@@ -1,12 +1,13 @@
 import numpy as np
 import pandas as pd
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
 from vates.utils import t_checker
 from vates.alm.enums import AssetRepBasis
 from vates.alm.funds._utils import ALContainer
 
 
+@add_projection_time_synchronizer
 class FundCalculator:
     """Performs aggregation and performance calculations for a fund.
 
@@ -16,6 +17,11 @@ class FundCalculator:
     Attributes:
 
     """
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', 'container', 'asset_categories_enum')
+
     def __init__(
         self,
         *,
@@ -23,11 +29,6 @@ class FundCalculator:
         container: ALContainer,
         asset_categories: list[str]
     ):
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         self.container: ALContainer = container
         self.asset_categories_enum: dict[str, int] = {item: i for i, item in enumerate(asset_categories)}
 
@@ -73,13 +74,6 @@ class FundCalculator:
         self.tdv_asset_ror_pc_bd: TDepVariable = create_tdv("asset_ror_pc_bd")
         self.tdv_asset_inv_ret_ad: TDepVariable = create_tdv("asset_inv_ret_ad")
         self.tdv_asset_ror_pc_ad: TDepVariable = create_tdv("asset_ror_pc_ad")
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     @t_checker({"proc_assets_bd": -1, "proc_assets_ad": -1}, "proc_assets_bd")
     def process_assets_before_dealing(self) -> None:

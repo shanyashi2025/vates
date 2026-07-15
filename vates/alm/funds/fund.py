@@ -3,7 +3,7 @@ import warnings
 from enum import Enum, unique
 from typing import Optional
 
-from vates._core.proj_model_engine import ProjModelEngine
+from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.utils import t_checker
 from vates.alm.enums import AssetRepBasis
 from vates.alm.assets import Asset, Cash
@@ -23,6 +23,8 @@ class FundSizeType(Enum):
     MAX_AS_MATH = "MAX_AS_MATH"
     MAX_AS_CSV = "MAX_AS_CSV"
 
+
+@add_projection_time_synchronizer
 class Fund:
     """Investment fund with assets and liabilities.
 
@@ -35,6 +37,11 @@ class Fund:
         _calculator (FundCalculator): Aggregation/returns calculator.
         _allocator (AssetAllocator): Asset allocator for rebalancing.
     """
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict',
+                 'fund_id', '_container', '_primary_cash_asset', '_assembled', '_calculator', '_allocator')
 
     def __init__(
         self,
@@ -53,11 +60,6 @@ class Fund:
             rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
             asset_categories (list[str]): Asset categories to be reported.
         """
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         self.fund_id = fund_id
         # Asset and liab collections
         self._container: ALContainer = ALContainer(name=fund_id)
@@ -70,13 +72,6 @@ class Fund:
         self._allocator: AssetAllocator = asset_allocator or AssetAllocator(
             model_engine=model_engine, container=self._container, rebalance_policy=rebalance_policy
         )
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     @property
     def assets(self) -> list[Asset]:

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import pandas as pd
 import warnings
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
 from vates.utils import RiskModule, SubRisk, NumVarGroup
 from vates.solvency.cn_cross2.params import (
     AccountType,
@@ -206,8 +206,11 @@ class MinCapCalculator:
     def __call__(self, *args, **kwargs):
         self.calculate_minimum_capital(*args, **kwargs)
 
-
+@add_projection_time_synchronizer
 class MinCapUnit:
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
     def __init__(
         self,
         *,
@@ -215,11 +218,6 @@ class MinCapUnit:
         model_engine: ProjModelEngine | None = None,
         account_type: AccountType,
     ):
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         self.name: str = name
         self._account_type: AccountType = account_type
 
@@ -236,13 +234,6 @@ class MinCapUnit:
         self.tdv_credit_mc: TDepVariable = create_tdv("credit_mc")
         self.tdv_divers: TDepVariable = create_tdv("diversification")
         self.tdv_loss_absorb: TDepVariable = create_tdv("loss_absorbency")
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     def calculate_minimum_capital(self, mc_in: MinCapInputer) -> None:
         t = self.time
@@ -299,7 +290,11 @@ class MinCapUnit:
         return self._last_mc_calc
 
 
+@add_projection_time_synchronizer
 class MinCapConsolidator:
+    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    
     def __init__(
         self,
         *,
@@ -307,11 +302,6 @@ class MinCapConsolidator:
         model_engine: ProjModelEngine | None = None,
         bus_unit_list: list[MinCapUnit]
     ):
-        if model_engine is not None:
-            model_engine.attach_time_observer(self)
-            self.time: int = model_engine.time
-            self._start_date: pd.Period = model_engine.START_DATE
-
         self.name: str = name
         self._bus_unit_list: list[MinCapUnit] = bus_unit_list
 
@@ -329,13 +319,6 @@ class MinCapConsolidator:
         self.tdv_credit_mc: TDepVariable = create_tdv("credit_mc")
         self.tdv_divers: TDepVariable = create_tdv("diversification")
         self.tdv_loss_absorb: TDepVariable = create_tdv("loss_absorbency")
-
-    def sync_time(self, subject) -> None:
-        self.time = subject.time
-
-    @property
-    def period(self) -> pd.Period:
-        return self._start_date + self.time
 
     def calculate_minimum_capital(self) -> None:
         t, p = self.time, self.period
