@@ -20,7 +20,6 @@ class StochExecutor:
     load_json = ProjModelEngine.load_json
     read_csv = ProjModelEngine.read_csv
     read_excel = ProjModelEngine.read_excel
-    read_parquet = ProjModelEngine.read_parquet
     _concat_output_file_path = ProjModelEngine._concat_output_file_path
     get_filepath = ProjModelEngine.get_filepath
     _search_filepath = ProjModelEngine._search_filepath

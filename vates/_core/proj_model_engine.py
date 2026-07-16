@@ -440,6 +440,7 @@ class ProjModelEngine:
         }
 
         if self._run_config.enable_write_runlog:
+            os.makedirs(self.results_directory_path, exist_ok=True)
             with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
                 json.dump(self._runlog, jsonfile, indent=4)
 
@@ -489,24 +490,6 @@ class ProjModelEngine:
         else:
             ext_warn = "" if filename.lower().endswith('.xlsx') else "You might forget to include '.xlsx' in filename."
             raise FileNotFoundError(f"Excel file '{filename}' does not exist in input directories. {ext_warn}")
-
-    def read_parquet(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
-                     allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
-        filepath = self.get_filepath(filename, first_or_last_seen=first_or_last_seen)
-        if filepath is not None:
-            try:
-                import pyarrow as pa
-            except ImportError:
-                raise ImportError("Need to install 'pyarrow' library (`pip install pyarrow`).")
-            dataset = pa.dataset.dataset(filepath, format="parquet")
-            table = dataset.to_table(**kwargs)
-            return table.to_pandas()
-        elif allow_not_found:
-            self.include_traced_message(f"INFO: parquet file '{filename}' not found, 'None' is return.")
-            return None
-        else:
-            ext_warn = "" if filename.lower().endswith('.parquet') else "You might forget to include '.parquet' in filename."
-            raise FileNotFoundError(f"Parquet file '{filename}' not exists in input directories. {ext_warn}")
 
     def get_filepath(self, filename: str, /, *, first_or_last_seen: str = "first_seen") -> Path | None:
         if filename in self._cached_filepath:  # get from cache
@@ -604,7 +587,7 @@ class ProjModelEngine:
         return self._time_synchronizer
 
     @property
-    def time(self) -> int | None:
+    def time(self) -> int:
         """int: Current projection time index."""
         return self._time_synchronizer.time
 
@@ -617,7 +600,7 @@ class ProjModelEngine:
         self._time_synchronizer.set(time=value, period=self.START_DATE + value)
 
     @property
-    def period(self) -> pd.Period | None:
+    def period(self) -> pd.Period:
         """pd.Period: Current projection period."""
         return self._time_synchronizer.period
 

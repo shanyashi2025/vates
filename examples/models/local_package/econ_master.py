@@ -91,11 +91,10 @@ class EsgMaster:
         self.currencies: list[EsgItem] = currencies or []
         self.market_info: EsgItem | None = market_info
 
-    def update_econ_data(self, period: pd.Period, esg_step: int = 1) -> None:
+    def update_econ_data(self, period: pd.Period, *, esg_step: int = 1) -> None:
         date_col = self._get_esg_date_col(period, esg_step)
         # update yield curves
         for esg_item in self.yield_curves:
-            # print(date_col)
             if date_col:
                 self.update_yield_curve(esg_item, date_col)
             else:

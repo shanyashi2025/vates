@@ -60,12 +60,13 @@ class FundMaster:
                 rebalance_policy=cls.build_rebalance_policy_from_df(rebalance_policy_df, fund_id=fund_id),
                 asset_categories=row["asset_classes_reported"].split(';')
             )
-            if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
-                ph_funds.append(fund)
-            else:
-                if sh_fund is not None:
-                    raise ValueError("Duplicated shareholder fund.")
-                sh_fund = fund
+            if "fund_type" in row:
+                if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
+                    ph_funds.append(fund)
+                else:
+                    if sh_fund is not None:
+                        raise ValueError("Duplicated shareholder fund.")
+                    sh_fund = fund
             funds.append(fund)
             rebalance_params_dict[fund_id] = FundRebalanceParams(
                 size_type=FundSizeType[row["fund_size_type"].upper()],
