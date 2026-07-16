@@ -1,7 +1,15 @@
 import json
 import math
 import numpy as np
+import pandas as pd
 import sys
+
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    has_matplotlib = True
+except ImportError:
+    has_matplotlib = False
 
 import vates
 from vates import StochExecutor, ProjModelEngine, TDepVariable
@@ -150,6 +158,74 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
 
     # print(model.proj_result())
 
+    if not has_matplotlib:
+        print(f"`matplotlib` library is not installed, can't plot simulation path.")
+    else: # has_matplotlib:
+        # === Plot portfolio balance simualtion path ===
+        import glob
+        import matplotlib.pyplot as plt
+
+        # === Plot portfolio balance simualtion path ===
+        print(f"Started to plot simulation path ...")
+        stoch_files = glob.glob(f'{model.results_directory_path}/{model.MODEL_NAME}*.stoch.csv')
+        df_all = pd.concat((pd.read_csv(f) for f in stoch_files), ignore_index=True)
+
+        cols = [] if model.START_MONTH == 12 else [str(model.START_YEAR * 100 + model.START_MONTH)]
+        cols.extend(list(str(y) for y in range(model.START_YEAR, model.END_YEAR + 1)))
+
+        n = len(portfolio_params)
+        fig, axes = plt.subplots(nrows=n, ncols=3, figsize=(18, 5 * n))
+        axes = axes.flatten()
+
+        for i, port in enumerate(portfolio_params):
+            rows = ((df_all["group"] == 'MonteCarlo') & (df_all["owner"] == port) & (df_all["variable"] == 'balance'))
+            df = df_all.loc[rows, cols]
+
+            mean = df.mean()
+            p5, p95 = df.quantile(0.05), df.quantile(0.95)
+            p10, p90 = df.quantile(0.1), df.quantile(0.9)
+            p25, p75 = df.quantile(0.25), df.quantile(0.75)
+            p50 = df.quantile(0.5)
+
+            ax1, ax2, ax3 = axes[i * 3], axes[i * 3 + 1], axes[i * 3 + 2]
+            # --- (1) All simulation paths ---
+            for s in range(len(df)):
+                ax1.plot(cols, df.iloc[s], alpha=0.3)
+            ax1.set_title(f"{port}\nAll Simulation Paths")
+            ax1.set_xlabel("Year")
+            ax1.set_ylabel("Portfolio Balance")
+
+            # --- (2) Mean + confidence band ---
+            ax2.plot(cols, mean, label="mean", linestyle='solid')
+            ax2.plot(cols, p10, label="10th", linestyle='dotted')
+            ax2.plot(cols, p25, label="25th", linestyle='dashdot')
+            ax2.plot(cols, p50, label="50th", linestyle='dashed')
+            ax2.plot(cols, p75, label="75th", linestyle='dashdot')
+            ax2.plot(cols, p90, label="90th", linestyle='dotted')
+
+            ax2.fill_between(cols, p5, p95, alpha=0.2, label="5–95%")
+            ax2.set_title(f"{port}\nMean & Confidence Interval")
+            ax2.set_xlabel("Year")
+            ax2.legend()
+            ax2.sharey(ax1)
+
+            # --- (3) End balance histogram ---
+            data = df[str(model.END_YEAR)].values
+            p_low, p_high = np.percentile(data, [2.5, 97.5])  # 95% interval
+
+            ax3.hist(data, density=True, bins=20)
+            ax3.axvline(p_low, color='r', linestyle='--', label=f'2.5th percentile = {p_low:,.0f}')
+            ax3.axvline(p_high, color='g', linestyle='--', label=f'97.5th percentile = {p_high:,.0f}')
+            ax3.set_title(f"{port}\nPortfolio End Balance Distribution (95% Interval)")
+            ax3.set_xlabel("End Balance")
+            ax3.set_ylabel("Frequency")
+            ax3.legend()
+
+        plt.tight_layout()
+        output_png = f'{model.results_directory_path}/{model.MODEL_NAME}_simulation_path.png'
+        plt.savefig(output_png, dpi=300)
+        plt.close()
+        print(f"simulation path figure saved to : '{output_png}'")
 
 def main():
     with open(sys.argv[1], 'r', encoding='utf-8') as file:

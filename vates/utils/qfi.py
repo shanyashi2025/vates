@@ -43,7 +43,11 @@ def geometric_brownian_motion(mu, sigma, dt, z):
 
 def search_efficient_frontier(mu: np.ndarray, sigma: np.ndarray, corr_matrix: np.ndarray, n_points: int=100
                               ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    import cvxpy as cp
+    try:                
+        import cvxpy as cp
+    except ImportError:
+        raise ImportError("Need to install 'cvxpy' library (`pip install cvxpy`).")
+    
     # validate arguments
     if type(mu) != np.ndarray: raise TypeError(f'Invalid {type(mu)=}, expected np.ndarray.')
     if type(sigma) != np.ndarray: raise TypeError(f'Invalid {type(sigma)=}, expected np.ndarray.')

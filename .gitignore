@@ -23,6 +23,7 @@ Desktop.ini
 *.log
 examples/results/
 examples/.output/
+examples/.write/
 examples/.dev*/
 examples/*/.dev*
 examples/.test*/
