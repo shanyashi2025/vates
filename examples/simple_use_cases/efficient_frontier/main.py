@@ -1,6 +1,7 @@
 import csv
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 try:
     import matplotlib
@@ -36,7 +37,6 @@ def main():
 
     import matplotlib.pyplot as plt
     from matplotlib.ticker import PercentFormatter
-    from pathlib import Path
     base_dir = Path(__file__).resolve().parent
 
     # Efficient frontier and portfolio optimizer
