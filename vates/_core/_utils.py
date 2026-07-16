@@ -58,9 +58,27 @@ def add_projection_time_synchronizer(_cls=None, *, allow_overwrite=False):
     """Add the attribute/field `_time_synchronizer`, and two properties `time` and `period` for the class, specifically:
 
     - `_time_synchronizer` (a ProjectionTimeSynchronizer instance object):
-        (a) model_engine.time_synchronizer: if `model_engine` (usually a ProjModelEngine instance object) in kwargs, and
-        has attribute `time_synchronizer`;
-        (b) ProjectionTimeSynchronizer(): otherwise.
+                    ┌────────────────────────────────────────────────────────┐
+                    │ if `model_engine` (usually a ProjModelEngine instance  │
+                    │ object) exists in **kwargs, and is not None            │
+                    └────────────────────────────┬───────────────────────────┘
+                            ┌─────── True ───────├──────── False ─────────┐
+                            │                                             │
+            ┌───────────────▼────────────────┐                            │
+            │ if `model_engine` hasattr      ├─────── False ────────┐     │
+            │    `time_synchronizer`         │                      │     │
+            └───────────────┬────────────────┘                      │     │
+                          True                                      │     │
+                            │                                       │     │
+            ┌───────────────▼───────────────────┐                   │     │
+            │ if model_engine.time_synchronizer ├──── False ────┐   │     │
+            │          is not None              │               │   │     │
+            └───────────────┬───────────────────┘               │   │     │
+                          True                                  │   │     │
+                            │                                   │   │     │
+            ┌───────────────▼────────────────┐         ┌────────▼───▼─────▼───────────┐
+            │ model_engine.time_synchronizer │         │ ProjectionTimeSynchronizer() │
+            └────────────────────────────────┘         └──────────────────────────────┘
 
     - `time`: self._time_synchronizer.time
     - `period`: self._time_synchronizer.period
@@ -88,9 +106,14 @@ def add_projection_time_synchronizer(_cls=None, *, allow_overwrite=False):
         def new_init(self, *args, **kwargs):
             obj = kwargs.get("model_engine")
             if obj is not None:
-                val = getattr(obj, "time_synchronizer", None)
-                if val is None:
-                    warnings.warn(f"add_projection_time_synchronizer: {type(obj)} does\'t has attribute 'time_synchronizer'.")
+                if hasattr(obj, "time_synchronizer"):
+                    val = getattr(obj, "time_synchronizer")
+                    if val is None:
+                        warnings.warn(f"add_projection_time_synchronizer: {obj}\'s 'time_synchronizer' is None.")
+                        val = ProjectionTimeSynchronizer()
+                else:
+                    warnings.warn(
+                        f"add_projection_time_synchronizer: {type(obj)} does\'t has attribute 'time_synchronizer'.")
                     val = ProjectionTimeSynchronizer()
             else:
                 val = ProjectionTimeSynchronizer()
