@@ -1,0 +1,13 @@
+﻿table,demo
+funds,funds.csv
+assets_cash,assets_cash.csv
+assets_equity,assets_equity.csv
+assets_bond,assets_bond.csv
+profile_bond,profile_bond.csv
+esg,esg_50sims.parquet
+esg_params,esg_params.json
+market_info,market_info.csv
+liabs,liabs.csv
+epl,epl.csv
+rebalance_policy,rebalance_policy.csv
+asset_allocation,asset_allocation.csv

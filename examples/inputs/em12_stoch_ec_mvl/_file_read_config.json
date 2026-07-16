@@ -1,0 +1,11 @@
+{
+    "assets_cash": {"index_col": "asset_id"},
+    "assets_equity": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
+    "assets_bond": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
+    "profile_equity": {"index_col": "_asset_id", "allow_not_found": true, "keep_default_na": false},
+    "profile_bond": {"index_col": "_asset_id", "allow_not_found": true, "keep_default_na": false},
+    "funds": {"index_col": "fund_id"},
+    "market_info": {"index_col": "data_item"},
+    "epl": {"index_col": ["liab_id", "var_name"]},
+    "bond_provided_cash_flow": {"allow_not_found": true, "keep_default_na": false}
+}

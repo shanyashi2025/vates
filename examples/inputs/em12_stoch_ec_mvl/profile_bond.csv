@@ -1,0 +1,5 @@
+﻿ref_no,_asset_id,fund_id,bond_type,allocation_group,maturity_term_y,currency_id,coupon_freq,market_spread,face_value,credit_band_id,asset_classification,units,rf_curve_id
+1,_profile#01,cd_fund,国债,govt_bond,30,cny,2,0,100,none,AC,40,cny_rf
+2,_profile#02,cd_fund,国债,govt_bond,30,cny,2,0,100,none,FVOCI,60,cny_rf
+3,_profile#03,cd_fund,企业债,corp_bond,10,cny,1,0,100,AAA,AC,40,cny_rf
+4,_profile#04,cd_fund,企业债,corp_bond,10,cny,1,0,100,AA,FVOCI,60,cny_rf

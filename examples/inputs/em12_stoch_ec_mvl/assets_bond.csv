@@ -1,0 +1,5 @@
+﻿#,asset_id,bond_code,bond_type,allocation_group,currency_id,fund_id,issue_date,maturity_date,coupon_rate,coupon_freq,provided_cash_flow_id,face_value,rf_curve_id,mv_price_dirty,market_spread,abv_price_dirty,units,credit_band_id,asset_classification,pre_calculation
+1,cd_govt1,200007,国债,govt_bond,cny,cd_fund,2020/5/22,2070/5/25,0.0373,2,none,100,cny_rf,153.112638,-0.00005,100.308445,18,none,AC,risk_neutralization
+2,cd_govt2,200007,国债,govt_bond,cny,cd_fund,2020/5/22,2070/5/25,0.0373,2,none,100,cny_rf,153.112638,-0.00005,100.308445,14,none,FVOCI,risk_neutralization
+3,cd_corp1,2180460,企业债,corp_bond,cny,cd_fund,2021/11/18,2051/11/19,0.0375,1,none,100,cny_rf,134.660393,0.0015,100.307254,30,none,AC,risk_neutralization
+4,cd_corp2,2180460,企业债,corp_bond,cny,cd_fund,2021/11/18,2051/11/19,0.0375,1,none,100,cny_rf,134.660393,0.0015,100.307254,12,none,FVOCI,risk_neutralization

@@ -1,0 +1,2 @@
+﻿ref_no,liab_id,entry_date,currency_id,fund_id,liab_class,liab_type,no_pols_if,math_res_if,surr_val_if,asset_share_if
+1,ex_cd_flex,2024/12/31,cny,cd_fund,ExtProjLiab,Par_CD_Flex,1,10635.17167,2824.748333,10635.17167
