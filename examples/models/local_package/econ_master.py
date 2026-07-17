@@ -7,7 +7,7 @@ from typing import Self
 
 from vates import ProjModelEngine, KeyedArray
 from vates.utils import curve_interp, parse_str_to_int_list
-from vates.alm.econs import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
+from vates.alm import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 
 
 @dataclass(slots=True)

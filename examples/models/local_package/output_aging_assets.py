@@ -3,7 +3,7 @@ import os
 import csv
 import warnings
 
-from vates.alm.assets import Cash, BondFixed, Equity
+from vates.alm import Cash, BondFixed, Equity
 
 def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int | str, out_rootfolder: str) -> None:
 

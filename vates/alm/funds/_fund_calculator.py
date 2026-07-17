@@ -48,8 +48,8 @@ class FundCalculator:
         self.tdv_tot_acct_val_ad: TDepVariable = create_tdv("tot_acct_val_if_ad")
         self.tdv_tot_asset_share_bd: TDepVariable = create_tdv("tot_asset_share_if_bd")
         self.tdv_tot_asset_share_ad: TDepVariable = create_tdv("tot_asset_share_if_ad")
-        self.tdv_accum_free_proceeds_bd: TDepVariable = create_tdv("accum_free_proceeds_bd")
-        self.tdv_accum_free_proceeds_ad: TDepVariable = create_tdv("accum_free_proceeds_ad")
+        self.tdv_free_estate_bd: TDepVariable = create_tdv("free_estate_bd")
+        self.tdv_free_estate_ad: TDepVariable = create_tdv("free_estate_ad")
         self.tdv_proceeds_transferred_in: TDepVariable = create_tdv("proceeds_transferred_in")
         self.tdv_proceeds_transferred_out: TDepVariable = create_tdv("proceeds_transferred_out")
         # dims = AssetRepBasis

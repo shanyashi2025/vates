@@ -92,7 +92,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                     fund_liabs_roll_forward(
                         fund=fund,
                         epl=epl,
-                        as_inv_ret=fund.rate_of_return_fav_bd(t),
+                        as_inv_ret=fund.rate_of_return_fav_bd[t],
                         as_cf_ret=0  # specify the rate
                     )
                 else:

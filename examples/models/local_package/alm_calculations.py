@@ -1,7 +1,7 @@
 import pandas as pd
 
 from vates import ProjModelEngine, KeyedArray
-from vates.alm.funds import Fund, TargetWeight
+from vates.alm import Fund, TargetWeight
 
 from .setup_objs_alm import FundRebalanceParams
 from .asset_master import AssetMaster
@@ -93,7 +93,7 @@ def liabs_update_ad(fund: Fund) -> None:
         for liab in fund.liabs:
             t, p = fund.time, fund.period
             if getattr(liab, 'liab_type', None) == 'Par_CD':
-                as_rgl_ret = fund.rate_of_return_fav_ad(t) - fund.rate_of_return_fav_bd(t)
+                as_rgl_ret = fund.rate_of_return_fav_ad[t] - fund.rate_of_return_fav_bd[t]
                 asset_share_if = liab.arr_asset_share_bd[t] + liab.arr_asset_share_ad[t - 1] * as_rgl_ret
                 liab.update_ad(asset_share_if=asset_share_if)
             else:

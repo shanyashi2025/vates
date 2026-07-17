@@ -10,7 +10,7 @@ from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
 from vates.alm.funds._asset_allocator import AssetAllocator, RebalancePolicyParams, TargetWeight
 from vates.alm.funds._fund_calculator import FundCalculator
-from vates.alm.funds._utils import ALContainer
+from vates.alm.funds._utils import ALContainer, _RateOfReturnIndexer
 
 @unique
 class FundSizeType(Enum):
@@ -41,7 +41,8 @@ class Fund:
     period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict',
-                 'fund_id', '_container', '_primary_cash_asset', '_assembled', 'calculator', '_allocator')
+                 'fund_id', '_container', '_primary_cash_asset', '_assembled', 'calculator', '_allocator',
+                 'rate_of_return_mv_bd', 'rate_of_return_mv_ad', 'rate_of_return_fav_bd', 'rate_of_return_fav_ad')
 
     def __init__(
         self,
@@ -71,6 +72,20 @@ class Fund:
         )
         self._allocator: AssetAllocator = asset_allocator or AssetAllocator(
             model_engine=model_engine, container=self._container, rebalance_policy=rebalance_policy
+        )
+
+        # rate of return indexers
+        self.rate_of_return_mv_bd: _RateOfReturnIndexer = _RateOfReturnIndexer(
+            self.calculator.tdv_totass_ror_pc_bd, arr_index=AssetRepBasis.MV.value, divby=100
+        )
+        self.rate_of_return_mv_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
+            self.calculator.tdv_totass_ror_pc_ad, arr_index=AssetRepBasis.MV.value, divby=100
+        )
+        self.rate_of_return_fav_bd: _RateOfReturnIndexer = _RateOfReturnIndexer(
+            self.calculator.tdv_totass_ror_pc_bd, arr_index=AssetRepBasis.FAV.value, divby=100
+        )
+        self.rate_of_return_fav_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
+            self.calculator.tdv_totass_ror_pc_ad, arr_index=AssetRepBasis.FAV.value, divby=100
         )
 
     @property
@@ -150,24 +165,24 @@ class Fund:
     def process_assets_before_dealing(self) -> None:
         """Process asset cash flows and reported values before dealing (bd)."""
         self.calculator.process_assets_before_dealing()
-        self._container.deposit_free_proceeds(self.calculator.tdv_totass_cash_flow[self.time])
+        self._container.accumulate_free_estate(self.calculator.tdv_totass_cash_flow[self.time])
 
     @t_checker({"proc_liabs_bd": -1, "proc_liabs_ad": -1, "proc_assets_bd": 0}, "proc_liabs_bd")
     def process_liabs_before_dealing(self) -> None:
         """Process liability cash flows and balance sheet variables before dealing (bd)."""
         self.calculator.process_liabs_before_dealing()
-        self._container.deposit_free_proceeds(self.calculator.tdv_totliab_cash_flow[self.time])
+        self._container.accumulate_free_estate(self.calculator.tdv_totliab_cash_flow[self.time])
 
     @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
     def no_action_on_rebalance(self) -> None:
         """Skip asset rebalance, invest free proceeds into primary cash."""
         t = self.time
-        self.calculator.tdv_accum_free_proceeds_bd[t] = self._container.accum_free_proceeds
-        # just invest accum_free_proceeds into primary cash, no other action, accum_free_proceeds is reset to zero
-        self.primary_cash_asset.invest_new_money(self._container.withdrawal_accum_free_proceeds())
+        self.calculator.tdv_free_estate_bd[t] = self._container.free_estate
+        # just invest free_estate into primary cash, no other action, free_estate is reset to zero
+        self.primary_cash_asset.invest_new_money(self._container.dispose_free_estate())
         for asset in self.assets:
             asset.close_dealing()
-        self.calculator.tdv_accum_free_proceeds_ad[t] = self._container.accum_free_proceeds # should be zero
+        self.calculator.tdv_free_estate_ad[t] = self._container.free_estate # should be zero
         self.calculator.process_assets_after_dealing()
 
     @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
@@ -186,7 +201,7 @@ class Fund:
         fund_size_type = FundSizeType[fund_size_type.upper()] if isinstance(fund_size_type, str) else fund_size_type
         asset_size_basis = AssetRepBasis[asset_size_basis.upper()] if isinstance(asset_size_basis, str) else asset_size_basis
 
-        self.calculator.tdv_accum_free_proceeds_bd[t] = self._container.accum_free_proceeds
+        self.calculator.tdv_free_estate_bd[t] = self._container.free_estate
         # process rebalance
         fund_size = self._get_fund_size(fund_size_type=fund_size_type, asset_size_basis=asset_size_basis)
         recon_rgl = self._allocator.rebalance(
@@ -198,7 +213,7 @@ class Fund:
         )
         for asset in self.assets:
             asset.close_dealing()
-        self.calculator.tdv_accum_free_proceeds_ad[t] = self._container.accum_free_proceeds
+        self.calculator.tdv_free_estate_ad[t] = self._container.free_estate
         self.calculator.process_assets_after_dealing()
         # reconcile realized gain/loss
         if abs((rgl := self.calculator.tdv_totass_rgl_ad[p]) - recon_rgl) > 0.01: raise ValueError(
@@ -220,27 +235,25 @@ class Fund:
         """
         t = self.time
         if fund_size_type == FundSizeType.FUND:
-            # need to include accum_free_proceeds
-            return self.calculator.tdv_totass_rep_value_bd[t][asset_size_basis.value] + self._container.accum_free_proceeds
+            return self._container.get_totass_value(asset_size_basis, include_free_estate=True)
+            # # need to include free_estate
         elif fund_size_type == FundSizeType.SURR_VALUE:
-            return self.calculator.tdv_tot_surr_val[t]
+            return self._container.totliab_surr_value
         elif fund_size_type == FundSizeType.MATH_RES:
-            return self.calculator.tdv_tot_math_res[t]
+            return self._container.totliab_math_res
         elif fund_size_type == FundSizeType.ACCT_VALUE:
-            return self.calculator.tdv_tot_acct_val_bd[t]
+            return self._container.totliab_acct_value
         elif fund_size_type == FundSizeType.ASSET_SHARE:
-            return self.calculator.tdv_tot_asset_share_bd[t]
+            return self._container.totliab_asset_share
         elif fund_size_type == FundSizeType.MAX_AS_MATH:
-            return max(self.calculator.tdv_tot_asset_share_bd[t], self.calculator.tdv_tot_math_res[t])
+            return max(self._container.totliab_asset_share, self._container.totliab_math_res)
         elif fund_size_type == FundSizeType.MAX_AS_CSV:
-            return max(self.calculator.tdv_tot_asset_share_bd[t], self.calculator.tdv_tot_surr_val[t])
-
+            return max(self._container.totliab_asset_share, self._container.totliab_surr_value)
         raise ValueError(f"Unknown fund size type: {fund_size_type}.")
 
     @t_checker({"proc_liabs_ad": -1, "proc_liabs_bd": 0, "proc_assets_ad": 0}, "proc_liabs_ad")
     def process_liabs_after_dealing(self) -> None:
-        """Process liability values after dealing (ad)."""
-        # note: liab.update_ad() is NOT automatically called here
+        """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""
         self.calculator.process_liabs_after_dealing()
 
     @t_checker({"proc_assets_ad": 0})
@@ -252,7 +265,7 @@ class Fund:
         """
         t = self.time
 
-        amount = self._container.withdrawal_accum_free_proceeds()
+        amount = self._container.dispose_free_estate()
         if other is None:
             pass
         elif isinstance(other, Fund):
@@ -277,47 +290,7 @@ class Fund:
             self.calculator.tdv_proceeds_transferred_in[t] += max(amount, 0.0)
             self.calculator.tdv_proceeds_transferred_out[t] += max(- amount, 0.0)
 
-        self._container.deposit_free_proceeds(amount)
-
-    def _rate_of_return_bd(self, t_or_p: int | pd.Period, basis: AssetRepBasis) -> float:
-        """Rate of return before dealing.
-
-        Args:
-            t_or_p (int | pd.Period): Time period.
-            basis (AssetRepBasis): Reporting basis.
-
-        Returns:
-            float: Rate of return (decimal) before dealing.
-        """
-        return self.calculator.tdv_totass_ror_pc_bd[t_or_p][basis.value] / 100
-
-    def _rate_of_return_ad(self, t_or_p: int | pd.Period, basis: AssetRepBasis) -> float:
-        """Rate of return after dealing.
-
-        Args:
-            t_or_p (int | pd.Period): Time period.
-            basis (AssetRepBasis): Reporting basis.
-
-        Returns:
-            float: Rate of return (decimal) after dealing.
-        """
-        return self.calculator.tdv_totass_ror_pc_ad[t_or_p][basis.value] / 100
-
-    def rate_of_return_mv_bd(self, t_or_p: int | pd.Period) -> float:
-        """float: Rate of return (MV basis) before dealing."""
-        return self._rate_of_return_bd(t_or_p, AssetRepBasis.MV)
-
-    def rate_of_return_fav_bd(self, t_or_p: int | pd.Period) -> float:
-        """float: Rate of return (FAV or PL basis) before dealing."""
-        return self._rate_of_return_bd(t_or_p, AssetRepBasis.FAV)
-
-    def rate_of_return_mv_ad(self, t_or_p: int | pd.Period) -> float:
-        """float: Rate of return (MV basis) after dealing."""
-        return self._rate_of_return_ad(t_or_p, AssetRepBasis.MV)
-
-    def rate_of_return_fav_ad(self, t_or_p: int | pd.Period) -> float:
-        """float: Rate of return (FAV or PL basis) after dealing."""
-        return self._rate_of_return_ad(t_or_p, AssetRepBasis.FAV)
+        self._container.accumulate_free_estate(amount)
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.fund_id}'"
