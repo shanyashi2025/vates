@@ -4,7 +4,7 @@ import numpy.typing as npt
 import warnings
 from dataclasses import dataclass
 
-from vates.utils import convert_spot_to_disc, solve_ytm
+from vates.finmath import InterestRateConvertor, solve_ytm
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,8 +183,8 @@ class BondFixedPricer:
         """
         cash_flows = self.cash_flow_gen.get_future_cash_flows(valn_date)
         if cash_flows is not None:  # return None if matured
-            disc_factors = convert_spot_to_disc(spots, "M")
-            return np.dot(cash_flows, disc_factors[1:len(cash_flows) + 1])
+            discount = InterestRateConvertor.spot_to_discount(spots, time_interval=1/12)
+            return np.dot(cash_flows, discount[1:len(cash_flows) + 1])
         else:
             return 0.0
 
@@ -201,12 +201,12 @@ class BondFixedPricer:
         """
         cash_flows = self.cash_flow_gen.get_future_cash_flows(valn_date)
         if cash_flows is not None:  # return None if matured
-            periods = np.arange(1, len(cash_flows) + 1)
+            time = np.arange(1, len(cash_flows) + 1)  # time in month
             coupon_freq = self.cash_flow_gen.params.coupon_freq
             freq = 1 if coupon_freq == 0 else coupon_freq # 1 for zero coupon bond
-            disc_fac = (1 / (1 + amort_rate / freq)) ** (1 / 12 * freq)
-            disc_factors = disc_fac ** periods
-            return np.dot(cash_flows, disc_factors)
+            factor = (1 + amort_rate / freq) ** (-freq / 12)
+            discount = factor ** time
+            return np.dot(cash_flows, discount)
         else:
             return 0.0
 

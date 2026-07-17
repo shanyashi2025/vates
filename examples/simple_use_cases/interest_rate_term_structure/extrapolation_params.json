@@ -1,0 +1,37 @@
+{
+  "rate1": {
+    "method": "smith_wilson",
+    "ufr": 0.042,
+    "llp": 20,
+    "convergence_point": 40,
+    "min_alpha": 0.05,
+    "convergence_tolerance_bp": 1,
+    "max_maturity": 120
+  },
+  "rate2": {
+    "method": "eiopa_alternative",
+    "ufr": 0.042,
+    "fsp": 20,
+    "alpha": 0.075,
+    "llfr_weight": [
+      {"x": 20, "y": 30, "w": 0.75},
+      {"x": 20, "y": 50, "w": 0.25}
+    ]
+  },
+  "rate3": {
+    "method": "smith_wilson",
+    "ufr": 0.042,
+    "llp": 20,
+    "convergence_point": 60,
+    "min_alpha": 0.05,
+    "max_maturity": 120
+  },
+  "rate4": {
+    "method": "smith_wilson",
+    "ufr": 0.045,
+    "llp": 10,
+    "convergence_point": 60,
+    "min_alpha": 0.05,
+    "max_maturity": 120
+  }
+}

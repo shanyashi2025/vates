@@ -8,7 +8,7 @@ try:
 except ImportError:
     has_matplotlib = False
 
-from vates.alm.assets.derivatives import BlackScholesCalculator
+from vates.finmath import BlackScholesCalculator
 
 
 def main():

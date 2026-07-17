@@ -1,5 +1,4 @@
 import pandas as pd
-import warnings
 
 from vates._core import ProjModelEngine, TDepVariable
 from vates.utils import t_checker

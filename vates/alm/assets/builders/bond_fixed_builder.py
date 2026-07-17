@@ -3,13 +3,14 @@ import pandas as pd
 import warnings
 
 from vates._core import ProjModelEngine
-from vates.utils import solve_ytm, solve_z_spread, calculate_risk_adj_spot, convert_spot_to_par
+from vates.finmath import solve_ytm, solve_z_spread, InterestRateConvertor
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.enums import AssetClassification
 from vates.alm.assets.bond_fixed import BondFixed
 from vates.alm.assets._bond_fixed_component import (
     BondFixedParameters, BondFixedCashFlowGenerator, BondFixedCashFlowProvider, BondFixedPricer
 )
+from vates.alm.assets._utils import calculate_risk_adj_spot
 
 
 class BondFixedBuilder:
@@ -126,7 +127,7 @@ class BondFixedBuilder:
                 spots = rf_spots + self.market_spread
 
             n_months = (self.maturity_date - self.issue_date).n
-            par_yield = convert_spot_to_par(spots=spots, payment_freq=self.coupon_freq, term_type='M')[n_months]
+            par_yield = InterestRateConvertor.spot_to_par(spots, freq=self.coupon_freq, time_interval=1/12)[n_months]
 
             self.coupon_rate = float(par_yield)
 

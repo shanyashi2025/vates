@@ -46,11 +46,11 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
         dt = 1 / 12
 
         if n_assets > 1:
-            z = vates.utils.multivariate_standard_normal(corr_matrix, rng=model.rng, bypass_valid_corr=True)
+            z = vates.finmath.multivariate_standard_normal(corr_matrix, rng=model.rng, bypass_valid_corr=True)
         else:
             z = model.rng.standard_normal(1)  # note: standard_normal(1) >> np.ndarray, standard_normal(0) >> float
 
-        r = np.array([vates.utils.geometric_brownian_motion(mu=mu[i], sigma=sigma[i], dt=dt, z=z[i])
+        r = np.array([vates.finmath.geometric_brownian_motion(mu=mu[i], sigma=sigma[i], dt=dt, z=z[i])
                       for i in range(n_assets)]) - 1  # # S(t)/S(t-1) - 1
 
         for _, port_var in model.portfolios.items():
@@ -126,7 +126,7 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
         sigma[i] = df.at[asset_name, 'standard_deviation']
         for j in range(n_assets):
             corr_matrix[i, j] = df.at[asset_name, asset_name_list[j]]
-    valid, msg = vates.utils.validate_corr_matrix(corr_matrix)
+    valid, msg = vates.finmath.validate_corr_matrix(corr_matrix)
     if not valid: raise ValueError(msg)
 
     # portfolios

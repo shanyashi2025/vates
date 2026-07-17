@@ -5,7 +5,7 @@ import warnings
 from typing import Optional
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
-from vates.utils import convert_spot_to_disc, convert_disc_to_spot, convert_disc_to_fwrd, convert_disc_to_par, convert_fwrd_to_disc
+from vates.finmath import InterestRateConvertor
 
 
 @add_projection_time_synchronizer
@@ -16,7 +16,7 @@ class YieldCurve:
     Attributes:
         curve_id (str): Yield curve identifier.
         _spot_rates: Spot rates.
-        _disc_factors: Discount factors.
+        _discount_factors: Discount factors.
         _forward_rates: Forward rates.
         _par_yields: Par yields.
     """
@@ -24,7 +24,7 @@ class YieldCurve:
     period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
-                 'curve_id', '_spot_rates', '_disc_factors', '_forward_rates', '_par_yields', 'tdv_spot_rates',)
+                 'curve_id', '_spot_rates', '_discount_factors', '_forward_rates', '_par_yields', 'tdv_spot_rates',)
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class YieldCurve:
         """
         self.curve_id = curve_id
         self._spot_rates: npt.NDArray[np.float64] | None = None
-        self._disc_factors: npt.NDArray[np.float64] | None = None
+        self._discount_factors: npt.NDArray[np.float64] | None = None
         self._forward_rates: npt.NDArray[np.float64] | None = None
         self._par_yields: dict[int, Optional[npt.NDArray[np.float64]]] = {1: None, 2: None, 4: None, 12: None}
         self._last_update: int | None = None
@@ -83,29 +83,29 @@ class YieldCurve:
             value (npt.NDArray[np.float64]): Spot rates.
         """
         self._spot_rates = value.copy()
-        self._disc_factors = convert_spot_to_disc(self._spot_rates, "M")
-        self._forward_rates = convert_disc_to_fwrd(self._disc_factors, "M")
+        self._discount_factors = InterestRateConvertor.spot_to_discount(self._spot_rates, time_interval=1/12)
+        self._forward_rates = InterestRateConvertor.discount_to_forward(self._discount_factors, time_interval=1/12)
         for n in self._par_yields:
-            self._par_yields[n] = convert_disc_to_par(self._disc_factors, n, "M")
+            self._par_yields[n] = InterestRateConvertor.discount_to_par(self._discount_factors, freq=n, time_interval=1/12)
         self._on_exit_update()
 
     @property
-    def disc_factors(self) -> npt.NDArray[np.float64]:
-        return self._disc_factors
+    def discount_factors(self) -> npt.NDArray[np.float64]:
+        return self._discount_factors
 
-    @disc_factors.setter
-    def disc_factors(self, value: npt.NDArray[np.float64]) -> None:
+    @discount_factors.setter
+    def discount_factors(self, value: npt.NDArray[np.float64]) -> None:
         """
         Specify the yield curve using discount factors.
 
         Args:
             value (npt.NDArray[np.float64]): Discount factors.
         """
-        self._disc_factors = value.copy()
-        self._spot_rates = convert_disc_to_spot(self._disc_factors, "M")
-        self._forward_rates = convert_disc_to_fwrd(self._disc_factors, "M")
+        self._discount_factors = value.copy()
+        self._spot_rates = InterestRateConvertor.discount_to_spot(self._discount_factors, time_interval=1/12)
+        self._forward_rates = InterestRateConvertor.discount_to_forward(self._discount_factors, time_interval=1/12)
         for n in self._par_yields:
-            self._par_yields[n] = convert_disc_to_par(self._disc_factors, n, "M")
+            self._par_yields[n] = InterestRateConvertor.discount_to_par(self._discount_factors, freq=n, time_interval=1/12)
         self._on_exit_update()
 
     @property
@@ -121,10 +121,10 @@ class YieldCurve:
             value (npt.NDArray[np.float64]): Forward rates.
         """
         self._forward_rates = value.copy()
-        self._disc_factors = convert_fwrd_to_disc(self._forward_rates, "M")
-        self._spot_rates = convert_disc_to_spot(self._disc_factors, "M")
+        self._discount_factors = InterestRateConvertor.forward_to_discount(self._forward_rates, time_interval=1/12)
+        self._spot_rates = InterestRateConvertor.discount_to_spot(self._discount_factors, time_interval=1/12)
         for n in self._par_yields:
-            self._par_yields[n] = convert_disc_to_par(self._disc_factors, n, "M")
+            self._par_yields[n] = InterestRateConvertor.discount_to_par(self._discount_factors, freq=n, time_interval=1/12)
         self._on_exit_update()
 
     @property

@@ -6,10 +6,10 @@ from vates._core import (
     KeyedArray,
     proj_result,
 )
-from vates import utils
-
 from vates import alm
+from vates import finmath
 from vates import solvency
+from vates import utils
 
 __version__ = "0.1.4"
 
@@ -25,6 +25,7 @@ __all__ = [
     'utils',
     # libs
     'alm',
+    'finmath',
     'solvency',
 
 ]

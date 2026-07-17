@@ -4,7 +4,7 @@ import pandas as pd
 import warnings
 
 from vates._core import ProjModelEngine, TDepVariable
-from vates.utils import calculate_risk_adj_spot, t_checker
+from vates.utils import t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.assets.asset_base import Asset
@@ -13,8 +13,9 @@ from vates.alm.assets._bond_fixed_component import (
     BondFixedCashFlowGenerator,
     BondFixedCashFlowProvider,
     BondFixedPricer,
-    BondFixedRiskCalculator
+    BondFixedRiskCalculator,
 )
+from vates.alm.assets._utils import calculate_risk_adj_spot
 
 
 class BondFixed(Asset):

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Self
 
-@dataclass
+@dataclass(slots=True)
 class NumVarGroup:
 
     def reset(self) -> None:

@@ -122,7 +122,7 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
     stoch = StochExecutor(
         model_name=model_name,
         description=f"{description}, simulations: {simulations}, scenario: '{scenario}', "
-                    f"from {start_year}/{start_month}' to '{end_year}/12."
+                    f"from {start_year}/{start_month} to {end_year}/12."
     )
     stoch.configure_run(
         simulations=simulations,

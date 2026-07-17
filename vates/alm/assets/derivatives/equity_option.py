@@ -3,11 +3,11 @@ import pandas as pd
 import warnings
 
 from vates._core import ProjModelEngine, TDepVariable
+from vates.finmath import CallOrPut, BlackScholesCalculator
 from vates.utils import t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.asset_base import Asset
-from vates.alm.assets.derivatives._derivative_pricer import CallOrPut, BlackScholesCalculator
 
 class EquityOption(Asset):
     """

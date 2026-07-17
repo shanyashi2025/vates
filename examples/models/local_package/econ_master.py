@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from typing import Self
 
 from vates import ProjModelEngine, KeyedArray
-from vates.utils import curve_interp, parse_str_to_int_list
 from vates.alm import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
+from vates.finmath import interpolate_interest_rates
+from vates.utils import parse_str_to_int_list
 
 
 @dataclass(slots=True)
@@ -159,10 +160,10 @@ class EsgMaster:
         # determine rate type and process curve data
         if var.measure == "PRICE":
             rates = np.insert(arr=rates, obj=0, values=1)  # let discount_factor = 1 at term 0
-            yield_curve_obj.disc_factors = curve_interp(term, rates, var.interp_method)
+            yield_curve_obj.discount_factors = interpolate_interest_rates(term, rates, method=var.interp_method)
         elif var.measure == "SPOT":
             rates = np.insert(arr=rates, obj=0, values=0)  # let spot_rate = 0 at term 0
-            yield_curve_obj.spot_rates = curve_interp(term, rates, var.interp_method)
+            yield_curve_obj.spot_rates = interpolate_interest_rates(term, rates, method=var.interp_method)
         else:
             raise ValueError(f"{var.descr}: invalid {var.measure=}")
 
@@ -279,7 +280,7 @@ class EsgMaster:
                     warnings.warn(f'{curve_id} is not updated on {market_info_obj.time} ({market_info_obj.period}), '
                                   f'skip update the corresponding short rate.')
                     continue
-                data[f'{short_rate_id}:next'] = (1 / curve_obj.disc_factors[1]) ** 12 - 1  # convert to annual effective rates
+                data[f'{short_rate_id}:next'] = (1 / curve_obj.discount_factors[1]) ** 12 - 1  # convert to annual effective rates
 
         for key, value in data.items():
             market_info_obj[key] = value

@@ -10,7 +10,6 @@ from vates.alm.assets import (
     Equity,
 )
 from vates.alm.assets.derivatives import (
-    BlackScholesCalculator,
     EquityOption,
 )
 # econs
@@ -52,7 +51,6 @@ __all__ = [
     'BondFixed',
     'Equity',
     'EquityOption',
-    'BlackScholesCalculator',
     # econs
     'CreditBand',
     'Currency',

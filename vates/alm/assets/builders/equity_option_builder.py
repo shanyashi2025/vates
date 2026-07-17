@@ -2,8 +2,9 @@ import pandas as pd
 import math
 
 from vates._core import ProjModelEngine
+from vates.finmath import CallOrPut, BlackScholesCalculator
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
-from vates.alm.assets.derivatives import EquityOption, CallOrPut, BlackScholesCalculator
+from vates.alm.assets.derivatives import EquityOption
 
 
 class EquityOptionBuilder:

@@ -1,6 +1,8 @@
 import numpy as np
 from typing import Dict
 
+from vates.finmath.rate_conversion import InterestRateTermStructure
+
 class SmithWilsonExtrapolator:
     """Smith–Wilson curve extrapolator for risk-free interest rates.
 
@@ -9,14 +11,16 @@ class SmithWilsonExtrapolator:
     """
 
     def __init__(self,
-                 instrument: str,
-                 coupon_frequency: int,
-                 rates: np.ndarray,
-                 maturities: np.ndarray,
-                 ufr: float,
-                 convergence_point: int,
-                 min_alpha: float,
-                 convergence_tolerance_bp: float):
+        *,
+        instrument: str,
+        coupon_frequency: int,
+        rates: np.ndarray,
+        maturities: np.ndarray,
+        ufr: float,
+        convergence_point: int,
+        min_alpha: float,
+        convergence_tolerance_bp: float
+    ):
         """Initialize the Smith–Wilson extrapolator.
 
         Args:
@@ -60,7 +64,7 @@ class SmithWilsonExtrapolator:
 
         self.alfa, self.gamma = self._calibrate_alfa_gamma(alfamin=min_alpha, tau=convergence_tolerance_bp/10000)
 
-    def extrapolate(self, max_maturity, alfa=None, gamma=None):
+    def extrapolate(self, max_maturity, alfa=None, gamma=None) -> InterestRateTermStructure:
         """Extrapolate the curve up to a maximum maturity.
 
         Computes discount factors, zero and forward rate intensities, and
@@ -75,13 +79,7 @@ class SmithWilsonExtrapolator:
             gamma: Vector Q b that parameterizes the kernel representation.
 
         Returns:
-            Dict[str, np.ndarray]: A dictionary with arrays indexed by maturity:
-                - "discount": Discount factors.
-                - "yldintensity": Zero rate intensity (log-yield) at each t.
-                - "zeroac": Annual-compounded zero rates.
-                - "fwintensity": Instantaneous forward rate intensity.
-                - "forwardcc": Continuously-compounded one-year forward rates.
-                - "forwardac": Annual-compounded one-year forward rates.
+            InterestRateTermStructure
         """
         if alfa is None: alfa = self.alfa
         if gamma is None: gamma = self.gamma
@@ -90,41 +88,14 @@ class SmithWilsonExtrapolator:
         u = np.arange(1, self.n_pays + 1).reshape(1, -1) / self.n_coup
 
         H = self._H_mat(alfa, v, u)
-        G = self._G_mat(alfa, v, u)
 
         tempdiscount = (H @ gamma).flatten()  # spec 153, H(v,u)*Qb
-        tempintensity = (G @ gamma).flatten()  # spec 157, G(v,u)*Qb
-
         discount = np.zeros(max_maturity + 1)
-        yldintensity = np.zeros(max_maturity + 1)
-        fwintensity = np.zeros(max_maturity + 1)
-        zeroac = np.zeros(max_maturity + 1)
-        forwardac = np.zeros(max_maturity + 1)
-        forwardcc = np.zeros(max_maturity + 1)
-        zerocc = np.zeros(max_maturity + 1)
-
         discount[0] = 1
-        temp = np.sum((1 - np.exp(-alfa * u.flatten())) * gamma.flatten())  # spec 159, (1'-exp(-alfa*u'))Qb
-        yldintensity[0] = self.ln_ufr - alfa * temp  # spec 159
-        fwintensity[0] = yldintensity[0]  # spec 159
-
         maturities = np.arange(1, max_maturity + 1)
         discount[1:] = np.exp(-self.ln_ufr * maturities) * (1 + tempdiscount[1:])
-        yldintensity[1:] = self.ln_ufr - np.log1p(tempdiscount[1:]) / maturities  # spec 157
-        fwintensity[1:] = self.ln_ufr - tempintensity[1:] / (1 + tempdiscount[1:])  # spec 157
-        zeroac[1:] = discount[1:] ** (-1 / maturities) - 1
-        forwardac[1:] = discount[:-1] / discount[1:] - 1
-        forwardcc[1:] = np.log1p(forwardac[1:])
-        zerocc[1:] = np.log1p(zeroac[1:])
 
-        return {
-            "discount": discount,
-            "yldintensity": yldintensity,
-            "zeroac": zeroac,
-            "fwintensity": fwintensity,
-            "forwardcc": forwardcc,
-            "forwardac": forwardac
-        }
+        return InterestRateTermStructure.from_discount(discount)
 
     def _C_mat(self) -> np.ndarray:
         """Build the cash-flow matrix for the selected instrument set.
@@ -276,59 +247,3 @@ class SmithWilsonExtrapolator:
                 alfa = a
                 break
         return alfa, gamma
-
-
-def smith_wilson_extrap(rates: np.ndarray,
-                        maturities: np.ndarray,
-                        ufr: float,
-                        convergence_point: int,
-                        min_alpha: float,
-                        instrument: str = "zero",
-                        coupon_frequency: int = 1,
-                        convergence_tolerance_bp: float = 0.1,
-                        max_maturity: int = 150) -> Dict[str, np.ndarray]:
-    """Smith-Wilson Risk-Free Interest Rate Extrapolation Tool.
-
-    Args:
-        instrument: Instrument type: "zero", "bond", or "swap" (case-insensitive).
-        coupon_frequency: Number of coupon payments per year for coupon
-            instruments (1, 2, 4, or 12). Ignored for zeros.
-        rates: Observed market rates as decimals. For bonds/swaps, use
-            coupon rates or par rates per instrument.
-        maturities: Maturities corresponding to `rates` in years. For
-            bonds/swaps, provide payment times in years for each quoted
-            instrument.
-        ufr: Ultimate forward rate as an annually compounded rate
-            (decimal), e.g., 0.035 for 3.5%.
-        convergence_point: Convergence point (in years) by which the forward
-            rate is within the specified tolerance of the UFR.
-        min_alpha: Minimum value of the alpha parameter used as a lower
-            bound in calibration.
-        convergence_tolerance_bp: Convergence tolerance in basis points (bp)
-            used as tau in calibration. Default is 0.1 bp.
-        max_maturity: Maximum maturity in whole years (inclusive) for which
-            the outputs are returned. Default is 150 (year).
-
-    Returns:
-        Dict[str, np.ndarray]: A dictionary with arrays indexed by maturity (starting from 1):
-            - "spot": Annual-compounded spot rates.
-            - "forward": Annual-compounded one-year forward rates.
-    """
-    sw = SmithWilsonExtrapolator(
-        instrument,
-        coupon_frequency,
-        rates,
-        maturities,
-        ufr,
-        convergence_point,
-        min_alpha,
-        convergence_tolerance_bp
-    )
-
-    r = sw.extrapolate(max_maturity)
-
-    return {
-        "spot": r["zeroac"][1:max_maturity+1],
-        "forward": r["forwardac"][1:max_maturity+1],
-        "alpha": sw.alfa
-    }

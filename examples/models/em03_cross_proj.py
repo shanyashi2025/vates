@@ -133,12 +133,12 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
 
 def _interp_monthly_spot(spot_in: np.ndarray) -> np.ndarray:
-    from vates.utils import convert_spot_to_fwrd, curve_interp, convert_fwrd_to_spot
+    from vates.finmath import convert_interest_rates, interpolate_interest_rates
     terms = np.arange(len(spot_in)) * 12 # term in month
     # modify the code to implement other curve interpolation method
-    fwrd_in = convert_spot_to_fwrd(spot_in, 'A')
-    fwrd_interp = curve_interp(terms, fwrd_in, "next")
-    spot_out = convert_fwrd_to_spot(fwrd_interp, 'M')
+    fwrd_in = convert_interest_rates(spot_in, from_type="spot", to_type="forward")
+    fwrd_interp = interpolate_interest_rates(terms, fwrd_in, method="next")
+    spot_out = convert_interest_rates(fwrd_interp, time_interval=1/12, from_type="forward", to_type="spot")
     return spot_out
 
 

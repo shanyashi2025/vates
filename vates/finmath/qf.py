@@ -1,13 +1,14 @@
-"""Quantitative Finance and Investment"""
+"""Quantitative Finance"""
 import numpy as np
 import math
 import warnings
 
 
-def multivariate_standard_normal(corr: np.ndarray, rng: np.random._generator.Generator=None,
-                                 bypass_valid_corr: bool=False) -> np.ndarray:
-    if not bypass_valid_corr: validate_corr_matrix(corr)
-    if rng is None: rng = np.random.default_rng()
+def multivariate_standard_normal(corr: np.ndarray, rng: np.random._generator.Generator = None,
+                                 bypass_valid_corr: bool = False) -> np.ndarray:
+    if not bypass_valid_corr:
+        validate_corr_matrix(corr)
+    rng = rng or np.random.default_rng()
     n = len(corr)
     L = np.linalg.cholesky(corr)
     u = rng.standard_normal(n)
@@ -41,7 +42,7 @@ def geometric_brownian_motion(mu, sigma, dt, z):
     return math.exp((mu - 0.5 * sigma ** 2) * dt + sigma * z * math.sqrt(dt))
 
 
-def search_efficient_frontier(mu: np.ndarray, sigma: np.ndarray, corr_matrix: np.ndarray, n_points: int=100
+def search_efficient_frontier(mu: np.ndarray, sigma: np.ndarray, corr_matrix: np.ndarray, n_points: int = 100
                               ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     try:                
         import cvxpy as cp

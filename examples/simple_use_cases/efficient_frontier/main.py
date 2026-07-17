@@ -10,7 +10,7 @@ try:
 except ImportError:
     has_matplotlib = False
 
-from vates.utils import search_efficient_frontier
+from vates.finmath import search_efficient_frontier
 
 def _min_std_meeting_ret_tar(wgts: np.ndarray, rets: np.ndarray, stds: np.ndarray, ret_tar: float) -> dict | None:
     """minimum standard deviation meeting return target"""

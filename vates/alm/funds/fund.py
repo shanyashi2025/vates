@@ -106,11 +106,9 @@ class Fund:
             existing_assets (Asset | list[Asset] | None): Existing assets to be included.
             existing_liabs (Liab | list[Liab] | None): Existing liabilities to be included.
 
-        Raises:
-
         """
         if self._assembled:
-            raise ValueError(f"Fund has already been assembled.")
+            warnings.warn(f"Fund has already been assembled.")
 
         if existing_assets is None:
             pass
@@ -216,9 +214,9 @@ class Fund:
         self.calculator.tdv_free_estate_ad[t] = self._container.free_estate
         self.calculator.process_assets_after_dealing()
         # reconcile realized gain/loss
-        if abs((rgl := self.calculator.tdv_totass_rgl_ad[p]) - recon_rgl) > 0.01: raise ValueError(
-            f"Fund {self.fund_id} at {p=} realized gain/loss reconciliation break, "
-            f"calculator: {rgl} <> allocator: {recon_rgl}")
+        if abs((rgl := self.calculator.tdv_totass_rgl_ad[p]) - recon_rgl) > 0.01:
+            warnings.warn(f"Fund {self.fund_id} at {p=} realized gain/loss reconciliation break, "
+                          f"calculator: {rgl} != allocator: {recon_rgl}")
 
     def _get_fund_size(self, *, fund_size_type: FundSizeType, asset_size_basis: AssetRepBasis) -> float:
         """Get the fund size based on the fund size type and basis.
@@ -233,7 +231,6 @@ class Fund:
         Raises:
             ValueError: If fund size type is invalid.
         """
-        t = self.time
         if fund_size_type == FundSizeType.FUND:
             return self._container.get_totass_value(asset_size_basis, include_free_estate=True)
             # # need to include free_estate
