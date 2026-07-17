@@ -90,8 +90,12 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
 def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str,
                            workspace_directory: str, input_directories: list[str], results_directory: str | None = None,
                            max_workers: int | None = None,
-                           model_name: str = "monte_carlo", model_description: str = "Portfolio Monte Carlo simulation."):
-    model = StochExecutor(name=model_name, description=model_description)
+                           model_name: str = "monte_carlo", description: str = "Portfolio Monte Carlo simulation"):
+    model = StochExecutor(
+        model_name=model_name,
+        description=f"{description}, simulations: {simulations}, scenario: '{scenario}', "
+                    f"from {start_year}/{start_month} to {end_year}/12."
+    )
     model.bind_projection(port_monte_carlo_proj)
     model.configure_run(
         simulations=simulations,

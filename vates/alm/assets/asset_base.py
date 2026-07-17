@@ -63,7 +63,7 @@ class Asset(ABC):
         self._units: float = units
         self._purchase_date: pd.Period = purchase_date or (self.period if self._is_profile else None)
         self._currency: Currency | None = currency
-        self._classification: AssetClassification = AssetClassification(classification.upper()) \
+        self._classification: AssetClassification = AssetClassification[classification.upper()] \
             if isinstance(classification, str) else classification
         self._asset_category: str = asset_category
         self._fund_id: str = fund_id

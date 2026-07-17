@@ -22,16 +22,16 @@ class ProjModelEngine:
     def __init__(
         self,
         *,
-        name: str,
+        model_name: str,
         description: str = '...'
     ) -> None:
         """Initialize a projection model engine.
 
         Args:
-            name (str): The name of the model.
+            model_name (str): The name of the model.
             description (str, optional): The description of the model.
         """
-        self._name: str = str(name)
+        self._model_name: str = str(model_name)
         self._description: str = str(description)
 
         self._projection: Callable | None = None
@@ -40,7 +40,7 @@ class ProjModelEngine:
         # runtime stuffs
         self._cached_filepath: dict[str, tuple] = {}
         self._proj_variables: list[weakref.ref[ProjVariable]] = []
-        self._output_files: set = set()
+        self._result_files: set = set()
         self._time_synchronizer: ProjectionTimeSynchronizer = ProjectionTimeSynchronizer()
         self._messages: list[str] = []
         self._runlog: dict | None = None
@@ -218,7 +218,7 @@ class ProjModelEngine:
         if self.results_directory_path.is_dir():
             if self._run_config.is_delete_existing_results:
                 remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
-                for f in glob.glob(str(self.results_directory_path / f'{self._name}*')):
+                for f in glob.glob(str(self.results_directory_path / f'{self._model_name}*')):
                     if f.endswith(remove_pattern):
                         os.remove(f)
                     else:
@@ -244,7 +244,7 @@ class ProjModelEngine:
             writer.writerow(['group', 'owner', 'variable', 'constant'] + period_col_list)
             for v in variables:
                 self._write_variable(v, writer)
-        self._output_files.add(output_file)
+        self._result_files.add(output_file)
 
     def _write_stochastic_result(self) -> None:
         """Write the stochastic result."""
@@ -287,7 +287,7 @@ class ProjModelEngine:
                 writer.writerow(['simulation', 'group', 'owner', 'variable', 'constant'] + period_col_list)
             for v in variables:
                 self._write_stoch_variable(v, writer, self._run_config.simulation, pos_lst_m, pos_lst_y)
-        self._output_files.add(output_file)
+        self._result_files.add(output_file)
 
     def attach_time_observer(self, observer, /) -> None:
         self._time_synchronizer.attach_time_observer(observer)
@@ -411,11 +411,11 @@ class ProjModelEngine:
         exec_seconds = exec_total_seconds % 60
 
         self._runlog = {
-            "model": {
-                "name": self._name,
-                "description": self._description,
-                "projection_function": f"{inspect.getfile(self._projection)}:{self._projection.__name__}",
-                "projection_engine": f"{inspect.getfile(type(self))}:{type(self).__name__}",
+            "model_name": self._model_name,
+            "description": self._description,
+            "srouce_code": {
+                "projection_function": f"{inspect.getfile(self._projection)}: <function '{self._projection.__name__}'>",
+                "projection_engine": f"{inspect.getfile(type(self))}: <class '{type(self).__name__}'>",
             },
             "execution": {
                 "success": exec_success,
@@ -423,7 +423,7 @@ class ProjModelEngine:
                 "end": exec_end_time.strftime('%Y-%m-%d %H:%M:%S'),
                 "duration": f"{exec_hours:02}:{exec_minutes:02}:{exec_seconds:02}",
             },
-            "run_config": {
+            "configuration": {
                 "start_year": self.START_YEAR,
                 "start_month": self.START_MONTH,
                 "end_year": self.END_YEAR,
@@ -434,8 +434,8 @@ class ProjModelEngine:
                 "input_directories": self._run_config.input_directories,
                 "results_directory": self._run_config.results_directory,
             },
-            "environ": self._environ,
-            "output_files": list(map(str, self._output_files)),
+            "environment": self._environ,
+            "results": list(map(str, self._result_files)),
             "messages": self._messages,
         }
 
@@ -521,8 +521,8 @@ class ProjModelEngine:
                 last_seen = filepath
         return first_seen, last_seen
 
-    def _concat_output_file_path(self, name: str) -> Path:
-        return self.results_directory_path / f'{self._name}{name}'
+    def _concat_output_file_path(self, filename: str, /) -> Path:
+        return self.results_directory_path / f'{self._model_name}{filename}'
 
     @property
     def workspace_directory_path(self) -> Path:
@@ -534,16 +534,16 @@ class ProjModelEngine:
 
     @property
     def MODEL_NAME(self) -> str:
-        """str: Model alias used to prefix output files."""
-        return self._name
+        """str: Model name used for result files."""
+        return self._model_name
 
     @property
-    def SCENARIO(self) -> str | None:
-        """str: Scenario code that identifies the set of input used for a run."""
+    def SCENARIO(self) -> str:
+        """str: Scenario code used for a run."""
         return self._run_config.scenario
 
     @property
-    def SIMULATION(self) -> int | None:
+    def SIMULATION(self) -> int:
         """int: Simulation."""
         return self._run_config.simulation
 

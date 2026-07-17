@@ -2,7 +2,7 @@
     "number_of_years_monthly_results_retained": 1,
     "statistic": {
         "mean": "mean",
-		  "std": "std",
+        "std": "std",
         "median": "median",
         "max": "max",
         "min": "min",

@@ -113,8 +113,8 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
         ).all
         target_allocation = build_target_allocation(asset_allocation_df, fund_id, str(period.year * 100 + period.month))
         fund.rebalance_assets(
-            fund_size_type=rebalance_params.size_type,
-            asset_size_basis=rebalance_params.size_basis,
+            fund_size_type=rebalance_params.fund_size_type,
+            asset_size_basis=rebalance_params.asset_size_basis,
             target_weight=target_allocation,
             assets_profile=profile_assets
         )

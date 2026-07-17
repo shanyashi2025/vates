@@ -17,21 +17,21 @@ The `ProjModelEngine` class is the projection model engine.
 - set up a model instance:
 
 ```python
-import vates as vt
+import vates
 
-model_simple_params = vt.ProjModelEngine(name='your_model_name', start_year=2025, start_month=12)
+model_simple_params = vates.ProjModelEngine(model_name='your_model_name', start_year=2025, start_month=12)
 
-model_full_params = vt.ProjModelEngine(
-  name='your_model_name',
-  start_year=2025,
-  start_month=12,
-  end_year=2026,
-  description='description of your model',
-  scenario='scenario_to_run',
-  simulation=1,
-  workspace_directory='path/to/workspace',
-  input_directories=['path/to/input/folder1', 'path/to/input/folder2'],
-  results_directory='path/to/results/folder'
+model_full_params = vates.ProjModelEngine(
+    model_name='your_model_name',
+    start_year=2025,
+    start_month=12,
+    end_year=2026,
+    description='description of your model',
+    scenario='scenario_to_run',
+    simulation=1,
+    workspace_directory='path/to/workspace',
+    input_directories=['path/to/input/folder1', 'path/to/input/folder2'],
+    results_directory='path/to/results/folder'
 )
 ```
 
@@ -43,9 +43,9 @@ model_full_params = vt.ProjModelEngine(
 - set up a model instance and call `.run()` to perform the projection
 
 ```python
-import vates as vt
+import vates
 
-class YourModel(vt.ProjModelEngine):
+class YourModel(vates.ProjModelEngine):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
@@ -68,14 +68,14 @@ your_model_instance.run()
 You can set up instances of `TDepVariable` and/or `ConstVariable`, the projected results will be automatically output to the `your_model_name.proj.csv` file.
 
 ```python
-import vates as vt
+import vates
 
-class YourModel(vt.ProjModelEngine):
+class YourModel(vates.ProjModelEngine):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.const_var1 = vt.ConstVariable(self, 'const_var1_name', 'owner1_name', 'group1_name')
-        self.tdep_var1 = vt.TDepVariable(self, 'tdep_var1_name', 'owner1_name', 'group2_name')
-        self.tdep_var2 = vt.TDepVariable(self, 'tdep_var2_name', 'owner2_name', 'group1_name')
+        self.const_var1 = vates.ConstVariable(self, 'const_var1_name', 'owner1_name', 'group1_name')
+        self.tdep_var1 = vates.TDepVariable(self, 'tdep_var1_name', 'owner1_name', 'group2_name')
+        self.tdep_var2 = vates.TDepVariable(self, 'tdep_var2_name', 'owner2_name', 'group1_name')
         
     def time_zero_calculations(self):
         self.const_var1[0] = self.START_YEAR * 100 + self.START_MONTH
@@ -102,10 +102,10 @@ The `StochExecutor` class is the executor for stochastic model, multiprocessing 
   - `post_stoch_calculations()`
 
 ```python
-import vates as vt
+import vates
 
 
-class YourStochExecutor(vt.StochExecutor):
+class YourStochExecutor(vates.StochExecutor):
   def pre_stoch_calculations(self):
     print(f"model name: {self.MODEL_NAME} | scenario: {self.SCENARIO} | simulations: {self.SIMULATIONS}")
 
@@ -113,7 +113,7 @@ class YourStochExecutor(vt.StochExecutor):
     print(f'post stochastic calculations ...')
 
 
-class YourModel(vt.ProjModelEngine):
+class YourModel(vates.ProjModelEngine):
   def time_zero_calculations(self):
     print(
       f"model name: {self.MODEL_NAME} | scenario: {self.SCENARIO} | simulation: {self.SIMULATION} | start date: {self.START_DATE} | end date: {self.END_DATE}")
@@ -126,7 +126,7 @@ class YourModel(vt.ProjModelEngine):
 if __name__ == '__main__':  # must create the '__main__' block for multiprocessing
   your_stoch_model_instance = YourStochExecutor(
     model_cls=YourModel,
-    name='your_stoch_model_name',
+    model_name='your_stoch_model_name',
     start_year=2025,
     start_month=12,
     end_year=2026,
@@ -148,7 +148,7 @@ import pandas as pd
 import random
 
 random.seed(42)
-import vates as vt
+import vates
 
 # --- set up the DataFrame ---
 n_idx1, n_idx2, n_cols = 5, 3, 10
@@ -168,7 +168,7 @@ df = pd.DataFrame(data, index=multi_index, columns=columns)
 
 # --- KeyedArray ---
 # 1. create KeyedArray object from DataFrame
-kr = vt.kr_from_df(df)
+kr = vates.kr_from_df(df)
 
 # 2. get attributes `ndim`, `size`, `shape`, `dtype` just like numpy ndarray
 print(f">>> {kr.ndim=}, {kr.size=}, {kr.shape=}, {kr.dtype=}")
@@ -204,7 +204,7 @@ The `Cell` class in `autograd` module automates the backpropagation process to c
 For actuarial practice, you can employ `autograd` to implement sensitivity test in a fast way.
 
 ```python
-import vates as vt
+import vates
 
 def simple_cashflow_model(mort_rates, discount_rates):
     no_pols_if = 1
@@ -223,8 +223,8 @@ def simple_cashflow_model(mort_rates, discount_rates):
 mort_rates = [0.001, 0.002]
 discount_rates = [0.025, 0.035]
 
-mort_rate_mul_sens, mort_rate_add_sens = vt.autograd.Cell(1), vt.autograd.Cell(0)
-discount_rate_add_sens = vt.autograd.Cell(0)
+mort_rate_mul_sens, mort_rate_add_sens = vates.autograd.Cell(1), vates.autograd.Cell(0)
+discount_rate_add_sens = vates.autograd.Cell(0)
 
 mort_rates = [x * mort_rate_mul_sens + mort_rate_add_sens for x in mort_rates]
 discount_rates = [x + discount_rate_add_sens for x in discount_rates]

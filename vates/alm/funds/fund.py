@@ -171,22 +171,24 @@ class Fund:
         self.calculator.process_assets_after_dealing()
 
     @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
-    def rebalance_assets(self, *, fund_size_type: FundSizeType, asset_size_basis: AssetRepBasis,
+    def rebalance_assets(self, *, fund_size_type: str | FundSizeType, asset_size_basis: str | AssetRepBasis,
                          target_weight: dict[str, TargetWeight], assets_profile: list[Asset] | None = None, **kwargs
                          ) -> None:
         """Rebalance assets per target allocation and optional profile.
 
         Args:
-            fund_size_type (FundSizeType): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
-            asset_size_basis (AssetRepBasis): Basis for sizing against fund (usually FAV or BSV).
+            fund_size_type (str | FundSizeType): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
+            asset_size_basis (str, AssetRepBasis): Basis for sizing against fund (usually FAV or BSV).
             target_weight (dict[str, TargetWeight]): Target allocation by group.
             assets_profile (list[Asset] | None=None): Profile assets for purchases (e.g., bonds).
         """
         t, p = self.time, self.period
+        fund_size_type = FundSizeType[fund_size_type.upper()] if isinstance(fund_size_type, str) else fund_size_type
+        asset_size_basis = AssetRepBasis[asset_size_basis.upper()] if isinstance(asset_size_basis, str) else asset_size_basis
 
         self.calculator.tdv_accum_free_proceeds_bd[t] = self._container.accum_free_proceeds
         # process rebalance
-        fund_size = self._get_fund_size(fund_size_type, asset_size_basis)
+        fund_size = self._get_fund_size(fund_size_type=fund_size_type, asset_size_basis=asset_size_basis)
         recon_rgl = self._allocator.rebalance(
             fund_size=fund_size,
             asset_size_basis=asset_size_basis,
@@ -203,12 +205,12 @@ class Fund:
             f"Fund {self.fund_id} at {p=} realized gain/loss reconciliation break, "
             f"calculator: {rgl} <> allocator: {recon_rgl}")
 
-    def _get_fund_size(self, size_type: FundSizeType, size_basis: AssetRepBasis) -> float:
+    def _get_fund_size(self, *, fund_size_type: FundSizeType, asset_size_basis: AssetRepBasis) -> float:
         """Get the fund size based on the fund size type and basis.
 
         Args:
-            size_type (FundSizeType): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
-            size_basis (AssetRepBasis): Asset reporting basis use for rebalance (usually FAV or BSV).
+            fund_size_type (str): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
+            asset_size_basis (AssetRepBasis): Asset reporting basis use for rebalance (usually FAV or BSV).
 
         Returns:
             float: Computed fund size on the requested basis.
@@ -217,23 +219,23 @@ class Fund:
             ValueError: If fund size type is invalid.
         """
         t = self.time
-        if size_type == FundSizeType.FUND:
+        if fund_size_type == FundSizeType.FUND:
             # need to include accum_free_proceeds
-            return self.calculator.tdv_totass_rep_value_bd[t][size_basis.value] + self._container.accum_free_proceeds
-        elif size_type == FundSizeType.SURR_VALUE:
+            return self.calculator.tdv_totass_rep_value_bd[t][asset_size_basis.value] + self._container.accum_free_proceeds
+        elif fund_size_type == FundSizeType.SURR_VALUE:
             return self.calculator.tdv_tot_surr_val[t]
-        elif size_type == FundSizeType.MATH_RES:
+        elif fund_size_type == FundSizeType.MATH_RES:
             return self.calculator.tdv_tot_math_res[t]
-        elif size_type == FundSizeType.ACCT_VALUE:
+        elif fund_size_type == FundSizeType.ACCT_VALUE:
             return self.calculator.tdv_tot_acct_val_bd[t]
-        elif size_type == FundSizeType.ASSET_SHARE:
+        elif fund_size_type == FundSizeType.ASSET_SHARE:
             return self.calculator.tdv_tot_asset_share_bd[t]
-        elif size_type == FundSizeType.MAX_AS_MATH:
+        elif fund_size_type == FundSizeType.MAX_AS_MATH:
             return max(self.calculator.tdv_tot_asset_share_bd[t], self.calculator.tdv_tot_math_res[t])
-        elif size_type == FundSizeType.MAX_AS_CSV:
+        elif fund_size_type == FundSizeType.MAX_AS_CSV:
             return max(self.calculator.tdv_tot_asset_share_bd[t], self.calculator.tdv_tot_surr_val[t])
 
-        raise ValueError(f"Invalid fund size type: {size_type}.")
+        raise ValueError(f"Unknown fund size type: {fund_size_type}.")
 
     @t_checker({"proc_liabs_ad": -1, "proc_liabs_bd": 0, "proc_assets_ad": 0}, "proc_liabs_ad")
     def process_liabs_after_dealing(self) -> None:

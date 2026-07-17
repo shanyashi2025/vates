@@ -6,8 +6,11 @@ from local_package import load_file_df, EsgMaster, AssetMaster
 
 def asset_model(start_year: int, start_month: int, end_year: int, scenario: str, workspace_directory: str,
                 input_directories: list[str], results_directory: str | None = None,
-                model_name: str = "asset_model_inner", model_description: str = "Run off existing assets"):
-    model = ProjModelEngine(name=model_name, description=model_description)
+                model_name: str = "asset_model_inner", description: str = "Run off existing assets"):
+    model = ProjModelEngine(
+        model_name=model_name,
+        description=f"{description}, scenario: '{scenario}', from {start_year}/{start_month} to {end_year}/12."
+    )
     model.configure_run(
         start_year=start_year,
         start_month=start_month,

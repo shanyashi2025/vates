@@ -28,10 +28,10 @@ class StochExecutor:
     def __init__(
         self,
         *,
-        name: str,
+        model_name: str,
         description: str = '...',
     ) -> None:
-        self._name: str = str(name)
+        self._model_name: str = str(model_name)
         self._description: str = str(description)
 
         self._proj_cls: type[ProjModelEngine] | None = None
@@ -40,7 +40,7 @@ class StochExecutor:
 
         # runtime stuffs
         self._cached_filepath: dict[str, tuple] = {}
-        self._output_files: set = set()
+        self._result_files: set = set()
         self._messages: list[str] = []
         self._sim_messages: list = []
         self._runlog: dict | None = None
@@ -201,7 +201,7 @@ class StochExecutor:
 
         if self.results_directory_path.is_dir():
             remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
-            for f in glob.glob(str(self.results_directory_path / f'{self._name}*')):
+            for f in glob.glob(str(self.results_directory_path / f'{self._model_name}*')):
                 if f.endswith(remove_pattern):
                     os.remove(f)
                 else:
@@ -237,7 +237,7 @@ class StochExecutor:
         for simulation in simulation_batch:
             try:
                 model_instance = self._proj_cls(
-                    name=self._name,
+                    model_name=self._model_name,
                     description=self._description
                 ).bind_projection(
                     self._projection
@@ -266,7 +266,7 @@ class StochExecutor:
             try:
                 res = model_instance.run(projection_args=projection_args)
                 result.append(res)
-                output_files.extend(model_instance._output_files)
+                output_files.extend(model_instance._result_files)
 
             except Exception as e:
                 traceback.print_exc()
@@ -303,7 +303,7 @@ class StochExecutor:
                 success, result, output_files = future.result()
                 exec_success = exec_success and success
                 self._sim_messages.extend(result)
-                self._output_files.update(output_files)
+                self._result_files.update(output_files)
 
         return exec_success
 
@@ -312,7 +312,7 @@ class StochExecutor:
         if stoch_setting is None or stoch_setting.get('statistic', None) is None:
             return
 
-        stoch_file_paths = sorted([f for f in self._output_files if f and str(f).endswith('.stoch.csv')])
+        stoch_file_paths = sorted([f for f in self._result_files if f and str(f).endswith('.stoch.csv')])
         if len(stoch_file_paths) == 0: return
 
         df = pd.concat((pd.read_csv(f) for f in stoch_file_paths), ignore_index=True)
@@ -334,7 +334,7 @@ class StochExecutor:
 
         output_file = self._concat_output_file_path('.stoch.stat.csv')
         statistic.to_csv(output_file, index=False)
-        self._output_files.add(output_file)
+        self._result_files.add(output_file)
 
     @property
     def runlog(self) -> dict[str, ...] | None:
@@ -347,12 +347,12 @@ class StochExecutor:
         exec_seconds = exec_total_seconds % 60
 
         self._runlog = {
-            "model": {
-                "name": self._name,
-                "description": self._description,
-                "projection_function": f"{inspect.getfile(self._projection)}:{self._projection.__name__}",
-                "projection_engine": f"{inspect.getfile(self._proj_cls)}:{self._proj_cls.__name__}",
-                "stochastic_executor": f"{inspect.getfile(type(self))}:{type(self).__name__}",
+            "model_name": self._model_name,
+            "description": self._description,
+            "srouce_code": {
+                "projection_function": f"{inspect.getfile(self._projection)}: <function '{self._projection.__name__}'>",
+                "projection_engine": f"{inspect.getfile(self._proj_cls)}: <class '{self._proj_cls.__name__}'>",
+                "stochastic_executor": f"{inspect.getfile(type(self))}: <class '{type(self).__name__}'>",
             },
             "execution": {
                 "success": exec_success,
@@ -360,7 +360,7 @@ class StochExecutor:
                 "end": exec_end_time.strftime('%Y-%m-%d %H:%M:%S'),
                 "duration": f"{exec_hours:02}:{exec_minutes:02}:{exec_seconds:02}",
             },
-            "run_setting": {
+            "configuration": {
                 "start_year": self.START_YEAR,
                 "start_month": self.START_MONTH,
                 "end_year": self.END_YEAR,
@@ -372,10 +372,9 @@ class StochExecutor:
                 "results_directory": self._run_config.results_directory,
                 "max_workers": self._run_config.max_workers,
             },
-            "environ": self._environ,
-            "output_files": list(map(str, self._output_files)),
-            "messages": self._messages,
-            "simulation_messages": self._sim_messages
+            "environment": self._environ,
+            "results": list(map(str, self._result_files)),
+            "messages": self._messages + self._sim_messages,
         }
 
         if self._run_config.enable_write_runlog:
@@ -402,17 +401,17 @@ class StochExecutor:
 
     @property
     def MODEL_NAME(self) -> str:
-        """str: Model alias used to prefix output files."""
-        return self._name
+        """str: Model name used for result files."""
+        return self._model_name
 
     @property
-    def SCENARIO(self) -> str | None:
-        """str: Scenario code that identifies the set of input used for a run."""
+    def SCENARIO(self) -> str:
+        """str: Scenario code used for a run."""
         return self._run_config.scenario
 
     @property
-    def SIMULATIONS(self) -> list[int] | None:
-        """int: Simulation."""
+    def SIMULATIONS(self) -> list[int]:
+        """list[int]: Simulations for a stochastic run."""
         return self._run_config.simulations
 
     @property
@@ -441,7 +440,7 @@ class StochExecutor:
         return self._run_config.end_date.month
 
     @property
-    def END_DATE(self) -> pd.Period | None:
+    def END_DATE(self) -> pd.Period:
         """pd.Period: End date of the projection."""
         return self._run_config.end_date
 

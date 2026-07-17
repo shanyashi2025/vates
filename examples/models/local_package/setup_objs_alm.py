@@ -3,10 +3,7 @@ from typing import List, Dict, Self
 import pandas as pd
 
 from vates import ProjModelEngine
-from vates.alm import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
-from vates.alm.econs import Currency
-from vates.alm.liabs import Liab, ExtProjLiab
-from vates.alm.funds import Fund, FundSizeType, RebalancePolicyParams
+from vates.alm import Currency, Liab, ExtProjLiab, Fund, RebalancePolicyParams
 
 
 @dataclass
@@ -14,12 +11,12 @@ class FundRebalanceParams:
     """Parameters for fund rebalance.
 
     Attributes:
-        size_type (FundSizeType): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
-        size_basis (AssetRepBasis): The basis for assets to match the fund size (usually FAV).
-        rebalance_freq (int): rebalance frequency (1=A, 2=H, 4=Q, 12=M, 0=SKIP).
+        fund_size_type (str): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.), corresponds to Enum `alm.FundSizeType`.
+        asset_size_basis (str): The basis for assets to match the fund size (usually FAV), corresponds to Enum `alm.AssetRepBasis`.
+        rebalance_freq (int): rebalance frequency (1=A, 2=H, 4=Q, 12=M, 0=No).
     """
-    size_type: FundSizeType
-    size_basis: AssetRepBasis
+    fund_size_type: str
+    asset_size_basis: str
     rebalance_freq: int
 
 
@@ -69,8 +66,8 @@ class FundMaster:
                     sh_fund = fund
             funds.append(fund)
             rebalance_params_dict[fund_id] = FundRebalanceParams(
-                size_type=FundSizeType[row["fund_size_type"].upper()],
-                size_basis=AssetRepBasis[row["fund_size_basis"].upper()],
+                fund_size_type=row["fund_size_type"].upper(),
+                asset_size_basis=row["fund_size_basis"].upper(),
                 rebalance_freq=row["fund_rebalance_freq"]  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
             )
 
@@ -95,14 +92,11 @@ class FundMaster:
 
         for idx, row in df_flt.iterrows():
             allocation_group = row["allocation_group"]
-            sequence = row["sequence"]
-            buysell_approach = AssetBuySellApproach(row["buysell_approach"].upper())
-            purchase_method = AssetPurchaseMethod(row["purchase_method"].upper())
 
-            rebalance_policy[allocation_group] = RebalancePolicyParams(
-                sequence=sequence,
-                buysell_approach=buysell_approach,
-                purchase_method=purchase_method,
+            rebalance_policy[allocation_group] = RebalancePolicyParams.create(
+                sequence=row["sequence"],
+                buysell_approach=row["buysell_approach"],
+                purchase_method=row["purchase_method"],
             )
 
         return rebalance_policy

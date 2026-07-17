@@ -3,6 +3,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import warnings
+from typing import Self
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
 from vates.alm.enums import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
@@ -10,7 +11,7 @@ from vates.alm.assets import Asset, Cash
 from vates.alm.funds._utils import ALContainer
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class RebalancePolicyParams:
     """Rebalance policy parameters.
 
@@ -24,8 +25,18 @@ class RebalancePolicyParams:
     buysell_approach: AssetBuySellApproach
     purchase_method: AssetPurchaseMethod
 
+    @classmethod
+    def create(cls, *, sequence: int, buysell_approach: AssetBuySellApproach | str,
+               purchase_method: AssetPurchaseMethod | str) -> Self:
+        return RebalancePolicyParams(
+            sequence=int(sequence),
+            buysell_approach=AssetBuySellApproach[buysell_approach.upper()] \
+                if isinstance(buysell_approach, str) else buysell_approach,
+            purchase_method=AssetPurchaseMethod[purchase_method.upper()] \
+                if isinstance(purchase_method, str) else purchase_method,
+       )
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class TargetWeight:
     """Target allocation weights for an allocation group.
 

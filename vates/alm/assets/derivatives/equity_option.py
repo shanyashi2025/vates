@@ -78,7 +78,7 @@ class EquityOption(Asset):
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
                          purchase_date=purchase_date, currency=currency, classification=classification,
                          asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
-        self._call_or_put: CallOrPut = CallOrPut(call_or_put.upper()) if isinstance(call_or_put, str) else call_or_put
+        self._call_or_put: CallOrPut = CallOrPut[call_or_put.upper()] if isinstance(call_or_put, str) else call_or_put
         self._exercise_date: pd.Period = exercise_date
         self._price: float = price
         self._stock_price: float = stock_price
