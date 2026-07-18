@@ -1,7 +1,7 @@
 import json
 import sys
 from vates import ProjModelEngine
-from local_package import load_file_df, EsgMaster, AssetMaster
+from bespoke_package import load_file_df, EsgMaster, AssetMaster
 
 
 def assets_projection(model: ProjModelEngine, assets_df_dict: dict, esg_master: EsgMaster):

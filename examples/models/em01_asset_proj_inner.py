@@ -1,7 +1,7 @@
 import json
 import sys
 from vates import ProjModelEngine
-from local_package import load_file_df, EsgMaster, AssetMaster
+from bespoke_package import load_file_df, EsgMaster, AssetMaster
 
 
 def asset_model(start_year: int, start_month: int, end_year: int, scenario: str, workspace_directory: str,
