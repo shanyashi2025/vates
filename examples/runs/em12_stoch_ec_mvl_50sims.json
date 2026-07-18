@@ -1,0 +1,12 @@
+{
+    "model_name": "stoch_ec_mvl",
+    "start_year": 2024,
+    "start_month": 12,
+    "end_year": 2124,
+    "scenario": "demo",
+    "workspace_directory": "examples",
+    "input_directories": ["inputs/em12_stoch_ec_mvl"],
+    "results_directory": "results/em12_stoch_ec_mvl_50sims",
+    "simulations": "1-50",
+    "max_workers": 6
+}

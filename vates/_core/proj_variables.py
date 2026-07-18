@@ -62,7 +62,7 @@ class ProjVariable(ABC):
     @property
     @abstractmethod
     def is_constant(self) -> bool:
-        """bool: True if constant, False if time-dependent."""
+        """bool: True if constant, False if time-dimensioned."""
         pass
 
     @property
@@ -127,7 +127,7 @@ class ProjVariable(ABC):
 
 
 class ConstVariable(ProjVariable):
-    """Container for constant (non-time-dependent) variables.
+    """Container for constant (non-time-dimensioned) variables.
 
     Holds a scalar, string, or an array (up to 3 dimensions) that does not vary over time.
     Optional dimension labels can be provided as lists or Enums; they are used in CSV output.
@@ -190,8 +190,8 @@ class ConstVariable(ProjVariable):
         self._result = value
 
 
-class TDepVariable(ProjVariable):
-    """Container for time-dependent variables (indexed by the time or period).
+class TDimVariable(ProjVariable):
+    """Container for time-dimensioned variables (indexed by the time or period).
 
     Values are stored for each `t` from 0 to `max_t` (inclusive). Optional up to 3 labeled
     dimensions (lists or Enums) are supported and preserved for CSV output.
@@ -255,7 +255,7 @@ class TDepVariable(ProjVariable):
 
     @property
     def is_constant(self) -> bool:
-        """bool: Always False for time-dependent variables."""
+        """bool: Always False for time-dimensioned variables."""
         return False
 
     @property

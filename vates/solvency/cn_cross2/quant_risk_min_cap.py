@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import pandas as pd
 import warnings
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 from vates.utils import RiskModule, SubRisk, NumVarGroup
 from vates.solvency.cn_cross2.params import (
     AccountType,
@@ -226,14 +226,14 @@ class MinCapUnit:
         self._min_cap_calculator: MinCapCalculator = MinCapCalculator(name)
         self._last_mc_calc: pd.Period | None = None
 
-        create_tdv = lambda varname: TDepVariable(varname, model_engine=model_engine, owner=name, group='CROSS_MC')
-        self.tdv_min_cap: TDepVariable = create_tdv("minimum_capital")
-        self.tdv_life_mc: TDepVariable = create_tdv("life_mc")
-        self.tdv_nonlife_mc: TDepVariable = create_tdv("nonlife_mc")
-        self.tdv_market_mc: TDepVariable = create_tdv("market_mc")
-        self.tdv_credit_mc: TDepVariable = create_tdv("credit_mc")
-        self.tdv_divers: TDepVariable = create_tdv("diversification")
-        self.tdv_loss_absorb: TDepVariable = create_tdv("loss_absorbency")
+        create_tdv = lambda varname: TDimVariable(varname, model_engine=model_engine, owner=name, group='CROSS_MC')
+        self.tdv_min_cap: TDimVariable = create_tdv("minimum_capital")
+        self.tdv_life_mc: TDimVariable = create_tdv("life_mc")
+        self.tdv_nonlife_mc: TDimVariable = create_tdv("nonlife_mc")
+        self.tdv_market_mc: TDimVariable = create_tdv("market_mc")
+        self.tdv_credit_mc: TDimVariable = create_tdv("credit_mc")
+        self.tdv_divers: TDimVariable = create_tdv("diversification")
+        self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
 
     def calculate_minimum_capital(self, mc_in: MinCapInputer) -> None:
         t = self.time
@@ -311,14 +311,14 @@ class MinCapConsolidator:
         self._min_cap_calculator_la: MinCapCalculator = MinCapCalculator(f'{name}:loss_absorb')
         self._last_mc_calc: pd.Period | None = None
 
-        create_tdv = lambda varname: TDepVariable(varname, model_engine=model_engine, owner=name, group='CROSS_MC')
-        self.tdv_min_cap: TDepVariable = create_tdv("minimum_capital")
-        self.tdv_life_mc: TDepVariable = create_tdv("life_mc")
-        self.tdv_nonlife_mc: TDepVariable = create_tdv("nonlife_mc")
-        self.tdv_market_mc: TDepVariable = create_tdv("market_mc")
-        self.tdv_credit_mc: TDepVariable = create_tdv("credit_mc")
-        self.tdv_divers: TDepVariable = create_tdv("diversification")
-        self.tdv_loss_absorb: TDepVariable = create_tdv("loss_absorbency")
+        create_tdv = lambda varname: TDimVariable(varname, model_engine=model_engine, owner=name, group='CROSS_MC')
+        self.tdv_min_cap: TDimVariable = create_tdv("minimum_capital")
+        self.tdv_life_mc: TDimVariable = create_tdv("life_mc")
+        self.tdv_nonlife_mc: TDimVariable = create_tdv("nonlife_mc")
+        self.tdv_market_mc: TDimVariable = create_tdv("market_mc")
+        self.tdv_credit_mc: TDimVariable = create_tdv("credit_mc")
+        self.tdv_divers: TDimVariable = create_tdv("diversification")
+        self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
 
     def calculate_minimum_capital(self) -> None:
         t, p = self.time, self.period

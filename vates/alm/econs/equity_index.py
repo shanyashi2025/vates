@@ -1,6 +1,6 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 
 
 @add_projection_time_synchronizer
@@ -10,7 +10,7 @@ class EquityIndex:
 
     Attributes:
         index_id (str): Equity index identifier.
-        tdv_tot_return_index (TDepVariable): Total return index.
+        tdv_tot_return_index (TDimVariable): Total return index.
         tdv_dividend_yield_ac (float): Dividend yield (annual compounding).
     """
     time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
@@ -40,9 +40,9 @@ class EquityIndex:
         self._total_return_index: float | None = None
         self._last_update: int | None = None
 
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=index_id, group='equity_index')
-        self.tdv_tot_return_index: TDepVariable = create_tdv("tot_return_index")
-        self.tdv_dividend_yield_ac: TDepVariable = create_tdv("dividend_yield_ac")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=index_id, group='equity_index')
+        self.tdv_tot_return_index: TDimVariable = create_tdv("tot_return_index")
+        self.tdv_dividend_yield_ac: TDimVariable = create_tdv("dividend_yield_ac")
 
     @property
     def last_update(self) -> int | None:
@@ -75,12 +75,12 @@ class EquityIndex:
         return self._total_return_index
 
     @property
-    def arr_tot_return_index(self) -> TDepVariable:
+    def arr_tot_return_index(self) -> TDimVariable:
         """float: Total return index."""
         return self.tdv_tot_return_index
 
     @property
-    def arr_dividend_yield_ac(self) -> TDepVariable:
+    def arr_dividend_yield_ac(self) -> TDimVariable:
         """TDepVariable: Dividend yield (annual compounding)."""
         return self.tdv_dividend_yield_ac
 

@@ -2,7 +2,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 
 
 @add_projection_time_synchronizer
@@ -45,18 +45,18 @@ class CreditBand:
         self._recovery_rate: float | None = None
         self._last_update: int | None = None
 
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=band_id, group='credit')
-        self.tdv_prob_of_default_ac: TDepVariable = create_tdv("prob_of_default_ac")
-        self.tdv_recovery_rate: TDepVariable = create_tdv("recovery_rate")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=band_id, group='credit')
+        self.tdv_prob_of_default_ac: TDimVariable = create_tdv("prob_of_default_ac")
+        self.tdv_recovery_rate: TDimVariable = create_tdv("recovery_rate")
         if tdv_spread_term_dim is None:
-            self.tdv_spread: TDepVariable = create_tdv("credit_spread")
+            self.tdv_spread: TDimVariable = create_tdv("credit_spread")
         else:  # has term structure
-            self.tdv_spread: TDepVariable = TDepVariable("credit_spread", dims=[tdv_spread_term_dim],
+            self.tdv_spread: TDimVariable = TDimVariable("credit_spread", dims=[tdv_spread_term_dim],
                                                          model_engine=model_engine, owner=band_id, group='credit')
         if tdv_spotmult_term_dim is None:
-            self.tdv_spotmult: TDepVariable = create_tdv("credit_spotmult")
+            self.tdv_spotmult: TDimVariable = create_tdv("credit_spotmult")
         else: # has term structure
-            self.tdv_spotmult: TDepVariable = TDepVariable("credit_spotmult", dims=[tdv_spotmult_term_dim],
+            self.tdv_spotmult: TDimVariable = TDimVariable("credit_spotmult", dims=[tdv_spotmult_term_dim],
                                                            model_engine=model_engine, owner=band_id, group='credit')
 
     @property

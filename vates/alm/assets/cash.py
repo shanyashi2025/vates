@@ -1,7 +1,7 @@
 import pandas as pd
 
 from vates import ProjModelEngine
-from vates._core import TDepVariable
+from vates._core import TDimVariable
 from vates.utils import t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, MarketInfo
@@ -61,10 +61,10 @@ class Cash(Asset):
         self._ret_id: str = ret_id
         self._ret_id_short_pos: str = ret_id_short_pos or ret_id
 
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=asset_id, group='cash')
-        self.tdv_cash_flow: TDepVariable = create_tdv("cash_flow")
-        self.tdv_mv_bd: TDepVariable = create_tdv("mv_bd")
-        self.tdv_mv_ad: TDepVariable = create_tdv("mv_ad")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='cash')
+        self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
+        self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
+        self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
         self.tdv_mv_ad[self.time] = self.mv
 
     @property
@@ -163,6 +163,6 @@ class Cash(Asset):
         return 0.0
 
     @property
-    def arr_cash_flow(self) -> TDepVariable:
+    def arr_cash_flow(self) -> TDimVariable:
         """TDepVariable: Cash flow array"""
         return self.tdv_cash_flow

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 
 
 @add_projection_time_synchronizer
@@ -10,7 +10,7 @@ class Currency:
 
     Attributes:
         currency_id (str): Currency identifier.
-        tdv_fx_rate (TDepVariable): Current FX rate.
+        tdv_fx_rate (TDimVariable): Current FX rate.
     """
     time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
@@ -33,7 +33,7 @@ class Currency:
         self.currency_id: str = currency_id
         self._last_update: int | None = None
 
-        self.tdv_fx_rate: TDepVariable = TDepVariable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
+        self.tdv_fx_rate: TDimVariable = TDimVariable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
 
     @property
     def last_update(self) -> int | None:
@@ -41,7 +41,7 @@ class Currency:
         return self._last_update
 
     @property
-    def arr_fx_rate(self) -> TDepVariable:
+    def arr_fx_rate(self) -> TDimVariable:
         """Optional[float]: Current FX rate."""
         return self.tdv_fx_rate
 

@@ -70,23 +70,25 @@ You can set up instances of `TDepVariable` and/or `ConstVariable`, the projected
 ```python
 import vates
 
+
 class YourModel(vates.ProjModelEngine):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.const_var1 = vates.ConstVariable(self, 'const_var1_name', 'owner1_name', 'group1_name')
-        self.tdep_var1 = vates.TDepVariable(self, 'tdep_var1_name', 'owner1_name', 'group2_name')
-        self.tdep_var2 = vates.TDepVariable(self, 'tdep_var2_name', 'owner2_name', 'group1_name')
-        
+        self.tdep_var1 = vates.TDimVariable(self, 'tdep_var1_name', 'owner1_name', 'group2_name')
+        self.tdep_var2 = vates.TDimVariable(self, 'tdep_var2_name', 'owner2_name', 'group1_name')
+
     def time_zero_calculations(self):
         self.const_var1[0] = self.START_YEAR * 100 + self.START_MONTH
-        
+
     def in_time_calculations(self):
         t, p = self.time, self.period
         self.tdep_var1[t] = p.year * 100 + p.month
         self.tdep_var2[t] = (t / 2) ** 2
-        
+
     def post_time_calculations(self):
         pass
+
 
 your_model_instance = YourModel(model_name='your_model_name', start_year=2025, start_month=12, end_year=2026)
 

@@ -2,7 +2,7 @@ import math
 import pandas as pd
 import warnings
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, TDimVariable
 from vates.finmath import CallOrPut, BlackScholesCalculator
 from vates.utils import t_checker
 from vates.alm.enums import AssetClassification
@@ -106,14 +106,14 @@ class EquityOption(Asset):
                     raise ValueError(msg)
 
         # create array variables
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=asset_id, group='equity_option')
-        self.tdv_units_bd: TDepVariable = create_tdv("units_bd")
-        self.tdv_units_ad: TDepVariable = create_tdv("units_ad")
-        self.tdv_cash_flow: TDepVariable = create_tdv("cash_flow")
-        self.tdv_stock_price: TDepVariable = create_tdv("stock_price")
-        self.tdv_price: TDepVariable = create_tdv("price")
-        self.tdv_mv_bd: TDepVariable = create_tdv("mv_bd")
-        self.tdv_mv_ad: TDepVariable = create_tdv("mv_ad")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='equity_option')
+        self.tdv_units_bd: TDimVariable = create_tdv("units_bd")
+        self.tdv_units_ad: TDimVariable = create_tdv("units_ad")
+        self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
+        self.tdv_stock_price: TDimVariable = create_tdv("stock_price")
+        self.tdv_price: TDimVariable = create_tdv("price")
+        self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
+        self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
 
         if not is_profile:
             t = self.time
@@ -268,6 +268,6 @@ class EquityOption(Asset):
         return self._cash_flow
 
     @property
-    def arr_cash_flow(self) -> TDepVariable:
+    def arr_cash_flow(self) -> TDimVariable:
         """TDepVariable: Cash flow array"""
         return self.tdv_cash_flow

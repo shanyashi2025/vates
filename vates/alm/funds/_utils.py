@@ -1,7 +1,7 @@
 import pandas as pd
 from dataclasses import dataclass, field
 
-from vates._core import TDepVariable
+from vates._core import TDimVariable
 from vates.alm.assets import Asset
 from vates.alm.liabs import Liab
 from vates.alm.enums import AssetRepBasis
@@ -81,8 +81,8 @@ class _RateOfReturnIndexer:
 
     __slots__ = ('_tdv', '_arr_index', '_divby')
 
-    def __init__(self, tdv: TDepVariable, /, arr_index: int | list[int] | None = None, divby: float = 1):
-        self._tdv: TDepVariable = tdv
+    def __init__(self, tdv: TDimVariable, /, arr_index: int | list[int] | None = None, divby: float = 1):
+        self._tdv: TDimVariable = tdv
         self._arr_index: int | None = arr_index
         self._divby: float = divby
 

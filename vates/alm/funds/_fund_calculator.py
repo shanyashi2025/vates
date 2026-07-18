@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 from vates.utils import t_checker
 from vates.alm.enums import AssetRepBasis
 from vates.alm.funds._utils import ALContainer
@@ -12,7 +12,7 @@ class FundCalculator:
     """Performs aggregation and performance calculations for a fund.
 
     Computes asset and liability aggregates, investment returns, URGL/RGL, and
-    stores time-dependent arrays for reporting by class and total.
+    stores time-dimensioned arrays for reporting by class and total.
 
     Attributes:
 
@@ -32,48 +32,48 @@ class FundCalculator:
         self.container: ALContainer = container
         self.asset_categories_enum: dict[str, int] = {item: i for i, item in enumerate(asset_categories)}
 
-        # Initialize time-dependent variables used for reporting
+        # Initialize time-dimensioned variables used for reporting
         fund_id = self.container.name
         # dims = None
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=fund_id, group='fund')
-        self.tdv_totass_cash_flow: TDepVariable = create_tdv("totass_cash_flow")
-        self.tdv_totass_urgl_bd: TDepVariable = create_tdv("totass_urgl_bd")
-        self.tdv_totass_urgl_ad: TDepVariable = create_tdv("totass_urgl_ad")
-        self.tdv_totass_rgl_ad: TDepVariable = create_tdv("totass_rgl_ad")
-        self.tdv_totliab_cash_flow: TDepVariable = create_tdv("totliab_cash_flow")
-        self.tdv_tot_num_pols: TDepVariable = create_tdv("tot_no_pols_if")
-        self.tdv_tot_surr_val: TDepVariable = create_tdv("tot_surr_val_if")
-        self.tdv_tot_math_res: TDepVariable = create_tdv("tot_math_res_if")
-        self.tdv_tot_acct_val_bd: TDepVariable = create_tdv("tot_acct_val_if_bd")
-        self.tdv_tot_acct_val_ad: TDepVariable = create_tdv("tot_acct_val_if_ad")
-        self.tdv_tot_asset_share_bd: TDepVariable = create_tdv("tot_asset_share_if_bd")
-        self.tdv_tot_asset_share_ad: TDepVariable = create_tdv("tot_asset_share_if_ad")
-        self.tdv_free_estate_bd: TDepVariable = create_tdv("free_estate_bd")
-        self.tdv_free_estate_ad: TDepVariable = create_tdv("free_estate_ad")
-        self.tdv_proceeds_transferred_in: TDepVariable = create_tdv("proceeds_transferred_in")
-        self.tdv_proceeds_transferred_out: TDepVariable = create_tdv("proceeds_transferred_out")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=fund_id, group='fund')
+        self.tdv_totass_cash_flow: TDimVariable = create_tdv("totass_cash_flow")
+        self.tdv_totass_urgl_bd: TDimVariable = create_tdv("totass_urgl_bd")
+        self.tdv_totass_urgl_ad: TDimVariable = create_tdv("totass_urgl_ad")
+        self.tdv_totass_rgl_ad: TDimVariable = create_tdv("totass_rgl_ad")
+        self.tdv_totliab_cash_flow: TDimVariable = create_tdv("totliab_cash_flow")
+        self.tdv_tot_num_pols: TDimVariable = create_tdv("tot_no_pols_if")
+        self.tdv_tot_surr_val: TDimVariable = create_tdv("tot_surr_val_if")
+        self.tdv_tot_math_res: TDimVariable = create_tdv("tot_math_res_if")
+        self.tdv_tot_acct_val_bd: TDimVariable = create_tdv("tot_acct_val_if_bd")
+        self.tdv_tot_acct_val_ad: TDimVariable = create_tdv("tot_acct_val_if_ad")
+        self.tdv_tot_asset_share_bd: TDimVariable = create_tdv("tot_asset_share_if_bd")
+        self.tdv_tot_asset_share_ad: TDimVariable = create_tdv("tot_asset_share_if_ad")
+        self.tdv_free_estate_bd: TDimVariable = create_tdv("free_estate_bd")
+        self.tdv_free_estate_ad: TDimVariable = create_tdv("free_estate_ad")
+        self.tdv_proceeds_transferred_in: TDimVariable = create_tdv("proceeds_transferred_in")
+        self.tdv_proceeds_transferred_out: TDimVariable = create_tdv("proceeds_transferred_out")
         # dims = AssetRepBasis
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[AssetRepBasis])
-        self.tdv_totass_rep_value_bd: TDepVariable = create_tdv("totass_rep_value_bd")
-        self.tdv_totass_rep_value_ad: TDepVariable = create_tdv("totass_rep_value_ad")
-        self.tdv_totass_inv_ret_bd: TDepVariable = create_tdv("totass_inv_ret_bd")
-        self.tdv_totass_ror_pc_bd: TDepVariable = create_tdv("totass_ror_pc_bd")
-        self.tdv_totass_inv_ret_ad: TDepVariable = create_tdv("totass_inv_ret_ad")
-        self.tdv_totass_ror_pc_ad: TDepVariable = create_tdv("totass_ror_pc_ad")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[AssetRepBasis])
+        self.tdv_totass_rep_value_bd: TDimVariable = create_tdv("totass_rep_value_bd")
+        self.tdv_totass_rep_value_ad: TDimVariable = create_tdv("totass_rep_value_ad")
+        self.tdv_totass_inv_ret_bd: TDimVariable = create_tdv("totass_inv_ret_bd")
+        self.tdv_totass_ror_pc_bd: TDimVariable = create_tdv("totass_ror_pc_bd")
+        self.tdv_totass_inv_ret_ad: TDimVariable = create_tdv("totass_inv_ret_ad")
+        self.tdv_totass_ror_pc_ad: TDimVariable = create_tdv("totass_ror_pc_ad")
         # dims = AssetClass
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[asset_categories])
-        self.tdv_asset_cash_flow: TDepVariable = create_tdv("asset_cash_flow")
-        self.tdv_asset_urgl_bd: TDepVariable = create_tdv("asset_urgl_bd")
-        self.tdv_asset_urgl_ad: TDepVariable = create_tdv("asset_urgl_ad")
-        self.tdv_asset_rgl_ad: TDepVariable = create_tdv("asset_rgl_ad")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[asset_categories])
+        self.tdv_asset_cash_flow: TDimVariable = create_tdv("asset_cash_flow")
+        self.tdv_asset_urgl_bd: TDimVariable = create_tdv("asset_urgl_bd")
+        self.tdv_asset_urgl_ad: TDimVariable = create_tdv("asset_urgl_ad")
+        self.tdv_asset_rgl_ad: TDimVariable = create_tdv("asset_rgl_ad")
         # dims = AssetClass,AssetRepBasis
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[asset_categories, AssetRepBasis])
-        self.tdv_asset_rep_value_bd: TDepVariable = create_tdv("asset_rep_value_bd")
-        self.tdv_asset_rep_value_ad: TDepVariable = create_tdv("asset_rep_value_ad")
-        self.tdv_asset_inv_ret_bd: TDepVariable = create_tdv("asset_inv_ret_bd")
-        self.tdv_asset_ror_pc_bd: TDepVariable = create_tdv("asset_ror_pc_bd")
-        self.tdv_asset_inv_ret_ad: TDepVariable = create_tdv("asset_inv_ret_ad")
-        self.tdv_asset_ror_pc_ad: TDepVariable = create_tdv("asset_ror_pc_ad")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[asset_categories, AssetRepBasis])
+        self.tdv_asset_rep_value_bd: TDimVariable = create_tdv("asset_rep_value_bd")
+        self.tdv_asset_rep_value_ad: TDimVariable = create_tdv("asset_rep_value_ad")
+        self.tdv_asset_inv_ret_bd: TDimVariable = create_tdv("asset_inv_ret_bd")
+        self.tdv_asset_ror_pc_bd: TDimVariable = create_tdv("asset_ror_pc_bd")
+        self.tdv_asset_inv_ret_ad: TDimVariable = create_tdv("asset_inv_ret_ad")
+        self.tdv_asset_ror_pc_ad: TDimVariable = create_tdv("asset_ror_pc_ad")
 
     @t_checker({"proc_assets_bd": -1, "proc_assets_ad": -1}, "proc_assets_bd")
     def process_assets_before_dealing(self) -> None:

@@ -3,7 +3,7 @@ import numpy.typing as npt
 import pandas as pd
 import warnings
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, TDimVariable
 from vates.utils import t_checker
 from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, YieldCurve, CreditBand
@@ -149,21 +149,21 @@ class BondFixed(Asset):
                     raise ValueError(msg)
 
         # Initialize TDepVariable
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=asset_id, group='bond')
-        self.tdv_units_default: TDepVariable = create_tdv("units_default")
-        self.tdv_units_maturity: TDepVariable = create_tdv("units_maturity")
-        self.tdv_units_bd: TDepVariable = create_tdv("units_bd")
-        self.tdv_units_ad: TDepVariable = create_tdv("units_ad")
-        self.tdv_cash_flow: TDepVariable = create_tdv("cash_flow")
-        self.tdv_interest: TDepVariable = create_tdv("interest")
-        self.tdv_principal: TDepVariable = create_tdv("principal")
-        self.tdv_default_recovery: TDepVariable = create_tdv("default_recovery")
-        self.tdv_mv_price: TDepVariable = create_tdv("mv_price")
-        self.tdv_abv_price: TDepVariable = create_tdv("abv_price")
-        self.tdv_mv_bd: TDepVariable = create_tdv("mv_bd")
-        self.tdv_abv_bd: TDepVariable = create_tdv("abv_bd")
-        self.tdv_mv_ad: TDepVariable = create_tdv("mv_ad")
-        self.tdv_abv_ad: TDepVariable = create_tdv("abv_ad")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='bond')
+        self.tdv_units_default: TDimVariable = create_tdv("units_default")
+        self.tdv_units_maturity: TDimVariable = create_tdv("units_maturity")
+        self.tdv_units_bd: TDimVariable = create_tdv("units_bd")
+        self.tdv_units_ad: TDimVariable = create_tdv("units_ad")
+        self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
+        self.tdv_interest: TDimVariable = create_tdv("interest")
+        self.tdv_principal: TDimVariable = create_tdv("principal")
+        self.tdv_default_recovery: TDimVariable = create_tdv("default_recovery")
+        self.tdv_mv_price: TDimVariable = create_tdv("mv_price")
+        self.tdv_abv_price: TDimVariable = create_tdv("abv_price")
+        self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
+        self.tdv_abv_bd: TDimVariable = create_tdv("abv_bd")
+        self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
+        self.tdv_abv_ad: TDimVariable = create_tdv("abv_ad")
 
         t = self.time
         self.tdv_mv_price[t] = self._mv_price_dirty
@@ -342,7 +342,7 @@ class BondFixed(Asset):
         return self._cash_flow
 
     @property
-    def arr_cash_flow(self) -> TDepVariable:
+    def arr_cash_flow(self) -> TDimVariable:
         """TDepVariable: Cash flow array"""
         return self.tdv_cash_flow
 

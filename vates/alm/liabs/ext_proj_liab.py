@@ -1,6 +1,6 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, TDepVariable
+from vates._core import ProjModelEngine, TDimVariable
 from vates.utils import t_checker
 from vates.alm.econs import Currency
 from vates.alm.liabs.liab_base import Liab
@@ -46,16 +46,16 @@ class ExtProjLiab(Liab):
         super().__init__(model_engine=model_engine, liab_id=liab_id, fund_id=fund_id, currency=currency,
                          entry_date=entry_date, no_pols_if=no_pols_if, surr_val_if=surr_val_if, math_res_if=math_res_if,
                          acct_value_if=acct_value_if, asset_share_if=asset_share_if)
-        create_tdv = lambda name: TDepVariable(name, model_engine=model_engine, owner=liab_id, group='liability')
-        self.tdv_cash_flow: TDepVariable = create_tdv("cash_flow")
-        self.tdv_prem_inc: TDepVariable = create_tdv("prem_inc")
-        self.tdv_num_pols: TDepVariable = create_tdv("no_pols_if")
-        self.tdv_surr_val: TDepVariable = create_tdv("surr_val_if")
-        self.tdv_math_res: TDepVariable = create_tdv("math_res_if")
-        self.tdv_acct_value_bd: TDepVariable = create_tdv("acct_value_if_bd")
-        self.tdv_acct_value_ad: TDepVariable = create_tdv("acct_value_if_ad")
-        self.tdv_asset_share_bd: TDepVariable = create_tdv("asset_share_if_bd")
-        self.tdv_asset_share_ad: TDepVariable = create_tdv("asset_share_if_ad")
+        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=liab_id, group='liability')
+        self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
+        self.tdv_prem_inc: TDimVariable = create_tdv("prem_inc")
+        self.tdv_num_pols: TDimVariable = create_tdv("no_pols_if")
+        self.tdv_surr_val: TDimVariable = create_tdv("surr_val_if")
+        self.tdv_math_res: TDimVariable = create_tdv("math_res_if")
+        self.tdv_acct_value_bd: TDimVariable = create_tdv("acct_value_if_bd")
+        self.tdv_acct_value_ad: TDimVariable = create_tdv("acct_value_if_ad")
+        self.tdv_asset_share_bd: TDimVariable = create_tdv("asset_share_if_bd")
+        self.tdv_asset_share_ad: TDimVariable = create_tdv("asset_share_if_ad")
 
         t = self.time
         self.tdv_num_pols[t] = self._num_pols
@@ -103,41 +103,41 @@ class ExtProjLiab(Liab):
         self.tdv_asset_share_ad[t] = self._asset_share
 
     @property
-    def arr_cash_flow(self) -> TDepVariable:
+    def arr_cash_flow(self) -> TDimVariable:
         """TDepVariable: Cash flow array"""
         return self.tdv_cash_flow
 
     @property
-    def arr_prem_inc(self) -> TDepVariable:
+    def arr_prem_inc(self) -> TDimVariable:
         """TDepVariable: Premium income array"""
         return self.tdv_prem_inc
 
     @property
-    def arr_math_res(self) -> TDepVariable:
+    def arr_math_res(self) -> TDimVariable:
         """float: Mathematical reserve in force as at a date."""
         return self.tdv_math_res
 
     @property
-    def arr_surr_val(self) -> TDepVariable:
+    def arr_surr_val(self) -> TDimVariable:
         """float: Surrender value in force as at a date."""
         return self.tdv_surr_val
 
     @property
-    def arr_acct_value_bd(self) -> TDepVariable:
+    def arr_acct_value_bd(self) -> TDimVariable:
         """float: Separate account value before dealing as at a date."""
         return self.tdv_acct_value_bd
 
     @property
-    def arr_acct_value_ad(self) -> TDepVariable:
+    def arr_acct_value_ad(self) -> TDimVariable:
         """float: Separate account value after dealing as at a date."""
         return self.tdv_acct_value_bd
 
     @property
-    def arr_asset_share_bd(self) -> TDepVariable:
+    def arr_asset_share_bd(self) -> TDimVariable:
         """float: Asset share before dealing as at a date."""
         return self.tdv_asset_share_bd
 
     @property
-    def arr_asset_share_ad(self) -> TDepVariable:
+    def arr_asset_share_ad(self) -> TDimVariable:
         """float: Asset share after dealing as at a date."""
         return self.tdv_asset_share_ad

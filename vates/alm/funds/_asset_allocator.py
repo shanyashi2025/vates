@@ -5,7 +5,7 @@ import pandas as pd
 import warnings
 from typing import Self
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 from vates.alm.enums import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.assets import Asset, Cash
 from vates.alm.funds._utils import ALContainer
@@ -80,11 +80,11 @@ class AssetAllocator:
         self.ag_seq_list = self.list_ag_in_sequence(self.fund_id, rebalance_policy)
 
         tdv_kwargs = {"model_engine": model_engine, "owner": self.fund_id, "group": 'rebalance'}
-        self.tdv_fund_size = TDepVariable("fund_size", **tdv_kwargs)
-        self.tdv_ag_repval_bd = TDepVariable("ag_repval_bd",  dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
-        self.tdv_ag_repval_ad = TDepVariable("ag_repval_ad", dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
-        self.tdv_ag_alloc_pc_bd = TDepVariable("ag_alloc_pc_bd", dims=[self.ag_seq_list], **tdv_kwargs)
-        self.tdv_ag_alloc_pc_ad = TDepVariable("ag_alloc_pc_ad", dims=[self.ag_seq_list], **tdv_kwargs)
+        self.tdv_fund_size = TDimVariable("fund_size", **tdv_kwargs)
+        self.tdv_ag_repval_bd = TDimVariable("ag_repval_bd", dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
+        self.tdv_ag_repval_ad = TDimVariable("ag_repval_ad", dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
+        self.tdv_ag_alloc_pc_bd = TDimVariable("ag_alloc_pc_bd", dims=[self.ag_seq_list], **tdv_kwargs)
+        self.tdv_ag_alloc_pc_ad = TDimVariable("ag_alloc_pc_ad", dims=[self.ag_seq_list], **tdv_kwargs)
 
     @staticmethod
     def list_ag_in_sequence(fund_id: str, rebalance_policy: dict[str, RebalancePolicyParams]) -> list[str]:

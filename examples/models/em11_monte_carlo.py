@@ -12,7 +12,7 @@ except ImportError:
     has_matplotlib = False
 
 import vates
-from vates import StochExecutor, ProjModelEngine, TDepVariable
+from vates import StochExecutor, ProjModelEngine, TDimVariable
 
 
 def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, sigma, corr_matrix, portfolio_params):
@@ -31,8 +31,8 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
                 'rebalance_freq': params['rebalance_freq'],
                 'asset_amount': ibal * params['weight'],
                 'rfa_amount': ibal * params['rfawgt'],
-                'balance': TDepVariable("balance", model_engine=model, owner=key, group='MonteCarlo'),
-                'return': TDepVariable("return", model_engine=model, owner=key, group='MonteCarlo'),
+                'balance': TDimVariable("balance", model_engine=model, owner=key, group='MonteCarlo'),
+                'return': TDimVariable("return", model_engine=model, owner=key, group='MonteCarlo'),
                 'sum_ret': 0.0,
                 'sum_sqret': 0.0
             }

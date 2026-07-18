@@ -4,7 +4,7 @@ import pandas as pd
 import warnings
 from typing import Optional
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDepVariable
+from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 from vates.finmath import InterestRateConvertor
 
 
@@ -59,7 +59,7 @@ class YieldCurve:
                     break
         tdv_term_dim = tdv_term_dim or [*range(12, 61, 12), *range(120, 601, 120)] # default: 1/2/3/4/5/10/20/30/40/50Y
 
-        self.tdv_spot_rates: TDepVariable = TDepVariable("spot_rate", dims=[tdv_term_dim],
+        self.tdv_spot_rates: TDimVariable = TDimVariable("spot_rate", dims=[tdv_term_dim],
                                                          model_engine=model_engine, owner=curve_id, group='yield_curve')
 
     @property

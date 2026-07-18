@@ -2,7 +2,7 @@ from vates._core import (
     ProjModelEngine,
     StochExecutor,
     ConstVariable,
-    TDepVariable,
+    TDimVariable,
     KeyedArray,
     proj_result,
 )
@@ -18,7 +18,7 @@ __all__ = [
     'ProjModelEngine',
     'StochExecutor',
     'ConstVariable',
-    'TDepVariable',
+    'TDimVariable',
     'KeyedArray',
     'proj_result',
     # utils
