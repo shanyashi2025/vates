@@ -3,6 +3,11 @@ import sys
 from vates import ProjModelEngine
 from bespoke_package import load_file_df, EsgMaster, AssetMaster
 
+try:
+    import scipy
+    has_scipy = True
+except ImportError:
+    has_scipy = False
 
 def assets_projection(model: ProjModelEngine, assets_df_dict: dict, esg_master: EsgMaster):
     esg_master.update_econ_data(model.period)
@@ -45,9 +50,22 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
         esg_df=model.read_csv(filename_dict["esg"])
     )
 
+    assets_df_dict = {
+        "assets_cash": file_df_dict["assets_cash"],
+        "assets_bond": file_df_dict.get("assets_bond"),
+        "assets_equity": file_df_dict.get("assets_equity"),
+        "bond_provided_cash_flow": file_df_dict.get("bond_provided_cash_flow"),
+    }
+
+    if has_scipy:
+        assets_df_dict["assets_equity_option"] = file_df_dict.get("assets_equity_option")
+    else:
+        print(f"'assets_equity_option' is excluded to avoid 'ImportError', if you want to include equity option, please"
+              f" install 'scipy' library (`pip install scipy`).")
+
     _ = model.run(
         projection_args={
-            "assets_df_dict": file_df_dict,
+            "assets_df_dict": assets_df_dict,
             "esg_master": esg_master
         }
     )

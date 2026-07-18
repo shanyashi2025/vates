@@ -3,6 +3,12 @@ import sys
 from vates import ProjModelEngine
 from bespoke_package import load_file_df, EsgMaster, AssetMaster
 
+try:
+    import scipy
+    has_scipy = True
+except ImportError:
+    has_scipy = False
+
 
 def asset_model(start_year: int, start_month: int, end_year: int, scenario: str, workspace_directory: str,
                 input_directories: list[str], results_directory: str | None = None,
@@ -40,6 +46,12 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
         "assets_equity": file_df_dict.get("assets_equity"),
         "bond_provided_cash_flow": file_df_dict.get("bond_provided_cash_flow"),
     }
+
+    if has_scipy:
+        assets_df_dict["assets_equity_option"] = file_df_dict.get("assets_equity_option")
+    else:
+        print(f"'assets_equity_option' is excluded to avoid 'ImportError', if you want to include equity option, please"
+              f" install 'scipy' library (`pip install scipy`).")
 
     assets = []
 

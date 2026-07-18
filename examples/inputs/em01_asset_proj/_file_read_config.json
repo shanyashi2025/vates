@@ -2,6 +2,7 @@
     "assets_cash": {"index_col": "asset_id"},
     "assets_equity": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
     "assets_bond": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
+    "assets_equity_option": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
     "market_info": {"index_col": "data_item"},
     "bond_provided_cash_flow": {"allow_not_found": true, "keep_default_na": false}
 }

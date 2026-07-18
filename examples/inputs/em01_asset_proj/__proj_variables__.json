@@ -8,6 +8,9 @@
   "equity": {
     "include": "__ALL__"
   },
+  "equity_option": {
+    "include": "__ALL__"
+  },
   "yield_curve": {
     "include": ["spot_rate"]
   },

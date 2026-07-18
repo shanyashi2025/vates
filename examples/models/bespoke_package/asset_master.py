@@ -3,13 +3,14 @@ import pandas as pd
 from typing import Self
 
 from vates import ProjModelEngine
-from vates.alm import create_asset, Cash, BondFixed, Equity, YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
+from vates.alm import create_asset, Cash, BondFixed, Equity, EquityOption, YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 from .econ_master import EsgMaster
 
 ASSET_CATEGORY_MAPPING = {
     'cash': 'CASH',
     'equity': 'EQUITY',
     'fixed_bond': 'BOND',
+    'equity_option': 'EQ_DERIV'
 }
 
 ASSET_CLASSIFICATION_MAPPING = {
@@ -29,14 +30,16 @@ class AssetMaster:
         cash_ls: list[Cash] | None = None,
         fixed_bond_ls: list[BondFixed] | None = None,
         equity_ls: list[Equity] | None = None,
+        equity_option_ls: list[EquityOption] | None = None
     ):
         self.cash_ls: list[Cash] = cash_ls or []
         self.fixed_bond_ls: list[BondFixed] = fixed_bond_ls or []
         self.equity_ls: list[Equity] = equity_ls or []
+        self.equity_option_ls: list[EquityOption] = equity_option_ls or []
 
     @property
     def all(self) -> list:
-        return self.cash_ls + self.fixed_bond_ls + self.equity_ls
+        return self.cash_ls + self.fixed_bond_ls + self.equity_ls + self.equity_option_ls
 
     @classmethod
     def existing_from_df(
@@ -93,8 +96,15 @@ class AssetMaster:
             )
         else:
             fixed_bond_ls = []
+        if df_dict.get(name := 'assets_equity_option', None) is not None:
+            equity_option_ls = cls.build_assets_equity_option_from_df(
+                model_engine=model_engine, df=df_dict[name].copy(), fund_id=fund_id,
+                currencies=currencies, equity_indices=equity_indices, yield_curves=yield_curves
+            )
+        else:
+            equity_option_ls = []
 
-        return AssetMaster(cash_ls=cash_ls, fixed_bond_ls=fixed_bond_ls, equity_ls=equity_ls)
+        return AssetMaster(cash_ls=cash_ls, fixed_bond_ls=fixed_bond_ls, equity_ls=equity_ls, equity_option_ls=equity_option_ls)
 
     @classmethod
     def profile_from_df(
@@ -501,3 +511,73 @@ class AssetMaster:
             equity_list.append(equity)
 
         return equity_list
+
+    @classmethod
+    def build_assets_equity_option_from_df(
+        cls,
+        df: pd.DataFrame,
+        *,
+        model_engine: ProjModelEngine,
+        fund_id: str | None,
+        currencies: list['Currency'],
+        equity_indices: list['EquityIndex'],
+        yield_curves: list['YieldCurve']
+    ) -> list:
+        """
+        Build equity option asset objects from a DataFrame and add them to a fund if provided.
+
+        Args:
+            model_engine: Model engine object.
+            df (pd.DataFrame): DataFrame containing equity asset data.
+            fund_id (str | None): Fund id to filter the df, or None.
+            currencies (list): List of Currency objects.
+            equity_indices (list): List of EquityIndex objects.
+            yield_curves (list): List of YieldCurve objects.
+
+        Returns:
+            list: List of EquityOption asset objects.
+        """
+        equity_option_list = []
+
+        df_flt: pd.DataFrame = df.copy()
+        if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
+
+        for asset_id, row in df_flt.iterrows():
+            currency_id = row["currency_id"]
+            currency = next((x for x in currencies if x.currency_id == currency_id), None)
+            equity_index_id = row["equity_index_id"]
+            equity_index = next((x for x in equity_indices if x.index_id == equity_index_id), None)
+            rf_curve_id = row["rf_curve_id"]
+            rf_curve = next((x for x in yield_curves if x.curve_id == rf_curve_id), None)
+            pre_calc = row["pre_calculation"]
+
+            # create instance
+            equity_option = create_asset(
+                asset_cls="equity_option",
+                model_engine=model_engine,
+                pre_calculations=pre_calc.split(';') if pre_calc.lower() != 'none' else None,
+                asset_id=asset_id,
+                asset_category=ASSET_CATEGORY_MAPPING['equity_option'],
+                fund_id=row["fund_id"],
+                allocation_group=row["allocation_group"],
+                currency=currency,
+                call_or_put=row["call_or_put"],
+                exercise_date=pd.Period(row["exercise_date"], freq='M'),
+                units=row["units"],
+                price=row["price"],
+                stock_price=row["stock_price"],
+                strike_price=row["strike_price"],
+                equity_index=equity_index,
+                rf_curve=rf_curve,
+                std_dev=row["std_dev"],
+                is_pay_dividend=(row["is_pay_dividend"].lower() in ('y', 'yes')),
+                is_profile=False
+            )
+            # dynamically create attribute(s)
+            for col in df_flt.columns:
+                if col.startswith('tag__'):
+                    setattr(equity_option, col[5:], row[col])
+            # append to list
+            equity_option_list.append(equity_option)
+
+        return equity_option_list

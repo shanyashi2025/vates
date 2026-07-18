@@ -2,6 +2,7 @@
 assets_cash,assets_cash.csv
 assets_equity,assets_equity.csv
 assets_bond,assets_bond.csv
+assets_equity_option,assets_equity_option.csv
 esg,esg.csv
 esg_params,esg_params.json
 market_info,market_info.csv
