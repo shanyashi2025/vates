@@ -55,7 +55,7 @@ class FundMaster:
                 fund_id=fund_id,
                 model_engine=model_engine,
                 rebalance_policy=cls.build_rebalance_policy_from_df(rebalance_policy_df, fund_id=fund_id),
-                asset_categories=row["asset_classes_reported"].split(';')
+                asset_categories=row["asset_categories"].split(';')
             )
             if "fund_type" in row:
                 if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):

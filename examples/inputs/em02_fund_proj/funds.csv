@@ -1,4 +1,4 @@
-﻿ref_no,fund_id,fund_type,fund_size_type,fund_size_basis,fund_rebalance_freq,asset_classes_reported
+﻿ref_no,fund_id,fund_type,fund_size_type,fund_size_basis,fund_rebalance_freq,asset_categories
 1,trad_fund,Policyholder,MATH_RES,FAV,12,CASH;EQUITY;BOND
 2,cd1_fund,Policyholder,ASSET_SHARE,FAV,12,CASH;EQUITY;BOND
 3,cd2_fund,Policyholder,MAX_AS_MATH,BSV,12,CASH;EQUITY;BOND
