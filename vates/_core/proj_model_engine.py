@@ -332,7 +332,7 @@ class ProjModelEngine:
                 return True
             include, exclude = group_dict.get("include"), group_dict.get("exclude")
             if include:
-                if isinstance(include, str) and include.upper() == "__ALL__":
+                if isinstance(include, str) and include.lower() == "__all__":
                     return True
                 return isinstance(include, list) and v.name in include
             if exclude:
