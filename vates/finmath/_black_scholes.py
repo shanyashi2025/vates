@@ -15,8 +15,8 @@ class BlackScholesCalculator:
         except ImportError:
             raise ImportError("Need to install 'scipy' library (`pip install scipy`).")
 
-    @staticmethod
-    def price(*, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
+    @classmethod
+    def price(cls, *, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
               ) -> float:
         """
         Calculate Black-Scholes price.
@@ -41,7 +41,7 @@ class BlackScholesCalculator:
         if tau < 1e-10:
             return max(s - k, 0.0) if call_or_put == CallOrPut.CALL else max(k - s, 0.0)
 
-        _norm = BlackScholesCalculator.lazy_import_norm()
+        _norm = cls.lazy_import_norm()
 
         f = s * math.exp((r - q) * tau)  # forward price: `F = S * exp((r - q) * t)`
         vol_tau = sigma * math.sqrt(tau)  # volatility over tau
@@ -55,8 +55,8 @@ class BlackScholesCalculator:
         else:
             return z * (k * (1 - nd2) - f * (1 - nd1))
 
-    @staticmethod
-    def greeks(*, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
+    @classmethod
+    def greeks(cls, *, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
                ) -> dict[str, float]:
         """
         Calculate Black-Scholes Greeks.
@@ -77,7 +77,7 @@ class BlackScholesCalculator:
         if tau < 0: raise ValueError(f'{tau=}, must be non-negative.')
         if tau < 1e-10: return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0, 'rho': 0, }
 
-        _norm = BlackScholesCalculator.lazy_import_norm()
+        _norm = cls.lazy_import_norm()
 
         f = s * math.exp((r - q) * tau)  # forward price: `F = S * exp((r - q) * t)`
         vol_tau = sigma * math.sqrt(tau)  # volatility over tau
@@ -109,8 +109,8 @@ class BlackScholesCalculator:
             'rho': float(rho),  # `dP/dr`
         }
 
-    @staticmethod
-    def _price_and_vega(*, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float, sigma: float, tau: float
+    @classmethod
+    def _price_and_vega(cls, *, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float, sigma: float, tau: float
                         ) -> tuple[float, float]:
         """
         Calculate Black-Scholes price and vega.
@@ -134,7 +134,7 @@ class BlackScholesCalculator:
         if tau < 1e-10:
             return max(s - k, 0.0) if call_or_put == CallOrPut.CALL else max(k - s, 0.0), 0.0
 
-        _norm = BlackScholesCalculator.lazy_import_norm()
+        _norm = cls.lazy_import_norm()
 
         f = s * math.exp((r - q) * tau)  # forward price: `F = S * exp((r - q) * t)`
         vol_tau = sigma * math.sqrt(tau)  # volatility over tau
@@ -152,8 +152,8 @@ class BlackScholesCalculator:
 
         return price, vega
 
-    @staticmethod
-    def implied_volatility(*, call_or_put: CallOrPut | str, price: float, s: float, k: float, r: float, q: float = 0.0,
+    @classmethod
+    def implied_volatility(cls, *, call_or_put: CallOrPut | str, price: float, s: float, k: float, r: float, q: float = 0.0,
                            tau: float, initial_guess: float = 0.2, tol: float = 1e-10, maxiter: int = 100) -> float:
         """
         Solve Black-Scholes implied volatility (sigma).
