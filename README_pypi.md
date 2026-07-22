@@ -1,59 +1,14 @@
-# About This Repository
+### About
 
-Open-source Python packages and sample implementations for actuarial models.
+`vates` is an open-source Python package for actuarial models.
 
-## Project layout
-
-```text
-.
-├── vates/                  # The core package
-├── docs/                   # Project documentation
-├── examples/               # Example implementations
-│   ├── models/             # Source code of example models and bespoke package(s)
-│   ├── inputs/             # Example input data (tables) associated with the models
-│   ├── runs/               # Examples of model run configuration (json file)
-│   └── simple_use_cases/   # Examples use cases
-└── gui/                    # A graphical user interface for end-users to run models
-```
-
-## **Quick Start**
-
-### **A. Installation**
-
-#### 1. Create a virtual environment (recommended)
-
-PowerShell (Windows):
-
-```powershell
-cd path\to\your\project
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-> If activation is blocked by execution policy, run once in that window:
-> ```powershell
-> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-> ```
-> Then run `Activate.ps1` again.
-
-You should see `(.venv)` in the prompt when the environment is active.
-
-#### 2. Install `vates` library
+### Installation
 
 ```powershell
 pip install vates
 ```
 
-or install in editable mode from this repo directly
-
-```
-pip install -e .
-```
-
-This installs the distribution **`vates`** in editable mode; import the library as **`import vates`**.
-
-
-### **B. Set up a model**
+### Quick Start
 
 #### 1. Projection Model
 
@@ -187,48 +142,22 @@ simulation: 2
 simulation: 10
 ```
 
+#### 4. ALM Package
 
-### **C. Example Implementations**
+The `vates.alm` is the subpackage for asset-liability model.
 
-Work from the **repository root**.
+There are many classes provided for modelling convenience:
 
-#### 1. Asset projection model (inner function)
+- assets: `Cash`, `Equity`, `BondFixed`, `EquityOption`
+- econs: `YieldCurve`, `CreditBand`, `EquityIndex`
+- funds: `Fund`
+- liabs: `ExtProjLiab`
 
-- model: `.\examples\models\em01_asset_proj_inner.py`
-- input: `.\examples\inputs\em01_asset_proj\`
-- configuration: `.\examples\runs\em01_asset_proj_inner.json`
-- execution: `python .\examples\models\em01_asset_proj_inner.py .\examples\runs\em01_asset_proj_inner.json`
-- result: `.\examples\results\em01_asset_proj_inner\`
 
-#### 2. Asset projection model (top function)
+### See
 
-- model: `.\examples\models\em01_asset_proj_top.py`
-- input: `.\examples\inputs\em01_asset_proj\`
-- configuration: `.\examples\runs\em01_asset_proj_top.json`
-- execution: `python .\examples\models\em01_asset_proj_top.py .\examples\runs\em01_asset_proj_top.json`
-- result: `.\examples\results\em01_asset_proj_top\`
+GitHub repository: https://github.com/shanyashi2025/vates
 
-#### 3. Fund projection model
+Documentation and tutorials: https://github.com/shanyashi2025/vates/tree/main/docs
 
-- model: `.\examples\models\em02_fund_proj.py`
-- input: `.\examples\inputs\em02_fund_proj\`
-- configuration: `.\examples\runs\em02_fund_proj.json`
-- execution: `python .\examples\models\em02_fund_proj.py .\examples\runs\em02_fund_proj.json`
-- result: `.\examples\results\em02_fund_proj\`
-
-#### 4. (stochastic) Monte Carlo simulation
-
-- model: `.\examples\models\em11_monte_carlo.py`
-- input: `.\examples\inputs\em11_monte_carlo\`
-- configuration: `.\examples\runs\em11_monte_carlo.json`
-- execution: `python .\examples\models\em11_monte_carlo.py .\examples\runs\em11_monte_carlo.json`
-- result: `.\examples\results\em11_monte_carlo\`
-
-#### 5. (stochastic) Economic capital
-
-- model: `.\examples\models\em12_stoch_ec_mvl.py`
-- input: `.\examples\inputs\em12_stoch_ec_mvl\`
-- configuration: `.\examples\runs\em12_stoch_ec_mvl.json`
-- execution: `python .\examples\models\em12_stoch_ec_mvl.py .\examples\runs\em12_stoch_ec_mvl.json`
-- result: `.\examples\results\em12_stoch_ec_mvl\`
-
+Example implementations: https://github.com/shanyashi2025/vates/tree/main/examples
