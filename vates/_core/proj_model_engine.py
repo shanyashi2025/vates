@@ -8,6 +8,7 @@ import traceback
 import warnings
 import weakref
 from datetime import datetime
+from itertools import product
 from pathlib import Path
 from types import MethodType
 from typing import Callable, Literal, Self, get_type_hints
@@ -355,7 +356,6 @@ class ProjModelEngine:
 
     @staticmethod
     def _write_nd_variable(variable: ProjVariable, writer: csv.writer) -> None:
-        from itertools import product
         fixcol = [variable.group, variable.owner]
         dim_ranges = [range(len(dim)) for dim in variable.dims]
         for dim_index in product(*dim_ranges):
@@ -386,7 +386,6 @@ class ProjModelEngine:
     @staticmethod
     def _write_nd_stoch_variable(variable: ProjVariable, writer: csv.writer, sim: int,
                                  pos_lst_m: list[int], pos_lst_y: list[int]) -> None:
-        from itertools import product
         fixcol = ([sim] if sim else []) + [variable.group, variable.owner]
         dim_ranges = [range(len(dim)) for dim in variable.dims]
         for dim_index in product(*dim_ranges):

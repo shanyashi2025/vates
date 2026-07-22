@@ -5,7 +5,10 @@ import os
 import pandas as pd
 import traceback
 import warnings
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
+from itertools import batched
+from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Callable, Self, get_type_hints
 
@@ -178,7 +181,6 @@ class StochExecutor:
             self.include_traced_message(f"max_workers is set to 1: request={requested_workers}, exptect positive.")
             return 1
 
-        from multiprocessing import cpu_count
         _cpu_count = cpu_count()
         if requested_workers <= _cpu_count:
             return requested_workers
@@ -218,7 +220,6 @@ class StochExecutor:
     @staticmethod
     def _create_batches(simulations: list[int], n_batches: int) -> list[tuple[int, ...]]:
         """Split simulations into batches for workers"""
-        from itertools import batched
         quotient, remainder = divmod(len(simulations), n_batches)
         batched_simulations = batched(simulations, n=quotient + (1 if remainder > 0 else 0))
         return [batch for batch in batched_simulations]
@@ -282,8 +283,6 @@ class StochExecutor:
         *,
         projection_args: dict[str, ...]
     ) -> bool:
-        from concurrent.futures import ProcessPoolExecutor, as_completed
-
         n_workers = min(self._run_config.max_workers, len(self._run_config.simulations))
         simulation_batches = self._create_batches(self._run_config.simulations, n_workers)
         exec_success = True

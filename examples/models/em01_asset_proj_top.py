@@ -57,11 +57,12 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
         "bond_provided_cash_flow": file_df_dict.get("bond_provided_cash_flow"),
     }
 
-    if has_scipy:
-        assets_df_dict["assets_equity_option"] = file_df_dict.get("assets_equity_option")
-    else:
-        print(f"'assets_equity_option' is excluded to avoid 'ImportError', if you want to include equity option, please"
-              f" install 'scipy' library (`pip install scipy`).")
+    if file_df_dict.get("assets_equity_option") is not None:
+        if has_scipy:
+            assets_df_dict["assets_equity_option"] = file_df_dict.get("assets_equity_option")
+        else:
+            print(f"'assets_equity_option' is excluded to avoid 'ImportError', if you want to include equity option, "
+                  f"please install 'scipy' library (`pip install scipy`).")
 
     _ = model.run(
         projection_args={

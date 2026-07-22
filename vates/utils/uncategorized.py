@@ -41,3 +41,14 @@ def t_checker(checklist: dict[str, int] | None, tracker_key: str | None = None, 
             return result
         return wrapper
     return decorator
+
+class class_lazy_property:
+    """A descriptor that caches a property at the Class level."""
+    def __init__(self, func):
+        self.func = func
+        self.name = func.__name__
+
+    def __get__(self, instance, owner):
+        value = self.func(owner)
+        setattr(owner, self.name, value)
+        return value

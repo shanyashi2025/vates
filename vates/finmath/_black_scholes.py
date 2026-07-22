@@ -1,5 +1,6 @@
 import math
 from vates.finmath.enums import CallOrPut
+from vates.utils import class_lazy_property
 
 
 class BlackScholesCalculator:
@@ -7,8 +8,8 @@ class BlackScholesCalculator:
     Equity option Black-Scholes calculator.
     """
 
-    @classmethod
-    def lazy_import_norm(cls):
+    @class_lazy_property
+    def norm(cls):
         try:
             from scipy.stats import norm
             return norm
@@ -41,13 +42,11 @@ class BlackScholesCalculator:
         if tau < 1e-10:
             return max(s - k, 0.0) if call_or_put == CallOrPut.CALL else max(k - s, 0.0)
 
-        _norm = cls.lazy_import_norm()
-
         f = s * math.exp((r - q) * tau)  # forward price: `F = S * exp((r - q) * t)`
         vol_tau = sigma * math.sqrt(tau)  # volatility over tau
         d1 = math.log(f / k) / vol_tau + 0.5 * vol_tau
         d2 = d1 - vol_tau
-        nd1, nd2 = _norm.cdf(d1), _norm.cdf(d2)
+        nd1, nd2 = cls.norm.cdf(d1), cls.norm.cdf(d2)
         z = math.exp(-r * tau)
 
         if call_or_put == CallOrPut.CALL:
@@ -77,14 +76,12 @@ class BlackScholesCalculator:
         if tau < 0: raise ValueError(f'{tau=}, must be non-negative.')
         if tau < 1e-10: return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0, 'rho': 0, }
 
-        _norm = cls.lazy_import_norm()
-
         f = s * math.exp((r - q) * tau)  # forward price: `F = S * exp((r - q) * t)`
         vol_tau = sigma * math.sqrt(tau)  # volatility over tau
         d1 = math.log(f / k) / vol_tau + 0.5 * vol_tau
         d2 = d1 - vol_tau
-        nd1, nd2 = _norm.cdf(d1), _norm.cdf(d2)
-        pdf_d1 = _norm.pdf(d1)
+        nd1, nd2 = cls.norm.cdf(d1), cls.norm.cdf(d2)
+        pdf_d1 = cls.norm.pdf(d1)
         z, zq = math.exp(-r * tau), math.exp(-q * tau)
 
         if call_or_put == CallOrPut.CALL:
@@ -134,13 +131,11 @@ class BlackScholesCalculator:
         if tau < 1e-10:
             return max(s - k, 0.0) if call_or_put == CallOrPut.CALL else max(k - s, 0.0), 0.0
 
-        _norm = cls.lazy_import_norm()
-
         f = s * math.exp((r - q) * tau)  # forward price: `F = S * exp((r - q) * t)`
         vol_tau = sigma * math.sqrt(tau)  # volatility over tau
         d1 = math.log(f / k) / vol_tau + 0.5 * vol_tau
         d2 = d1 - vol_tau
-        nd1, nd2 = _norm.cdf(d1), _norm.cdf(d2)
+        nd1, nd2 = cls.norm.cdf(d1), cls.norm.cdf(d2)
         z = math.exp(-r * tau)
 
         if call_or_put == CallOrPut.CALL:
@@ -148,7 +143,7 @@ class BlackScholesCalculator:
         else:
             price = z * (k * (1 - nd2) - f * (1 - nd1))
 
-        vega = z * f * _norm.pdf(d1) * math.sqrt(tau)
+        vega = z * f * cls.norm.pdf(d1) * math.sqrt(tau)
 
         return price, vega
 

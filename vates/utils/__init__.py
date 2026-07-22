@@ -8,6 +8,7 @@ from vates.utils.risk_module import (
 from vates.utils.uncategorized import (
     new_business_convolve,
     t_checker,
+    class_lazy_property,
 )
 
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     # uncategorized
     'new_business_convolve',
     't_checker',
+    'class_lazy_property',
 
 ]
