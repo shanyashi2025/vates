@@ -22,10 +22,4 @@ Desktop.ini
 # Local / generated (adjust if you want to track some of these)
 *.log
 examples/results/
-examples/.output/
-examples/.write/
-examples/.dev*/
-examples/*/.dev*
-examples/.test*/
-examples/*/.test*
-examples/.tasks/
+examples/intermediate/

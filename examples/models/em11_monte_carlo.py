@@ -112,11 +112,15 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
 
     negative_weight_allowed = False
     negatvie_rfawgt_allowed = False
+
+    df = model.read_csv("_file_names.csv", index_col="table")
+    filename_dict = {idx: row[model.SCENARIO] for idx, row in df.iterrows()}
+
     # parameters
-    df = model.read_csv('parameters.csv', index_col="parameter")
+    df = model.read_csv(filename_dict['parameters'], index_col="parameter")
     risk_free_rate = df.at['risk_free_rate', 'value']
     # assets
-    df = model.read_csv('assets.csv', index_col="asset_name")
+    df = model.read_csv(filename_dict['assets'], index_col="asset_name")
     asset_name_list = df.index.tolist()
     n_assets = len(asset_name_list)
     mu, sigma, corr_matrix = np.zeros(n_assets), np.zeros(n_assets), np.zeros(shape=(n_assets, n_assets))

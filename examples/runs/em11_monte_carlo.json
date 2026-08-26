@@ -3,7 +3,7 @@
     "start_year": 2024,
     "start_month": 12,
     "end_year": 2034,
-    "scenario": "demo",
+    "scenario": "base",
     "workspace_directory": "examples",
     "input_directories": ["inputs/em11_monte_carlo"],
     "results_directory": "results/em11_monte_carlo",

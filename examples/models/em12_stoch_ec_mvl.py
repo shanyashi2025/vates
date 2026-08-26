@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import sys
 from vates import StochExecutor, ProjModelEngine, KeyedArray, ConstVariable
-from bespoke_package import (
+from company_package import (
     load_file_df,
     EsgMaster,
     AssetMaster,

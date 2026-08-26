@@ -1,7 +1,7 @@
 import json
 import sys
 from vates import ProjModelEngine
-from bespoke_package import load_file_df, EsgMaster, AssetMaster
+from company_package import load_file_df, EsgMaster, AssetMaster
 
 try:
     import scipy

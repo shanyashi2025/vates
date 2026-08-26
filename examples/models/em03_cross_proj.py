@@ -3,7 +3,7 @@ import numpy as np
 import sys
 from vates import ProjModelEngine, KeyedArray, alm
 from vates.solvency import cn_cross2
-from bespoke_package import (
+from company_package import (
     load_file_df,
     EsgMaster,
     AssetMaster,
