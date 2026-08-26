@@ -1,6 +1,3 @@
-from enum import Enum, unique
-import warnings
-
 from vates.alm.assets.cash import Cash
 from vates.alm.assets.equity import Equity
 from vates.alm.assets.bond_fixed import BondFixed
@@ -22,30 +19,14 @@ _BUILDER_MAP = {
     EquityOption: EquityOptionBuilder,
 }
 
-@unique
-class AssetPreCalculation(Enum):
-    """Enum for asset pre-calculations."""
-    MARKET_SPREAD = 'calibrate_market_spread'
-    MARKET_PRICE = "calculate_market_price"
-    AMORT_RATE = 'calculate_amort_rate'
-    COUPON_RATE = 'derive_coupon_rate'
-    INTEREST_RATE = 'derive_interest_rate'
-    IMPLIED_VOLATILITY = 'calibrate_implied_volatility'
-    RISK_NEUTRALIZATION = 'risk_neutralization'
-    FUTURES_PRICE = 'calculate_futures_price'
-    CONTRACT_VALUE = 'calculate_contract_value'
-    DELIVERY_PRICE = 'derive_delivery_price'
 
-
-def create_asset(asset_cls,
-                 pre_calculations: str | AssetPreCalculation | list[str | AssetPreCalculation] | None = None,
-                 **kwargs):
+def create_asset(asset_cls, build_pipeline: str | list[str] | None = None, **kwargs):
     """
     Factory function to create an asset.
 
     Args:
         asset_cls: Asset class, 'cash', 'equity', 'bond' ('bond_fixed', 'fixed_bond' equivalently), 'equity_option'
-        pre_calculations (str | AssetPreCalculation | list[str | AssetPreCalculation] | None): List of pre-calculations.
+        build_pipeline (str | list[str] | None): Build pipeline.
         **kwargs: Parameters.
 
     Returns:
@@ -61,49 +42,7 @@ def create_asset(asset_cls,
             raise ValueError(f"'{asset_cls}' is not a valid asset class name.")
 
     if asset_cls in _BUILDER_MAP:
-        return create_asset_by_builder(_BUILDER_MAP[asset_cls], pre_calculations, **kwargs)
-
-    return asset_cls(**kwargs)
-
-
-def create_asset_by_builder(builder_cls,
-                            pre_calculations: str | AssetPreCalculation | list[str | AssetPreCalculation] | None = None,
-                            **kwargs):
-    """
-    Factory function to create an asset.
-
-    Args:
-        builder_cls: Asset builder class.
-        pre_calculations (str | AssetPreCalculation | list[str | AssetPreCalculation] | None): List of pre-calculations.
-        **kwargs: Parameters.
-
-    Returns:
-        Asset: The constructed Asset object.
-    """
-    builder = builder_cls(**kwargs)
-
-    if pre_calculations is None:
-        return builder.build()
-
-    if not isinstance(pre_calculations, list):
-        pre_calculations = [pre_calculations]
-
-    if len(pre_calculations) == 0:
-        return builder.build()
-
-    pre_calc_names = [c.name for c in AssetPreCalculation]
-    for calc in pre_calculations:
-        if isinstance(calc, AssetPreCalculation):
-            func_name = calc.value
-        elif isinstance(calc, str) and calc.upper() in pre_calc_names:
-            func_name = AssetPreCalculation[calc.upper()].value
-        else:  # no further validation
-            func_name = str(calc)
-
-        func = getattr(builder, func_name, None)
-        if callable(func):
-            func()
-        else:
-            warnings.warn(f"{calc} ignored: {func_name} not found in {str(builder)} or not callable.")
-
-    return builder.build()
+        # return create_asset_by_builder(_BUILDER_MAP[asset_cls], build_pipeline, **kwargs)
+        return _BUILDER_MAP[asset_cls](**kwargs).build(build_pipeline)
+    else:
+        return asset_cls(**kwargs)

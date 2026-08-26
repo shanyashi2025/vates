@@ -1,5 +1,7 @@
-import pandas as pd
 import math
+import pandas as pd
+import warnings
+from typing import Self
 
 from vates._core import ProjModelEngine
 from vates.finmath import CallOrPut, BlackScholesCalculator
@@ -87,7 +89,7 @@ class EquityOptionBuilder:
     def os_term_m(self) -> int:
         return (self.exercise_date - self.p).n
 
-    def calculate_market_price(self) -> None:
+    def calculate_market_price(self) -> Self:
         """
         Calculate the market price using the volatility (standard deviation).
         """
@@ -103,7 +105,9 @@ class EquityOptionBuilder:
             sigma=self.std_dev, tau=self.os_term_m / 12
         )
 
-    def calibrate_implied_volatility(self) -> None:
+        return self
+
+    def calibrate_implied_volatility(self) -> Self:
         """
         Calculate the implied volatility.
         """
@@ -119,10 +123,26 @@ class EquityOptionBuilder:
             tau=self.os_term_m / 12
         )
 
-    def risk_neutralization(self) -> None:
-        self.calibrate_implied_volatility()
+        return self
 
-    def build(self) -> EquityOption:
+    def risk_neutralization(self) -> Self:
+        return self.calibrate_implied_volatility()
+
+    def build(self, pipeline: str | list[str] | None = None) -> EquityOption:
+        if pipeline:
+            if not isinstance(pipeline, list):
+                pipeline = [pipeline]
+            for step in pipeline:
+                step = step.lower()
+                if step in ('calculate_market_price', 'market_price'):
+                    self.calculate_market_price()
+                elif step in ('calibrate_implied_volatility', 'calculate_implied_volatility', 'implied_volatility'):
+                    self.calibrate_implied_volatility()
+                elif step in ('risk_neutralization', 'risk_neutralize'):
+                    self.risk_neutralization()
+                else:
+                    warnings.warn(f"{type(self).__name__}: no method matches '{step}' hence ignored.")
+
         if self.price is None: raise RuntimeError("price is not yet set.")
         if self.std_dev is None: raise RuntimeError("std_dev is not yet set.")
 

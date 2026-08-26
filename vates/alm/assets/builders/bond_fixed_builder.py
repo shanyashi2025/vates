@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import warnings
+from typing import Self
 
 from vates._core import ProjModelEngine
 from vates.finmath import solve_ytm, solve_z_spread, InterestRateConvertor
@@ -102,7 +103,7 @@ class BondFixedBuilder:
     def t(self) -> int:
         return self.model_engine.time
 
-    def derive_coupon_rate(self) -> None:
+    def derive_coupon_rate(self) -> Self:
         """
         Derive coupon rate based on yields at the point of purchase, assuming bond is purchased at par.
         """
@@ -134,7 +135,9 @@ class BondFixedBuilder:
         else:  # coupon_freq == 0
             self.coupon_rate = 0.0
 
-    def calculate_amort_rate(self) -> None:
+        return self
+
+    def calculate_amort_rate(self) -> Self:
         """
         Calibrate the amortized rate using the set amortized book value price.
         """
@@ -162,7 +165,9 @@ class BondFixedBuilder:
             initial_guess=self.coupon_rate
         )
 
-    def calibrate_market_spread(self) -> None:
+        return self
+
+    def calibrate_market_spread(self) -> Self:
         """
         Calculate the market spread using the set market price.
         """
@@ -200,7 +205,9 @@ class BondFixedBuilder:
             spots=spots
         )
 
-    def calculate_market_price(self) -> None:
+        return self
+
+    def calculate_market_price(self) -> Self:
         """
         Calculate the market price using the set market spread.
         """
@@ -232,7 +239,9 @@ class BondFixedBuilder:
 
         self.mv_price = pricer.calculate_market_price(self.p, spots)
 
-    def risk_neutralization(self) -> None:
+        return self
+
+    def risk_neutralization(self) -> Self:
         """
         Set market spread to zero and goal seek the face value that gives market price.
         """
@@ -266,7 +275,9 @@ class BondFixedBuilder:
         calc_price = pricer.calculate_market_price(self.p, spots)  # typically > mv_price if market_spread > 0
         self.face_value *= self.mv_price / calc_price  # scale face_value that gives mv_price
 
-    def build(self) -> BondFixed:
+        return self
+
+    def build(self, pipeline: str | list[str] | None = None) -> BondFixed:
         """
         Build and return a fully initialized BondFixed object.
 
@@ -276,6 +287,24 @@ class BondFixedBuilder:
         Raises:
             ValueError: If required data is missing or timing constraints are violated.
         """
+        if pipeline:
+            if not isinstance(pipeline, list):
+                pipeline = [pipeline]
+            for step in pipeline:
+                step = step.lower()
+                if step in ('calibrate_market_spread', 'calculate_market_spread', 'market_spread'):
+                    self.calibrate_market_spread()
+                elif step in ('calculate_market_price', 'market_price'):
+                    self.calculate_market_price()
+                elif step in ('calculate_amort_rate', 'amort_rate'):
+                    self.calculate_amort_rate()
+                elif step in ('derive_coupon_rate', 'calculate_coupon_rate', 'coupon_rate'):
+                    self.derive_coupon_rate()
+                elif step in ('risk_neutralization', 'risk_neutralize'):
+                    self.risk_neutralization()
+                else:
+                    warnings.warn(f"{type(self).__name__}: no method matches '{step}' hence ignored.")
+
         # Validate required data
         if self.mv_price is None: raise ValueError("mv_price is not yet set.")
         if self.market_spread is None: raise ValueError("market_spread is not yet set.")

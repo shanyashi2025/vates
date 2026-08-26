@@ -22,7 +22,7 @@ def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int |
             'asset_id', 'is_profile', 'units', 'currency_id', 'fund_id', 'allocation_group', 'asset_classification',
             'issue_date', 'maturity_date', 'coupon_rate', 'coupon_freq', 'face_value', 'provided_cash_flow_id',
             'mv_price_dirty', 'market_spread', 'abv_price_dirty', 'amort_rate', 'rf_curve_id', 'credit_band_id',
-            'purchase_date', 'pre_calculation',
+            'purchase_date',
         ],
 
     }
@@ -123,7 +123,6 @@ def output_asset_fixed_bond(bond: BondFixed, out_file: str, header: list[str]) -
     credit_band = getattr(bond, '_credit_band', None)
     data_dict['credit_band_id'] = 'none' if credit_band is None else credit_band.band_id
     data_dict['purchase_date'] = bond.purchase_date
-    data_dict['pre_calculation'] = 'none'
     data_dict['coupon_rate'] = params.coupon_rate
     data_dict['rf_curve_id'] = getattr(bond, '_rf_curve').curve_id
     _write_output_file_content(out_file, list(data_dict.values()))

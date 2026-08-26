@@ -1,4 +1,4 @@
-﻿#,asset_id,fund_id,allocation_group,currency_id,call_or_put,exercise_date,units,price,stock_price,strike_price,equity_index_id,rf_curve_id,std_dev,is_pay_dividend,pre_calculation
+﻿#,asset_id,fund_id,allocation_group,currency_id,call_or_put,exercise_date,units,price,stock_price,strike_price,equity_index_id,rf_curve_id,std_dev,is_pay_dividend,build_pipeline
 1,option_1,trad_fund,equity_option,cny,call,2025/12/31,1,5.24887334,100,100,cny_equity,cny_rf,-9999,y,implied_volatility
 2,option_2,trad_fund,equity_option,cny,call,2025/12/31,1,-9999,100,100,cny_equity,cny_rf,0.15,y,market_price
 3,option_3,trad_fund,equity_option,cny,put,2025/12/31,1,6.54810897,100,100,cny_equity,cny_rf,-9999,y,implied_volatility

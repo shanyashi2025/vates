@@ -261,13 +261,17 @@ class AssetMaster:
             else:
                 provided_cash_flow_dict = None
 
-            pre_calc = row["pre_calculation"]
+            build_pipeline = None
+            if "build_pipeline" in df.columns:
+                build_pipeline = row["build_pipeline"]
+                if build_pipeline.lower() != 'none':
+                    build_pipeline = build_pipeline.split(';')
 
             # create instance
             fixed_bond = create_asset(
                 model_engine=model_engine,
                 asset_cls="fixed_bond",
-                pre_calculations=pre_calc.split(';') if pre_calc.lower() != 'none' else None,
+                build_pipeline=build_pipeline,
                 asset_id=asset_id,
                 asset_category=ASSET_CATEGORY_MAPPING['fixed_bond'],
                 fund_id=row["fund_id"],
@@ -367,7 +371,7 @@ class AssetMaster:
             fixed_bond = create_asset(
                 model_engine=model_engine,
                 asset_cls="fixed_bond",
-                pre_calculations=['coupon_rate'],
+                build_pipeline=['coupon_rate'],
                 asset_id=f"{str_cal_ym}{_asset_id}",
                 asset_category=ASSET_CATEGORY_MAPPING['fixed_bond'],
                 fund_id=fund_id,
@@ -549,13 +553,17 @@ class AssetMaster:
             equity_index = next((x for x in equity_indices if x.index_id == equity_index_id), None)
             rf_curve_id = row["rf_curve_id"]
             rf_curve = next((x for x in yield_curves if x.curve_id == rf_curve_id), None)
-            pre_calc = row["pre_calculation"]
+            build_pipeline = None
+            if "build_pipeline" in df.columns:
+                build_pipeline = row["build_pipeline"]
+                if build_pipeline.lower() != 'none':
+                    build_pipeline = build_pipeline.split(';')
 
             # create instance
             equity_option = create_asset(
                 asset_cls="equity_option",
                 model_engine=model_engine,
-                pre_calculations=pre_calc.split(';') if pre_calc.lower() != 'none' else None,
+                build_pipeline=build_pipeline,
                 asset_id=asset_id,
                 asset_category=ASSET_CATEGORY_MAPPING['equity_option'],
                 fund_id=row["fund_id"],

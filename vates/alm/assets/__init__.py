@@ -1,4 +1,4 @@
-from vates.alm.assets.asset_creation import create_asset, AssetPreCalculation
+from vates.alm.assets.asset_creation import create_asset
 from vates.alm.assets.asset_base import Asset
 from vates.alm.assets.cash import Cash
 from vates.alm.assets.equity import Equity
@@ -13,6 +13,5 @@ __all__ = [
     'BondFixed',
     'derivatives',
     'create_asset',
-    'AssetPreCalculation',
 
 ]
