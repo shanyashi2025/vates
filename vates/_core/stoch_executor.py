@@ -64,11 +64,7 @@ class StochExecutor:
             ValueError: If `func` is not callable.
         """
         if self._projection is not None:
-            self.include_traced_message(
-                f"WARNING: {self._projection} is already bound. If you are sure you want to reset it, "
-                f"use 'foo._projection = None', then call 'foo.bind_projection(...)'."
-            )
-            return self
+            raise ValueError(f"{self._projection} is already bound.")
         if not callable(func):
             raise ValueError(f"Cannot bind un-callable object: {func}.")
 
@@ -121,11 +117,7 @@ class StochExecutor:
             max_workers (int, optional): Max workers. Defaults to 1.
         """
         if self._run_config is not None:
-            self.include_traced_message(
-                f"WARNING: Run configuration is already set. If you are sure you want to reset it, "
-                f"use 'foo._run_config = None', then call 'foo.set_run_config(...)' method."
-            )
-            return self
+            raise ValueError(f"Run configuration is already set.")
 
         none_items = []
 

@@ -62,10 +62,7 @@ class ProjModelEngine:
             ValueError: If `func` is not callable.
         """
         if self._projection is not None:
-            msg = (f"{self._projection} is already bound. If you are sure you want to reset it, "
-                   f"use 'foo._projection = None', then call 'foo.bind_projection(...)'.")
-            warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
-            return self
+            raise ValueError(f"{self._projection} is already bound.")
         if not callable(func):
             raise ValueError(f"Cannot bind un-callable object: {func}.")
 
@@ -127,10 +124,7 @@ class ProjModelEngine:
             enable_write_runlog (bool, optional): Enable writing run log. Defaults to True.
         """
         if self._run_config is not None:
-            msg = (f"Run configuration is already set. If you are sure you want to reset it, "
-                   f"use 'foo._run_config = None', then call 'foo.set_run_config(...)' method.")
-            warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
-            return self
+            raise ValueError(f"Run configuration is already set.")
 
         none_items = []
 

@@ -286,12 +286,10 @@ class TDimVariable(ProjVariable):
         elif type(index) == pd.Period:
             t = (index - self._cfg.start_date).n
         else:
-            warnings.warn(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
-            return None
+            raise TypeError(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
 
         if not (0 <= t <= self._cfg.max_t):
-            warnings.warn(f"Invalid {index=}, expected t: 0 to {self._cfg.max_t} (period: {self._cfg.start_date} to {self._cfg.end_date}).")
-            return None
+            raise ValueError(f"Invalid {index=}, expected t: 0 to {self._cfg.max_t} (period: {self._cfg.start_date} to {self._cfg.end_date}).")
 
         if self._assigned[t]:
             return self._result[t] if self._ndim == 0 else self._result[t,].copy()
@@ -309,12 +307,10 @@ class TDimVariable(ProjVariable):
         elif type(index) == pd.Period:
             t = (index - self._cfg.start_date).n
         else:
-            warnings.warn(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
-            return
+            raise TypeError(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
 
         if not (0 <= t <= self._cfg.max_t):
-            warnings.warn(f"Invalid {index=}, expected t: 0 to {self._cfg.max_t} (period: {self._cfg.start_date} to {self._cfg.end_date}).")
-            return
+            raise ValueError(f"Invalid {index=}, expected t: 0 to {self._cfg.max_t} (period: {self._cfg.start_date} to {self._cfg.end_date}).")
 
         if self._ndim == 0:
             self._result[t] = value
