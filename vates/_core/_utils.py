@@ -54,6 +54,8 @@ class ProjectionTimeSynchronizer:
             self._time_observers[:] = alive_observers
 
 
+FALLBACK_TIME_SYNCHRONIZER = None
+
 def add_projection_time_synchronizer(_cls=None, *, allow_overwrite=False):
     """Add the attribute/field `_time_synchronizer`, and two properties `time` and `period` for the class, specifically:
 
@@ -76,9 +78,9 @@ def add_projection_time_synchronizer(_cls=None, *, allow_overwrite=False):
             └───────────────┬───────────────────┘               │   │     │
                           True                                  │   │     │
                             │                                   │   │     │
-            ┌───────────────▼────────────────┐         ┌────────▼───▼─────▼───────────┐
-            │ model_engine.time_synchronizer │         │ ProjectionTimeSynchronizer() │
-            └────────────────────────────────┘         └──────────────────────────────┘
+            ┌───────────────▼────────────────┐         ┌────────▼───▼─────▼─────────┐
+            │ model_engine.time_synchronizer │         │ FALLBACK_TIME_SYNCHRONIZER │
+            └────────────────────────────────┘         └────────────────────────────┘
 
     - `time`: self._time_synchronizer.time
     - `period`: self._time_synchronizer.period
@@ -105,18 +107,15 @@ def add_projection_time_synchronizer(_cls=None, *, allow_overwrite=False):
 
         def new_init(self, *args, **kwargs):
             obj = kwargs.get("model_engine")
+            val = None
             if obj is not None:
                 if hasattr(obj, "time_synchronizer"):
                     val = getattr(obj, "time_synchronizer")
-                    if val is None:
-                        warnings.warn(f"add_projection_time_synchronizer: {obj}\'s 'time_synchronizer' is None.")
-                        val = ProjectionTimeSynchronizer()
+            if val is None:
+                if FALLBACK_TIME_SYNCHRONIZER:
+                    val = FALLBACK_TIME_SYNCHRONIZER
                 else:
-                    warnings.warn(
-                        f"add_projection_time_synchronizer: {type(obj)} does\'t has attribute 'time_synchronizer'.")
-                    val = ProjectionTimeSynchronizer()
-            else:
-                val = ProjectionTimeSynchronizer()
+                    raise ValueError(f"Failed to add projection time synchronizer.")
 
             setattr(self, "_time_synchronizer", val)
 

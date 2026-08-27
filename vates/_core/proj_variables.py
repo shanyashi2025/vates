@@ -1,11 +1,11 @@
 from __future__ import annotations
+import numpy as np
 import pandas as pd
 import typing
-import numpy as np
-import weakref
 import warnings
-from enum import Enum
+import weakref
 from abc import ABC, abstractmethod
+from enum import Enum
 
 if typing.TYPE_CHECKING:
     from vates._core.proj_model_engine import ProjModelEngine
@@ -208,34 +208,21 @@ class TDimVariable(ProjVariable):
 
     __slots__ = ('_cfg', '_result', '_assigned',)
 
-    def __new__(
-        cls,
-        name: str,
-        /,
-        *,
-        model_engine: ProjModelEngine | None = None,
-        owner: str = 'unowned',
-        group: str = 'ungrouped',
-        dims: list | None = None
-    ):
-        if model_engine is None:
-            warnings.warn(f"Cannot create 'TDepVariable', a 'ConstVariable' instance returned (model_engine is None).")
-            return ConstVariable(name, model_engine=model_engine, owner=owner, group=group, dims=dims)
+    fallback_cfg = None
 
-        return super().__new__(cls)
 
     def __init__(
         self,
         name: str,
         /,
         *,
-        model_engine: ProjModelEngine | None = None,
+        model_engine: ProjModelEngine | None,
         owner: str = 'unowned',
         group: str = 'ungrouped',
         dims: list | None = None
     ):
         """
-        Initialize the Time-memory Variable.
+        Initialize the Time-dimensioned Variable.
 
         Args:
             model_engine (ProjModelEngine): Model engine object.
@@ -245,9 +232,15 @@ class TDimVariable(ProjVariable):
             dims (list|None): Dimensions.
         """
         super().__init__(name, model_engine=model_engine, owner=owner, group=group, dims=dims)
-        self._cfg: RunConfig = model_engine._run_config
+        if model_engine:
+            self._cfg: RunConfig = model_engine._run_config
+        elif self.fallback_cfg:
+            self._cfg = self.fallback_cfg  # for advanced users who deliberately want to use 'fallback_cfg'
+        else:
+            raise ValueError("'model_engine' is None.")
         self._result = np.zeros(self._shape)
         self._assigned = np.array([False] * (self._cfg.max_t + 1))
+
 
     @property
     def result(self) -> np.ndarray:
