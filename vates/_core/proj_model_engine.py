@@ -20,6 +20,9 @@ class ProjModelEngine:
     """Actuarial projection model engine.
     """
 
+    _projection: Callable
+    _run_config: RunConfig
+
     def __init__(
         self,
         *,
@@ -35,18 +38,15 @@ class ProjModelEngine:
         self._model_name: str = str(model_name)
         self._description: str = str(description)
 
-        self._projection: Callable | None = None
-        self._run_config: RunConfig | None = None
-
         # runtime stuffs
         self._cached_filepath: dict[str, tuple] = {}
         self._proj_variables: list[weakref.ref[ProjVariable]] = []
         self._result_files: set = set()
         self._time_synchronizer: ProjectionTimeSynchronizer = ProjectionTimeSynchronizer()
         self._messages: list[str] = []
-        self._runlog: dict | None = None
+        self._runlog: dict = {}
 
-        super().__setattr__('_initialized', True)
+        self._initialized: bool = True
 
     def bind_projection(
         self,
@@ -61,7 +61,7 @@ class ProjModelEngine:
         Raises:
             ValueError: If `func` is not callable.
         """
-        if self._projection is not None:
+        if hasattr(self, '_projection'):
             raise ValueError(f"{self._projection} is already bound.")
         if not callable(func):
             raise ValueError(f"Cannot bind un-callable object: {func}.")
@@ -73,7 +73,7 @@ class ProjModelEngine:
         if len(sig.parameters) == 0:
             self.include_traced_message(f"INFO: Function '{func.__name__}' has no argument, it will be bound as a "
                                         f"function instead of a method.")
-            self._projection = func
+            super().__setattr__('_projection', func)
         else:
             first_arg_name = list(sig_params.keys())[0]
             if first_arg_name not in hints:
@@ -81,7 +81,7 @@ class ProjModelEngine:
             if hints[first_arg_name] is not type(self):
                 raise ValueError(f"Function '{func.__name__}' first argument '{first_arg_name}': model engine type "
                                  f"'{type(self)}' inconsistent with type hint '{str(hints[first_arg_name])}'.")
-            self._projection = MethodType(func, self)
+            super().__setattr__('_projection',  MethodType(func, self))
 
         self.include_traced_message(f"INFO: Function {func} has been bound to {self}.")
 
@@ -123,7 +123,7 @@ class ProjModelEngine:
             stoch_result_file_id (str, optional): Stochastic result id. Defaults to None.
             enable_write_runlog (bool, optional): Enable writing run log. Defaults to True.
         """
-        if self._run_config is not None:
+        if hasattr(self, '_run_config'):
             raise ValueError(f"Run configuration is already set.")
 
         none_items = []
@@ -145,7 +145,7 @@ class ProjModelEngine:
         if results_directory is None:
             results_directory = f"./results/{scenario or ''}"
             none_items.append(f"results_directory='{results_directory}'")
-        self._run_config = RunConfig.create(
+        super().__setattr__('_run_config', RunConfig.create(
             start_year=start_year,
             start_month=start_month,
             end_year=end_year,
@@ -160,7 +160,7 @@ class ProjModelEngine:
             stoch_result_file_mode=stoch_result_file_mode,
             stoch_result_file_id=stoch_result_file_id,
             enable_write_runlog=enable_write_runlog,
-        )
+        ))
 
         if len(none_items) > 0:
             msg = f"Following items are set by default: {', '.join(none_items)}."
@@ -173,9 +173,9 @@ class ProjModelEngine:
         *,
         projection_args: dict[str, ...] | None = None,
     ) -> dict:
-        if self._projection is None:
+        if not hasattr(self, '_projection'):
             raise ValueError(f"Projection function has not been bound.")
-        if self._run_config is None:
+        if not hasattr(self, '_run_config'):
             raise ValueError("Run configuration has not been set.")
         projection_args = projection_args or {}
 
@@ -403,7 +403,7 @@ class ProjModelEngine:
         exec_minutes = (exec_total_seconds % 3600) // 60
         exec_seconds = exec_total_seconds % 60
 
-        self._runlog = {
+        self._runlog.update({
             "model_name": self._model_name,
             "description": self._description,
             "srouce_code": {
@@ -430,7 +430,7 @@ class ProjModelEngine:
             "environment": self._environ,
             "results": list(map(str, self._result_files)),
             "messages": self._messages,
-        }
+        })
 
         if self._run_config.enable_write_runlog:
             os.makedirs(self.results_directory_path, exist_ok=True)
@@ -626,6 +626,8 @@ class ProjModelEngine:
                     pass
                 else:
                     raise AttributeError(f"Cannot overwrite protected member '{name}'")
+            elif name.startswith('_'):
+                raise AttributeError(f"Cannot add a private member (underscore-prefixed) '{name}'.")
             if not hasattr(self, name) and hasattr(self, "_messages"):
                 self.include_traced_message(f"INFO: Add member: '{name}' {type(value)}")
         super().__setattr__(name, value)

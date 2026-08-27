@@ -19,6 +19,11 @@ from vates._core._utils import RunConfig
 class StochExecutor:
     """Stochastic model executor."""
 
+    _proj_cls: type[ProjModelEngine]
+    _projection: Callable
+    _run_config: RunConfig
+    _sims_str: str
+
     include_traced_message = ProjModelEngine.include_traced_message
     load_json = ProjModelEngine.load_json
     read_csv = ProjModelEngine.read_csv
@@ -37,18 +42,14 @@ class StochExecutor:
         self._model_name: str = str(model_name)
         self._description: str = str(description)
 
-        self._proj_cls: type[ProjModelEngine] | None = None
-        self._projection: Callable | None = None
-        self._run_config: RunConfig | None = None
-
         # runtime stuffs
         self._cached_filepath: dict[str, tuple] = {}
         self._result_files: set = set()
         self._messages: list[str] = []
         self._sim_messages: list = []
-        self._runlog: dict | None = None
+        self._runlog: dict = {}
 
-        self._sims_str: str | None = None
+        self._initialized: bool = True
 
     def bind_projection(
         self,
@@ -63,7 +64,7 @@ class StochExecutor:
         Raises:
             ValueError: If `func` is not callable.
         """
-        if self._projection is not None:
+        if hasattr(self, '_projection'):
             raise ValueError(f"{self._projection} is already bound.")
         if not callable(func):
             raise ValueError(f"Cannot bind un-callable object: {func}.")
@@ -75,16 +76,15 @@ class StochExecutor:
         first_arg_name = list(sig_params.keys())[0]
         proj_cls = get_type_hints(func).get(first_arg_name)
         if proj_cls is not None:
-            self._proj_cls = proj_cls
+            super().__setattr__('_proj_cls', proj_cls)
             self.include_traced_message(
                 f"INFO: {proj_cls} is set as the projection model engine according to type hints of "
                 f"first argument '{first_arg_name}'."
             )
         else:
-            self.include_traced_message(f"INFO: {ProjModelEngine} is set as the projection model engine by default.")
-            self._proj_cls = ProjModelEngine
+            raise ValueError(f"First argument '{first_arg_name}': type hint is missing.")
 
-        self._projection = func
+        super().__setattr__('_projection', func)
         self.include_traced_message(f"INFO: Function {func} has been bound to {self}.")
         return self
 
@@ -116,7 +116,7 @@ class StochExecutor:
             results_directory (str, optional): Results directory. Defaults to 'results/`scenario`'.
             max_workers (int, optional): Max workers. Defaults to 1.
         """
-        if self._run_config is not None:
+        if hasattr(self, '_run_config'):
             raise ValueError(f"Run configuration is already set.")
 
         none_items = []
@@ -141,8 +141,8 @@ class StochExecutor:
         if max_workers is None:
             max_workers = 1
             none_items.append(f"max_workers='{max_workers}'")
-        self._sims_str = simulations
-        self._run_config = RunConfig.create(
+        super().__setattr__('_sims_str', simulations)
+        super().__setattr__('_run_config', RunConfig.create(
             start_year=start_year,
             start_month=start_month,
             end_year=end_year,
@@ -158,7 +158,7 @@ class StochExecutor:
             stoch_result_file_id=None,
             enable_write_runlog=True,
             max_workers=self._parse_max_workers(max_workers),
-        )
+        ))
 
         if len(none_items) > 0:
             self.include_traced_message(f"INFO: Following items are set by default: {', '.join(none_items)}.")
@@ -185,11 +185,11 @@ class StochExecutor:
         *,
         projection_args: dict[str, ...] | None = None,
     ) -> dict:
-        if self._projection is None:
+        if not hasattr(self, '_projection'):
             raise ValueError(f"Projection function has not been bound.")
-        if self._proj_cls is None:
+        if not hasattr(self, '_proj_cls'):
             raise ValueError(f"Projection model engine class is None.")
-        if self._run_config is None:
+        if not hasattr(self, '_run_config'):
             raise ValueError("Run configuration has not been set.")
         projection_args = projection_args or {}
 
@@ -337,7 +337,7 @@ class StochExecutor:
         exec_minutes = (exec_total_seconds % 3600) // 60
         exec_seconds = exec_total_seconds % 60
 
-        self._runlog = {
+        self._runlog.update({
             "model_name": self._model_name,
             "description": self._description,
             "srouce_code": {
@@ -366,7 +366,7 @@ class StochExecutor:
             "environment": self._environ,
             "results": list(map(str, self._result_files)),
             "messages": self._messages + self._sim_messages,
-        }
+        })
 
         if self._run_config.enable_write_runlog:
             with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
@@ -444,6 +444,8 @@ class StochExecutor:
         if hasattr(self, '_initialized'):
             if name in type(self).__dict__:  # check if the attribute name already exists in the class definition
                 raise AttributeError(f"Cannot overwrite protected member '{name}'")
+            elif name.startswith('_'):
+                raise AttributeError(f"Cannot add a private member (underscore-prefixed) '{name}'.")
             if not hasattr(self, name) and hasattr(self, "_messages"):
                 self.include_traced_message(f"INFO: Add member: '{name}' {type(value)}")
         super().__setattr__(name, value)
