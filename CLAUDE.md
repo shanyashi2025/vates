@@ -134,7 +134,15 @@ calculation. Generated outputs (`examples/results/`, `examples/intermediate/`) a
 
 - Private/internal modules are prefixed with `_` (e.g. `_core`, `_utils.py`, `_bond_fixed_component.py`);
   the public API is curated in each package's `__init__.py` `__all__`.
-- Model/engine configuration follows a defensive-typing style: methods take keyword-only args, warn
-  (not raise) on double-binding/double-configuration, and reject invalid types via explicit checks.
+- Model/engine configuration follows a defensive-typing style: methods take keyword-only args, raise
+  on double-binding/double-configuration, and reject invalid types via explicit checks. `warnings.warn`
+  is used only for informational notices (defaults applied, files not deleted), not for errors.
+- `ProjModelEngine` and `StochExecutor` guard attribute assignment via `__setattr__`, armed by an
+  `_initialized` flag set at the end of `__init__`. After arming: overwriting a class-level member
+  raises `AttributeError` (except properties with a setter, e.g. `time`/`period`); adding a new
+  underscore-prefixed member raises `AttributeError`; adding a new *public* member is allowed and
+  traced as `INFO: Add member: ...` in the runlog. Framework internals write through
+  `super().__setattr__` (used in `bind_projection`/`configure_run`); the `_projection`/`_run_config`/
+  `_proj_cls` fields are created lazily, so "is set" is tested with `hasattr`, not `is None`.
 - Dates are represented as monthly `pd.Period` objects; time steps are integers `t` from `0`.
 - Results use a long, 4-column key of `(group, owner, variable, date_or_constant)`.

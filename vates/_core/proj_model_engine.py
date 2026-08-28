@@ -59,28 +59,59 @@ class ProjModelEngine:
             func (callable): The projection function.
 
         Raises:
-            ValueError: If `func` is not callable.
+            ValueError: If `func` is already bound, not callable, or a class.
+            ValueError: If the type hints of `func` cannot be resolved (e.g.
+                string/forward annotations referencing names that are not
+                importable at module scope).
+            ValueError: If `func`'s first argument is missing an annotation,
+                is annotated with a non-class, or is annotated with a type
+                that `self` is not a subclass of.
         """
         if hasattr(self, '_projection'):
             raise ValueError(f"{self._projection} is already bound.")
         if not callable(func):
             raise ValueError(f"Cannot bind un-callable object: {func}.")
-
-        sig = inspect.signature(func)
-        hints = get_type_hints(func)
+        if inspect.isclass(func):
+            raise ValueError(f"Cannot bind a class: {func}.")
 
         sig_params = inspect.signature(func).parameters
-        if len(sig.parameters) == 0:
+        if len(sig_params) == 0:
             self.include_traced_message(f"INFO: Function '{func.__name__}' has no argument, it will be bound as a "
                                         f"function instead of a method.")
             super().__setattr__('_projection', func)
         else:
+            try:
+                if inspect.isfunction(func) or inspect.ismethod(func):
+                    globalns = getattr(func, "__globals__", None)
+                else:
+                    globalns = getattr(func.__call__, "__globals__", None)
+                hints = get_type_hints(func, globalns=globalns)
+            except NameError as e:
+                raise ValueError(
+                    f"Function '{func.__name__}': type hints cannot be resolved. If you use string/forward "
+                    f"annotations (e.g. via 'from __future__ import annotations'), referenced names must be "
+                    f"importable at module scope. Cause: {e}"
+                ) from e
+
             first_arg_name = list(sig_params.keys())[0]
             if first_arg_name not in hints:
-                raise ValueError(f"Function '{func.__name__}' first argument '{first_arg_name}': must have annotation.")
-            if hints[first_arg_name] is not type(self):
-                raise ValueError(f"Function '{func.__name__}' first argument '{first_arg_name}': model engine type "
-                                 f"'{type(self)}' inconsistent with type hint '{str(hints[first_arg_name])}'.")
+                raise ValueError(
+                    f"Function '{func.__name__}' first argument '{first_arg_name}': must annotate with the "
+                    f"model engine type, e.g.: '{type(self).__name__}'. String/forward annotations (e.g. via "
+                    f"'from __future__ import annotations') are only resolved when the referenced name is "
+                    f"importable at module scope."
+                )
+            annotated = hints[first_arg_name]
+            if not isinstance(annotated, type):
+                raise ValueError(
+                    f"Function '{func.__name__}' first argument '{first_arg_name}': annotation must be a "
+                    f"class (the model engine type), got '{annotated}'."
+                )
+            if not issubclass(type(self), annotated):
+                raise ValueError(
+                    f"Function '{func.__name__}' first argument '{first_arg_name}': model engine type "
+                    f"'{type(self)}' is not a subclass of the annotated type '{annotated}'."
+                )
             super().__setattr__('_projection',  MethodType(func, self))
 
         self.include_traced_message(f"INFO: Function {func} has been bound to {self}.")

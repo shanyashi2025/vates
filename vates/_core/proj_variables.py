@@ -2,7 +2,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import typing
-import warnings
 import weakref
 from abc import ABC, abstractmethod
 from enum import Enum

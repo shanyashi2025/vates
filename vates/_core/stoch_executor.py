@@ -62,28 +62,54 @@ class StochExecutor:
             func (callable): The projection function.
 
         Raises:
-            ValueError: If `func` is not callable.
+            ValueError: If `func` is already bound, not callable, or a class.
+            ValueError: If `func` has no argument. A projection function bound
+                through `StochExecutor` must take the model engine as its first
+                argument, because its type annotation selects the worker engine
+                class.
+            ValueError: If the type hints of `func` cannot be resolved (e.g.
+                string/forward annotations referencing names that are not
+                importable at module scope).
+            ValueError: If `func`'s first argument is missing an annotation,
+                or is annotated with a type that is not a `ProjModelEngine`
+                subclass.
         """
         if hasattr(self, '_projection'):
             raise ValueError(f"{self._projection} is already bound.")
         if not callable(func):
             raise ValueError(f"Cannot bind un-callable object: {func}.")
+        if inspect.isclass(func):
+            raise ValueError(f"Cannot bind a class: {func}.")
 
         sig_params = inspect.signature(func).parameters
         if len(sig_params) == 0:
             raise ValueError(f"Function '{func.__name__}' has no argument, cannot be bound.")
+        try:
+            if inspect.isfunction(func) or inspect.ismethod(func):
+                globalns = getattr(func, "__globals__", None)
+            else:
+                globalns = getattr(func.__call__, "__globals__", None)
+            hints = get_type_hints(func, globalns=globalns)
+        except NameError as e:
+            raise ValueError(
+                f"Function '{func.__name__}': type hints cannot be resolved. If you use string/forward "
+                f"annotations (e.g. via 'from __future__ import annotations'), referenced names must be "
+                f"importable at module scope. Cause: {e}"
+            ) from e
 
         first_arg_name = list(sig_params.keys())[0]
-        proj_cls = get_type_hints(func).get(first_arg_name)
-        if proj_cls is not None:
-            super().__setattr__('_proj_cls', proj_cls)
-            self.include_traced_message(
-                f"INFO: {proj_cls} is set as the projection model engine according to type hints of "
-                f"first argument '{first_arg_name}'."
+        proj_cls = hints.get(first_arg_name)
+        if proj_cls is None:
+            raise ValueError(
+                f"Function '{func.__name__}' first argument '{first_arg_name}': must annotate with the "
+                f"projection engine type (a 'ProjModelEngine' subclass), e.g. ': ProjModelEngine'."
             )
-        else:
-            raise ValueError(f"First argument '{first_arg_name}': type hint is missing.")
-
+        if not isinstance(proj_cls, type) or not issubclass(proj_cls, ProjModelEngine):
+            raise ValueError(
+                f"Function '{func.__name__}' first argument '{first_arg_name}': annotated type '{proj_cls}' "
+                f"must be a 'ProjModelEngine' subclass (it is used as the worker engine class)."
+            )
+        super().__setattr__('_proj_cls', proj_cls)
         super().__setattr__('_projection', func)
         self.include_traced_message(f"INFO: Function {func} has been bound to {self}.")
         return self
