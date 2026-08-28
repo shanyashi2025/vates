@@ -277,7 +277,7 @@ class BondFixedBuilder:
 
         return self
 
-    def build(self, pipeline: str | list[str] | None = None) -> BondFixed:
+    def build(self, pipeline: str | list[str] | None = None, pipe_operator: str = "|>") -> BondFixed:
         """
         Build and return a fully initialized BondFixed object.
 
@@ -288,8 +288,11 @@ class BondFixedBuilder:
             ValueError: If required data is missing or timing constraints are violated.
         """
         if pipeline:
+            if isinstance(pipeline, str):
+                pipeline = pipeline.split(pipe_operator)
             if not isinstance(pipeline, list):
-                pipeline = [pipeline]
+                raise TypeError(f"Invalid type of pipeline {type(pipeline)}, expected 'list' or 'str'")
+
             for step in pipeline:
                 step = step.lower()
                 if step in ('calibrate_market_spread', 'calculate_market_spread', 'market_spread'):
@@ -303,7 +306,7 @@ class BondFixedBuilder:
                 elif step in ('risk_neutralization', 'risk_neutralize'):
                     self.risk_neutralization()
                 else:
-                    warnings.warn(f"{type(self).__name__}: no method matches '{step}' hence ignored.")
+                    warnings.warn(f"{type(self).__name__}: '{step}' is ignored as no method matches.")
 
         # Validate required data
         if self.mv_price is None: raise ValueError("mv_price is not yet set.")

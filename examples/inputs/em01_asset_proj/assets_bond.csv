@@ -1,5 +1,5 @@
 ﻿#,asset_id,tag__bond_code,tag__bond_type,allocation_group,currency_id,fund_id,issue_date,maturity_date,coupon_rate,coupon_freq,provided_cash_flow_id,face_value,rf_curve_id,mv_price_dirty,market_spread,abv_price_dirty,units,credit_band_id,asset_classification,build_pipeline
-1,trad_HTM_18附息国债06,180006,国债,govt_bond,cny,trad_fund,2018/3/16,2048/3/19,0.0422,2,none,100,cny_rf,143.47352,0.0001,101.049493,280,none,AC,market_spread;amort_rate
+1,trad_HTM_18附息国债06,180006,国债,govt_bond,cny,trad_fund,2018/3/16,2048/3/19,0.0422,2,none,100,cny_rf,143.47352,0.0001,101.049493,280,none,AC,market_spread|>amort_rate
 2,cd1_HTM_20附息国债07,200007,国债,govt_bond,cny,cd1_fund,2020/5/22,2070/5/25,0.0373,2,none,100,cny_rf,153.112638,-0.00005,100.308445,40,none,AC,market_price
 3,cd2_HTM_22附息国债12,220012,国债,govt_bond,cny,cd2_fund,2022/6/14,2029/6/15,0.0275,1,none,100,cny_rf,107.414911,0,101.365675,60,none,AC,market_spread
 4,trad_HTM_18附息国债06_,180006,国债,govt_bond,cny,trad_fund,2018/3/16,2048/3/19,0.0422,2,none,100,cny_rf,143.47352,0.0001,101.049493,280,none,AC,market_price

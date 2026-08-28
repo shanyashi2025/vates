@@ -20,13 +20,14 @@ _BUILDER_MAP = {
 }
 
 
-def create_asset(asset_cls, build_pipeline: str | list[str] | None = None, **kwargs):
+def create_asset(asset_cls, *, build_pipeline: str | list[str] | None = None, pipe_operator: str = "|>", **kwargs):
     """
     Factory function to create an asset.
 
     Args:
         asset_cls: Asset class, 'cash', 'equity', 'bond' ('bond_fixed', 'fixed_bond' equivalently), 'equity_option'
         build_pipeline (str | list[str] | None): Build pipeline.
+        pipe_operator (str): Pipe operator, used when `build_pipeline` is str, defaults to '|>'.
         **kwargs: Parameters.
 
     Returns:
@@ -42,7 +43,6 @@ def create_asset(asset_cls, build_pipeline: str | list[str] | None = None, **kwa
             raise ValueError(f"'{asset_cls}' is not a valid asset class name.")
 
     if asset_cls in _BUILDER_MAP:
-        # return create_asset_by_builder(_BUILDER_MAP[asset_cls], build_pipeline, **kwargs)
-        return _BUILDER_MAP[asset_cls](**kwargs).build(build_pipeline)
+        return _BUILDER_MAP[asset_cls](**kwargs).build(build_pipeline, pipe_operator)
     else:
         return asset_cls(**kwargs)
