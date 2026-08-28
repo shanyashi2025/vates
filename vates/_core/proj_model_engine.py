@@ -634,7 +634,7 @@ class ProjModelEngine:
             value = pd.Period(value, freq="M")
         if not isinstance(value, pd.Period):
             raise TypeError(f"period: type {type(value)} is not allowed, expected 'pd.Period'.")
-        if self.START_DATE <= value <= self.END_DATE :
+        if not self.START_DATE <= value <= self.END_DATE :
             raise ValueError(f"period: value {value} is not allowed, expected {self.START_DATE}) to {self.END_DATE}.")
         self._time_synchronizer.set(period=value, time=(value - self.START_DATE).n)
 
