@@ -6,13 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Vates** — an open-source Python library (requires Python ≥ 3.12) for actuarial modeling:
 monthly-step projection of assets, liabilities, funds, and economic/ESG scenarios, plus
-stochastic (Monte Carlo) solvency capital measurement. Depends only on `numpy` and `pandas`;
-`scipy` is optional and gates the equity-option asset class.
+stochastic (Monte Carlo) solvency capital measurement. Depends on `numpy` and `pandas`.
 
 ## Development Commands
 
 - **Install (editable):** `pip install -e .` from the repo root (imports as `import vates`).
-  `.venv/` and `uv.lock` are present; the project uses setuptools + `pyproject.toml` (version `0.1.5`),
+  `.venv/` and `uv.lock` are present; the project uses setuptools + `pyproject.toml`,
   so `pip`/`uv` can also read it. There is no separate test suite or linter config.
 
 - **Run example models:** from the repo root, pass a JSON run-config as the first CLI arg:
@@ -94,7 +93,7 @@ High-level Asset–Liability Management building blocks that plug into the proje
   **builder** (`vates/alm/assets/builders/`). A builder performs a named `build_pipeline` of
   calibration steps (e.g. `derive_coupon_rate`, `calculate_amort_rate`, `calibrate_market_spread`,
   `calculate_market_price`, `risk_neutralization`) then validates required prices/spreads before
-  constructing the asset. This builder layer is the most recently active area of the codebase.
+  constructing the asset.
 - **`funds/`** — fund accounting (`Fund`) with an asset allocator and fund calculator (fund value,
   target weight / `RebalancePolicyParams`, `FundSizeType`, `TargetWeight`).
 - **`liabs/`** — liability base class (`Liab`) and `ExtProjLiab` for liabilities projected by an
