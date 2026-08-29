@@ -21,6 +21,17 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/shanyashi2025/vates"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "stoch: tests that spawn multiprocessing worker processes (StochExecutor)",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["vates*"]
