@@ -1,19 +1,24 @@
-"""Regression tests for the `time` / `period` setters and the underlying
-`ProjectionTimeSynchronizer`.
+"""Regression tests for the `time` / `period` setters, the underlying
+`ProjectionTimeSynchronizer`, and the `add_projection_time_synchronizer`
+class decorator.
 
-These are the pair most likely to regress: the `time` setter recently carried an
-inverted boundary comparison, and both drain through the same synchronizer. The
-tests pin the *inclusive* endpoint semantics explicitly.
+The setters are the pair most likely to regress: the `time` setter recently
+carried an inverted boundary comparison, and both drain through the same
+synchronizer. The tests pin the *inclusive* endpoint semantics explicitly.
 """
 
 import gc
+import warnings
 
 import pandas as pd
 import pytest
 from pandas._libs.tslibs.parsing import DateParseError
 
-from vates import ProjModelEngine
-from vates._core._utils import ProjectionTimeSynchronizer
+import vates._core._utils as _utils
+from vates._core._utils import (
+    ProjectionTimeSynchronizer,
+    add_projection_time_synchronizer,
+)
 
 
 class TestTimeSetter:
@@ -207,3 +212,143 @@ class TestProjectionTimeSynchronizer:
         gc.collect()  # the observer has no other reference after the call returns
         s.set(time=1)
         assert len(s._time_observers) == 0
+
+
+class TestAddProjectionTimeSynchronizer:
+    """The class decorator injects `_time_synchronizer` + `time`/`period` properties.
+
+    Mirrors `vates/alm/assets/asset_base.py` (the canonical user): a bare
+    `@add_projection_time_synchronizer`, a keyword-only `model_engine` parameter,
+    and `time`/`period` read through the shared synchronizer.
+    """
+
+    def test_bare_decorator_wires_to_engine_synchronizer(self, make_configured, tmp_path):
+        @add_projection_time_synchronizer
+        class Asset:
+            pass
+
+        m = make_configured(tmp_path)
+        asset = Asset(model_engine=m)
+        # same synchronizer object, so a read reflects the engine's state
+        assert asset._time_synchronizer is m.time_synchronizer
+        assert asset.time is None
+        assert asset.period is None
+
+        m.time = 3
+        assert asset.time == 3
+        assert asset.period == m.START_DATE + 3
+
+    def test_engine_period_setter_propagates_to_asset(self, make_configured, tmp_path):
+        @add_projection_time_synchronizer
+        class Asset:
+            pass
+
+        m = make_configured(tmp_path)
+        asset = Asset(model_engine=m)
+        m.period = m.START_DATE + 6
+        assert asset.period == m.START_DATE + 6
+        assert asset.time == 6
+
+    def test_no_engine_raises(self, monkeypatch):
+        monkeypatch.setattr(_utils, "FALLBACK_TIME_SYNCHRONIZER", None)
+
+        @add_projection_time_synchronizer
+        class Asset:
+            pass
+
+        with pytest.raises(ValueError, match="Failed to add projection time synchronizer"):
+            Asset()
+        with pytest.raises(ValueError, match="Failed to add projection time synchronizer"):
+            Asset(model_engine=None)
+
+    def test_model_engine_without_synchronizer_raises(self, monkeypatch):
+        # `model_engine` must expose a `time_synchronizer` attribute; a plain
+        # object does not, so the fallback/error branch is reached.
+        monkeypatch.setattr(_utils, "FALLBACK_TIME_SYNCHRONIZER", None)
+
+        @add_projection_time_synchronizer
+        class Asset:
+            pass
+
+        with pytest.raises(ValueError, match="Failed to add projection time synchronizer"):
+            Asset(model_engine=object())
+
+    def test_fallback_synchronizer_used(self, monkeypatch):
+        sync = ProjectionTimeSynchronizer(_time=2, _period=pd.Period("2026-12", freq="M"))
+        monkeypatch.setattr(_utils, "FALLBACK_TIME_SYNCHRONIZER", sync)
+
+        @add_projection_time_synchronizer
+        class Asset:
+            pass
+
+        asset = Asset()
+        assert asset.time == 2
+        assert asset.period == pd.Period("2026-12", freq="M")
+
+    def test_original_init_still_runs(self, make_configured, tmp_path):
+        # The class's own __init__ is preserved and re-invoked with the same
+        # kwargs (asset_base pattern: keyword-only model_engine parameter).
+        @add_projection_time_synchronizer
+        class Asset:
+            def __init__(self, *, model_engine=None, label=None):
+                self.label = label
+
+        m = make_configured(tmp_path)
+        asset = Asset(model_engine=m, label="eq")
+        assert asset.label == "eq"
+        m.time = 1
+        assert asset.time == 1
+
+    def test_parentheses_form_equivalent(self, make_configured, tmp_path):
+        # `add_projection_time_synchronizer()` (no args) returns the decorator
+        # factory; applying it yields the same behavior as the bare form.
+        Asset = add_projection_time_synchronizer()(type("Asset", (), {}))
+
+        m = make_configured(tmp_path)
+        asset = Asset(model_engine=m)
+        m.time = 4
+        assert asset.time == 4
+        assert asset.period == m.START_DATE + 4
+
+    def test_existing_time_attribute_kept_without_overwrite(self, make_configured, tmp_path):
+        # By default the decorator refuses to overwrite an existing `time`/
+        # `period` and warns; the class attribute survives.
+        @add_projection_time_synchronizer
+        class Asset:
+            time = "class-attr"
+            period = "class-attr"
+
+        m = make_configured(tmp_path)
+        asset = Asset(model_engine=m)
+        assert asset.time == "class-attr"
+        assert asset.period == "class-attr"
+        m.time = 3
+        assert asset.time == "class-attr"  # still the class attribute
+
+    def test_overwrite_allowed_replaces_property(self, make_configured, tmp_path):
+        @add_projection_time_synchronizer(allow_overwrite=True)
+        class Asset:
+            time = "class-attr"
+
+        m = make_configured(tmp_path)
+        asset = Asset(model_engine=m)
+        m.time = 3
+        assert asset.time == 3            # now reads through the synchronizer
+        assert asset.period == m.START_DATE + 3
+
+    def test_warns_when_not_allowed_to_overwrite(self):
+        with pytest.warns(UserWarning, match="not allowed to be overwritten"):
+            @add_projection_time_synchronizer
+            class Asset:
+                time = "class-attr"
+
+        assert Asset.time == "class-attr"  # untouched
+
+    def test_allow_overwrite_suppresses_warning(self):
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            @add_projection_time_synchronizer(allow_overwrite=True)
+            class Asset:
+                time = "class-attr"
+
+        assert not any("not allowed to be overwritten" in str(w.message) for w in record)
