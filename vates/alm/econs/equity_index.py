@@ -13,8 +13,8 @@ class EquityIndex:
         tdv_tot_return_index (TDimVariable): Total return index.
         tdv_dividend_yield_ac (float): Dividend yield (annual compounding).
     """
-    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
                  'index_id', '_total_return', '_capital_growth', '_dividend_yield', '_dividend_yield_ac', '_total_return_index',

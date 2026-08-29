@@ -60,8 +60,8 @@ class AssetAllocator:
     Attributes:
         rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
     """
-    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer',
                  'fund_id', 'container', 'rebalance_policy', 'ag_seq_list',

@@ -23,8 +23,8 @@ class Liab(ABC):
         _acct_value (float): Account value in force.
         _asset_share (float): Asset share in force.
     """
-    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', '_liab_id', '_fund_id', '_currency',
                  '_entry_date', '_num_pols', '_surr_val', '_math_res', '_acct_value', '_asset_share', '_cash_flow',
@@ -33,7 +33,7 @@ class Liab(ABC):
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `has_time_synchronizer`
+        model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `add_projection_time_synchronizer`
         liab_id: str,
         fund_id: str,
         currency: Currency,

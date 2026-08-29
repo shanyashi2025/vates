@@ -20,8 +20,8 @@ class YieldCurve:
         _forward_rates: Forward rates.
         _par_yields: Par yields.
     """
-    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
                  'curve_id', '_spot_rates', '_discount_factors', '_forward_rates', '_par_yields', 'tdv_spot_rates',)

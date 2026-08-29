@@ -12,8 +12,8 @@ class Currency:
         currency_id (str): Currency identifier.
         tdv_fx_rate (TDimVariable): Current FX rate.
     """
-    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
                  'currency_id', 'tdv_fx_rate', )

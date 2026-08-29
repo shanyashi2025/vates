@@ -23,8 +23,8 @@ class Asset(ABC):
         _fund_id (str): Associated fund identifier.
         _allocation_group (str): Allocation group for the asset.
     """
-    time: int           # for type hint only, will be injected by decorator `has_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `has_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', '_asset_id', '_is_profile', '_units',
                  '_purchase_date', '_currency', '_classification', '_asset_category', '_fund_id', '_allocation_group')
@@ -32,7 +32,7 @@ class Asset(ABC):
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine = None,  # will be referenced by decorator `has_time_synchronizer`
+        model_engine: ProjModelEngine = None,  # will be referenced by decorator `add_projection_time_synchronizer`
         asset_id: str,
         is_profile: bool,
         units: float,
