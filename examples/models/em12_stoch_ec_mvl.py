@@ -15,14 +15,15 @@ from company_package import (
     liabs_update_ad,
 )
 
+try:
+    import pyarrow.dataset as ds
+except ImportError as e:
+    raise ImportError(f"need to install `pyarrow` library (pip install pyarrow)") from e
+
 
 def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str, assets_df_dict: dict,
                     liabs_df: pd.DataFrame, funds_df: pd.DataFrame, rebalance_policy_df: pd.DataFrame,
                     epl: KeyedArray, asset_allocation_df: pd.DataFrame):
-    try:
-        import pyarrow.dataset as ds
-    except ImportError:
-        raise ImportError(f"need to install `pyarrow` library (pip install pyarrow)")
 
     t, p = model.time, model.period
     str_date = str(p.year * 100 + p.month)
