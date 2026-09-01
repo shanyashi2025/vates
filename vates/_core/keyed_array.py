@@ -230,7 +230,7 @@ class _AtIndexer:
 
         self._nparray: np.ndarray = nparray
         self._dim_names: list[str] = self._validate_dim_names(dim_names)
-        self._dim_name_to_axis: dict[str, int] = {name: i for i, name in enumerate(dim_names)}
+        self._dim_name_to_axis: dict[str, int] = {name: i for i, name in enumerate(self._dim_names)}
         self._key_pos_pairs: list[dict[Any, int]] = key_pos_pairs
         self._cached_key_pos: dict[tuple[int, Any], tuple[Any, bool, str]] = {}
 

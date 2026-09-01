@@ -35,28 +35,34 @@ class ProjectionTimeSynchronizer:
         self._notify_on_time_change()
 
     def attach_time_observer(self, observer, /) -> None:
-        if isinstance(observer, weakref.ref):
-            self._time_observers.append(observer)
+        ref = observer if isinstance(observer, weakref.ref) else weakref.ref(observer)
+        if ref in self._time_observers:
+            warnings.warn(f"{observer} has already been attached.")
         else:
-            self._time_observers.append(weakref.ref(observer))
+            self._time_observers.append(ref)
+
+    def detach_time_observer(self, observer, /) -> None:
+        ref = observer if isinstance(observer, weakref.ref) else weakref.ref(observer)
+        if ref in self._time_observers:
+            self._time_observers.remove(ref)
 
     def _notify_on_time_change(self) -> None:
-        alive_observers = []
+        notifiable_observers = []
         for ref in self._time_observers:
             obs = ref()
-            if obs is not None:
-                obs.sync_time(self)
-                alive_observers.append(ref)
+            if obs is not None and hasattr(obs, "update_on_time_change"):
+                obs.update_on_time_change(synchronizer=self, time=self._time, period=self._period)
+                notifiable_observers.append(ref)
 
         total_count = len(self._time_observers)
-        dead_count = total_count - len(alive_observers)
-        if dead_count > 0 and (dead_count > 50 or dead_count / total_count > 0.25):  # currently adopt a naive strategy
-            self._time_observers[:] = alive_observers
+        non_notifiable_count = total_count - len(notifiable_observers)
+        if non_notifiable_count > 0 and (non_notifiable_count > 50 or non_notifiable_count / total_count > 0.25):  # currently adopt a naive strategy
+            self._time_observers[:] = notifiable_observers
 
 
 FALLBACK_TIME_SYNCHRONIZER = None
 
-def add_projection_time_synchronizer(_cls=None, *, allow_overwrite=False):
+def add_projection_time_synchronizer(_cls=None, *, allow_overwrite: bool = False, attach_observer: bool = False, ):
     """Add the attribute/field `_time_synchronizer`, and two properties `time` and `period` for the class, specifically:
 
     - `_time_synchronizer` (a ProjectionTimeSynchronizer instance object):
@@ -89,6 +95,9 @@ def add_projection_time_synchronizer(_cls=None, *, allow_overwrite=False):
         _cls: the class object to be decorated
         allow_overwrite (bool): True to overwrite the property `time` and/or property `period` if explicitly defined in
             the class body.
+        attach_observer (bool): True to attach the class object to synchronizer's `_time_observers`, the class object
+            typically has `update_on_time_change` method which will be called by synchronizer's `_notify_on_time_change`,
+            otherwise the class object can be detached once threshold bited.
 
     Returns:
         (a) The decorated class if _cls is provided and allow_overwrite is not provided, e.g.
@@ -118,6 +127,8 @@ def add_projection_time_synchronizer(_cls=None, *, allow_overwrite=False):
                     raise ValueError(f"Failed to add projection time synchronizer.")
 
             setattr(self, "_time_synchronizer", val)
+            if attach_observer and hasattr(cls, "update_on_time_change"):
+                val.attach_time_observer(self)
 
             if original_init and original_init is not object.__init__:
                 original_init(self, *args, **kwargs)

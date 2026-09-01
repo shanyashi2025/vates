@@ -21,6 +21,11 @@ from vates._core._utils import (
 )
 
 
+class _NoUpdate:
+    """An alive observer stub WITHOUT an `update_on_time_change` method
+    (weakref-able)."""
+
+
 class TestTimeSetter:
     def test_endpoint_zero_accepted(self, make_configured, tmp_path):
         m = make_configured(tmp_path)
@@ -171,8 +176,8 @@ class TestProjectionTimeSynchronizer:
         calls = []
 
         class Observer:
-            def sync_time(self, sync):
-                calls.append(sync.time)
+            def update_on_time_change(self, *, synchronizer, time, period):
+                calls.append(time)
 
         s = ProjectionTimeSynchronizer()
         obs = Observer()
@@ -181,11 +186,65 @@ class TestProjectionTimeSynchronizer:
         s.set(time=2)
         assert calls == [1, 2]
 
+    def test_detach_time_observer_removes(self):
+        s = ProjectionTimeSynchronizer()
+        observer = self._Observer()
+        s.attach_time_observer(observer)
+        assert len(s._time_observers) == 1
+        s.detach_time_observer(observer)
+        assert len(s._time_observers) == 0
+        s.set(time=1)
+        assert observer.calls == 0  # no longer notified
+
+    def test_detach_time_observer_absent_noop(self):
+        s = ProjectionTimeSynchronizer()
+        s.attach_time_observer(self._Observer())
+        s.detach_time_observer(self._Observer())  # different instance -> not found
+        assert len(s._time_observers) == 1
+        # detaching from an empty list is harmless
+        s2 = ProjectionTimeSynchronizer()
+        s2.detach_time_observer(self._Observer())
+        assert len(s2._time_observers) == 0
+
+    def test_duplicate_attach_warns_and_ignored(self):
+        # Re-attaching the same object warns and is NOT appended (hard dedup);
+        # the original single registration remains and still receives
+        # notifications.
+        s = ProjectionTimeSynchronizer()
+        observer = self._Observer()
+        s.attach_time_observer(observer)
+        with pytest.warns(UserWarning, match="already been attached"):
+            s.attach_time_observer(observer)
+        assert len(s._time_observers) == 1  # duplicate ignored
+        s.set(time=1)
+        assert observer.calls == 1
+
+    def test_alive_observer_without_update_method_skipped_and_pruned(self):
+        # An alive observer without `update_on_time_change` is not notified (no
+        # crash), but is counted as dead: 1/1 = 100% > 25% -> pruned after the notify.
+        s = ProjectionTimeSynchronizer()
+        target = _NoUpdate()  # strongly referenced: stays alive
+        s.attach_time_observer(target)
+        s.set(time=1)
+        assert len(s._time_observers) == 0
+
+    def test_alive_observer_without_update_method_counts_toward_pruning(self):
+        # 1 un-notifiable + 1 notifiable: dead ratio 1/2 = 50% > 25% -> the
+        # un-notifiable observer is pruned, the notifiable one survives.
+        s = ProjectionTimeSynchronizer()
+        target = _NoUpdate()
+        observer = self._Observer()
+        s.attach_time_observer(target)
+        s.attach_time_observer(observer)
+        s.set(time=1)
+        assert len(s._time_observers) == 1
+        assert observer.calls == 1
+
     class _Observer:
         def __init__(self):
             self.calls = 0
 
-        def sync_time(self, sync):
+        def update_on_time_change(self, *, synchronizer, time, period):
             self.calls += 1
 
     def test_dead_observer_retained_below_threshold(self):
@@ -309,6 +368,51 @@ class TestAddProjectionTimeSynchronizer:
         m.time = 4
         assert asset.time == 4
         assert asset.period == m.START_DATE + 4
+
+    def test_no_attach_by_default(self, make_configured, tmp_path):
+        # `attach_observer` defaults to False: reads work through the shared
+        # synchronizer, but the instance is not registered as an observer.
+        @add_projection_time_synchronizer
+        class Asset:
+            pass
+
+        m = make_configured(tmp_path)
+        Asset(model_engine=m)
+        assert len(m.time_synchronizer._time_observers) == 0
+
+    def test_attach_observer_notifies_when_update_method_present(self, make_configured, tmp_path):
+        recorded = []
+
+        @add_projection_time_synchronizer(attach_observer=True)
+        class Asset:
+            def update_on_time_change(self, *, synchronizer, time, period):
+                recorded.append(time)
+
+        m = make_configured(tmp_path)
+        asset = Asset(model_engine=m)
+        assert len(m.time_synchronizer._time_observers) == 1
+        m.time = 1
+        m.time = 5
+        assert recorded == [1, 5]
+        assert len(m.time_synchronizer._time_observers) == 1  # still attached
+        # the engine and the decorated object share the notify path
+        assert asset.time == 5
+
+    def test_attach_observer_skipped_without_update_method(self, make_configured, tmp_path):
+        # `attach_observer=True` on a class WITHOUT `update_on_time_change` does
+        # NOT attach it at all (guarded by `hasattr(cls, ...)`). Reads still work
+        # through the shared synchronizer (no notification needed).
+        @add_projection_time_synchronizer(attach_observer=True)
+        class Asset:
+            pass
+
+        m = make_configured(tmp_path)
+        asset = Asset(model_engine=m)
+        assert len(m.time_synchronizer._time_observers) == 0  # never attached
+        m.time = 1
+        assert len(m.time_synchronizer._time_observers) == 0
+        assert asset.time == 1
+        assert asset.period == m.START_DATE + 1
 
     def test_existing_time_attribute_kept_without_overwrite(self, make_configured, tmp_path):
         # By default the decorator refuses to overwrite an existing `time`/

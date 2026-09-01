@@ -4,7 +4,7 @@ import time
 import random
 random.seed(42)
 
-from vates import KeyedArray, kr_from_df
+from vates import KeyedArray
 
 def create_test_df(n_idx1: int, n_idx2: int, n_cols: int) -> pd.DataFrame:
     np.random.seed(42)
@@ -55,8 +55,8 @@ def main():
     # Basics of KeyedArray
     print(f"\n--- Basics of KeyedArray ---")
     print(f"1. crate the `KeyedArray` object from DataFrame")
-    print(f">>> vt.kr_from_df(df)")
-    kr = kr_from_df(df)
+    print(f">>> KeyedArray.from_df(df)")
+    kr = KeyedArray.from_df(df)
     print(f">>> {type(kr)=}")
 
     print(f"\n2. get values of the array")
@@ -85,14 +85,14 @@ def main():
     print(f">>> {kr.get(col_name='col2', row_index=('a0', 'b1'))=} # sequance does not matter")
     print(f"-   notes with respect to `row_index` and `col_name`:")
     print(f"(1) for SingleIndex Dataframe:")
-    print(f"    default dimension names are 'row_index' and 'col_name' created by `vt.kr_from_df(df)`")
-    print(f"    you can specify dimension names: `vt.kr_from_df(df, multi_index_name=your_row_index_name, col_index_name=your_col_index_name)`")
+    print(f"    default dimension names are 'row_index' and 'col_name' created by `KeyedArray.from_df(df)`")
+    print(f"    you can specify dimension names: `KeyedArray.from_df(df, multi_index_name=< your_row_index_name >, col_index_name=< your_col_index_name >)`")
     print(f"(2) for MultiIndex Dataframe without unpacking MultiIndex - like this case:")
-    print(f"    default dimension names are 'row_index' and 'col_name' created by `vt.kr_from_df(df)`")
-    print(f"    you can specify dimension names: `vt.kr_from_df(df, multi_index_name=your_row_index_name, col_index_name=your_col_index_name)`")
+    print(f"    default dimension names are 'row_index' and 'col_name' created by `KeyedArray.from_df(df)`")
+    print(f"    you can specify dimension names: `KeyedArray.from_df(df, multi_index_name=< your_row_index_name >, col_index_name=< your_col_index_name >)`")
     print(f"(3) for MultiIndex Dataframe with unpacking MultiIndex:")
-    print(f"    default dimension names are original df index names and 'col_name' created by `vt.kr_from_df(df, unpack_multi_index=True)`")
-    print(f"    you can specify col index name: `vt.kr_from_df(df, unpack_multi_index=True, col_index_name=your_col_index_name)`")
+    print(f"    default dimension names are original df index names and 'col_name' created by `KeyedArray.from_df(df, unpack_multi_index=True)`")
+    print(f"    you can specify col index name: `KeyedArray.from_df(df, unpack_multi_index=True, col_index_name=< your_col_index_name >)`")
 
     print(f"\n7. use `.key_to_pos()` to map the key to integer-position index of the dimension")
     print(f"-   dimension can be specified by either int or str")
@@ -110,7 +110,6 @@ def main():
         lookup_keys = rand_lookup_keys(n_lookups, n_idx1, n_idx2, n_cols)
         t1, t2, t3 = kr_at(kr, lookup_keys), df_at(df, lookup_keys), df_loc(df, lookup_keys)
         print(f"{n_lookups:>10,} | {t1:>6.2f} | {t2:>6.2f} | {t1 / t2:>16.2%} | {t3:>6.2f} | {t1 / t3:>16.2%} ")
-    print(f"! `KeyedArray` significantly outperforms `DataFrame` in scalar access")
     print(f"- testing data size: size={kr.size} | shape={kr.shape} | ndim={kr.ndim}")
     print(f"- pandas version: {pd.__version__} (df.at and df.loc are much slower in version 3.0.x compared with version 2.3.x)")
 

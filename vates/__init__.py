@@ -1,3 +1,4 @@
+from importlib.metadata import version
 from vates._core import (
     ProjModelEngine,
     StochExecutor,
@@ -11,7 +12,7 @@ from vates import finmath
 from vates import solvency
 from vates import utils
 
-__version__ = "0.1.6"
+__version__ = version("vates")
 
 __all__ = [
     # core
