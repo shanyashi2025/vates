@@ -10,7 +10,6 @@ except ImportError:
     has_scipy = False
 
 def assets_projection(model: ProjModelEngine, assets_df_dict: dict, esg_master: EsgMaster):
-    esg_master.update_econ_data(model.period)
     if model.time == 0:
         model.assets = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=esg_master).all
     else:

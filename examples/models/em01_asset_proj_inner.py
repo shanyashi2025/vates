@@ -58,7 +58,6 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
     @model.bind_projection
     def assets_projection():
-        esg_master.update_econ_data(model.period)
         if model.time == 0:
             assets[:] = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=esg_master).all
         else:

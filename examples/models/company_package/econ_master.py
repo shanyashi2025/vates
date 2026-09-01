@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Self
 
 from vates import ProjModelEngine, KeyedArray
+from vates._core import add_projection_time_synchronizer
 from vates.alm import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 from vates.finmath import interpolate_interest_rates
 from vates.utils import parse_str_to_int_list
@@ -76,7 +77,11 @@ class EsgItem:
                 raise TypeError(f"{var.descr}: invalid term type {type(var.term)}, expected 'int' or 'list'.")
 
 
+@add_projection_time_synchronizer(attach_observer=True)
 class EsgMaster:
+
+    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
     def __init__(
         self,
@@ -85,14 +90,22 @@ class EsgMaster:
         equity_indices: list[EsgItem] | None = None,
         currencies: list[EsgItem] | None = None,
         market_info: EsgItem | None = None,
+        *,
+        model_engine: ProjModelEngine = None,
+        esg_step_func: None,
     ) -> None:
         self.yield_curves: list[EsgItem] = yield_curves or []
         self.credit_bands: list[EsgItem] = credit_bands or []
         self.equity_indices: list[EsgItem] = equity_indices or []
         self.currencies: list[EsgItem] = currencies or []
         self.market_info: EsgItem | None = market_info
+        self.esg_step_func = esg_step_func  # a function with argument of period
 
-    def update_econ_data(self, period: pd.Period, *, esg_step: int = 1) -> None:
+    def update_on_time_change(self, *, synchronizer, time, period):
+        self.update_econ_data(period)
+
+    def update_econ_data(self, period: pd.Period) -> None:
+        esg_step = self.esg_step_func(period) if self.esg_step_func else 1
         date_col = self._get_esg_date_col(period, esg_step)
         # update yield curves
         for esg_item in self.yield_curves:
@@ -292,7 +305,8 @@ class EsgMaster:
         *,
         model_engine: ProjModelEngine,
         esg_params: dict,
-        market_info_df: pd.DataFrame | None = None
+        market_info_df: pd.DataFrame | None = None,
+        esg_step_func = None
     ) -> Self:
         yield_curves = cls.build_esg_items(model_engine=model_engine, econ_cls=YieldCurve, econ_id_attr="curve_id",
                                            esg_params=esg_params.get("yield_curves"), esg_df=esg_df,
@@ -315,13 +329,18 @@ class EsgMaster:
                                          esg_params=esg_params.get("currencies"), esg_df=esg_df,
                                          variable_spec={})
         market_info = EsgItem(descr="general", econ_obj=MarketInfo(model_engine=model_engine), esg_data=market_info_df)
-        return EsgMaster(
+        obj = EsgMaster(
             yield_curves=yield_curves,
             credit_bands=credit_bands,
             equity_indices=equity_indices,
             currencies=currencies,
             market_info=market_info,
+            model_engine=model_engine,
+            esg_step_func=esg_step_func
         )
+        if obj.period is not None:
+            obj.update_econ_data(obj.period)
+        return obj
 
     @classmethod
     def build_esg_items(

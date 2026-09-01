@@ -82,7 +82,6 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
             inputer.reset()
 
         # --- (2) process economic assumptions ---
-        esg_master.update_econ_data(p)
         gby_60d_ma = np.array([gby_60d_ma_curve.spot_rates[i * 12] for i in range(41)])  # strip year data
         cross_intba, cross_intup, cross_intdn = cn_cross2.interest_risk_discount_curve(gby_60d_ma)
         cross_intba_spot = _interp_monthly_spot(cross_intba)

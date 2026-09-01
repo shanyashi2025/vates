@@ -61,10 +61,6 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     @model.bind_projection
     def fund_projection():
         t, p = model.time, model.period
-        if t is None:
-            raise ValueError(f"Invalid {t=}")
-
-        esg_master.update_econ_data(p)
 
         if t == 0:
             for fund in fund_master.funds:

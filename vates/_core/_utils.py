@@ -62,7 +62,7 @@ class ProjectionTimeSynchronizer:
 
 FALLBACK_TIME_SYNCHRONIZER = None
 
-def add_projection_time_synchronizer(_cls=None, *, allow_overwrite: bool = False, attach_observer: bool = False, ):
+def add_projection_time_synchronizer(_cls=None, *, allow_overwrite: bool = False, attach_observer: bool = False):
     """Add the attribute/field `_time_synchronizer`, and two properties `time` and `period` for the class, specifically:
 
     - `_time_synchronizer` (a ProjectionTimeSynchronizer instance object):

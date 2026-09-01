@@ -28,6 +28,9 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
     t, p = model.time, model.period
     str_date = str(p.year * 100 + p.month)
 
+    def _get_esg_step(period: pd.Period):
+        return 1 if period.year == model.START_YEAR else 12
+
     if t == 0:
         # build esg master
         filepath = model.get_filepath(esg_filename)
@@ -39,9 +42,9 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             model_engine=model,
             esg_params=esg_params,
             esg_df=esg_df,
+            esg_step_func=_get_esg_step
         )
-        model.esg_master.update_econ_data(p)
-        
+
         deflators_df = esg_df[(esg_df["CLASS"]=='VALN') & (esg_df["MEASURE"]=='DEF')].set_index(['ECONOMY', 'CLASS', 'MEASURE', 'TERM'])
         model.deflators_kr = KeyedArray.from_df(deflators_df)
         model.deflators = np.zeros(model.MAX_T + 1)
@@ -66,8 +69,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             fund.assemble_on_start(existing_assets=existing_assets, existing_liabs=existing_liabs)
 
     else:  # t > 1
-        esg_step = 1 if p.year == model.START_YEAR else 12
-        model.esg_master.update_econ_data(p, esg_step=esg_step)
+        esg_step = _get_esg_step(p)
         if esg_step == 1:
             model.deflators[t] = model.deflators_kr.at[('CNY', 'VALN', 'DEF', 0), str_date]
         elif (p.month % esg_step) == 1:
