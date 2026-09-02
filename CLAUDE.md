@@ -110,8 +110,8 @@ spreading/interpolation/extrapolation, Smith–Wilson extrapolation, Black–Sch
 
 ### Solvency (`vates/solvency/`)
 
-Currently a China Cross-II module (`cn_cross2/`: regulatory `params.py` and
-`quant_risk_min_cap.py`). Compute quantitative-risk minimum capital from stochastic projections.
+Currently a China C-ROSS (Phase-II) module (`cn_cross2/`: regulatory `params.py` and `quant_risk_min_cap.py`). 
+Compute quantitative-risk minimum capital.
 
 ### `_experiment/` and `utils/`
 
@@ -145,3 +145,11 @@ calculation. Generated outputs (`examples/results/`, `examples/intermediate/`) a
   `_proj_cls` fields are created lazily, so "is set" is tested with `hasattr`, not `is None`.
 - Dates are represented as monthly `pd.Period` objects; time steps are integers `t` from `0`.
 - Results use a long, 4-column key of `(group, owner, variable, date_or_constant)`.
+
+## Test Generation Guidelines for pytest
+
+- **Scope Limit**: Only read the specified source file and its direct import dependencies. Do not scan the full repository.
+- **Fixtures**: Always inspect `tests/conftest.py` before creating new fixtures or mocks. Re-use existing fixtures where possible.
+- **Execution**: Run specific test files (e.g., `pytest tests/test_x.py`), never run the full test suite (`pytest`) when
+  modifying single functions (unless user explicitly requests so).
+- **Loop Limit**: If a test fails after 3 fix attempts, stop automatically, summary the traceback, and prompt the user for direction.

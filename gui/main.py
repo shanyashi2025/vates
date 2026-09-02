@@ -1,14 +1,16 @@
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
-import webbrowser
-import os
-import subprocess
+import csv
+import html
 import json
-import pandas as pd
-from datetime import datetime
-import tempfile
+import os
 import shlex
 import shutil
+import subprocess
+import tempfile
+import tkinter as tk
+import webbrowser
+
+from datetime import datetime
+from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 
 def _cmd_quote_for_call(path: str) -> str:
@@ -673,8 +675,8 @@ class ModelLauncher:
     def open_csv_in_browser(self, file_path, filename, dp):
         """Open CSV in browser with beautiful HTML formatting"""
         try:
-            df = pd.read_csv(file_path, na_filter=False)
-            html_content = self.generate_html_from_df(df, file_path, filename, dp)
+            headers, rows = self.read_csv_table(file_path)
+            html_content = self.generate_html_from_table(headers, rows, file_path, filename, dp)
 
             # Create temporary HTML file
             with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
@@ -688,8 +690,56 @@ class ModelLauncher:
             messagebox.showerror("Error", f"Could not open file in browser: {str(e)}")
 
     @staticmethod
-    def generate_html_from_df(df, file_path, filename, dp):
-        """Generate a beautiful HTML representation of the DataFrame"""
+    def read_csv_table(file_path):
+        """Read a CSV into header and row lists (empty cells stay empty strings)."""
+        with open(file_path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.reader(f)
+            try:
+                headers = next(reader)
+            except StopIteration:
+                return [], []
+            rows = list(reader)
+
+        n = len(headers)
+        padded = []
+        for row in rows:
+            if len(row) < n:
+                row = row + [""] * (n - len(row))
+            elif len(row) > n:
+                row = row[:n]
+            padded.append(row)
+        return headers, padded
+
+    @staticmethod
+    def _column_is_numeric(rows, col_index):
+        """True if every non-empty value in the column parses as a number."""
+        saw_number = False
+        for row in rows:
+            raw = row[col_index].strip() if col_index < len(row) else ""
+            if raw == "":
+                continue
+            try:
+                float(raw)
+            except ValueError:
+                return False
+            saw_number = True
+        return saw_number
+
+    @staticmethod
+    def _format_cell(value, numeric, dp):
+        if numeric:
+            raw = str(value).strip()
+            if raw == "":
+                return ""
+            try:
+                return str(round(float(raw), dp))
+            except ValueError:
+                return html.escape(str(value))
+        return html.escape(str(value))
+
+    @staticmethod
+    def generate_html_from_table(headers, rows, file_path, filename, dp):
+        """Generate a beautiful HTML representation of a CSV table"""
 
         # Custom CSS for modern styling with sticky header and enhanced scrolling
         css = """
@@ -997,8 +1047,8 @@ class ModelLauncher:
         </head>
         <body>
             <div class="container">
-                <h2>📊 {filename}</h2>
-                <p>{file_path}</p>                
+                <h2>📊 {html.escape(str(filename))}</h2>
+                <p>{html.escape(str(file_path))}</p>                
 
                 <!-- Column Lock Controls -->
                 <div class="column-controls">
@@ -1019,11 +1069,12 @@ class ModelLauncher:
         """
 
         # Add headers
-        for i, col in enumerate(df.columns):
+        for i, col in enumerate(headers):
+            col_label = html.escape(str(col))
             if i < 10:
-                html_content += f'<th data-column-index="{i}" onclick="toggleColumnLock({i})">{col}</th>'
+                html_content += f'<th data-column-index="{i}" onclick="toggleColumnLock({i})">{col_label}</th>'
             else:
-                html_content += f'<th>{col}</th>'
+                html_content += f'<th>{col_label}</th>'
 
         html_content += """
                             </tr>
@@ -1032,19 +1083,20 @@ class ModelLauncher:
         """
 
         # Add data rows (limit to first 1000 rows for performance)
-        display_df = df.head(1000) if len(df) > 1000 else df
-
-        for _, row in display_df.iterrows():
+        numeric_cols = [
+            ModelLauncher._column_is_numeric(rows, i) for i in range(len(headers))
+        ]
+        display_rows = rows[:1000]
+        for row in display_rows:
             html_content += "<tr>"
-            for i, col in enumerate(df.columns):
-                value = row[col]
-                # Check if numeric for styling
-                # css_class = "numeric" if pd.api.types.is_numeric_dtype(df[col]) else ""
-                if pd.api.types.is_numeric_dtype(df[col]):
+            for i in range(len(headers)):
+                value = row[i] if i < len(row) else ""
+                if numeric_cols[i]:
                     css_class = "numeric"
-                    value = round(value, dp)
+                    value = ModelLauncher._format_cell(value, True, dp)
                 else:
                     css_class = ""
+                    value = ModelLauncher._format_cell(value, False, dp)
                 html_content += f'<td class="{css_class}" data-column-index="{i}">{value}</td>'
             html_content += "</tr>"
 
@@ -1061,8 +1113,11 @@ class ModelLauncher:
                 </div>
         """
 
-        if len(df) > 1000:
-            html_content += f"<p style='text-align: center; margin-top: 20px; color: #6c757d;'><em>Showing first 1000 rows out of {len(df)} total rows</em></p>"
+        if len(rows) > 1000:
+            html_content += (
+                f"<p style='text-align: center; margin-top: 20px; color: #6c757d;'>"
+                f"<em>Showing first 1000 rows out of {len(rows)} total rows</em></p>"
+            )
 
         html_content += """
             </div>
