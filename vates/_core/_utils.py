@@ -2,15 +2,16 @@ import pandas as pd
 import warnings
 import weakref
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Any, Self
 
-@dataclass(slots=True)
 class ProjectionTimeSynchronizer:
-    _time: int | None = None
-    _period: pd.Period | None = None
-    _time_observers: list[weakref.ref] = field(default_factory=list)
+
+    def __init__(self, time: int | None = None, period: pd.Period | None = None):
+        self._time: int | None = time
+        self._period: pd.Period | None = period
+        self._time_observers: list[weakref.ref] = []
 
     @property
     def time(self) -> int | None:
@@ -36,8 +37,9 @@ class ProjectionTimeSynchronizer:
 
     def attach_time_observer(self, observer, /) -> None:
         ref = observer if isinstance(observer, weakref.ref) else weakref.ref(observer)
-        if ref in self._time_observers:
-            warnings.warn(f"{observer} has already been attached.")
+        obs = ref()
+        if obs is None or ref in self._time_observers or not hasattr(obs, "update_on_time_change"):
+            pass  # 1. dead, 2. duplicate, 3. doesn't have method `update_on_time_change`
         else:
             self._time_observers.append(ref)
 
@@ -47,22 +49,22 @@ class ProjectionTimeSynchronizer:
             self._time_observers.remove(ref)
 
     def _notify_on_time_change(self) -> None:
-        notifiable_observers = []
+        alive_observers = []
         for ref in self._time_observers:
             obs = ref()
-            if obs is not None and hasattr(obs, "update_on_time_change"):
+            if obs is not None:
                 obs.update_on_time_change(synchronizer=self, time=self._time, period=self._period)
-                notifiable_observers.append(ref)
+                alive_observers.append(ref)
 
         total_count = len(self._time_observers)
-        non_notifiable_count = total_count - len(notifiable_observers)
-        if non_notifiable_count > 0 and (non_notifiable_count > 50 or non_notifiable_count / total_count > 0.25):  # currently adopt a naive strategy
-            self._time_observers[:] = notifiable_observers
+        dead_count = total_count - len(alive_observers)
+        if dead_count > 0 and (dead_count > 50 or dead_count / total_count > 0.25):  # currently adopt a naive strategy
+            self._time_observers[:] = alive_observers
 
 
 FALLBACK_TIME_SYNCHRONIZER = None
 
-def add_projection_time_synchronizer(_cls=None, *, allow_overwrite: bool = False, attach_observer: bool = False):
+def add_projection_time_synchronizer(_cls=None, /):
     """Add the attribute/field `_time_synchronizer`, and two properties `time` and `period` for the class, specifically:
 
     - `_time_synchronizer` (a ProjectionTimeSynchronizer instance object):
@@ -93,21 +95,8 @@ def add_projection_time_synchronizer(_cls=None, *, allow_overwrite: bool = False
 
     Args:
         _cls: the class object to be decorated
-        allow_overwrite (bool): True to overwrite the property `time` and/or property `period` if explicitly defined in
-            the class body.
-        attach_observer (bool): True to attach the class object to synchronizer's `_time_observers`, the class object
-            typically has `update_on_time_change` method which will be called by synchronizer's `_notify_on_time_change`,
-            otherwise the class object can be detached once threshold bited.
 
-    Returns:
-        (a) The decorated class if _cls is provided and allow_overwrite is not provided, e.g.
-            @add_projection_time_synchronizer  # no parentheses
-            class A:
-                ...
-        (b) The decorator if _cls is not provided and allow_overwrite is provided, e.g.
-            @add_projection_time_synchronizer(allow_overwrite=True)
-            class A:
-                ...
+    Returns: the decorated class
 
     """
 
@@ -115,32 +104,31 @@ def add_projection_time_synchronizer(_cls=None, *, allow_overwrite: bool = False
         original_init = getattr(cls, "__init__", None)
 
         def new_init(self, *args, **kwargs):
-            obj = kwargs.get("model_engine")
-            val = None
-            if obj is not None:
-                if hasattr(obj, "time_synchronizer"):
-                    val = getattr(obj, "time_synchronizer")
-            if val is None:
+            model_engine = kwargs.get("model_engine")
+            time_synchronizer = None
+            if model_engine is not None:
+                if hasattr(model_engine, "time_synchronizer"):
+                    time_synchronizer = getattr(model_engine, "time_synchronizer")
+            if time_synchronizer is None:
                 if FALLBACK_TIME_SYNCHRONIZER:
-                    val = FALLBACK_TIME_SYNCHRONIZER
+                    time_synchronizer = FALLBACK_TIME_SYNCHRONIZER
                 else:
                     raise ValueError(f"Failed to add projection time synchronizer.")
 
-            setattr(self, "_time_synchronizer", val)
-            if attach_observer and hasattr(cls, "update_on_time_change"):
-                val.attach_time_observer(self)
+            setattr(self, "_time_synchronizer", time_synchronizer)
+            time_synchronizer.attach_time_observer(self)
 
             if original_init and original_init is not object.__init__:
                 original_init(self, *args, **kwargs)
 
         cls.__init__ = new_init
 
-        if hasattr(cls, "time") and not allow_overwrite:
-            warnings.warn(f"add_projection_time_synchronizer: {cls} property 'time' is not allowed to be overwritten.")
+        if hasattr(cls, "time"):
+            warnings.warn(f"{cls} property 'time' is already defined.")
         else:
             setattr(cls, "time", property(fget=lambda self: getattr(self, "_time_synchronizer").time))
-        if hasattr(cls, "period") and not allow_overwrite:
-            warnings.warn(f"add_projection_time_synchronizer: {cls} property 'period' is not allowed to be overwritten.")
+        if hasattr(cls, "period"):
+            warnings.warn(f"{cls} property 'period' is already defined.")
         else:
             setattr(cls, "period", property(fget=lambda self: getattr(self, "_time_synchronizer").period))
 
