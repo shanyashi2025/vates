@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from dataclasses import dataclass
-from typing import Self
+from typing import Callable, Self
 
 from vates import ProjModelEngine, KeyedArray
 from vates._core import add_projection_time_synchronizer
@@ -92,20 +92,27 @@ class EsgMaster:
         market_info: EsgItem | None = None,
         *,
         model_engine: ProjModelEngine = None,
-        esg_step_func: None,
+        esg_step_map: dict | Callable | None = None,
     ) -> None:
         self.yield_curves: list[EsgItem] = yield_curves or []
         self.credit_bands: list[EsgItem] = credit_bands or []
         self.equity_indices: list[EsgItem] = equity_indices or []
         self.currencies: list[EsgItem] = currencies or []
         self.market_info: EsgItem | None = market_info
-        self.esg_step_func = esg_step_func  # a function with argument of period
+        self.esg_step_map: dict | Callable | None = esg_step_map  # take one argument of `period`
 
     def update_on_time_change(self, *, synchronizer, time, period):
         self.update_econ_data(period)
 
     def update_econ_data(self, period: pd.Period) -> None:
-        esg_step = self.esg_step_func(period) if self.esg_step_func else 1
+        if self.esg_step_map is None:
+            esg_step = 1  # defaults to 1
+        elif isinstance(self.esg_step_map, dict):
+            esg_step = self.esg_step_map.get(period, 1)  # defaults to 1
+        elif callable(self.esg_step_map):
+            esg_step = self.esg_step_map(period)
+        else:
+            raise TypeError(f"Invalid {type(period)=}, expected 'dict' or 'callable'.")
         date_col = self._get_esg_date_col(period, esg_step)
         # update yield curves
         for esg_item in self.yield_curves:
@@ -306,7 +313,7 @@ class EsgMaster:
         model_engine: ProjModelEngine,
         esg_params: dict,
         market_info_df: pd.DataFrame | None = None,
-        esg_step_func = None
+        esg_step_map: dict | Callable | None = None
     ) -> Self:
         yield_curves = cls.build_esg_items(model_engine=model_engine, econ_cls=YieldCurve, econ_id_attr="curve_id",
                                            esg_params=esg_params.get("yield_curves"), esg_df=esg_df,
@@ -336,7 +343,7 @@ class EsgMaster:
             currencies=currencies,
             market_info=market_info,
             model_engine=model_engine,
-            esg_step_func=esg_step_func
+            esg_step_map=esg_step_map
         )
         if obj.period is not None:
             obj.update_econ_data(obj.period)

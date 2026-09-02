@@ -42,7 +42,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             model_engine=model,
             esg_params=esg_params,
             esg_df=esg_df,
-            esg_step_func=_get_esg_step
+            esg_step_map=_get_esg_step
         )
 
         deflators_df = esg_df[(esg_df["CLASS"]=='VALN') & (esg_df["MEASURE"]=='DEF')].set_index(['ECONOMY', 'CLASS', 'MEASURE', 'TERM'])
