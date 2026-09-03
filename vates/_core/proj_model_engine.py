@@ -315,9 +315,6 @@ class ProjModelEngine:
                 self._write_stoch_variable(v, writer, self._run_config.simulation, pos_lst_m, pos_lst_y)
         self._result_files.add(output_file)
 
-    def attach_time_observer(self, observer, /) -> None:
-        self._time_synchronizer.attach_time_observer(observer)
-
     def include_proj_variable(self, proj_variable: ProjVariable | weakref.ref[ProjVariable]) -> None:
         """Include a projection variable into `_proj_variables`
 

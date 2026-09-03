@@ -16,67 +16,66 @@ The `ProjModelEngine` class is the projection model engine.
 
 - step 1: `ProjModelEngine`: initialize a model instance
 - step 2: `model.configure_run`: configure a run
-- step 3: `def {my_projection}`: define a function to perform projection calculations
+- step 3: `def < my_projection >`: define a function to perform projection calculations
 - step 4: `model.bind_projection`: bind it to the model
 - step 5: `model.run`: run the model
 
 ```python
-import vates
+from vates import ProjModelEngine
 
-model = vates.ProjModelEngine(model_name='my_model', description='example model')
+model = ProjModelEngine(model_name='my_model', description='example model')
 
 model.configure_run(start_year=2025, end_year=2026)
 
 @model.bind_projection
-def my_projection(model: vates.ProjModelEngine):
-    t = model.time
-    p = model.period
+def my_projection(m: ProjModelEngine):
+    t = m.time
+    p = m.period
     if t == 0:
-        print(f"Projection started, START_DATE = {model.START_DATE}")
+        print(f"Projection started, START_DATE={m.START_DATE}")
     else:
         print(f"time: {t}, period: {p}")
-    if t == model.MAX_T:
-        print(f"Projection ended, END_DATE = {model.END_DATE}")
+    if t == m.MAX_T:
+        print(f"Projection ended, END_DATE={m.END_DATE}")
 
 model.run()
 ```
 
 Following information will display in the terminal:
 ```text
-Projection started, START_DATE = 2025-12
+Projection started, START_DATE=2025-12
 time: 1, period: 2026-01
 time: 2, period: 2026-02
 ...
 time: 12, period: 2026-12
-Projection ended, END_DATE = 2026-12
+Projection ended, END_DATE=2026-12
 ```
 
-The runlog can be found in `.\results\{my_model}.runlog.json` file.
+The runlog can be found in `results\my_model.runlog.json` file.
 
 
 #### 2. Add Variables for Output
 
 You can set up instances of `TDimVariable` and/or `ConstVariable`, the projected results will be automatically written 
-to the `.\results\{my_model}.proj.csv` file.
+to the `results\my_model.proj.csv` file.
 
 ```python
-import vates
+from vates import ProjModelEngine, ConstVariable, TDimVariable
 
-model = vates.ProjModelEngine(model_name='my_model', description='example model')
+model = ProjModelEngine(model_name='my_model', description='example model')
 
 model.configure_run(start_year=2025, end_year=2026)
 
-model.const_var = vates.ConstVariable('const_var', model_engine=model)
-model.tdim_var = vates.TDimVariable('tdim_var', model_engine=model)
+const_var = ConstVariable('const_var', model_engine=model)
+tdim_var = TDimVariable('tdim_var', model_engine=model)
 
 @model.bind_projection
-def my_projection(model: vates.ProjModelEngine):
-    t = model.time
-    p = model.period
+def my_projection(m: ProjModelEngine):
+    t = m.time
+    p = m.period
     if t == 0:
-        model.const_var[...] = model.START_YEAR * 100 + model.START_MONTH
-    else:
-        model.tdim_var[t] = p.year * 100 + p.month
+        const_var[...] = m.START_YEAR * 100 + m.START_MONTH
+    tdim_var[t] = p.year * 100 + p.month + t / 100
 
 model.run()
 ```
@@ -86,23 +85,23 @@ You can use function `proj_result` to read the result from a `.proj.csv` file.
 ```python
 from vates import proj_result
 
-# Get the entire results 
+# 1. Get the entire results 
 df = proj_result(
-    results_directory=r".\examples\results\em01_asset_proj_inner",
-    model_name="asset_proj",
+    results_directory=r"results",
+    model_name="my_model",
 )
 print(df)
 
-# Get value of a specific cell (group + owner + variable + date)
+# 2. Get value of a specific cell (group + owner + variable + date)
 val = proj_result(
-    results_directory=r".\examples\results\em01_asset_proj_inner",
-    model_name="asset_proj",
-    group="equity_option",
-    owner="option_1",
-    variable="price",
-    date="202502",
+    results_directory=r"results",
+    model_name="my_model",
+    group="ungrouped",
+    owner="unowned",
+    variable="tdim_var",
+    date="202602",
 )
-print(f"{val:.4f}")  # 5.2973
+print(f"{val:.4f}")  # 202602.0200
 ```
 
 #### 3. Stochastic Model
@@ -112,20 +111,21 @@ The `StochExecutor` class is for stochastic model, multiprocessing is supported.
 Similarly,
 - step 1: `StochExecutor`: initialize a stochastic model instance
 - step 2: `model.configure_run`: configure a run
-- step 3: `def {my_projection}`: define a function to perform projection calculations
+- step 3: `def < my_projection >`: define a function to perform projection calculations (the bound function is executed 
+  in worker processes, so it must be top-level/picklable)
 - step 4: `model.bind_projection`: bind it to the model
 - step 5: `model.run`: run the model
 
 ```python
-import vates
+from vates import ProjModelEngine, StochExecutor
 
-def my_projection(model: vates.ProjModelEngine):
-    t = model.time
+def my_projection(m: ProjModelEngine):
+    t = m.time
     if t == 0:
-        print(f"simulation: {model.SIMULATION}")
+        print(f"simulation: {m.SIMULATION}")
 
 def stoch_model():
-    model = vates.StochExecutor(model_name='my_model', description='example model')
+    model = StochExecutor(model_name='my_stoch_model', description='example stochastic model')
     model.configure_run(start_year=2025, end_year=2026, simulations="1-10", max_workers=2)
     model.bind_projection(my_projection)
     model.run()
@@ -146,7 +146,7 @@ simulation: 10
 
 The `vates.alm` is the subpackage for asset-liability model.
 
-There are many classes provided for modelling convenience:
+There are building blocks for model developments:
 
 - assets: `Cash`, `Equity`, `BondFixed`, `EquityOption`
 - econs: `YieldCurve`, `CreditBand`, `EquityIndex`
@@ -158,6 +158,4 @@ There are many classes provided for modelling convenience:
 
 GitHub repository: https://github.com/shanyashi2025/vates
 
-Documentation and tutorials: https://github.com/shanyashi2025/vates/tree/main/docs
-
-Example implementations: https://github.com/shanyashi2025/vates/tree/main/examples
+Example workspace: https://github.com/shanyashi2025/vates/tree/main/example_ws

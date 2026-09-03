@@ -21,5 +21,5 @@ Desktop.ini
 
 # Local / generated (adjust if you want to track some of these)
 *.log
-examples/results/
-examples/intermediate/
+example_ws/results/
+example_ws/intermediate/

@@ -116,7 +116,7 @@ def add_projection_time_synchronizer(_cls=None, /):
                     raise ValueError(f"Failed to add projection time synchronizer.")
 
             setattr(self, "_time_synchronizer", time_synchronizer)
-            time_synchronizer.attach_time_observer(self)
+            time_synchronizer.attach_time_observer(self)  # `time_synchronizer` will refuse to attach the object if it doesn't have `update_on_time_change` method
 
             if original_init and original_init is not object.__init__:
                 original_init(self, *args, **kwargs)

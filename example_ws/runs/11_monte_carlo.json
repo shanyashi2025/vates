@@ -4,9 +4,9 @@
     "start_month": 12,
     "end_year": 2034,
     "scenario": "base",
-    "workspace_directory": "examples",
-    "input_directories": ["inputs/em11_monte_carlo"],
-    "results_directory": "results/em11_monte_carlo",
+    "workspace_directory": "example_ws",
+    "input_directories": ["inputs/11_monte_carlo"],
+    "results_directory": "results/example",
     "simulations": "1-1000",
     "max_workers": 4
 }

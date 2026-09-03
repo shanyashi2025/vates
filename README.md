@@ -1,6 +1,6 @@
 # About This Repository
 
-Open-source Python packages and sample implementations for actuarial models.
+Open-source Python packages and example implementations for actuarial models.
 
 ## Project layout
 
@@ -8,12 +8,12 @@ Open-source Python packages and sample implementations for actuarial models.
 .
 ├── vates/                  # The core package
 ├── docs/                   # Project documentation
-├── examples/               # Example implementations
+└── example_ws/             # Example workspace
 │   ├── models/             # Source code of example models and bespoke package(s)
 │   ├── inputs/             # Example input data (tables) associated with the models
-│   ├── runs/               # Examples of model run configuration (json file)
-│   └── simple_use_cases/   # Examples use cases
-└── gui/                    # A graphical user interface for end-users to run models
+│   ├── runs/               # Example run configurations (json file)
+│   └── simple_use_cases/   # Example use cases
+└── tests/                  # Test-suite
 ```
 
 ## **Quick Start**
@@ -61,67 +61,66 @@ The `ProjModelEngine` class is the projection model engine.
 
 - step 1: `ProjModelEngine`: initialize a model instance
 - step 2: `model.configure_run`: configure a run
-- step 3: `def {my_projection}`: define a function to perform projection calculations
+- step 3: `def < my_projection >`: define a function to perform projection calculations
 - step 4: `model.bind_projection`: bind it to the model
 - step 5: `model.run`: run the model
 
 ```python
-import vates
+from vates import ProjModelEngine
 
-model = vates.ProjModelEngine(model_name='my_model', description='example model')
+model = ProjModelEngine(model_name='my_model', description='example model')
 
 model.configure_run(start_year=2025, end_year=2026)
 
 @model.bind_projection
-def my_projection(model: vates.ProjModelEngine):
-    t = model.time
-    p = model.period
+def my_projection(m: ProjModelEngine):
+    t = m.time
+    p = m.period
     if t == 0:
-        print(f"Projection started, START_DATE = {model.START_DATE}")
+        print(f"Projection started, START_DATE={m.START_DATE}")
     else:
         print(f"time: {t}, period: {p}")
-    if t == model.MAX_T:
-        print(f"Projection ended, END_DATE = {model.END_DATE}")
+    if t == m.MAX_T:
+        print(f"Projection ended, END_DATE={m.END_DATE}")
 
 model.run()
 ```
 
 Following information will display in the terminal:
 ```text
-Projection started, START_DATE = 2025-12
+Projection started, START_DATE=2025-12
 time: 1, period: 2026-01
 time: 2, period: 2026-02
 ...
 time: 12, period: 2026-12
-Projection ended, END_DATE = 2026-12
+Projection ended, END_DATE=2026-12
 ```
 
-The runlog can be found in `.\results\{my_model}.runlog.json` file.
+The runlog can be found in `results\my_model.runlog.json` file.
 
 
 #### 2. Add Variables for Output
 
 You can set up instances of `TDimVariable` and/or `ConstVariable`, the projected results will be automatically written 
-to the `.\results\{my_model}.proj.csv` file.
+to the `results\my_model.proj.csv` file.
 
 ```python
-import vates
+from vates import ProjModelEngine, ConstVariable, TDimVariable
 
-model = vates.ProjModelEngine(model_name='my_model', description='example model')
+model = ProjModelEngine(model_name='my_model', description='example model')
 
 model.configure_run(start_year=2025, end_year=2026)
 
-model.const_var = vates.ConstVariable('const_var', model_engine=model)
-model.tdim_var = vates.TDimVariable('tdim_var', model_engine=model)
+const_var = ConstVariable('const_var', model_engine=model)
+tdim_var = TDimVariable('tdim_var', model_engine=model)
 
 @model.bind_projection
-def my_projection(model: vates.ProjModelEngine):
-    t = model.time
-    p = model.period
+def my_projection(m: ProjModelEngine):
+    t = m.time
+    p = m.period
     if t == 0:
-        model.const_var[...] = model.START_YEAR * 100 + model.START_MONTH
-    else:
-        model.tdim_var[t] = p.year * 100 + p.month
+        const_var[...] = m.START_YEAR * 100 + m.START_MONTH
+    tdim_var[t] = p.year * 100 + p.month + t / 100
 
 model.run()
 ```
@@ -131,23 +130,23 @@ You can use function `proj_result` to read the result from a `.proj.csv` file.
 ```python
 from vates import proj_result
 
-# Get the entire results 
+# 1. Get the entire results 
 df = proj_result(
-    results_directory=r".\examples\results\em01_asset_proj_inner",
-    model_name="asset_proj",
+    results_directory=r"results",
+    model_name="my_model",
 )
 print(df)
 
-# Get value of a specific cell (group + owner + variable + date)
+# 2. Get value of a specific cell (group + owner + variable + date)
 val = proj_result(
-    results_directory=r".\examples\results\em01_asset_proj_inner",
-    model_name="asset_proj",
-    group="equity_option",
-    owner="option_1",
-    variable="price",
-    date="202502",
+    results_directory=r"results",
+    model_name="my_model",
+    group="ungrouped",
+    owner="unowned",
+    variable="tdim_var",
+    date="202602",
 )
-print(f"{val:.4f}")  # 5.2973
+print(f"{val:.4f}")  # 202602.0200
 ```
 
 #### 3. Stochastic Model
@@ -157,20 +156,22 @@ The `StochExecutor` class is for stochastic model, multiprocessing is supported.
 Similarly,
 - step 1: `StochExecutor`: initialize a stochastic model instance
 - step 2: `model.configure_run`: configure a run
-- step 3: `def {my_projection}`: define a function to perform projection calculations
+- step 3: `def < my_projection >`: define a function to perform projection calculations (the bound function is executed 
+  in worker processes, so it must be top-level/picklable)
 - step 4: `model.bind_projection`: bind it to the model
 - step 5: `model.run`: run the model
 
-```python
-import vates
 
-def my_projection(model: vates.ProjModelEngine):
-    t = model.time
+```python
+from vates import ProjModelEngine, StochExecutor
+
+def my_projection(m: ProjModelEngine):
+    t = m.time
     if t == 0:
-        print(f"simulation: {model.SIMULATION}")
+        print(f"simulation: {m.SIMULATION}")
 
 def stoch_model():
-    model = vates.StochExecutor(model_name='my_model', description='example model')
+    model = StochExecutor(model_name='my_stoch_model', description='example stochastic model')
     model.configure_run(start_year=2025, end_year=2026, simulations="1-10", max_workers=2)
     model.bind_projection(my_projection)
     model.run()
@@ -194,41 +195,40 @@ Work from the **repository root**.
 
 #### 1. Asset projection model (inner function)
 
-- model: `.\examples\models\em01_asset_proj_inner.py`
-- input: `.\examples\inputs\em01_asset_proj\`
-- configuration: `.\examples\runs\em01_asset_proj_inner.json`
-- execution: `python .\examples\models\em01_asset_proj_inner.py .\examples\runs\em01_asset_proj_inner.json`
-- result: `.\examples\results\em01_asset_proj_inner\`
+- model: `example_ws\models\01_asset_proj.py`
+- input: `example_ws\inputs\01_asset_proj\`
+- configuration: `example_ws\runs\01_asset_proj.json`
+- execution: `python example_ws\models\01_asset_proj.py example_ws\runs\01_asset_proj.json`
+- result: `example_ws\results\example\asset_proj*` (.proj.csv, .runlog.json)
 
 #### 2. Asset projection model (top function)
 
-- model: `.\examples\models\em01_asset_proj_top.py`
-- input: `.\examples\inputs\em01_asset_proj\`
-- configuration: `.\examples\runs\em01_asset_proj_top.json`
-- execution: `python .\examples\models\em01_asset_proj_top.py .\examples\runs\em01_asset_proj_top.json`
-- result: `.\examples\results\em01_asset_proj_top\`
+- model: `example_ws\models\01_asset_proj-top.py`
+- input: `example_ws\inputs\01_asset_proj\`
+- configuration: `example_ws\runs\01_asset_proj-top.json`
+- execution: `python example_ws\models\01_asset_proj-top.py example_ws\runs\01_asset_proj-top.json`
+- result: `example_ws\results\example\asset_proj-top*` (.proj.csv, .runlog.json)
 
 #### 3. Fund projection model
 
-- model: `.\examples\models\em02_fund_proj.py`
-- input: `.\examples\inputs\em02_fund_proj\`
-- configuration: `.\examples\runs\em02_fund_proj.json`
-- execution: `python .\examples\models\em02_fund_proj.py .\examples\runs\em02_fund_proj.json`
-- result: `.\examples\results\em02_fund_proj\`
+- model: `example_ws\models\02_fund_proj.py`
+- input: `example_ws\inputs\02_fund_proj\`
+- configuration: `example_ws\runs\02_fund_proj.json`
+- execution: `python example_ws\models\02_fund_proj.py example_ws\runs\02_fund_proj.json`
+- result: `example_ws\results\example\fund_proj*` (.proj.csv, .runlog.json)
 
 #### 4. (stochastic) Monte Carlo simulation
 
-- model: `.\examples\models\em11_monte_carlo.py`
-- input: `.\examples\inputs\em11_monte_carlo\`
-- configuration: `.\examples\runs\em11_monte_carlo.json`
-- execution: `python .\examples\models\em11_monte_carlo.py .\examples\runs\em11_monte_carlo.json`
-- result: `.\examples\results\em11_monte_carlo\`
+- model: `example_ws\models\11_monte_carlo.py`
+- input: `example_ws\inputs\11_monte_carlo\`
+- configuration: `example_ws\runs\11_monte_carlo.json`
+- execution: `python example_ws\models\11_monte_carlo.py example_ws\runs\11_monte_carlo.json`
+- result: `example_ws\results\example\` (.proj.csv, .stoch.csv, .stoch.stat.csv, .runlog.json)
 
 #### 5. (stochastic) Economic capital
 
-- model: `.\examples\models\em12_stoch_ec_mvl.py`
-- input: `.\examples\inputs\em12_stoch_ec_mvl\`
-- configuration: `.\examples\runs\em12_stoch_ec_mvl.json`
-- execution: `python .\examples\models\em12_stoch_ec_mvl.py .\examples\runs\em12_stoch_ec_mvl.json`
-- result: `.\examples\results\em12_stoch_ec_mvl\`
-
+- model: `example_ws\models\12_stoch_ec_mvl.py`
+- input: `example_ws\inputs\12_stoch_ec_mvl\`
+- configuration: `example_ws\runs\12_stoch_ec_mvl.json`
+- execution: `python example_ws\models\12_stoch_ec_mvl.py example_ws\runs\12_stoch_ec_mvl.json`
+- result: `example_ws\results\example\` (.proj.csv, .stoch.csv, .stoch.stat.csv, .runlog.json)
