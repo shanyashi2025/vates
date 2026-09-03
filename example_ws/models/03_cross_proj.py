@@ -9,8 +9,8 @@ from company_package import (
     AssetMaster,
 )
 
-def cross_model(start_year: int, start_month: int, end_year: int, scenario: str, workspace_directory: str,
-                input_directories: list[str], results_directory: str | None = None,
+def cross_model(start_year: int, start_month: int, end_year: int, scenario: str, input_directories: list[str],
+                workspace_directory: str | None = None, results_directory: str | None = None,
                 model_name: str = "cross_model", description: str = "C-ROSS minimum capital projection"):
     model = ProjModelEngine(
         model_name=model_name,

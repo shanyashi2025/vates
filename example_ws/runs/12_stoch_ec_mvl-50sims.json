@@ -4,9 +4,8 @@
     "start_month": 12,
     "end_year": 2124,
     "scenario": "base",
-    "workspace_directory": "example_ws",
     "input_directories": ["inputs/12_stoch_ec_mvl"],
-    "results_directory": "results/example-12-50sims",
+    "results_directory": "results/base-stoch_ec_mvl-50sims",
     "simulations": "1-50",
     "max_workers": 6
 }

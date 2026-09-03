@@ -15,8 +15,8 @@ from company_package import (
 )
 
 
-def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, workspace_directory: str,
-               input_directories: list[str], results_directory: str | None = None,
+def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, input_directories: list[str],
+               workspace_directory: str | None = None, results_directory: str | None = None,
                model_name: str = "fund_model", description: str = "Fund level projection"):
     model = ProjModelEngine(
         model_name=model_name,

@@ -189,46 +189,50 @@ simulation: 10
 ```
 
 
-### **C. Example Implementations**
+### **C. Example Workspace**
 
-Work from the **repository root**.
+Work from the **<example_ws>**.
+
+```powershell
+cd path\to\example_ws
+```
 
 #### 1. Asset projection model (inner function)
 
-- model: `example_ws\models\01_asset_proj.py`
-- input: `example_ws\inputs\01_asset_proj\`
-- configuration: `example_ws\runs\01_asset_proj.json`
-- execution: `python example_ws\models\01_asset_proj.py example_ws\runs\01_asset_proj.json`
-- result: `example_ws\results\example\asset_proj*` (.proj.csv, .runlog.json)
+- model: `models\01_asset_proj.py`
+- input: `inputs\01_asset_proj\`
+- configuration: `runs\01_asset_proj.json`
+- execution: `python models\01_asset_proj.py runs\01_asset_proj.json`
+- result: `results\base\asset_proj*` (.proj.csv, .runlog.json)
 
 #### 2. Asset projection model (top function)
 
-- model: `example_ws\models\01_asset_proj-top.py`
-- input: `example_ws\inputs\01_asset_proj\`
-- configuration: `example_ws\runs\01_asset_proj-top.json`
-- execution: `python example_ws\models\01_asset_proj-top.py example_ws\runs\01_asset_proj-top.json`
-- result: `example_ws\results\example\asset_proj-top*` (.proj.csv, .runlog.json)
+- model: `models\01_asset_proj-top.py`
+- input: `inputs\01_asset_proj\`
+- configuration: `runs\01_asset_proj-top.json`
+- execution: `python models\01_asset_proj-top.py runs\01_asset_proj-top.json`
+- result: `results\base\asset_proj-top*` (.proj.csv, .runlog.json)
 
 #### 3. Fund projection model
 
-- model: `example_ws\models\02_fund_proj.py`
-- input: `example_ws\inputs\02_fund_proj\`
-- configuration: `example_ws\runs\02_fund_proj.json`
-- execution: `python example_ws\models\02_fund_proj.py example_ws\runs\02_fund_proj.json`
-- result: `example_ws\results\example\fund_proj*` (.proj.csv, .runlog.json)
+- model: `models\02_fund_proj.py`
+- input: `inputs\02_fund_proj\`
+- configuration: `runs\02_fund_proj.json`
+- execution: `python models\02_fund_proj.py runs\02_fund_proj.json`
+- result: `results\base\fund_proj*` (.proj.csv, .runlog.json)
 
 #### 4. (stochastic) Monte Carlo simulation
 
-- model: `example_ws\models\11_monte_carlo.py`
-- input: `example_ws\inputs\11_monte_carlo\`
-- configuration: `example_ws\runs\11_monte_carlo.json`
-- execution: `python example_ws\models\11_monte_carlo.py example_ws\runs\11_monte_carlo.json`
-- result: `example_ws\results\example\` (.proj.csv, .stoch.csv, .stoch.stat.csv, .runlog.json)
+- model: `models\11_monte_carlo.py`
+- input: `inputs\11_monte_carlo\`
+- configuration: `runs\11_monte_carlo.json`
+- execution: `python models\11_monte_carlo.py runs\11_monte_carlo.json`
+- result: `results\base\` (.proj.csv, .stoch.csv, .stoch.stat.csv, .runlog.json)
 
 #### 5. (stochastic) Economic capital
 
-- model: `example_ws\models\12_stoch_ec_mvl.py`
-- input: `example_ws\inputs\12_stoch_ec_mvl\`
-- configuration: `example_ws\runs\12_stoch_ec_mvl.json`
-- execution: `python example_ws\models\12_stoch_ec_mvl.py example_ws\runs\12_stoch_ec_mvl.json`
-- result: `example_ws\results\example\` (.proj.csv, .stoch.csv, .stoch.stat.csv, .runlog.json)
+- model: `models\12_stoch_ec_mvl.py`
+- input: `inputs\12_stoch_ec_mvl\`
+- configuration: `runs\12_stoch_ec_mvl.json`
+- execution: `python models\12_stoch_ec_mvl.py runs\12_stoch_ec_mvl.json`
+- result: `results\base\` (.proj.csv, .stoch.csv, .stoch.stat.csv, .runlog.json)

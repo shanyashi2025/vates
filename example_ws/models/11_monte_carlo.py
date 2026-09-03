@@ -88,8 +88,8 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
 
 
 def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str,
-                           workspace_directory: str, input_directories: list[str], results_directory: str | None = None,
-                           max_workers: int | None = None,
+                           input_directories: list[str], workspace_directory: str | None = None,
+                           results_directory: str | None = None, max_workers: int | None = None,
                            model_name: str = "monte_carlo", description: str = "Portfolio Monte Carlo simulation"):
     model = StochExecutor(
         model_name=model_name,

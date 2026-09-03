@@ -4,7 +4,5 @@
     "start_month": 12,
     "end_year": 2026,
     "scenario": "base",
-    "workspace_directory": "example_ws",
-    "input_directories": ["inputs/02_fund_proj"],
-    "results_directory": "results/example"
+    "input_directories": ["inputs/02_fund_proj"]
 }

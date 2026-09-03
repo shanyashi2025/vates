@@ -120,7 +120,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
 
 
 def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str, max_workers: int,
-                 workspace_directory: str, input_directories: list[str], results_directory: str | None = None,
+                 input_directories: list[str], workspace_directory: str | None = None, results_directory: str | None = None,
                  model_name: str = "stoch_ec_mvl", description: str = "Stochastic EC MVL model"):
     stoch = StochExecutor(
         model_name=model_name,
