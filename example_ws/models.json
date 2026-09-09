@@ -1,0 +1,312 @@
+{
+    "models": [
+        {
+            "display_name": "Asset Model",
+            "description": "Asset projection model - run off existing assets",
+            "script_path": "models/01_asset_proj.py",
+            "run_config_json_schema": {
+                "type": "object",
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "default": "asset_proj",
+                        "description": "For output file name, e.g. `asset_proj` -> `asset_proj.proj.csv`"
+                    },
+                    "start_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2099,
+                        "default": 2024
+                    },
+                    "start_month": {
+                        "type": "integer",
+                        "enum": [12,1,2,3,4,5,6,7,8,9,10,11]
+                    },
+                    "end_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2599,
+                        "default": 2026
+                    },
+                    "scenario": {
+                        "type": "string",
+                        "description": "e.g. `base`, must match a column in `_file_names.csv`"
+                    },
+                    "input_directories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "The order matters, model will use the first found if duplicate file names exist"
+                    },
+                    "results_directory": {
+                        "type": "string",
+                        "description": "If missing, `results/{scenario}/` will be used"
+                    }
+                },
+                "required": ["start_year", "start_month", "end_year", "scenario", "input_directories"]
+            },
+            "notes": ""
+        },
+        {
+            "display_name": "Asset Model (v2)",
+            "description": "Asset projection model - top-level wrapper",
+            "script_path": "models/01_asset_proj-top.py",
+            "run_config_json_schema": {
+                "type": "object",
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "default": "asset_proj_top",
+                        "description": "For output file name, e.g. `asset_proj_top` -> `asset_proj_top.proj.csv`"
+                    },
+                    "start_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2099,
+                        "default": 2024
+                    },
+                    "start_month": {
+                        "type": "integer",
+                        "enum": [12,1,2,3,4,5,6,7,8,9,10,11]
+                    },
+                    "end_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2599,
+                        "default": 2026
+                    },
+                    "scenario": {
+                        "type": "string",
+                        "description": "e.g. `base`, must match a column in `_file_names.csv`"
+                    },
+                    "input_directories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "The order matters, model will use the first found if duplicate file names exist"
+                    },
+                    "results_directory": {
+                        "type": "string",
+                        "description": "If missing, `results/{scenario}/` will be used"
+                    }
+                },
+                "required": ["start_year", "start_month", "end_year", "scenario", "input_directories"]
+            },
+            "notes": "Top-level wrapper for the asset projection model."
+        },
+        {
+            "display_name": "ALM Model (Fund)",
+            "description": "Fund projection model - ALM calculations with liabilities and funds",
+            "script_path": "models/02_fund_proj.py",
+            "run_config_json_schema": {
+                "type": "object",
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "default": "fund_model",
+                        "description": "For output file name, e.g. `fund_model` -> `fund_model.proj.csv`"
+                    },
+                    "start_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2099,
+                        "default": 2024
+                    },
+                    "start_month": {
+                        "type": "integer",
+                        "enum": [12,1,2,3,4,5,6,7,8,9,10,11]
+                    },
+                    "end_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2599,
+                        "default": 2026
+                    },
+                    "scenario": {
+                        "type": "string",
+                        "description": "e.g. `base`, must match a column in `_file_names.csv`"
+                    },
+                    "input_directories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "The order matters, model will use the first found if duplicate file names exist"
+                    },
+                    "results_directory": {
+                        "type": "string",
+                        "description": "If missing, `results/{scenario}/` will be used"
+                    }
+                },
+                "required": ["start_year", "start_month", "end_year", "scenario", "input_directories"]
+            },
+            "notes": ""
+        },
+        {
+            "display_name": "C-ROSS Model",
+            "description": "C-ROSS minimum capital projection model",
+            "script_path": "models/03_cross_proj.py",
+            "run_config_json_schema": {
+                "type": "object",
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "default": "cross_model",
+                        "description": "For output file name, e.g. `cross_model` -> `cross_model.proj.csv`"
+                    },
+                    "start_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2099,
+                        "default": 2024
+                    },
+                    "start_month": {
+                        "type": "integer",
+                        "enum": [12,1,2,3,4,5,6,7,8,9,10,11]
+                    },
+                    "end_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2599,
+                        "default": 2026
+                    },
+                    "scenario": {
+                        "type": "string",
+                        "description": "e.g. `base`, must match a column in `_file_names.csv`"
+                    },
+                    "input_directories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "The order matters, model will use the first found if duplicate file names exist"
+                    },
+                    "results_directory": {
+                        "type": "string",
+                        "description": "If missing, `results/{scenario}/` will be used"
+                    }
+                },
+                "required": ["start_year", "start_month", "end_year", "scenario", "input_directories"]
+            },
+            "notes": ""
+        },
+        {
+            "display_name": "Monte Carlo Simulation",
+            "description": "Portfolio Monte Carlo simulation with stochastic asset returns",
+            "script_path": "models/11_monte_carlo.py",
+            "run_config_json_schema": {
+                "type": "object",
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "default": "monte_carlo",
+                        "description": "For output file name, e.g. `monte_carlo` -> `monte_carlo.proj.csv`"
+                    },
+                    "start_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2099,
+                        "default": 2024
+                    },
+                    "start_month": {
+                        "type": "integer",
+                        "enum": [12,1,2,3,4,5,6,7,8,9,10,11]
+                    },
+                    "end_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2599,
+                        "default": 2026
+                    },
+                    "scenario": {
+                        "type": "string",
+                        "description": "e.g. `base`, must match a column in `_file_names.csv`"
+                    },
+                    "simulations": {
+                        "type": "string",
+                        "description": "Simulation range, e.g. '1-100' or '1-10,13'"
+                    },
+                    "max_workers": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 1,
+                        "description": "Max number of workers (CPU)"
+                    },
+                    "input_directories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "The order matters, model will use the first found if duplicate file names exist"
+                    },
+                    "results_directory": {
+                        "type": "string",
+                        "description": "If missing, `results/{scenario}/` will be used"
+                    }
+                },
+                "required": ["start_year", "start_month", "end_year", "scenario", "simulations", "input_directories"]
+            },
+            "notes": "Simulations control parallelism."
+        },
+        {
+            "display_name": "Stochastic EC Model",
+            "description": "Stochastic economic capital model (MVL basis)",
+            "script_path": "models/12_stoch_ec_mvl.py",
+            "run_config_json_schema": {
+                "type": "object",
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "default": "stoch_ec_mvl",
+                        "description": "For output file name, e.g. `stoch_ec_mvl` -> `stoch_ec_mvl.proj.csv`"
+                    },
+                    "start_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2099,
+                        "default": 2024
+                    },
+                    "start_month": {
+                        "type": "integer",
+                        "enum": [12,1,2,3,4,5,6,7,8,9,10,11]
+                    },
+                    "end_year": {
+                        "type": "integer",
+                        "minimum": 1999,
+                        "maximum": 2599,
+                        "default": 2026
+                    },
+                    "scenario": {
+                        "type": "string",
+                        "description": "e.g. `base`, must match a column in `_file_names.csv`"
+                    },
+                    "simulations": {
+                        "type": "string",
+                        "description": "Simulation range, e.g. '1-10' or '1-10,13'"
+                    },
+                    "max_workers": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 1,
+                        "description": "Max number of workers (CPU)"
+                    },
+                    "input_directories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "The order matters, model will use the first found if duplicate file names exist"
+                    },
+                    "results_directory": {
+                        "type": "string",
+                        "description": "If missing, `results/{scenario}/` will be used"
+                    }
+                },
+                "required": ["start_year", "start_month", "end_year", "scenario", "simulations", "max_workers", "input_directories"]
+            },
+            "notes": "Requires `pyarrow` for parquet ESG data."
+        }
+    ]
+}
