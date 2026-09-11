@@ -33,8 +33,8 @@ def engine_cls():
 def make_engine(engine_cls):
     """Factory returning a fresh, un-configured engine with a unique name."""
 
-    def _make(model_name="m", description="desc"):
-        return engine_cls(model_name=model_name, description=description)
+    def _make(slug="m", description="desc"):
+        return engine_cls(slug=slug, description=description)
 
     return _make
 
@@ -49,9 +49,9 @@ def make_configured(make_engine):
     writes leak into the repo.
     """
 
-    def _make(tmp_path, model_name="m", *, start_year=DEFAULT_START_YEAR,
+    def _make(tmp_path, slug="m", *, start_year=DEFAULT_START_YEAR,
               end_year=DEFAULT_END_YEAR, scenario="base"):
-        engine = make_engine(model_name)
+        engine = make_engine(slug)
         results_dir = tmp_path / "results" / (scenario or "")
         with warnings.catch_warnings():
             # configure_run emits a UserWarning when it fills defaults

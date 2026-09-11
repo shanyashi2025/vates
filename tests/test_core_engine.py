@@ -11,9 +11,9 @@ from vates import ProjModelEngine
 
 
 class TestConstruction:
-    def test_model_name_and_description(self, make_engine):
-        m = make_engine(model_name="my_model", description="my description")
-        assert m.MODEL_NAME == "my_model"
+    def test_slug_and_description(self, make_engine):
+        m = make_engine(slug="my_model", description="my description")
+        assert m.SLUG == "my_model"
         assert m._description == "my description"
 
     def test_engine_no_config_yet(self, make_engine):
@@ -94,7 +94,7 @@ class TestRunGuardStates:
         m.bind_projection(lambda: None)  # zero-arg binds as a plain function
         runlog = m.run()
         assert runlog["execution"]["success"] is True
-        assert runlog["model_name"] == m.MODEL_NAME
+        assert runlog["model"]["slug"] == m.SLUG
 
 
 class TestBindProjection:
@@ -176,7 +176,7 @@ class TestBindProjectionIssubclassSemantics:
         def proj(model: ProjModelEngine):
             pass
 
-        m = SubEngine(model_name="sub")
+        m = SubEngine(slug="sub")
         m.configure_run(start_year=2026, end_year=2027, workspace_directory=str(tmp_path))
         m.bind_projection(proj)
         m.run()  # executes fine
@@ -194,8 +194,8 @@ class TestSetattrGuard:
     def test_init_assignments_pass_before_initialized(self):
         # `_initialized` is armed at the end of `__init__`, so internal names
         # assigned during construction do not trip the guard.
-        m = ProjModelEngine(model_name="g", description="d")
-        assert m._model_name == "g"
+        m = ProjModelEngine(slug="g", description="d")
+        assert m._slug == "g"
 
     def test_overwrite_class_member_raises(self, make_configured, tmp_path):
         m = make_configured(tmp_path)

@@ -29,9 +29,9 @@ def _stoch_proj(model: ProjModelEngine):
     model.balance[model.time] = float(model.time)  # deterministic per sim
 
 
-def _make_executor(*, model_name="stoch", tmp_path, input_directories=None,
+def _make_executor(*, slug="stoch", tmp_path, input_directories=None,
                    simulations="1-2", max_workers=MAX_WORKERS_DEFAULT):
-    executor = StochExecutor(model_name=model_name)
+    executor = StochExecutor(slug=slug)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         executor.configure_run(
@@ -117,7 +117,7 @@ class TestRunGuardStates:
             se.run()
 
     def test_unconfigured_raises(self, tmp_path):
-        se = StochExecutor(model_name="stoch")
+        se = StochExecutor(slug="stoch")
         se.bind_projection(_stoch_proj)
         with pytest.raises(ValueError, match="has not been set"):
             se.run()
@@ -125,12 +125,12 @@ class TestRunGuardStates:
 
 class TestBatches:
     def test_split_into_batches(self):
-        se = StochExecutor(model_name="stoch")
+        se = StochExecutor(slug="stoch")
         batches = se._create_batches(list(range(1, 11)), 3)
         assert batches == [(1, 2, 3, 4), (5, 6, 7, 8), (9, 10)]
 
     def test_single_batch_when_one_worker(self):
-        se = StochExecutor(model_name="stoch")
+        se = StochExecutor(slug="stoch")
         batches = se._create_batches([1, 2, 3], 1)
         assert batches == [(1, 2, 3)]
 

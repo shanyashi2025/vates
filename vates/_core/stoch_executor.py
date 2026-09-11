@@ -36,10 +36,10 @@ class StochExecutor:
     def __init__(
         self,
         *,
-        model_name: str,
+        slug: str,
         description: str = '...',
     ) -> None:
-        self._model_name: str = str(model_name)
+        self._slug: str = str(slug)
         self._description: str = str(description)
 
         # runtime stuffs
@@ -162,7 +162,7 @@ class StochExecutor:
             workspace_directory = os.getcwd()
             none_items.append(f"workspace_directory='{workspace_directory}'")
         if results_directory is None:
-            results_directory = f"./results/{scenario or ''}"
+            results_directory = f"results/{scenario or ''}"
             none_items.append(f"results_directory='{results_directory}'")
         if max_workers is None:
             max_workers = 1
@@ -221,7 +221,7 @@ class StochExecutor:
 
         if self.results_directory_path.is_dir():
             remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
-            for f in glob.glob(str(self.results_directory_path / f'{self._model_name}*')):
+            for f in glob.glob(str(self.results_directory_path / f'{self._slug}*')):
                 if f.endswith(remove_pattern):
                     os.remove(f)
                 else:
@@ -256,7 +256,7 @@ class StochExecutor:
         for simulation in simulation_batch:
             try:
                 model_instance = self._proj_cls(
-                    model_name=self._model_name,
+                    slug=self._slug,
                     description=self._description
                 ).bind_projection(
                     self._projection
@@ -364,12 +364,12 @@ class StochExecutor:
         exec_seconds = exec_total_seconds % 60
 
         self._runlog.update({
-            "model_name": self._model_name,
-            "description": self._description,
-            "srouce_code": {
-                "projection_function": f"{inspect.getfile(self._projection)}: <function '{self._projection.__name__}'>",
-                "projection_engine": f"{inspect.getfile(self._proj_cls)}: <class '{self._proj_cls.__name__}'>",
-                "stochastic_executor": f"{inspect.getfile(type(self))}: <class '{type(self).__name__}'>",
+            "model": {
+                "slug": self._slug,
+                "description": self._description,
+                "projection_function": f"{inspect.getfile(self._projection)}::{self._projection.__name__}",
+                "projection_engine": f"{inspect.getfile(self._proj_cls)}::{self._proj_cls.__name__}",
+                "stochastic_executor": f"{inspect.getfile(type(self))}::{type(self).__name__}",
             },
             "execution": {
                 "success": exec_success,
@@ -417,9 +417,9 @@ class StochExecutor:
         return self._run_config.results_directory_path
 
     @property
-    def MODEL_NAME(self) -> str:
-        """str: Model name used for result files."""
-        return self._model_name
+    def SLUG(self) -> str:
+        """str: Model slug."""
+        return self._slug
 
     @property
     def SCENARIO(self) -> str:

@@ -409,14 +409,14 @@ def parse_str_to_int_list(str_in: str, /, *, separator: str = ',', joiner: str =
 def proj_result(
     *,
     results_directory: str | Path,
-    model_name: str,
+    slug: str,
     group: str | None = None,
     owner: str | None = None,
     variable: str | None = None,
     date: str | int | pd.Period | None = None,
 ) -> pd.DataFrame | float:
 
-    df = ProjResultFileReader.load_proj_result(Path(results_directory) / f"{model_name}.proj.csv")
+    df = ProjResultFileReader.load_proj_result(Path(results_directory) / f"{slug}.proj.csv")
 
     if all(item is None for item in [group, owner, variable, date]):
         return df
@@ -437,7 +437,7 @@ def proj_result(
     try:
         value = df.at[row_label, col_label]
     except KeyError:
-        raise LookupError(f"row: '{row_label}' + column: '{col_label}' not found in file '{model_name}.proj.csv'.")
+        raise LookupError(f"row: '{row_label}' + column: '{col_label}' not found in file '{slug}.proj.csv'.")
 
     if pd.isna(value) and col_label != "constant":
         value = df.at[row_label, "constant"]  # use 'constant' as fallback

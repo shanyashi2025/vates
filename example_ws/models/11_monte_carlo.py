@@ -3,6 +3,7 @@ import math
 import numpy as np
 import pandas as pd
 import sys
+from pathlib import Path
 
 try:
     import matplotlib
@@ -90,9 +91,9 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
 def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str,
                            input_directories: list[str], workspace_directory: str | None = None,
                            results_directory: str | None = None, max_workers: int | None = None,
-                           model_name: str = "monte_carlo", description: str = "Portfolio Monte Carlo simulation"):
+                           slug: str = "monte_carlo", description: str = "Portfolio Monte Carlo simulation"):
     model = StochExecutor(
-        model_name=model_name,
+        slug=slug,
         description=f"{description}, simulations: {simulations}, scenario: '{scenario}', "
                     f"from {start_year}/{start_month} to {end_year}/12."
     )
@@ -175,7 +176,7 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
 
         # === Plot portfolio balance simualtion path ===
         print(f"Started to plot simulation path ...")
-        stoch_files = glob.glob(f'{model.results_directory_path}/{model.MODEL_NAME}*.stoch.csv')
+        stoch_files = glob.glob(f'{model.results_directory_path}/{model.SLUG}*.stoch.csv')
         df_all = pd.concat((pd.read_csv(f) for f in stoch_files), ignore_index=True)
 
         cols = [] if model.START_MONTH == 12 else [str(model.START_YEAR * 100 + model.START_MONTH)]
@@ -230,10 +231,10 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
             ax3.legend()
 
         plt.tight_layout()
-        output_png = f'{model.results_directory_path}/{model.MODEL_NAME}_simulation_path.png'
+        output_png = Path(model.results_directory_path) / f'{model.SLUG}_simulation_path.png'
         plt.savefig(output_png, dpi=300)
         plt.close()
-        print(f"simulation path figure saved to : '{output_png}'")
+        print(f"simulation path figure saved: '{str(output_png)}'")
 
 def main():
     with open(sys.argv[1], 'r', encoding='utf-8') as file:

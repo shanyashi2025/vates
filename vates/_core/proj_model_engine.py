@@ -26,16 +26,16 @@ class ProjModelEngine:
     def __init__(
         self,
         *,
-        model_name: str,
+        slug: str,
         description: str = '...'
     ) -> None:
         """Initialize a projection model engine.
 
         Args:
-            model_name (str): The name of the model.
+            slug (str): The slug of the model.
             description (str, optional): The description of the model.
         """
-        self._model_name: str = str(model_name)
+        self._slug: str = str(slug)
         self._description: str = str(description)
 
         # runtime stuffs
@@ -174,7 +174,7 @@ class ProjModelEngine:
             workspace_directory = os.getcwd()
             none_items.append(f"workspace_directory='{workspace_directory}'")
         if results_directory is None:
-            results_directory = f"./results/{scenario or ''}"
+            results_directory = f"results/{scenario or ''}"
             none_items.append(f"results_directory='{results_directory}'")
         super().__setattr__('_run_config', RunConfig.create(
             start_year=start_year,
@@ -244,7 +244,7 @@ class ProjModelEngine:
         if self.results_directory_path.is_dir():
             if self._run_config.is_delete_existing_results:
                 remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
-                for f in glob.glob(str(self.results_directory_path / f'{self._model_name}*')):
+                for f in glob.glob(str(self.results_directory_path / f'{self._slug}*')):
                     if f.endswith(remove_pattern):
                         os.remove(f)
                     else:
@@ -432,11 +432,11 @@ class ProjModelEngine:
         exec_seconds = exec_total_seconds % 60
 
         self._runlog.update({
-            "model_name": self._model_name,
-            "description": self._description,
-            "srouce_code": {
-                "projection_function": f"{inspect.getfile(self._projection)}: <function '{self._projection.__name__}'>",
-                "projection_engine": f"{inspect.getfile(type(self))}: <class '{type(self).__name__}'>",
+            "model": {
+                "slug": self._slug,
+                "description": self._description,
+                "projection_function": f"{inspect.getfile(self._projection)}::{self._projection.__name__}",
+                "projection_engine": f"{inspect.getfile(type(self))}::{type(self).__name__}",
             },
             "execution": {
                 "success": exec_success,
@@ -543,7 +543,7 @@ class ProjModelEngine:
         return first_seen, last_seen
 
     def _concat_output_file_path(self, filename: str, /) -> Path:
-        return self.results_directory_path / f'{self._model_name}{filename}'
+        return self.results_directory_path / f'{self._slug}{filename}'
 
     @property
     def workspace_directory_path(self) -> Path:
@@ -554,9 +554,9 @@ class ProjModelEngine:
         return self._run_config.results_directory_path
 
     @property
-    def MODEL_NAME(self) -> str:
-        """str: Model name used for result files."""
-        return self._model_name
+    def SLUG(self) -> str:
+        """str: Model slug."""
+        return self._slug
 
     @property
     def SCENARIO(self) -> str:
@@ -643,7 +643,7 @@ class ProjModelEngine:
 
     def proj_result(self, *, group: str | None = None, owner: str | None = None, variable: str | None = None,
                     date: str | int | None = None,) -> pd.DataFrame | float:
-        return proj_result(results_directory=self.results_directory_path, model_name=self.MODEL_NAME,
+        return proj_result(results_directory=self.results_directory_path, slug=self.SLUG,
                            group=group, owner=owner, variable=variable, date=date)
 
     def __setattr__(self, name, value):

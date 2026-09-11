@@ -68,9 +68,10 @@ The `ProjModelEngine` class is the projection model engine.
 ```python
 from vates import ProjModelEngine
 
-model = ProjModelEngine(model_name='my_model', description='example model')
+model = ProjModelEngine(slug='my_model', description='example model')
 
 model.configure_run(start_year=2025, end_year=2026)
+
 
 @model.bind_projection
 def my_projection(m: ProjModelEngine):
@@ -82,6 +83,7 @@ def my_projection(m: ProjModelEngine):
         print(f"time: {t}, period: {p}")
     if t == m.MAX_T:
         print(f"Projection ended, END_DATE={m.END_DATE}")
+
 
 model.run()
 ```
@@ -107,12 +109,13 @@ to the `results\my_model.proj.csv` file.
 ```python
 from vates import ProjModelEngine, ConstVariable, TDimVariable
 
-model = ProjModelEngine(model_name='my_model', description='example model')
+model = ProjModelEngine(slug='my_model', description='example model')
 
 model.configure_run(start_year=2025, end_year=2026)
 
 const_var = ConstVariable('const_var', model_engine=model)
 tdim_var = TDimVariable('tdim_var', model_engine=model)
+
 
 @model.bind_projection
 def my_projection(m: ProjModelEngine):
@@ -121,6 +124,7 @@ def my_projection(m: ProjModelEngine):
     if t == 0:
         const_var[...] = m.START_YEAR * 100 + m.START_MONTH
     tdim_var[t] = p.year * 100 + p.month + t / 100
+
 
 model.run()
 ```
@@ -132,19 +136,19 @@ from vates import proj_result
 
 # 1. Get the entire results 
 df = proj_result(
-    results_directory=r"results",
-    model_name="my_model",
+  results_directory=r"results",
+  slug="my_model",
 )
 print(df)
 
 # 2. Get value of a specific cell (group + owner + variable + date)
 val = proj_result(
-    results_directory=r"results",
-    model_name="my_model",
-    group="ungrouped",
-    owner="unowned",
-    variable="tdim_var",
-    date="202602",
+  results_directory=r"results",
+  slug="my_model",
+  group="ungrouped",
+  owner="unowned",
+  variable="tdim_var",
+  date="202602",
 )
 print(f"{val:.4f}")  # 202602.0200
 ```
@@ -161,23 +165,25 @@ Similarly,
 - step 4: `model.bind_projection`: bind it to the model
 - step 5: `model.run`: run the model
 
-
 ```python
 from vates import ProjModelEngine, StochExecutor
 
+
 def my_projection(m: ProjModelEngine):
-    t = m.time
-    if t == 0:
-        print(f"simulation: {m.SIMULATION}")
+  t = m.time
+  if t == 0:
+    print(f"simulation: {m.SIMULATION}")
+
 
 def stoch_model():
-    model = StochExecutor(model_name='my_stoch_model', description='example stochastic model')
-    model.configure_run(start_year=2025, end_year=2026, simulations="1-10", max_workers=2)
-    model.bind_projection(my_projection)
-    model.run()
+  model = StochExecutor(slug='my_stoch_model', description='example stochastic model')
+  model.configure_run(start_year=2025, end_year=2026, simulations="1-10", max_workers=2)
+  model.bind_projection(my_projection)
+  model.run()
+
 
 if __name__ == '__main__':
-    stoch_model()
+  stoch_model()
 ```
 
 Following information will display in the terminal:

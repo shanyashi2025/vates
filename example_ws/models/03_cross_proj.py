@@ -11,9 +11,9 @@ from company_package import (
 
 def cross_model(start_year: int, start_month: int, end_year: int, scenario: str, input_directories: list[str],
                 workspace_directory: str | None = None, results_directory: str | None = None,
-                model_name: str = "cross_model", description: str = "C-ROSS minimum capital projection"):
+                slug: str = "cross_model", description: str = "C-ROSS minimum capital projection"):
     model = ProjModelEngine(
-        model_name=model_name,
+        slug=slug,
         description=f"{description}, scenario: '{scenario}', from {start_year}/{start_month} to {end_year}/12."
     )
     model.configure_run(

@@ -20,9 +20,9 @@ def assets_projection(model: ProjModelEngine, assets_df_dict: dict, esg_master: 
 
 def asset_model(start_year: int, start_month: int, end_year: int, scenario: str, input_directories: list[str],
                 workspace_directory: str | None = None, results_directory: str | None = None,
-                model_name: str = "asset_model_top", description: str = "Run off existing assets"):
+                slug: str = "asset_model_top", description: str = "Run off existing assets"):
     model = ProjModelEngine(
-        model_name=model_name,
+        slug=slug,
         description=f"{description}, scenario: '{scenario}', from {start_year}/{start_month} to {end_year}/12."
     )
     model.bind_projection(assets_projection)

@@ -17,9 +17,9 @@ from company_package import (
 
 def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, input_directories: list[str],
                workspace_directory: str | None = None, results_directory: str | None = None,
-               model_name: str = "fund_model", description: str = "Fund level projection"):
+               slug: str = "fund_model", description: str = "Fund level projection"):
     model = ProjModelEngine(
-        model_name=model_name,
+        slug=slug,
         description=f"{description}, scenario: '{scenario}', from {start_year}/{start_month} to {end_year}/12."
     )
     model.configure_run(
