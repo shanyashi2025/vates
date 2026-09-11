@@ -1,9 +1,8 @@
-import json
 import numpy as np
-import sys
 from vates import ProjModelEngine, KeyedArray, alm
 from vates.solvency import cn_cross2
 from company_package import (
+    run_with_json_config,
     load_file_df,
     EsgMaster,
     AssetMaster,
@@ -162,9 +161,7 @@ def _liab_mc_inputer_add_from_epl(mc_inputer: cn_cross2.MinCapInputer, epl: Keye
 
 
 def main():
-    with open(sys.argv[1], 'r', encoding='utf-8') as file:
-        kwargs = json.load(file)
-    cross_model(**kwargs)
+    run_with_json_config(cross_model)
 
 
 if __name__ == '__main__':

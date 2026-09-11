@@ -1,7 +1,6 @@
-import json
-import sys
 from vates import ProjModelEngine, KeyedArray
 from company_package import (
+    run_with_json_config,
     load_file_df,
     EsgMaster,
     AssetMaster,
@@ -128,9 +127,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
 
 
 def main():
-    with open(sys.argv[1], 'r', encoding='utf-8') as file:
-        kwargs = json.load(file)
-    fund_model(**kwargs)
+    run_with_json_config(fund_model)
 
 
 if __name__ == "__main__":

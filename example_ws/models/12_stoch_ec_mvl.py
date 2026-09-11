@@ -1,9 +1,8 @@
-import json
 import numpy as np
 import pandas as pd
-import sys
 from vates import StochExecutor, ProjModelEngine, KeyedArray, ConstVariable
 from company_package import (
+    run_with_json_config,
     load_file_df,
     EsgMaster,
     AssetMaster,
@@ -166,11 +165,8 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
     )
 
 
-
 def main():
-    with open(sys.argv[1], 'r', encoding='utf-8') as file:
-        kwargs = json.load(file)
-    stoch_ec_mvl(**kwargs)
+    run_with_json_config(stoch_ec_mvl)
 
 
 if __name__ == "__main__":

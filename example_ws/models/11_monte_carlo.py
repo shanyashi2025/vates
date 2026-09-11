@@ -1,8 +1,6 @@
-import json
 import math
 import numpy as np
 import pandas as pd
-import sys
 from pathlib import Path
 
 try:
@@ -10,10 +8,12 @@ try:
     matplotlib.use("Agg")
     has_matplotlib = True
 except ImportError:
+    matplotlib = None
     has_matplotlib = False
 
 import vates
 from vates import StochExecutor, ProjModelEngine, TDimVariable
+from company_package import run_with_json_config
 
 
 def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, sigma, corr_matrix, portfolio_params):
@@ -237,9 +237,7 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
         print(f"simulation path figure saved: '{str(output_png)}'")
 
 def main():
-    with open(sys.argv[1], 'r', encoding='utf-8') as file:
-        kwargs = json.load(file)
-    port_monte_carlo_stoch(**kwargs)
+    run_with_json_config(port_monte_carlo_stoch)
 
 
 if __name__ == "__main__":

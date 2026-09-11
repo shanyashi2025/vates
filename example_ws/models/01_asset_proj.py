@@ -1,12 +1,11 @@
-import json
-import sys
 from vates import ProjModelEngine
-from company_package import load_file_df, EsgMaster, AssetMaster
+from company_package import run_with_json_config, load_file_df, EsgMaster, AssetMaster
 
 try:
     import scipy
     has_scipy = True
 except ImportError:
+    scipy = None
     has_scipy = False
 
 
@@ -70,9 +69,7 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
 
 def main():
-    with open(sys.argv[1], 'r', encoding='utf-8') as file:
-        kwargs = json.load(file)
-    asset_model(**kwargs)
+    run_with_json_config(asset_model)
 
 
 if __name__ == "__main__":
