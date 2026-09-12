@@ -1,9 +1,9 @@
-"""Tests for `vates/_core/_utils.py`: `RunConfig.create` and `parse_str_to_int_list`."""
+"""Tests for `vates/_core/_utils.py`: `RunConfiguration.create` and `parse_str_to_int_list`."""
 
 import pytest
 from pathlib import Path
 
-from vates._core._utils import RunConfig, parse_str_to_int_list
+from vates._core._utils import RunConfiguration, parse_str_to_int_list
 
 WORKSPACE = "C:\\work"
 
@@ -22,7 +22,7 @@ def _create(**overrides):
         enable_write_runlog=True,
     )
     params.update(overrides)
-    return RunConfig.create(**params)
+    return RunConfiguration.create(**params)
 
 
 class TestRunConfigDates:
@@ -38,7 +38,7 @@ class TestRunConfigDates:
         assert cfg.start_date.year == 1900 and cfg.start_date.month == 1
 
     def test_early_start_below_minimum_raises(self):
-        # 1899-01 is before the RunConfig floor of 1900-01.
+        # 1899-01 is before the RunConfiguration floor of 1900-01.
         with pytest.raises(ValueError):
             _create(start_year=1899, start_month=1)
 
@@ -50,7 +50,7 @@ class TestRunConfigDates:
         # max_t is derived from the two dates, so this cannot normally trigger
         # through `create`; build directly to exercise the guard.
         with pytest.raises(ValueError):
-            RunConfig(
+            RunConfiguration(
                 start_date=_p(2026, 12),
                 end_date=_p(2027, 12),
                 max_t=10,  # 13 months expected -> inconsistent
@@ -60,7 +60,7 @@ class TestRunConfigDates:
                 workspace_directory=WORKSPACE,
                 workspace_directory_path=Path(WORKSPACE),
                 input_directories=None,
-                results_directory="./results/base",
+                results_directory="results/base",
                 results_directory_path=Path(WORKSPACE) / "results/base",
                 is_delete_existing_results=True,
                 enable_write_proj_result=True,
@@ -99,6 +99,52 @@ class TestRunConfigValidation:
     def test_simulations_parsed_from_string(self):
         cfg = _create(simulations="1-3,5")
         assert cfg.simulations == [1, 2, 3, 5]
+
+
+class TestPathFields:
+    def test_relative_workspace_directory_raises(self):
+        with pytest.raises(ValueError):
+            _create(workspace_directory="work")
+
+    def test_raw_results_directory_is_preserved(self):
+        cfg = _create(results_directory="./results/base")
+        assert cfg.results_directory == "./results/base"
+        assert cfg.results_directory_path == (cfg.workspace_directory_path / "./results/base").resolve()
+
+    def test_path_fields_are_absolute(self):
+        cfg = _create()
+        assert cfg.workspace_directory_path.is_absolute()
+        assert cfg.results_directory_path.is_absolute()
+
+
+class TestValidatePath:
+    def test_relative_path_raises_when_absolute_required(self):
+        with pytest.raises(ValueError):
+            RunConfiguration.validate_path("p", Path("relative/dir"), must_absolute=True)
+
+    def test_missing_path_raises_when_must_exist(self, tmp_path):
+        with pytest.raises(ValueError):
+            RunConfiguration.validate_path("p", tmp_path / "missing", must_exist=True)
+
+    def test_dir_check_skipped_for_missing_path(self, tmp_path):
+        # The type cannot be asserted for a path that does not exist yet.
+        RunConfiguration.validate_path("p", tmp_path / "missing", dir_or_file="dir")
+
+    def test_file_check_on_directory_raises(self, tmp_path):
+        with pytest.raises(ValueError):
+            RunConfiguration.validate_path("p", tmp_path, dir_or_file="file")
+
+    def test_dir_check_on_file_raises(self, tmp_path):
+        f = tmp_path / "a.txt"
+        f.write_text("x")
+        with pytest.raises(ValueError):
+            RunConfiguration.validate_path("p", f, dir_or_file="dir")
+
+    def test_dir_and_file_checks_pass(self, tmp_path):
+        f = tmp_path / "a.txt"
+        f.write_text("x")
+        RunConfiguration.validate_path("p", tmp_path, dir_or_file="dir", must_exist=True)
+        RunConfiguration.validate_path("p", f, dir_or_file="file", must_exist=True)
 
 
 class TestParseStrToIntList:

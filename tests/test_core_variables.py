@@ -11,7 +11,7 @@ import pytest
 from enum import Enum
 
 from vates import ConstVariable, TDimVariable
-from vates._core._utils import RunConfig
+from vates._core._utils import RunConfiguration
 
 from conftest import DEFAULT_END_YEAR, DEFAULT_START_YEAR
 
@@ -118,7 +118,7 @@ class TestTDimVariable:
 
     def test_fallback_cfg_used_and_warns(self):
         class WithFallback(TDimVariable):
-            fallback_cfg = RunConfig.create(
+            fallback_cfg = RunConfiguration.create(
                 start_year=2026, start_month=12, end_year=2027, end_month=12,
                 scenario="base",
                 workspace_directory="C:\\work", results_directory="res",

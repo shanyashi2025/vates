@@ -14,14 +14,14 @@ from types import MethodType
 from typing import Callable, Literal, Self, get_type_hints
 
 from vates._core.proj_variables import ProjVariable
-from vates._core._utils import RunConfig, ProjectionTimeSynchronizer, proj_result
+from vates._core._utils import RunConfiguration, ProjectionTimeSynchronizer, proj_result, apply_default_if_none
 
 class ProjModelEngine:
     """Actuarial projection model engine.
     """
 
     _projection: Callable
-    _run_config: RunConfig
+    _run_config: RunConfiguration
 
     def __init__(
         self,
@@ -145,7 +145,7 @@ class ProjModelEngine:
             end_month (int, optional): Projection end month. Defaults to 12.
             scenario (str, optional): Scenario. Defaults to None.
             simulation (int, optional): Simulation (stochastic). Defaults to None.
-            workspace_directory (str, optional): Workspace directory. Defaults to `{os.getcwd()}`.
+            workspace_directory (str, optional): Workspace directory, must be absolute path. Defaults to `{os.getcwd()}`.
             input_directories (list[str], optional): List of input directory. Defaults to None.
             results_directory (str, optional): Results directory. Defaults to 'results/`scenario`'.
             is_delete_existing_results (bool, optional): Delete existing results if any. Defaults to True.
@@ -156,36 +156,23 @@ class ProjModelEngine:
         """
         if hasattr(self, '_run_config'):
             raise ValueError(f"Run configuration is already set.")
-
-        none_items = []
-
         if start_year is None:
             raise ValueError(f"start_year: value 'None' is not allowed.")
-        if start_month is None:
-            start_month = 12
-            none_items.append(f"start_month={start_month}")
-        if end_year is None:
-            end_year = start_year
-            none_items.append(f"end_year={end_year}")
-        if end_month is None:
-            end_month = 12
-            none_items.append(f"end_month={end_month}")
-        if workspace_directory is None:
-            workspace_directory = os.getcwd()
-            none_items.append(f"workspace_directory='{workspace_directory}'")
-        if results_directory is None:
-            results_directory = f"results/{scenario or ''}"
-            none_items.append(f"results_directory='{results_directory}'")
-        super().__setattr__('_run_config', RunConfig.create(
+
+        none_items: list[str] = []
+
+        super().__setattr__('_run_config', RunConfiguration.create(
             start_year=start_year,
-            start_month=start_month,
-            end_year=end_year,
-            end_month=end_month,
+            start_month=apply_default_if_none("start_month", start_month, 12, record=none_items),
+            end_year=apply_default_if_none("end_year", end_year, start_year, record=none_items),
+            end_month=apply_default_if_none("end_month", end_month, 12, record=none_items),
             scenario=scenario,
             simulation=simulation,
-            workspace_directory=workspace_directory,
+            workspace_directory=apply_default_if_none(
+                "workspace_directory", workspace_directory, os.getcwd(), record=none_items),
             input_directories=input_directories,
-            results_directory=results_directory,
+            results_directory=apply_default_if_none(
+                "results_directory", results_directory, f"results/{scenario or ''}", record=none_items),
             is_delete_existing_results=is_delete_existing_results,
             enable_write_proj_result=enable_write_proj_result,
             stoch_result_file_mode=stoch_result_file_mode,
@@ -194,7 +181,7 @@ class ProjModelEngine:
         ))
 
         if len(none_items) > 0:
-            msg = f"Following items are set by default: {', '.join(none_items)}."
+            msg = f"Following configuration items use default settings: {', '.join(none_items)}."
             warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
 
         return self

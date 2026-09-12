@@ -6,6 +6,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Any, Self
 
+
+def apply_default_if_none(key: str, value, default, /, *, record: list[str] | None = None) -> Any:
+    """Return `default` when `value` is None, recording the applied default in `record`."""
+    if value is None:
+        if record:
+            record.append(f"{key}={default}")
+        return default
+    return value
+
+
 class ProjectionTimeSynchronizer:
 
     def __init__(self, time: int | None = None, period: pd.Period | None = None):
@@ -140,7 +150,7 @@ def add_projection_time_synchronizer(_cls=None, /):
     return decorator(_cls)
 
 @dataclass(frozen=True, slots=True)
-class RunConfig:
+class RunConfiguration:
     start_date: pd.Period | None
     end_date: pd.Period | None
     max_t: int
@@ -176,10 +186,10 @@ class RunConfig:
         self.validate_list("simulations", self.simulations, item_type=int, len_min=0, len_max=100_000, allow_none=True)
         self.validate_number("simulation", self.simulation, value_type=int, value_min=1, value_max=100_000, allow_none=True)
         self.validate_string("workspace_directory", self.workspace_directory)
-        self.validate_path("workspace_directory_path", self.workspace_directory_path)
+        self.validate_path("workspace_directory_path", self.workspace_directory_path, must_absolute=True)
         self.validate_list("input_directories", self.input_directories, item_type=str, allow_none=True)
         self.validate_string("results_directory", self.results_directory)
-        self.validate_path("results_directory_path", self.results_directory_path)
+        self.validate_path("results_directory_path", self.results_directory_path, must_absolute=True)
         self.validate_bool("is_delete_existing_results", self.is_delete_existing_results)
         self.validate_bool("enable_write_proj_result", self.enable_write_proj_result)
         self.validate_string("stoch_result_file_mode", self.stoch_result_file_mode, str_literal=['w', 'a'], allow_none=True)
@@ -221,6 +231,9 @@ class RunConfig:
         if isinstance(simulations, str):
             simulations = parse_str_to_int_list(simulations)
 
+        # `workspace_directory` must be given as an absolute path; reject relative input
+        # before resolving so a caller mistake is not silently hidden.
+        cls.validate_path("workspace_directory_path", Path(workspace_directory), must_absolute=True)
         workspace_directory_path = Path(workspace_directory).resolve()
         results_directory_path = (workspace_directory_path / results_directory).resolve()
 
@@ -310,7 +323,7 @@ class RunConfig:
             raise ValueError(f"{name}: {value=}, expected <={value_max}.")
 
     @staticmethod
-    def validate_path(name: str, value, /, *,
+    def validate_path(name: str, value, /, *, must_absolute: bool = False,
                       dir_or_file: str | None = None, must_exist: bool = False, allow_none: bool = False) -> None:
         if value is None:
             if not allow_none:
@@ -320,12 +333,17 @@ class RunConfig:
         if not isinstance(value, Path):
             raise TypeError(f"{name}: type '{type(value)}' is not allowed, expected 'Path'.")
 
-        if must_exist:
-            if not value.exists():
-                raise ValueError(f"Path {name} does not exist.")
-            if dir_or_file == "dir" and not value.is_file():
+        if must_absolute and not value.is_absolute():
+            raise ValueError(f"Path {name} must be absolute.")
+
+        if must_exist and not value.exists():
+            raise ValueError(f"Path {name} does not exist.")
+
+        # The directory/file type can only be asserted once the path actually exists.
+        if value.exists():
+            if dir_or_file == "dir" and not value.is_dir():
                 raise ValueError(f"Path {name} is not a directory.")
-            elif dir_or_file == "file":
+            elif dir_or_file == "file" and not value.is_file():
                 raise ValueError(f"Path {name} is not a file.")
 
     @staticmethod

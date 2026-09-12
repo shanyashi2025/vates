@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable, Self, get_type_hints
 
 from vates._core.proj_model_engine import ProjModelEngine
-from vates._core._utils import RunConfig
+from vates._core._utils import RunConfiguration, apply_default_if_none
 
 
 class StochExecutor:
@@ -21,7 +21,7 @@ class StochExecutor:
 
     _proj_cls: type[ProjModelEngine]
     _projection: Callable
-    _run_config: RunConfig
+    _run_config: RunConfiguration
     _sims_str: str
 
     include_traced_message = ProjModelEngine.include_traced_message
@@ -137,57 +137,42 @@ class StochExecutor:
             end_month (int, optional): Projection end month. Defaults to 12.
             scenario (str, optional): Scenario. Defaults to None.
             simulations: (str, optional): Simulations.
-            workspace_directory (str, optional): Workspace directory. Defaults to `{os.getcwd()}`.
+            workspace_directory (str, optional): Workspace directory, must be absolute path. Defaults to `{os.getcwd()}`.
             input_directories (list[str], optional): List of input directory. Defaults to None.
             results_directory (str, optional): Results directory. Defaults to 'results/`scenario`'.
             max_workers (int, optional): Max workers. Defaults to 1.
         """
         if hasattr(self, '_run_config'):
             raise ValueError(f"Run configuration is already set.")
-
-        none_items = []
-
         if start_year is None:
             raise ValueError(f"start_year: value 'None' is not allowed.")
-        if start_month is None:
-            start_month = 12
-            none_items.append(f"start_month={start_month}")
-        if end_year is None:
-            end_year = start_year
-            none_items.append(f"end_year={end_year}")
-        if end_month is None:
-            end_month = 12
-            none_items.append(f"end_month={end_month}")
-        if workspace_directory is None:
-            workspace_directory = os.getcwd()
-            none_items.append(f"workspace_directory='{workspace_directory}'")
-        if results_directory is None:
-            results_directory = f"results/{scenario or ''}"
-            none_items.append(f"results_directory='{results_directory}'")
-        if max_workers is None:
-            max_workers = 1
-            none_items.append(f"max_workers='{max_workers}'")
+
+        none_items: list[str] = []
         super().__setattr__('_sims_str', simulations)
-        super().__setattr__('_run_config', RunConfig.create(
+        super().__setattr__('_run_config', RunConfiguration.create(
             start_year=start_year,
-            start_month=start_month,
-            end_year=end_year,
-            end_month=end_month,
+            start_month=apply_default_if_none("start_month", start_month, 12, record=none_items),
+            end_year=apply_default_if_none("end_year", end_year, start_year, record=none_items),
+            end_month=apply_default_if_none("end_month", end_month, 12, record=none_items),
             scenario=scenario,
             simulations=simulations,
-            workspace_directory=workspace_directory,
+            workspace_directory=apply_default_if_none(
+                "workspace_directory", workspace_directory, os.getcwd(), record=none_items),
             input_directories=input_directories,
-            results_directory=results_directory,
+            results_directory=apply_default_if_none(
+                "results_directory", results_directory, f"results/{scenario or ''}", record=none_items),
             is_delete_existing_results=True,
             enable_write_proj_result=False,
             stoch_result_file_mode=None,
             stoch_result_file_id=None,
             enable_write_runlog=True,
-            max_workers=self._parse_max_workers(max_workers),
+            max_workers=self._parse_max_workers(
+                apply_default_if_none("max_workers", max_workers, 1, record=none_items)),
         ))
 
         if len(none_items) > 0:
-            self.include_traced_message(f"INFO: Following items are set by default: {', '.join(none_items)}.")
+            msg = f"Following configuration items use default settings: {', '.join(none_items)}."
+            warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
 
         return self
 

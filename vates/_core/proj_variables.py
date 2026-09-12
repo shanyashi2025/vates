@@ -8,7 +8,7 @@ from enum import Enum
 
 if typing.TYPE_CHECKING:
     from vates._core.proj_model_engine import ProjModelEngine
-    from vates._core._utils import RunConfig
+    from vates._core._utils import RunConfiguration
 
 
 class ProjVariable(ABC):
@@ -232,7 +232,7 @@ class TDimVariable(ProjVariable):
         """
         super().__init__(name, model_engine=model_engine, owner=owner, group=group, dims=dims)
         if model_engine:
-            self._cfg: RunConfig = model_engine._run_config
+            self._cfg: RunConfiguration = model_engine._run_config
         elif self.fallback_cfg:
             self._cfg = self.fallback_cfg  # for advanced users who deliberately want to use 'fallback_cfg'
         else:
