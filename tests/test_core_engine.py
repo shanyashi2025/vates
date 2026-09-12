@@ -3,6 +3,7 @@
 annotation contract."""
 
 import inspect
+import warnings
 
 import pandas as pd
 import pytest
@@ -188,6 +189,80 @@ class TestBindProjectionIssubclassSemantics:
         m = make_engine()
         with pytest.raises(ValueError, match="must annotate"):
             m.bind_projection(proj)
+
+
+class TestFileSearch:
+    """`get_filepath` / `read_csv` resolve filenames across `input_directories` (first wins)."""
+
+    @staticmethod
+    def _configured(make_engine, tmp_path, input_dirs):
+        m = make_engine(slug="fs")
+        # all `apply_default_if_none` arguments are explicit -> no default-fill warning
+        m.configure_run(
+            start_year=2026, start_month=12, end_year=2027, end_month=12,
+            workspace_directory=str(tmp_path),
+            results_directory="res",
+            input_directories=input_dirs,
+        )
+        return m
+
+    def test_first_match_wins(self, make_engine, tmp_path):
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        (tmp_path / "a" / "f.csv").write_text("x\n1\n", encoding="utf-8")
+        (tmp_path / "b" / "f.csv").write_text("x\n2\n", encoding="utf-8")
+        m = self._configured(make_engine, tmp_path, ["a", "b"])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            assert m.get_filepath("f.csv") == (tmp_path / "a" / "f.csv").resolve()
+            df = m.read_csv("f.csv")
+        assert df["x"].tolist() == [1]
+
+    def test_duplicate_warning_emitted_once(self, make_engine, tmp_path):
+        for d in ("a", "b", "c"):
+            (tmp_path / d).mkdir()
+            (tmp_path / d / "dup.csv").write_text("x\n1\n", encoding="utf-8")
+        m = self._configured(make_engine, tmp_path, ["a", "b", "c"])
+        with pytest.warns(UserWarning, match="Duplicate input file 'dup.csv'") as record:
+            first = m.get_filepath("dup.csv")
+            second = m.get_filepath("dup.csv")  # cached -> no second warning
+        assert len(record) == 1
+        assert first == second == (tmp_path / "a" / "dup.csv").resolve()
+
+    def test_no_warning_when_unique(self, make_engine, tmp_path):
+        (tmp_path / "a").mkdir()
+        (tmp_path / "a" / "only.csv").write_text("x\n1\n", encoding="utf-8")
+        m = self._configured(make_engine, tmp_path, ["a"])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert m.get_filepath("only.csv") == (tmp_path / "a" / "only.csv").resolve()
+
+    def test_absolute_path_passthrough(self, make_engine, tmp_path):
+        (tmp_path / "a").mkdir()
+        target = tmp_path / "a" / "abs.csv"
+        target.write_text("x\n1\n", encoding="utf-8")
+        m = self._configured(make_engine, tmp_path, ["a"])
+        assert m.get_filepath(str(target)) == target
+
+    def test_missing_returns_none(self, make_engine, tmp_path):
+        (tmp_path / "a").mkdir()
+        m = self._configured(make_engine, tmp_path, ["a"])
+        assert m.get_filepath("missing.csv") is None
+
+    def test_read_missing_raises_or_returns_none(self, make_engine, tmp_path):
+        (tmp_path / "a").mkdir()
+        m = self._configured(make_engine, tmp_path, ["a"])
+        with pytest.raises(FileNotFoundError):
+            m.read_csv("missing.csv")
+        assert m.read_csv("missing.csv", allow_not_found=True) is None
+
+    def test_search_result_is_cached(self, make_engine, tmp_path):
+        (tmp_path / "a").mkdir()
+        (tmp_path / "a" / "f.csv").write_text("x\n1\n", encoding="utf-8")
+        m = self._configured(make_engine, tmp_path, ["a"])
+        m.get_filepath("f.csv")
+        cached = m._cached_filepath["f.csv"]
+        assert cached == ((tmp_path / "a" / "f.csv").resolve(), [(tmp_path / "a" / "f.csv").resolve()])
 
 
 class TestSetattrGuard:

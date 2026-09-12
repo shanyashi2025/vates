@@ -80,6 +80,16 @@ class TestConfigureRun:
         se = _make_executor(tmp_path=tmp_path, input_directories=["inputs"])
         assert se._run_config.input_directory_paths == [(tmp_path / "inputs").resolve()]
 
+    def test_duplicate_input_file_warns_once(self, tmp_path):
+        for d in ("a", "b"):
+            (tmp_path / d).mkdir()
+            (tmp_path / d / "same.json").write_text("{}", encoding="utf-8")
+        se = _make_executor(tmp_path=tmp_path, input_directories=["a", "b"])
+        with pytest.warns(UserWarning, match="Duplicate input file 'same.json'") as record:
+            se.get_filepath("same.json")
+            se.get_filepath("same.json")
+        assert len(record) == 1
+
 
 class TestBindProjection:
     def test_zero_arg_rejected(self, tmp_path):

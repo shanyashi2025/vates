@@ -43,7 +43,7 @@ class StochExecutor:
         self._description: str = str(description)
 
         # runtime stuffs
-        self._cached_filepath: dict[str, tuple] = {}
+        self._cached_filepath: dict[str, tuple[Path | None, list[Path]]] = {}
         self._result_files: set = set()
         self._messages: list[str] = []
         self._sim_messages: list = []

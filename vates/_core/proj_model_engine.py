@@ -39,7 +39,7 @@ class ProjModelEngine:
         self._description: str = str(description)
 
         # runtime stuffs
-        self._cached_filepath: dict[str, tuple] = {}
+        self._cached_filepath: dict[str, tuple[Path | None, list[Path]]] = {}
         self._proj_variables: list[weakref.ref[ProjVariable]] = []
         self._result_files: set = set()
         self._time_synchronizer: ProjectionTimeSynchronizer = ProjectionTimeSynchronizer()
@@ -474,9 +474,8 @@ class ProjModelEngine:
             "process_id": os.getpid(),
         }
 
-    def load_json(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
-                  allow_not_found: bool = False, **kwargs) -> dict | None:
-        filepath = self.get_filepath(filename, first_or_last_seen=first_or_last_seen)
+    def load_json(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> dict | None:
+        filepath = self.get_filepath(filename)
         if filepath:
             with open(filepath, 'r', **kwargs) as jsonfile:
                 return json.load(jsonfile)
@@ -487,9 +486,8 @@ class ProjModelEngine:
             ext_warn = "" if filename.lower().endswith('.json') else "You might forget to include '.json' in filename."
             raise FileNotFoundError(f"JSON file '{filename}' not exists in input directories. {ext_warn}")
 
-    def read_csv(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
-                 allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
-        filepath = self.get_filepath(filename, first_or_last_seen=first_or_last_seen)
+    def read_csv(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
+        filepath = self.get_filepath(filename)
         if filepath:
             return pd.read_csv(filepath, **kwargs)
         elif allow_not_found:
@@ -499,9 +497,8 @@ class ProjModelEngine:
             ext_warn = "" if filename.lower().endswith('.csv') else "You might forget to include '.csv' in filename."
             raise FileNotFoundError(f"CSV file '{filename}' does not exist in input directories. {ext_warn}")
 
-    def read_excel(self, filename: str, /, *, first_or_last_seen: str = 'first_seen',
-                   allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
-        filepath = self.get_filepath(filename, first_or_last_seen=first_or_last_seen)
+    def read_excel(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
+        filepath = self.get_filepath(filename)
         if filepath:
             return pd.read_excel(filepath, **kwargs)
         elif allow_not_found:
@@ -511,33 +508,33 @@ class ProjModelEngine:
             ext_warn = "" if filename.lower().endswith('.xlsx') else "You might forget to include '.xlsx' in filename."
             raise FileNotFoundError(f"Excel file '{filename}' does not exist in input directories. {ext_warn}")
 
-    def get_filepath(self, filename: str, /, *, first_or_last_seen: str = "first_seen") -> Path | None:
-        if filename in self._cached_filepath:  # get from cache
-            filepath_tuple = self._cached_filepath[filename]
-        else:  # search
-            filepath_tuple = self._search_filepath(filename)
-            self._cached_filepath[filename] = filepath_tuple
+    def get_filepath(self, filename: str, /) -> Path | None:
+        """Return the path of `filename` in the input directories, first match wins.
 
-        if first_or_last_seen.lower() in ("first", "first_seen", "first-seen"):
-            return filepath_tuple[0]
-        elif first_or_last_seen.lower() in ("last", "last_seen", "last-seen"):
-            return filepath_tuple[1]
-        else:
-            msg = f"'first_or_last_seen': value '{first_or_last_seen}' is unkown, use 'first_seen' as fallback."
-            warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
-            return filepath_tuple[0]
+        When the same filename exists in more than one input directory, the first match
+        (per `input_directories` order) is returned and a warning is emitted once.
+        """
+        if filename not in self._cached_filepath:  # search and cache
+            chosen, matches = self._search_filepath(filename)
+            self._cached_filepath[filename] = (chosen, matches)
+            if len(matches) > 1:
+                ignored = ", ".join(f"'{p}'" for p in matches[1:])
+                msg = (f"Duplicate input file '{filename}' found in multiple input directories; "
+                       f"using '{chosen}' (first per input_directories order). Ignored: {ignored}. "
+                       f"Reorder 'input_directories' to change precedence.")
+                warnings.warn(msg); self.include_traced_message(f"WARNING: {msg}")
+        return self._cached_filepath[filename][0]
 
-    def _search_filepath(self, filename: str) -> tuple[Path | None, Path | None]:
+    def _search_filepath(self, filename: str) -> tuple[Path | None, list[Path]]:
+        """Return `(chosen, matches)`: the first match per input-directory order and all matches."""
         if (filepath := Path(filename)).is_absolute() and filepath.is_file():  # absolute path
-            return filepath, filepath
-        first_seen, last_seen = None, None
+            return filepath, [filepath]
+        matches = []
         for directory in self._run_config.input_directory_paths:  # search input_directory_paths sequentially
             filepath = (directory / filename).resolve()
             if filepath.is_file():
-                if first_seen is None:
-                    first_seen = filepath
-                last_seen = filepath
-        return first_seen, last_seen
+                matches.append(filepath)
+        return (matches[0] if matches else None), matches
 
     def _concat_output_file_path(self, filename: str, /) -> Path:
         return self.RESULTS_DIRECTORY_PATH / f'{self._slug}{filename}'
