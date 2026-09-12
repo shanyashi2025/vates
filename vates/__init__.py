@@ -1,4 +1,4 @@
-from importlib.metadata import version
+from importlib.metadata import version, PackageNotFoundError
 from vates._core import (
     ProjModelEngine,
     StochExecutor,
@@ -12,7 +12,10 @@ from vates import finmath
 from vates import solvency
 from vates import utils
 
-__version__ = version("vates")
+try:
+    __version__ = version("vates")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
 
 __all__ = [
     # core
