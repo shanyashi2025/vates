@@ -61,12 +61,13 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
             print(f"'assets_equity_option' is excluded to avoid 'ImportError', if you want to include equity option, "
                   f"please install 'scipy' library (`pip install scipy`).")
 
-    _ = model.run(
+    model.run(
         projection_args={
             "assets_df_dict": assets_df_dict,
             "esg_master": esg_master
         }
     )
+    return model
 
 
 def main():

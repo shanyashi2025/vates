@@ -64,8 +64,9 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
                 asset.roll_forward()
                 asset.close_dealing()
 
-    runlog = model.run()
-    # print(json.dumps(runlog, indent=4), "\n")
+    model.run()
+    # print(json.dumps(model.runlog, indent=4), "\n")
+    return model
 
 
 def main():

@@ -236,6 +236,8 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
         plt.close()
         print(f"simulation path figure saved: '{str(output_png)}'")
 
+    return model
+
 def main():
     run_with_json_config(port_monte_carlo_stoch)
 

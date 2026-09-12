@@ -206,7 +206,7 @@ class StochExecutor:
         self,
         *,
         projection_args: dict[str, ...] | None = None,
-    ) -> dict:
+    ) -> Self:
         if not hasattr(self, '_projection'):
             raise ValueError(f"Projection function has not been bound.")
         if not hasattr(self, '_proj_cls'):
@@ -229,7 +229,7 @@ class StochExecutor:
         exec_success = self._run_simulations_multiprocess(projection_args=projection_args)
         self._write_stochastic_statistic()
         self._dump_runlog(exec_success, exec_start_time, datetime.now())
-        return self._runlog
+        return self
 
     @staticmethod
     def _create_batches(simulations: list[int], n_batches: int) -> list[tuple[int, ...]]:
@@ -279,8 +279,8 @@ class StochExecutor:
                 continue # `model_instance` is not successfully initialized, skip `.run()`
 
             try:
-                res = model_instance.run(projection_args=projection_args)
-                result.append(res)
+                model_instance.run(projection_args=projection_args)
+                result.append(model_instance.runlog)
                 output_files.extend(model_instance._result_files)
 
             except Exception as e:

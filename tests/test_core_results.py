@@ -34,7 +34,8 @@ class TestWriteToggles:
         m.configure_run(start_year=2026, end_year=2027, workspace_directory=str(tmp_path),
                         results_directory="res")
         m.bind_projection(lambda: None)
-        runlog = m.run()
+        m.run()
+        runlog = m.runlog
         assert runlog["model"]["slug"] == "m"
         assert runlog["execution"]["success"] is True
         assert "configuration" in runlog

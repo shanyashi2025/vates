@@ -202,7 +202,7 @@ class ProjModelEngine:
         self,
         *,
         projection_args: dict[str, ...] | None = None,
-    ) -> dict:
+    ) -> Self:
         if not hasattr(self, '_projection'):
             raise ValueError(f"Projection function has not been bound.")
         if not hasattr(self, '_run_config'):
@@ -230,7 +230,7 @@ class ProjModelEngine:
             self._messages.append(traceback.format_exc())
             exec_success = False
         self._dump_runlog(exec_success, exec_start_time, datetime.now())
-        return self._runlog
+        return self
 
     def __call__(
         self,

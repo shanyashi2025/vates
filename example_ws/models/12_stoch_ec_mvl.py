@@ -155,7 +155,7 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
     asset_allocation_df = file_df_dict["asset_allocation"]
     liabs_df = file_df_dict["liabs"]
 
-    _ = stoch.run(
+    stoch.run(
         projection_args={
             "esg_params": stoch.load_json(filename_dict["esg_params"]),
             "esg_filename": filename_dict["esg"],
@@ -167,6 +167,8 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
             "asset_allocation_df": asset_allocation_df,
         }
     )
+
+    return stoch
 
 
 def main():

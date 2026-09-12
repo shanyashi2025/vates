@@ -123,7 +123,8 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 out_rootfolder=str(model.WORKSPACE_DIRECTORY_PATH)
             )
 
-    _ = model.run()
+    model.run()
+    return model
 
 
 def main():

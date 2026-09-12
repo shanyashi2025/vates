@@ -93,7 +93,8 @@ class TestRunGuardStates:
     def test_runlog_has_execution_success(self, make_configured, tmp_path):
         m = make_configured(tmp_path)
         m.bind_projection(lambda: None)  # zero-arg binds as a plain function
-        runlog = m.run()
+        m.run()
+        runlog = m.runlog
         assert runlog["execution"]["success"] is True
         assert runlog["model"]["slug"] == m.SLUG
 

@@ -173,7 +173,8 @@ class TestEndToEndRun:
         self._write_stoch_input(tmp_path, statistic=None)
         se = _make_executor(tmp_path=tmp_path, input_directories=["inputs"])
         se.bind_projection(_stoch_proj)
-        runlog = se.run()
+        se.run()
+        runlog = se.runlog
         assert runlog["execution"]["success"] is True
 
         files = {p.name for p in (tmp_path / "results").glob("stoch*")}
@@ -186,7 +187,8 @@ class TestEndToEndRun:
         self._write_stoch_input(tmp_path, statistic={"mean": "mean", "std": "std"})
         se = _make_executor(tmp_path=tmp_path, input_directories=["inputs"])
         se.bind_projection(_stoch_proj)
-        runlog = se.run()
+        se.run()
+        runlog = se.runlog
         assert runlog["execution"]["success"] is True
 
         results = tmp_path / "results"

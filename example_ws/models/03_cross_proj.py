@@ -128,6 +128,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     # ==================================================================================================================
 
     model.run()
+    return model
 
 
 def _interp_monthly_spot(spot_in: np.ndarray) -> np.ndarray:
