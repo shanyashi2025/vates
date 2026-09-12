@@ -10,7 +10,7 @@ from typing import Literal, Any, Self
 def apply_default_if_none(key: str, value, default, /, *, record: list[str] | None = None) -> Any:
     """Return `default` when `value` is None, recording the applied default in `record`."""
     if value is None:
-        if record:
+        if record is not None:
             record.append(f"{key}={default}")
         return default
     return value
@@ -157,10 +157,8 @@ class RunConfiguration:
     scenario: str | None
     simulations: list[int] | None
     simulation: int | None
-    workspace_directory: str
     workspace_directory_path: Path
-    input_directories: list[str] | None
-    results_directory: str
+    input_directory_paths: list[Path]
     results_directory_path: Path
     is_delete_existing_results: bool
     enable_write_proj_result: bool
@@ -185,10 +183,10 @@ class RunConfiguration:
         self.validate_string("scenario", self.scenario, allow_none=True)
         self.validate_list("simulations", self.simulations, item_type=int, len_min=0, len_max=100_000, allow_none=True)
         self.validate_number("simulation", self.simulation, value_type=int, value_min=1, value_max=100_000, allow_none=True)
-        self.validate_string("workspace_directory", self.workspace_directory)
         self.validate_path("workspace_directory_path", self.workspace_directory_path, must_absolute=True)
-        self.validate_list("input_directories", self.input_directories, item_type=str, allow_none=True)
-        self.validate_string("results_directory", self.results_directory)
+        self.validate_list("input_directory_paths", self.input_directory_paths, item_type=Path)
+        for d in self.input_directory_paths:
+            self.validate_path("input_directory", d, must_absolute=True)
         self.validate_path("results_directory_path", self.results_directory_path, must_absolute=True)
         self.validate_bool("is_delete_existing_results", self.is_delete_existing_results)
         self.validate_bool("enable_write_proj_result", self.enable_write_proj_result)
@@ -208,9 +206,9 @@ class RunConfiguration:
         scenario: str | None,
         simulations: str | list[int] | None = None,
         simulation: int | None = None,
-        workspace_directory: str,
-        input_directories: list[str] | None = None,
-        results_directory: str,
+        workspace_directory: str | Path,
+        input_directories: list[str | Path] | None = None,
+        results_directory: str | Path,
         is_delete_existing_results: bool,
         enable_write_proj_result: bool,
         stoch_result_file_mode: Literal['w', 'a', None] = None,
@@ -231,11 +229,17 @@ class RunConfiguration:
         if isinstance(simulations, str):
             simulations = parse_str_to_int_list(simulations)
 
-        # `workspace_directory` must be given as an absolute path; reject relative input
-        # before resolving so a caller mistake is not silently hidden.
+        # `workspace_directory`, `results_directory` and items of `input_directories` must be given as an absolute path;
+        # reject relative input  before resolving so a caller mistake is not silently hidden.
         cls.validate_path("workspace_directory_path", Path(workspace_directory), must_absolute=True)
         workspace_directory_path = Path(workspace_directory).resolve()
-        results_directory_path = (workspace_directory_path / results_directory).resolve()
+        cls.validate_path("results_directory_path", Path(results_directory), must_absolute=True)
+        results_directory_path = Path(results_directory).resolve()
+        input_directory_paths = []
+        if input_directories:
+            for d in input_directories:
+                cls.validate_path("input_directory", Path(d), must_absolute=True)
+                input_directory_paths.append(Path(d).resolve())
 
         return cls(
             start_date=start_date,
@@ -244,10 +248,8 @@ class RunConfiguration:
             scenario=scenario,
             simulations=simulations,
             simulation=simulation,
-            workspace_directory=workspace_directory,
             workspace_directory_path=workspace_directory_path,
-            input_directories=input_directories,
-            results_directory=results_directory,
+            input_directory_paths=input_directory_paths,
             results_directory_path=results_directory_path,
             is_delete_existing_results=is_delete_existing_results,
             enable_write_proj_result=enable_write_proj_result,

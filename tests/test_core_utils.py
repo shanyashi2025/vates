@@ -16,7 +16,7 @@ def _create(**overrides):
         end_month=12,
         scenario="base",
         workspace_directory=WORKSPACE,
-        results_directory="./results/base",
+        results_directory=str(Path(WORKSPACE) / "results" / "base"),
         is_delete_existing_results=True,
         enable_write_proj_result=True,
         enable_write_runlog=True,
@@ -57,10 +57,8 @@ class TestRunConfigDates:
                 scenario="base",
                 simulations=None,
                 simulation=None,
-                workspace_directory=WORKSPACE,
                 workspace_directory_path=Path(WORKSPACE),
-                input_directories=None,
-                results_directory="results/base",
+                input_directory_paths=[],
                 results_directory_path=Path(WORKSPACE) / "results/base",
                 is_delete_existing_results=True,
                 enable_write_proj_result=True,
@@ -106,10 +104,26 @@ class TestPathFields:
         with pytest.raises(ValueError):
             _create(workspace_directory="work")
 
-    def test_raw_results_directory_is_preserved(self):
-        cfg = _create(results_directory="./results/base")
-        assert cfg.results_directory == "./results/base"
-        assert cfg.results_directory_path == (cfg.workspace_directory_path / "./results/base").resolve()
+    def test_relative_results_directory_raises(self):
+        with pytest.raises(ValueError):
+            _create(results_directory="./results/base")
+
+    def test_relative_input_directory_raises(self):
+        with pytest.raises(ValueError):
+            _create(input_directories=["inputs"])
+
+    def test_absolute_results_directory_resolved(self):
+        results = str(Path(WORKSPACE) / "results" / "base")
+        cfg = _create(results_directory=results)
+        assert cfg.results_directory_path == Path(results).resolve()
+
+    def test_input_directory_paths_resolved(self):
+        inputs = Path(WORKSPACE) / "inputs"
+        cfg = _create(input_directories=[str(inputs)])
+        assert cfg.input_directory_paths == [inputs.resolve()]
+
+    def test_input_directory_paths_default_empty(self):
+        assert _create().input_directory_paths == []
 
     def test_path_fields_are_absolute(self):
         cfg = _create()

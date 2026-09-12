@@ -121,7 +121,7 @@ class TestTDimVariable:
             fallback_cfg = RunConfiguration.create(
                 start_year=2026, start_month=12, end_year=2027, end_month=12,
                 scenario="base",
-                workspace_directory="C:\\work", results_directory="res",
+                workspace_directory="C:\\work", results_directory="C:\\work\\res",
                 is_delete_existing_results=True, enable_write_proj_result=True,
                 enable_write_runlog=True,
             )

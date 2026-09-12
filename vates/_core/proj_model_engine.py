@@ -127,9 +127,9 @@ class ProjModelEngine:
         end_month: int | None = None,
         scenario: str | None = None,
         simulation: int | None = None,
-        workspace_directory: str | None = None,
-        input_directories: list[str] | None = None,
-        results_directory: str | None = None,
+        workspace_directory: str | Path | None = None,
+        input_directories: list[str | Path] | None = None,
+        results_directory: str | Path | None = None,
         is_delete_existing_results: bool = True,
         enable_write_proj_result: bool = True,
         stoch_result_file_mode: Literal['w', 'a', None] = None,
@@ -145,9 +145,9 @@ class ProjModelEngine:
             end_month (int, optional): Projection end month. Defaults to 12.
             scenario (str, optional): Scenario. Defaults to None.
             simulation (int, optional): Simulation (stochastic). Defaults to None.
-            workspace_directory (str, optional): Workspace directory, must be absolute path. Defaults to `{os.getcwd()}`.
-            input_directories (list[str], optional): List of input directory. Defaults to None.
-            results_directory (str, optional): Results directory. Defaults to 'results/`scenario`'.
+            workspace_directory (str | Path, optional): Workspace directory, must be absolute path. Defaults to `{os.getcwd()}`.
+            input_directories (list[str | Path], optional): List of input directory, relative paths are resolved against `workspace_directory`. Defaults to None.
+            results_directory (str | Path, optional): Results directory, relative paths are resolved against `workspace_directory`. Defaults to 'results/`scenario`'.
             is_delete_existing_results (bool, optional): Delete existing results if any. Defaults to True.
             enable_write_proj_result (bool, optional): Enable writing projection result. Defaults to True.
             stoch_result_file_mode (Literal['w', 'a'], optional): Stochastic result writer mode. Defaults to None.
@@ -160,7 +160,21 @@ class ProjModelEngine:
             raise ValueError(f"start_year: value 'None' is not allowed.")
 
         none_items: list[str] = []
-
+        workspace_directory = apply_default_if_none(
+            "workspace_directory", workspace_directory, os.getcwd(), record=none_items
+        )
+        workspace_directory_path = Path(workspace_directory)
+        results_directory = apply_default_if_none(
+            "results_directory",
+            results_directory,
+            workspace_directory_path / "results" / (scenario or ""),
+            record=none_items
+        )
+        # `results_directory` and `input_directories` may be given relative to the workspace directory.
+        if not Path(results_directory).is_absolute():
+            results_directory = workspace_directory_path / results_directory
+        if input_directories:
+            input_directories = [workspace_directory_path / d for d in input_directories]
         super().__setattr__('_run_config', RunConfiguration.create(
             start_year=start_year,
             start_month=apply_default_if_none("start_month", start_month, 12, record=none_items),
@@ -168,11 +182,9 @@ class ProjModelEngine:
             end_month=apply_default_if_none("end_month", end_month, 12, record=none_items),
             scenario=scenario,
             simulation=simulation,
-            workspace_directory=apply_default_if_none(
-                "workspace_directory", workspace_directory, os.getcwd(), record=none_items),
+            workspace_directory=workspace_directory,
             input_directories=input_directories,
-            results_directory=apply_default_if_none(
-                "results_directory", results_directory, f"results/{scenario or ''}", record=none_items),
+            results_directory=results_directory,
             is_delete_existing_results=is_delete_existing_results,
             enable_write_proj_result=enable_write_proj_result,
             stoch_result_file_mode=stoch_result_file_mode,
@@ -228,17 +240,17 @@ class ProjModelEngine:
         return self.run(projection_args=projection_args)
 
     def _write_results(self) -> None:
-        if self.results_directory_path.is_dir():
+        if self.RESULTS_DIRECTORY_PATH.is_dir():
             if self._run_config.is_delete_existing_results:
                 remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
-                for f in glob.glob(str(self.results_directory_path / f'{self._slug}*')):
+                for f in glob.glob(str(self.RESULTS_DIRECTORY_PATH / f'{self._slug}*')):
                     if f.endswith(remove_pattern):
                         os.remove(f)
                     else:
                         msg = f"Exsiting file NOT deleted: '{f}'."
                         warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
         else:
-            os.makedirs(self.results_directory_path, exist_ok=True)
+            os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
         self._write_projection_result()
         self._write_stochastic_result()
 
@@ -438,9 +450,9 @@ class ProjModelEngine:
                 "end_month": self.END_MONTH,
                 "scenario": self.SCENARIO,
                 "simulation": self.SIMULATION,
-                "workspace_directory": self._run_config.workspace_directory,
-                "input_directories": self._run_config.input_directories,
-                "results_directory": self._run_config.results_directory,
+                "workspace_directory": str(self.WORKSPACE_DIRECTORY_PATH),
+                "input_directories": [str(d) for d in self._run_config.input_directory_paths],
+                "results_directory": str(self.RESULTS_DIRECTORY_PATH),
             },
             "environment": self._environ,
             "results": list(map(str, self._result_files)),
@@ -448,7 +460,7 @@ class ProjModelEngine:
         })
 
         if self._run_config.enable_write_runlog:
-            os.makedirs(self.results_directory_path, exist_ok=True)
+            os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
             with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
                 json.dump(self._runlog, jsonfile, indent=4)
 
@@ -518,11 +530,9 @@ class ProjModelEngine:
     def _search_filepath(self, filename: str) -> tuple[Path | None, Path | None]:
         if (filepath := Path(filename)).is_absolute() and filepath.is_file():  # absolute path
             return filepath, filepath
-        if self._run_config.input_directories is None:  # return None if input_directories not specified
-            return None, None
         first_seen, last_seen = None, None
-        for directory in self._run_config.input_directories:  # search input_directories sequentially
-            filepath = (self.workspace_directory_path / directory / filename).resolve()
+        for directory in self._run_config.input_directory_paths:  # search input_directory_paths sequentially
+            filepath = (directory / filename).resolve()
             if filepath.is_file():
                 if first_seen is None:
                     first_seen = filepath
@@ -530,14 +540,14 @@ class ProjModelEngine:
         return first_seen, last_seen
 
     def _concat_output_file_path(self, filename: str, /) -> Path:
-        return self.results_directory_path / f'{self._slug}{filename}'
+        return self.RESULTS_DIRECTORY_PATH / f'{self._slug}{filename}'
 
     @property
-    def workspace_directory_path(self) -> Path:
+    def WORKSPACE_DIRECTORY_PATH(self) -> Path:
         return self._run_config.workspace_directory_path
 
     @property
-    def results_directory_path(self) -> Path:
+    def RESULTS_DIRECTORY_PATH(self) -> Path:
         return self._run_config.results_directory_path
 
     @property
@@ -630,7 +640,7 @@ class ProjModelEngine:
 
     def proj_result(self, *, group: str | None = None, owner: str | None = None, variable: str | None = None,
                     date: str | int | None = None,) -> pd.DataFrame | float:
-        return proj_result(results_directory=self.results_directory_path, slug=self.SLUG,
+        return proj_result(results_directory=self.RESULTS_DIRECTORY_PATH, slug=self.SLUG,
                            group=group, owner=owner, variable=variable, date=date)
 
     def __setattr__(self, name, value):

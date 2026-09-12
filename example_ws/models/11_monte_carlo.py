@@ -176,7 +176,7 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
 
         # === Plot portfolio balance simualtion path ===
         print(f"Started to plot simulation path ...")
-        stoch_files = glob.glob(f'{model.results_directory_path}/{model.SLUG}*.stoch.csv')
+        stoch_files = glob.glob(f'{model.RESULTS_DIRECTORY_PATH}/{model.SLUG}*.stoch.csv')
         df_all = pd.concat((pd.read_csv(f) for f in stoch_files), ignore_index=True)
 
         cols = [] if model.START_MONTH == 12 else [str(model.START_YEAR * 100 + model.START_MONTH)]
@@ -231,7 +231,7 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
             ax3.legend()
 
         plt.tight_layout()
-        output_png = Path(model.results_directory_path) / f'{model.SLUG}_simulation_path.png'
+        output_png = Path(model.RESULTS_DIRECTORY_PATH) / f'{model.SLUG}_simulation_path.png'
         plt.savefig(output_png, dpi=300)
         plt.close()
         print(f"simulation path figure saved: '{str(output_png)}'")

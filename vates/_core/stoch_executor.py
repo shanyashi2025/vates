@@ -123,9 +123,9 @@ class StochExecutor:
         end_month: int | None = None,
         scenario: str | None = None,
         simulations: str,
-        workspace_directory: str | None = None,
-        input_directories: list[str] | None = None,
-        results_directory: str | None = None,
+        workspace_directory: str | Path | None = None,
+        input_directories: list[str | Path] | None = None,
+        results_directory: str | Path | None = None,
         max_workers: int | None = None,
     ) -> Self:
         """Set the configuration for a run.
@@ -137,9 +137,9 @@ class StochExecutor:
             end_month (int, optional): Projection end month. Defaults to 12.
             scenario (str, optional): Scenario. Defaults to None.
             simulations: (str, optional): Simulations.
-            workspace_directory (str, optional): Workspace directory, must be absolute path. Defaults to `{os.getcwd()}`.
-            input_directories (list[str], optional): List of input directory. Defaults to None.
-            results_directory (str, optional): Results directory. Defaults to 'results/`scenario`'.
+            workspace_directory (str | Path, optional): Workspace directory, must be absolute path. Defaults to `{os.getcwd()}`.
+            input_directories (list[str | Path], optional): List of input directory, relative paths are resolved against `workspace_directory`. Defaults to None.
+            results_directory (str | Path, optional): Results directory, relative paths are resolved against `workspace_directory`. Defaults to 'results/`scenario`'.
             max_workers (int, optional): Max workers. Defaults to 1.
         """
         if hasattr(self, '_run_config'):
@@ -148,6 +148,21 @@ class StochExecutor:
             raise ValueError(f"start_year: value 'None' is not allowed.")
 
         none_items: list[str] = []
+        workspace_directory = apply_default_if_none(
+            "workspace_directory", workspace_directory, os.getcwd(), record=none_items
+        )
+        workspace_directory_path = Path(workspace_directory)
+        results_directory = apply_default_if_none(
+            "results_directory",
+            results_directory,
+            workspace_directory_path / "results" / (scenario or ""),
+            record=none_items
+        )
+        # `results_directory` and `input_directories` may be given relative to the workspace directory.
+        if not Path(results_directory).is_absolute():
+            results_directory = workspace_directory_path / results_directory
+        if input_directories:
+            input_directories = [workspace_directory_path / d for d in input_directories]
         super().__setattr__('_sims_str', simulations)
         super().__setattr__('_run_config', RunConfiguration.create(
             start_year=start_year,
@@ -156,11 +171,9 @@ class StochExecutor:
             end_month=apply_default_if_none("end_month", end_month, 12, record=none_items),
             scenario=scenario,
             simulations=simulations,
-            workspace_directory=apply_default_if_none(
-                "workspace_directory", workspace_directory, os.getcwd(), record=none_items),
+            workspace_directory=workspace_directory,
             input_directories=input_directories,
-            results_directory=apply_default_if_none(
-                "results_directory", results_directory, f"results/{scenario or ''}", record=none_items),
+            results_directory=results_directory,
             is_delete_existing_results=True,
             enable_write_proj_result=False,
             stoch_result_file_mode=None,
@@ -204,15 +217,15 @@ class StochExecutor:
             raise ValueError("Run configuration has not been set.")
         projection_args = projection_args or {}
 
-        if self.results_directory_path.is_dir():
+        if self.RESULTS_DIRECTORY_PATH.is_dir():
             remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
-            for f in glob.glob(str(self.results_directory_path / f'{self._slug}*')):
+            for f in glob.glob(str(self.RESULTS_DIRECTORY_PATH / f'{self._slug}*')):
                 if f.endswith(remove_pattern):
                     os.remove(f)
                 else:
                     self.include_traced_message(f"INFO: Exsiting file NOT deleted: '{f}'.")
         else:
-            os.makedirs(self.results_directory_path, exist_ok=True)
+            os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
 
         exec_start_time = datetime.now()
         exec_success = self._run_simulations_multiprocess(projection_args=projection_args)
@@ -255,9 +268,9 @@ class StochExecutor:
                     end_year=self.END_YEAR,
                     end_month=self.END_MONTH,
                     scenario=self.SCENARIO,
-                    workspace_directory=self._run_config.workspace_directory,
-                    input_directories=self._run_config.input_directories,
-                    results_directory=self._run_config.results_directory,
+                    workspace_directory=self.WORKSPACE_DIRECTORY_PATH,
+                    input_directories=self._run_config.input_directory_paths,
+                    results_directory=self.RESULTS_DIRECTORY_PATH,
                     is_delete_existing_results=False,
                     enable_write_runlog=False,
                 )
@@ -369,9 +382,9 @@ class StochExecutor:
                 "end_month": self.END_MONTH,
                 "scenario": self.SCENARIO,
                 "simulations": self._sims_str,
-                "workspace_directory": self._run_config.workspace_directory,
-                "input_directories": self._run_config.input_directories,
-                "results_directory": self._run_config.results_directory,
+                "workspace_directory": str(self.WORKSPACE_DIRECTORY_PATH),
+                "input_directories": [str(d) for d in self._run_config.input_directory_paths],
+                "results_directory": str(self.RESULTS_DIRECTORY_PATH),
                 "max_workers": self._run_config.max_workers,
             },
             "environment": self._environ,
@@ -394,11 +407,11 @@ class StochExecutor:
         }
 
     @property
-    def workspace_directory_path(self) -> Path:
+    def WORKSPACE_DIRECTORY_PATH(self) -> Path:
         return self._run_config.workspace_directory_path
 
     @property
-    def results_directory_path(self) -> Path:
+    def RESULTS_DIRECTORY_PATH(self) -> Path:
         return self._run_config.results_directory_path
 
     @property

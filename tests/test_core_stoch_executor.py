@@ -72,6 +72,14 @@ class TestConfigureRun:
         with pytest.raises(ValueError, match="already set"):
             se.configure_run(simulations="1-2", start_year=2026)
 
+    def test_relative_results_directory_resolved_against_workspace(self, tmp_path):
+        se = _make_executor(tmp_path=tmp_path)
+        assert se.RESULTS_DIRECTORY_PATH == (tmp_path / "results").resolve()
+
+    def test_relative_input_directories_resolved_against_workspace(self, tmp_path):
+        se = _make_executor(tmp_path=tmp_path, input_directories=["inputs"])
+        assert se._run_config.input_directory_paths == [(tmp_path / "inputs").resolve()]
+
 
 class TestBindProjection:
     def test_zero_arg_rejected(self, tmp_path):
