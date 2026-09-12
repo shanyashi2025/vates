@@ -20,6 +20,5 @@ Thumbs.db
 Desktop.ini
 
 # Local / generated (adjust if you want to track some of these)
-*.log
 example_ws/results/
 example_ws/intermediate/

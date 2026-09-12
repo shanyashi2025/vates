@@ -471,7 +471,6 @@ class ProjModelEngine:
             "USERNAME": os.getenv("USERNAME"),
             "USERDOMAIN": os.getenv("USERDOMAIN"),
             "VIRTUAL_ENV": os.getenv("VIRTUAL_ENV"),
-            "process_id": os.getpid(),
         }
 
     def load_json(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> dict | None:

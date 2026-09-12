@@ -179,7 +179,7 @@ class StochExecutor:
             stoch_result_file_mode=None,
             stoch_result_file_id=None,
             enable_write_runlog=True,
-            max_workers=self._parse_max_workers(
+            max_workers=self._apply_max_workers(
                 apply_default_if_none("max_workers", max_workers, 1, record=none_items)),
         ))
 
@@ -189,7 +189,7 @@ class StochExecutor:
 
         return self
 
-    def _parse_max_workers(self, requested_workers: int | None) -> int:
+    def _apply_max_workers(self, requested_workers: int) -> int:
         if not isinstance(requested_workers, int):
             self.include_traced_message(f"max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
             return 1
@@ -198,11 +198,9 @@ class StochExecutor:
             return 1
 
         _cpu_count = cpu_count()
-        if requested_workers <= _cpu_count:
-            return requested_workers
-        else:
+        if requested_workers > _cpu_count:
             self.include_traced_message(f"max_workers is set to {_cpu_count}: requested {requested_workers} > cpu_count.")
-            return _cpu_count
+        return min(requested_workers, _cpu_count)
 
     def run(
         self,
@@ -403,7 +401,6 @@ class StochExecutor:
             "USERNAME": os.getenv("USERNAME"),
             "USERDOMAIN": os.getenv("USERDOMAIN"),
             "VIRTUAL_ENV": os.getenv("VIRTUAL_ENV"),
-            "process_id": os.getpid(),
         }
 
     @property
