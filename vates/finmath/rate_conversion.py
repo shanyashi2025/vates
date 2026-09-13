@@ -345,7 +345,7 @@ def solve_z_spread(*, target_pv: float, cash_flows: npt.NDArray[np.float64], spo
             delta = epsilon
         else:
             delta = max(-epsilon, tolerance - 1 - min_spot_val - z)  # ensure (1 + min_spot_val + z + delta) > 0
-        discount = InterestRateConvertor.spot_to_discount(spots_plus_z, interval_unit="M")
+        discount = InterestRateConvertor.spot_to_discount(spots_plus_z + delta, interval_unit="M")
         pv_delta = np.dot(cash_flows, discount[1: n_months + 1])
         derivative = (pv_delta - pv) / delta
 
