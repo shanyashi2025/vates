@@ -5,15 +5,17 @@ Open-source Python packages and example implementations for actuarial models.
 ## Project layout
 
 ```text
-.
+./
 ├── vates/                  # The core package
 ├── docs/                   # Project documentation
 └── example_ws/             # Example workspace
 │   ├── models/             # Source code of example models and bespoke package(s)
 │   ├── inputs/             # Example input data (tables) associated with the models
 │   ├── runs/               # Example run configurations (json file)
-│   └── simple_use_cases/   # Example use cases
-└── tests/                  # Test-suite
+│   ├── simple_use_cases/   # Example use cases
+│   └── manifest.json       # Workspace manifest file for use with GUI (specifically, `gui/core/workspace.py`)
+├── tests/                  # Test-suite
+└── gui/                    # GUI built on streamlit
 ```
 
 ## **Quick Start**
@@ -69,9 +71,7 @@ The `ProjModelEngine` class is the projection model engine.
 from vates import ProjModelEngine
 
 model = ProjModelEngine(slug='my_model', description='example model')
-
 model.configure_run(start_year=2025, end_year=2026)
-
 
 @model.bind_projection
 def my_projection(m: ProjModelEngine):
@@ -83,7 +83,6 @@ def my_projection(m: ProjModelEngine):
         print(f"time: {t}, period: {p}")
     if t == m.MAX_T:
         print(f"Projection ended, END_DATE={m.END_DATE}")
-
 
 model.run()
 ```
@@ -110,12 +109,10 @@ to the `results\my_model.proj.csv` file.
 from vates import ProjModelEngine, ConstVariable, TDimVariable
 
 model = ProjModelEngine(slug='my_model', description='example model')
-
 model.configure_run(start_year=2025, end_year=2026)
 
 const_var = ConstVariable('const_var', model_engine=model)
 tdim_var = TDimVariable('tdim_var', model_engine=model)
-
 
 @model.bind_projection
 def my_projection(m: ProjModelEngine):
@@ -124,7 +121,6 @@ def my_projection(m: ProjModelEngine):
     if t == 0:
         const_var[...] = m.START_YEAR * 100 + m.START_MONTH
     tdim_var[t] = p.year * 100 + p.month + t / 100
-
 
 model.run()
 ```
@@ -168,19 +164,16 @@ Similarly,
 ```python
 from vates import ProjModelEngine, StochExecutor
 
-
 def my_projection(m: ProjModelEngine):
   t = m.time
   if t == 0:
     print(f"simulation: {m.SIMULATION}")
-
 
 def stoch_model():
   model = StochExecutor(slug='my_stoch_model', description='example stochastic model')
   model.configure_run(start_year=2025, end_year=2026, simulations="1-10", max_workers=2)
   model.bind_projection(my_projection)
   model.run()
-
 
 if __name__ == '__main__':
   stoch_model()
@@ -202,6 +195,14 @@ Work from the **<example_ws>**.
 ```powershell
 cd path\to\example_ws
 ```
+
+> Create and initialize a virtual environment (recommended)
+> 
+> PowerShell (Windows):
+> 
+> ```powershell
+> init_venv.ps1
+> ```
 
 #### 1. Asset projection model (inner function)
 
@@ -242,3 +243,44 @@ cd path\to\example_ws
 - configuration: `runs\12_stoch_ec_mvl.json`
 - execution: `python models\12_stoch_ec_mvl.py runs\12_stoch_ec_mvl.json`
 - result: `results\base\` (.proj.csv, .stoch.csv, .stoch.stat.csv, .runlog.json)
+
+
+### **D. GUI**
+
+#### Start the app
+
+1. Double-click `start.bat`.
+
+   The first launch creates a project virtual environment (`.venv`), installs the dependencies
+   from `requirements.txt` (mainly `streamlit`), and then starts the web app.
+
+2. Wait for the console to show the local URL, then open it in your browser, e.g.
+   `http://localhost:8501`. Keep the terminal window open while you use the app.
+
+#### Use the app
+
+1. In the sidebar, click **Open Workspace**, enter the workspace path, and click **Open**.
+
+   The workspace is validated; its name and path appear in the sidebar.
+
+2. On the **New Run** page: pick a model, fill in the parameters, and click **Run Model**.
+
+   The **Results** page link is available in the sidebar.
+
+3. While a run is in progress, you cannot start another run or open another workspace.
+   You may, however, prepare the next run's parameters or browse **Results** in the meantime.
+
+4. On the **Results** page: choose a folder and optionally a search term, expand a file,
+   and use **Preview**, **Download**, or **Open in Explorer**.
+
+#### Tips
+
+- Large files are previewed with limits (CSV: 1000 rows x 250 columns; runlog JSON: first
+  10 `messages`; JSON over 10 MB is not previewed). Downloads always contain the full file.
+- Run logs are stored under `results/` in your workspace as `*.runlog.json`.
+
+#### Troubleshooting
+
+- If `start.bat` reports Python is missing, install Python and tick **Add python.exe to PATH**.
+- If the page shows an old version error, delete the `.venv` folder and run `start.bat` again
+  to reinstall dependencies.

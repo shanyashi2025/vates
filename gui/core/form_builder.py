@@ -127,7 +127,18 @@ def render_form(
         default = field_schema.get("default")
         key = f"{key_prefix}_{field_name}" if key_prefix else field_name
 
-        if field_name == "input_directories":
+        if field_name == "workspace_directory":
+            st.markdown(f"{i}. {title}")
+            if description:
+                st.caption(description)
+            values[field_name] = st.text_input(
+                "Workspace directory",
+                value=str(workspace_root),
+                key=key,
+                label_visibility="collapsed",
+                disabled=True,
+            )
+        elif field_name == "input_directories":
             values[field_name] = render_input_directories(
                 i, field_name, field_schema, input_dirs, workspace_root,
                 key_prefix, field_name in required, description,
@@ -136,7 +147,7 @@ def render_form(
             st.markdown(f"{i}. {title}")
             if description:
                 st.caption(description)
-            st.caption("Enter subfolder name under `results/`, e.g. 'my_output' represents `results/my_output/`")
+            st.caption(f"Enter subfolder name under `results\\`, e.g. 'my_output' -> `{workspace_root}\\results\\my_output\\`")
             values[field_name] = st.text_input(
                 "Folder name under results/",
                 value=str(default) if default is not None else "",

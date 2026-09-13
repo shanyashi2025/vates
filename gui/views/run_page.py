@@ -56,7 +56,7 @@ def run_page() -> None:
         st.info("Click **Open Workspace** and enter a workspace path to begin.")
         return
 
-    model_names = [m.get("display_name", f"Model {i}") for i, m in enumerate(ws.models)]
+    model_names = [m.get("name", f"Model {i}") for i, m in enumerate(ws.models)]
     if model_names:
         if len(model_names) <= 8:
             selected = st.radio(
@@ -76,9 +76,10 @@ def run_page() -> None:
         st.session_state.selected_model_idx = model_names.index(selected)
 
     model = ws.models[st.session_state.selected_model_idx]
-    model_id = model.get("display_name", f"model_{st.session_state.selected_model_idx}").lower().replace(" ", "_")
+    model_id = model.get("name", f"model_{st.session_state.selected_model_idx}").lower().replace(" ", "_")
 
-    st.header(model.get("display_name", "Model"))
+    st.header(model.get("name", "Model"))
+    st.caption(str(ws.resolve_script_path(model["script_path"])))
     if model.get("description"):
         st.write(model["description"])
     if model.get("notes"):

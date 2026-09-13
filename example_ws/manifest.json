@@ -1,13 +1,13 @@
 {
     "models": [
         {
-            "display_name": "Asset Model",
+            "name": "Asset Model",
             "description": "Asset projection model - run off existing assets",
             "script_path": "models/01_asset_proj.py",
             "run_config_json_schema": {
                 "type": "object",
                 "properties": {
-                    "model_name": {
+                    "slug": {
                         "type": "string",
                         "default": "asset_proj",
                         "description": "For output file name, e.g. `asset_proj` -> `asset_proj.proj.csv`"
@@ -49,13 +49,13 @@
             "notes": ""
         },
         {
-            "display_name": "Asset Model (v2)",
+            "name": "Asset Model (v2)",
             "description": "Asset projection model - top-level wrapper",
             "script_path": "models/01_asset_proj-top.py",
             "run_config_json_schema": {
                 "type": "object",
                 "properties": {
-                    "model_name": {
+                    "slug": {
                         "type": "string",
                         "default": "asset_proj_top",
                         "description": "For output file name, e.g. `asset_proj_top` -> `asset_proj_top.proj.csv`"
@@ -97,13 +97,13 @@
             "notes": "Top-level wrapper for the asset projection model."
         },
         {
-            "display_name": "ALM Model (Fund)",
+            "name": "ALM Model (Fund)",
             "description": "Fund projection model - ALM calculations with liabilities and funds",
             "script_path": "models/02_fund_proj.py",
             "run_config_json_schema": {
                 "type": "object",
                 "properties": {
-                    "model_name": {
+                    "slug": {
                         "type": "string",
                         "default": "fund_model",
                         "description": "For output file name, e.g. `fund_model` -> `fund_model.proj.csv`"
@@ -145,13 +145,13 @@
             "notes": ""
         },
         {
-            "display_name": "C-ROSS Model",
+            "name": "C-ROSS Model",
             "description": "C-ROSS minimum capital projection model",
             "script_path": "models/03_cross_proj.py",
             "run_config_json_schema": {
                 "type": "object",
                 "properties": {
-                    "model_name": {
+                    "slug": {
                         "type": "string",
                         "default": "cross_model",
                         "description": "For output file name, e.g. `cross_model` -> `cross_model.proj.csv`"
@@ -193,13 +193,13 @@
             "notes": ""
         },
         {
-            "display_name": "Monte Carlo Simulation",
+            "name": "Monte Carlo Simulation",
             "description": "Portfolio Monte Carlo simulation with stochastic asset returns",
             "script_path": "models/11_monte_carlo.py",
             "run_config_json_schema": {
                 "type": "object",
                 "properties": {
-                    "model_name": {
+                    "slug": {
                         "type": "string",
                         "default": "monte_carlo",
                         "description": "For output file name, e.g. `monte_carlo` -> `monte_carlo.proj.csv`"
@@ -251,13 +251,13 @@
             "notes": "Simulations control parallelism."
         },
         {
-            "display_name": "Stochastic EC Model",
+            "name": "Stochastic EC Model",
             "description": "Stochastic economic capital model (MVL basis)",
             "script_path": "models/12_stoch_ec_mvl.py",
             "run_config_json_schema": {
                 "type": "object",
                 "properties": {
-                    "model_name": {
+                    "slug": {
                         "type": "string",
                         "default": "stoch_ec_mvl",
                         "description": "For output file name, e.g. `stoch_ec_mvl` -> `stoch_ec_mvl.proj.csv`"

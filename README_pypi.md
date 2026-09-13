@@ -24,9 +24,7 @@ The `ProjModelEngine` class is the projection model engine.
 from vates import ProjModelEngine
 
 model = ProjModelEngine(slug='my_model', description='example model')
-
 model.configure_run(start_year=2025, end_year=2026)
-
 
 @model.bind_projection
 def my_projection(m: ProjModelEngine):
@@ -38,7 +36,6 @@ def my_projection(m: ProjModelEngine):
         print(f"time: {t}, period: {p}")
     if t == m.MAX_T:
         print(f"Projection ended, END_DATE={m.END_DATE}")
-
 
 model.run()
 ```
@@ -65,12 +62,10 @@ to the `results\my_model.proj.csv` file.
 from vates import ProjModelEngine, ConstVariable, TDimVariable
 
 model = ProjModelEngine(slug='my_model', description='example model')
-
 model.configure_run(start_year=2025, end_year=2026)
 
 const_var = ConstVariable('const_var', model_engine=model)
 tdim_var = TDimVariable('tdim_var', model_engine=model)
-
 
 @model.bind_projection
 def my_projection(m: ProjModelEngine):
@@ -79,7 +74,6 @@ def my_projection(m: ProjModelEngine):
     if t == 0:
         const_var[...] = m.START_YEAR * 100 + m.START_MONTH
     tdim_var[t] = p.year * 100 + p.month + t / 100
-
 
 model.run()
 ```
@@ -123,19 +117,16 @@ Similarly,
 ```python
 from vates import ProjModelEngine, StochExecutor
 
-
 def my_projection(m: ProjModelEngine):
   t = m.time
   if t == 0:
     print(f"simulation: {m.SIMULATION}")
-
 
 def stoch_model():
   model = StochExecutor(slug='my_stoch_model', description='example stochastic model')
   model.configure_run(start_year=2025, end_year=2026, simulations="1-10", max_workers=2)
   model.bind_projection(my_projection)
   model.run()
-
 
 if __name__ == '__main__':
   stoch_model()

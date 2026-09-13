@@ -6,7 +6,7 @@ from pathlib import Path
 
 REQUIRED_DIRS = []  # ["models", "inputs"]
 AUTO_CREATE_DIRS = []  # ["runs", "results"]
-MANIFEST_FILENAME = "models.json"
+MANIFEST_FILENAME = "manifest.json"
 VENV_DIR = ".venv"
 
 
