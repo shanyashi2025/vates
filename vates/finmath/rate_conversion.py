@@ -72,10 +72,11 @@ def convert_interest_rates(rates: np.ndarray, /, *, interval_unit: Literal["Y", 
     Args:
         rates (np.ndarray): Rates to convert, index `0, 1, ..., n` corresponds to term `0, 1, ..., n`.
         interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
-        from_what (str): Source representation, one of `"spot"`, `"forward"`, `"discount"`, `"par"`
+        from_what (str): Source representation, one of `"spot"`, `"forward"`, `"discount"`
             (common aliases such as `"zero"` or `"spot_rates"` are accepted).
-        to_what (str): Target representation, same accepted values as `from_what`.
-        **kwargs: Extra keyword arguments forwarded to the underlying converter (e.g. `freq` for par yields).
+        to_what (str): Target representation, one of `"spot"`, `"forward"`, `"discount"`, `"par"`.
+        **kwargs: Extra keyword arguments forwarded to the underlying converter
+            (e.g. `coupon_frequency` for par yields).
 
     Returns:
         npt.NDArray[np.float64]: Converted rates.
@@ -168,7 +169,11 @@ class InterestRateConvertor:
         """
         Convert discount factors to par yields.
 
-        Par yields are only populated on coupon dates (multiples of `_coupon_step`); all other entries are zero.
+        Par yields are defined on coupon dates only. `step = grid_frequency / coupon_frequency` grid points
+        separate two consecutive coupons, where `grid_frequency` is 1 for a yearly grid and 12 for a monthly
+        grid. When `step > 1` the output is **sparse**: par yields are populated at coupon dates (multiples of
+        `step`) and every other entry is zero. The intermediate zeros are not par yields; only the coupon-date
+        entries carry information.
 
         Args:
             discount (npt.NDArray[np.float64]): Array of discount factors.
@@ -179,7 +184,7 @@ class InterestRateConvertor:
             npt.NDArray[np.float64]: Array of par yields (zeros on non-coupon dates).
 
         Raises:
-            ValueError: If `freq` is invalid or cannot be represented on the grid.
+            ValueError: If `coupon_frequency` is invalid or finer than the grid frequency.
         """
         grid_frequency = frequency_from_interval_unit(interval_unit)
         if coupon_frequency not in (1, 2, 4, 12):
@@ -269,8 +274,8 @@ class InterestRateConvertor:
         """Return the converter method for the requested rate-type pair.
 
         Args:
-            from_what: Canonical source rate type (`"spot"`, `"forward"`, `"discount"`, `"par"`).
-            to_what: Canonical target rate type.
+            from_what: Canonical source rate type (`"spot"`, `"forward"`, `"discount"`).
+            to_what: Canonical target rate type (`"spot"`, `"forward"`, `"discount"`, `"par"`).
 
         Returns:
             Callable: Converter method of this class.
@@ -327,7 +332,7 @@ def solve_z_spread(*, target_pv: float, cash_flows: npt.NDArray[np.float64], spo
 
     for _ in range(max_iterations):  # max iterations
         spots_plus_z = spots + z
-        discount = InterestRateConvertor.spot_to_discount(spots_plus_z, interval_unit="M")
+        discount = convert_interest_rates(spots_plus_z, interval_unit="M", from_what="spot", to_what="discount")
         pv = np.dot(cash_flows, discount[1: n_months + 1])
 
         if abs(pv / target_pv - 1) < tolerance:
@@ -338,7 +343,7 @@ def solve_z_spread(*, target_pv: float, cash_flows: npt.NDArray[np.float64], spo
             delta = epsilon
         else:
             delta = max(-epsilon, tolerance - 1 - min_spot_val - z)  # ensure (1 + min_spot_val + z + delta) > 0
-        discount = InterestRateConvertor.spot_to_discount(spots_plus_z + delta, interval_unit="M")
+        discount = convert_interest_rates(spots_plus_z + delta, interval_unit="M", from_what="spot", to_what="discount")
         pv_delta = np.dot(cash_flows, discount[1: n_months + 1])
         derivative = (pv_delta - pv) / delta
 
@@ -465,7 +470,9 @@ class InterestRateTermStructure:
             interval_unit (Literal["Y", "M"]): Grid interval unit, yearly or monthly.
 
         Returns:
-            dict[int, np.ndarray]: Par yields keyed by coupon frequency.
+            dict[int, np.ndarray]: Par yields keyed by coupon frequency. On a monthly grid, coupon frequencies
+                below 12 produce sparse arrays (zeros on non-coupon dates); see
+                `InterestRateConvertor.discount_to_par`.
         """
         freqs = (1,) if interval_unit == "Y" else (1, 2, 4, 12)
         return {n: InterestRateConvertor.discount_to_par(discount, coupon_frequency=n, interval_unit=interval_unit)
