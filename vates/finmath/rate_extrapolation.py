@@ -10,7 +10,9 @@ def extrapolate_interest_rates(rates: np.ndarray, /, *args, method: str, **kwarg
     Extrapolate interest rates.
 
     Args:
-        rates (np.ndarray): Rates to be extrapolated, index `0, 1, ..., n` corresponds to term `0, 1, ..., n` in years.
+        rates (np.ndarray): Rates to be extrapolated, index `0, 1, ..., n` corresponds to term `0, 1, ..., n` in
+            years. Entry `0` (term 0) is a placeholder; it is dropped for `"smith_wilson"` and ignored by
+            `"eiopa_alternative"`.
         *args: Positional argument absorber.
         method: Extrapolation method.
         **kwargs: Key-word argument absorber.
@@ -101,7 +103,7 @@ def smith_wilson_extrapolation(
 
     Args:
         rates: Observed market rates as decimals. For bonds/swaps, use coupon rates or par rates per instrument,
-            index `0, 1, ..., n` should correspond to term `1, 2, ..., n-1`.
+            index `0, 1, ..., n` should correspond to term `1, 2, ..., n` (term 0 is not accepted).
         instrument: Instrument type: "zero", "bond", or "swap" (case-insensitive).
         coupon_frequency: Number of coupon payments per year for coupon instruments (1, 2, 4, or 12). Ignored for zeros.
         llp: Last liquid point.

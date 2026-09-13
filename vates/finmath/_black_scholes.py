@@ -102,7 +102,7 @@ class BlackScholesCalculator:
             'delta': float(delta),  # `dP/dS`
             'gamma': float(gamma),  # `d2P/dS2`
             'theta': float(theta),  # `dP/dt`
-            'vega': float(vega),  # `dP/dSigma
+            'vega': float(vega),  # `dP/dSigma`
             'rho': float(rho),  # `dP/dr`
         }
 

@@ -1,13 +1,27 @@
 """Quantitative Finance"""
 import numpy as np
-import math
 import warnings
 
 
 def multivariate_standard_normal(corr: np.ndarray, rng: np.random._generator.Generator = None,
                                  bypass_valid_corr: bool = False) -> np.ndarray:
+    """Draw a standard normal vector with the given correlation matrix.
+
+    Args:
+        corr (np.ndarray): Correlation matrix (n x n).
+        rng (np.random.Generator, optional): Random generator. Defaults to `np.random.default_rng()`.
+        bypass_valid_corr (bool): Skip correlation-matrix validation, defaults to False.
+
+    Returns:
+        np.ndarray: Correlated standard normal vector of length n.
+
+    Raises:
+        ValueError: If `corr` is not a valid correlation matrix.
+    """
     if not bypass_valid_corr:
-        validate_corr_matrix(corr)
+        valid, msg = validate_corr_matrix(corr)
+        if not valid:
+            raise ValueError(msg)
     rng = rng or np.random.default_rng()
     n = len(corr)
     L = np.linalg.cholesky(corr)
@@ -37,9 +51,19 @@ def validate_corr_matrix(corr_matrix: np.ndarray) -> tuple[bool, str]:
     return True, 'pass'
 
 
-def geometric_brownian_motion(mu, sigma, dt, z):
-    """Geometric Brownian Motion"""
-    return math.exp((mu - 0.5 * sigma ** 2) * dt + sigma * z * math.sqrt(dt))
+def geometric_brownian_motion(mu: float, sigma: float, dt: float, z: np.ndarray) -> np.ndarray:
+    """Geometric Brownian Motion growth factor.
+
+    Args:
+        mu (float): Drift.
+        sigma (float): Volatility.
+        dt (float): Time step.
+        z (np.ndarray): Standard normal shock(s).
+
+    Returns:
+        np.ndarray: Growth factor(s) `exp((mu - 0.5 * sigma ** 2) * dt + sigma * z * sqrt(dt))`.
+    """
+    return np.exp((mu - 0.5 * sigma ** 2) * dt + sigma * z * np.sqrt(dt))
 
 
 def search_efficient_frontier(mu: np.ndarray, sigma: np.ndarray, corr_matrix: np.ndarray, n_points: int = 100

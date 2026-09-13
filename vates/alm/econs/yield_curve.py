@@ -19,8 +19,8 @@ class YieldCurve:
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    _yield_curve: InterestRateTermStructure
-    _last_update: int
+    _yield_curve: InterestRateTermStructure | None
+    _last_update: int | None
 
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
                  'curve_id', '_yield_curve', 'tdv_spot_rates',)
@@ -40,6 +40,8 @@ class YieldCurve:
             tdv_term_dim (list[int] | None): List of terms (in months) to be output.
         """
         self.curve_id = curve_id
+        self._yield_curve: InterestRateTermStructure | None = None
+        self._last_update: int | None = None
 
         if tdv_term_dim is not None:
             for value in tdv_term_dim:
@@ -57,8 +59,8 @@ class YieldCurve:
                                                          model_engine=model_engine, owner=curve_id, group='yield_curve')
 
     @property
-    def last_update(self) -> int:
-        """int: Last update time index."""
+    def last_update(self) -> int | None:
+        """int | None: Last update time index, or None if the curve has never been updated."""
         return self._last_update
 
     def update(self, *, from_what: Literal["spot_rates", "forward_rates", "discount_factors"] = None,
@@ -77,37 +79,44 @@ class YieldCurve:
         elif any(x is None for x in (from_what, value)):
             raise ValueError(f"`from_what` or `value` is None.")
         elif from_what == "spot_rates":
-            self._yield_curve = InterestRateTermStructure.from_zeroac(value, interval="M")
+            self._yield_curve = InterestRateTermStructure.from_zeroac(value, interval_mode="M")
         elif from_what == "forward_rates":
-            self._yield_curve = InterestRateTermStructure.from_forwardac(value, interval="M")
+            self._yield_curve = InterestRateTermStructure.from_forwardac(value, interval_mode="M")
         elif from_what == "discount_factors":
-            self._yield_curve = InterestRateTermStructure.from_discount(value, interval="M")
+            self._yield_curve = InterestRateTermStructure.from_discount(value, interval_mode="M")
         else:
             raise ValueError(f"Invalid {from_what=}, expected: 'spot_rates', 'forward_rates' or 'discount_factors'.")
 
         self._on_exit_update()
 
     @property
-    def spot_rates(self) -> npt.NDArray[np.float64]:
-        return self._yield_curve.spotac
+    def spot_rates(self) -> npt.NDArray[np.float64] | None:
+        """npt.NDArray[np.float64] | None: Spot rates, or None if the curve has not been initialized."""
+        return None if self._yield_curve is None else self._yield_curve.spotac
 
     @property
-    def discount_factors(self) -> npt.NDArray[np.float64]:
-        return self._yield_curve.discount
+    def discount_factors(self) -> npt.NDArray[np.float64] | None:
+        """npt.NDArray[np.float64] | None: Discount factors, or None if the curve has not been initialized."""
+        return None if self._yield_curve is None else self._yield_curve.discount
 
     @property
-    def forward_rates(self) -> npt.NDArray[np.float64]:
-        return self._yield_curve.forwardac
+    def forward_rates(self) -> npt.NDArray[np.float64] | None:
+        """npt.NDArray[np.float64] | None: Forward rates, or None if the curve has not been initialized."""
+        return None if self._yield_curve is None else self._yield_curve.forwardac
 
     @property
-    def par_yields(self) -> dict[int, npt.NDArray[np.float64]]:
-        return self._yield_curve.parac
+    def par_yields(self) -> dict[int, npt.NDArray[np.float64]] | None:
+        """dict[int, npt.NDArray[np.float64]] | None: Par yields, or None if the curve has not been initialized."""
+        return None if self._yield_curve is None else self._yield_curve.parac
 
     def _on_exit_update(self) -> None:
+        if self._yield_curve is None:
+            raise ValueError("Yield curve has not been initialized; call `update(...)` before `is_unchange=True`.")
         t = self.time
-        n = len(self._yield_curve)
+        spots = self._yield_curve.spotac
+        n = len(spots)
         tdv_term_dim = (int(i) for i in self.tdv_spot_rates.dims[0])
-        self.tdv_spot_rates[t] = np.array([0 if i > n else self.spot_rates[i] for i in tdv_term_dim])
+        self.tdv_spot_rates[t] = np.array([0.0 if i >= n else spots[i] for i in tdv_term_dim])
         self._last_update = t
 
     def __str__(self) -> str:
