@@ -2,10 +2,10 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import warnings
-from typing import Optional
+from typing import Literal
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
-from vates.finmath import InterestRateConvertor
+from vates.finmath import InterestRateTermStructure
 
 
 @add_projection_time_synchronizer
@@ -15,16 +15,15 @@ class YieldCurve:
 
     Attributes:
         curve_id (str): Yield curve identifier.
-        _spot_rates: Spot rates.
-        _discount_factors: Discount factors.
-        _forward_rates: Forward rates.
-        _par_yields: Par yields.
+        _yield_curve (InterestRateTermStructure): Yield curve (interest rate term structure)
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    
+    _yield_curve: InterestRateTermStructure
+    _last_update: int
+
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
-                 'curve_id', '_spot_rates', '_discount_factors', '_forward_rates', '_par_yields', 'tdv_spot_rates',)
+                 'curve_id', '_yield_curve', 'tdv_spot_rates',)
 
     def __init__(
         self,
@@ -41,11 +40,6 @@ class YieldCurve:
             tdv_term_dim (list[int] | None): List of terms (in months) to be output.
         """
         self.curve_id = curve_id
-        self._spot_rates: npt.NDArray[np.float64] | None = None
-        self._discount_factors: npt.NDArray[np.float64] | None = None
-        self._forward_rates: npt.NDArray[np.float64] | None = None
-        self._par_yields: dict[int, Optional[npt.NDArray[np.float64]]] = {1: None, 2: None, 4: None, 12: None}
-        self._last_update: int | None = None
 
         if tdv_term_dim is not None:
             for value in tdv_term_dim:
@@ -63,79 +57,57 @@ class YieldCurve:
                                                          model_engine=model_engine, owner=curve_id, group='yield_curve')
 
     @property
-    def last_update(self) -> int | None:
+    def last_update(self) -> int:
         """int: Last update time index."""
         return self._last_update
 
-    def no_change_on_update(self) -> None:
+    def update(self, *, from_what: Literal["spot_rates", "forward_rates", "discount_factors"] = None,
+               value: npt.NDArray[np.float64] = None, is_unchange: bool = False) -> None:
+        """
+        Update the yield curve for the current time step.
+
+        Args:
+            from_what (Literal["spot_rates", "forward_rates", "discount_factors"]): Update from.
+            value (npt.NDArray[np.float64]): Updated value.
+            is_unchange (bool): True if kept unchanged, defaults to False.
+        """
+        if is_unchange:
+            if any(x is not None for x in (from_what, value)):
+                raise ValueError(f"is_unchange=True but other arguments are given.")
+        elif any(x is None for x in (from_what, value)):
+            raise ValueError(f"`from_what` or `value` is None.")
+        elif from_what == "spot_rates":
+            self._yield_curve = InterestRateTermStructure.from_zeroac(value, interval="M")
+        elif from_what == "forward_rates":
+            self._yield_curve = InterestRateTermStructure.from_forwardac(value, interval="M")
+        elif from_what == "discount_factors":
+            self._yield_curve = InterestRateTermStructure.from_discount(value, interval="M")
+        else:
+            raise ValueError(f"Invalid {from_what=}, expected: 'spot_rates', 'forward_rates' or 'discount_factors'.")
+
         self._on_exit_update()
 
     @property
     def spot_rates(self) -> npt.NDArray[np.float64]:
-        return self._spot_rates
-
-    @spot_rates.setter
-    def spot_rates(self, value: npt.NDArray[np.float64]) -> None:
-        """
-        Specify the yield curve using spot rates.
-
-        Args:
-            value (npt.NDArray[np.float64]): Spot rates.
-        """
-        self._spot_rates = value.copy()
-        self._discount_factors = InterestRateConvertor.spot_to_discount(self._spot_rates, time_interval=1/12)
-        self._forward_rates = InterestRateConvertor.discount_to_forward(self._discount_factors, time_interval=1/12)
-        for n in self._par_yields:
-            self._par_yields[n] = InterestRateConvertor.discount_to_par(self._discount_factors, freq=n, time_interval=1/12)
-        self._on_exit_update()
+        return self._yield_curve.spotac
 
     @property
     def discount_factors(self) -> npt.NDArray[np.float64]:
-        return self._discount_factors
-
-    @discount_factors.setter
-    def discount_factors(self, value: npt.NDArray[np.float64]) -> None:
-        """
-        Specify the yield curve using discount factors.
-
-        Args:
-            value (npt.NDArray[np.float64]): Discount factors.
-        """
-        self._discount_factors = value.copy()
-        self._spot_rates = InterestRateConvertor.discount_to_spot(self._discount_factors, time_interval=1/12)
-        self._forward_rates = InterestRateConvertor.discount_to_forward(self._discount_factors, time_interval=1/12)
-        for n in self._par_yields:
-            self._par_yields[n] = InterestRateConvertor.discount_to_par(self._discount_factors, freq=n, time_interval=1/12)
-        self._on_exit_update()
+        return self._yield_curve.discount
 
     @property
     def forward_rates(self) -> npt.NDArray[np.float64]:
-        return self._forward_rates
-
-    @forward_rates.setter
-    def forward_rates(self, value: npt.NDArray[np.float64]) -> None:
-        """
-        Specify the yield curve using forward rates.
-
-        Args:
-            value (npt.NDArray[np.float64]): Forward rates.
-        """
-        self._forward_rates = value.copy()
-        self._discount_factors = InterestRateConvertor.forward_to_discount(self._forward_rates, time_interval=1/12)
-        self._spot_rates = InterestRateConvertor.discount_to_spot(self._discount_factors, time_interval=1/12)
-        for n in self._par_yields:
-            self._par_yields[n] = InterestRateConvertor.discount_to_par(self._discount_factors, freq=n, time_interval=1/12)
-        self._on_exit_update()
+        return self._yield_curve.forwardac
 
     @property
     def par_yields(self) -> dict[int, npt.NDArray[np.float64]]:
-        return self._par_yields
+        return self._yield_curve.parac
 
     def _on_exit_update(self) -> None:
         t = self.time
-        len_rates = len(self._spot_rates)
+        n = len(self._yield_curve)
         tdv_term_dim = (int(i) for i in self.tdv_spot_rates.dims[0])
-        self.tdv_spot_rates[t] = np.array([0 if i > len_rates else self._spot_rates[i] for i in tdv_term_dim])
+        self.tdv_spot_rates[t] = np.array([0 if i > n else self.spot_rates[i] for i in tdv_term_dim])
         self._last_update = t
 
     def __str__(self) -> str:

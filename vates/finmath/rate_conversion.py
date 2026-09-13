@@ -2,7 +2,7 @@ import numpy as np
 import numpy.typing as npt
 import warnings
 from enum import Enum
-from typing import Callable, Self
+from typing import Callable, Literal, Self
 from dataclasses import dataclass
 
 class InterestRateAlias(Enum):
@@ -23,11 +23,11 @@ class InterestRateAlias(Enum):
     par_rates = "par"
 
 
-def convert_interest_rates(rates: np.ndarray, /, *, time_interval: float = 1, from_type: str, to_type: str, **kwargs
-                          ) -> npt.NDArray[np.float64]:
-    from_type = InterestRateAlias[from_type.lower()].value
-    to_type = InterestRateAlias[to_type.lower()].value
-    func = InterestRateConvertor.get_func(from_type=from_type, to_type=to_type)
+def convert_interest_rates(rates: np.ndarray, /, *, time_interval: float = 1, from_what: str, to_what: str, **kwargs
+                           ) -> npt.NDArray[np.float64]:
+    from_what = InterestRateAlias[from_what.lower()].value
+    to_what = InterestRateAlias[to_what.lower()].value
+    func = InterestRateConvertor.get_func(from_what=from_what, to_what=to_what)
     return func(rates, time_interval=time_interval, **kwargs)
 
 
@@ -198,26 +198,26 @@ class InterestRateConvertor:
         return cls.discount_to_par(discount, freq=freq, time_interval=time_interval)
 
     @classmethod
-    def get_func(cls, *, from_type: str, to_type: str) -> Callable:
-        if from_type == "discount" and to_type == "forward":
+    def get_func(cls, *, from_what: str, to_what: str) -> Callable:
+        if from_what == "discount" and to_what == "forward":
             return cls.discount_to_forward
-        if from_type == "discount" and to_type == "par":
+        if from_what == "discount" and to_what == "par":
             return cls.discount_to_par
-        if from_type == "discount" and to_type == "spot":
+        if from_what == "discount" and to_what == "spot":
             return cls.discount_to_spot
-        if from_type == "forward" and to_type == "discount":
+        if from_what == "forward" and to_what == "discount":
             return cls.forward_to_discount
-        if from_type == "forward" and to_type == "par":
+        if from_what == "forward" and to_what == "par":
             return cls.forward_to_par
-        if from_type == "forward" and to_type == "spot":
+        if from_what == "forward" and to_what == "spot":
             return cls.forward_to_spot
-        if from_type == "spot" and to_type == "discount":
+        if from_what == "spot" and to_what == "discount":
             return cls.spot_to_discount
-        if from_type == "spot" and to_type == "forward":
+        if from_what == "spot" and to_what == "forward":
             return cls.spot_to_forward
-        if from_type == "par" and to_type == "spot_to_par":
+        if from_what == "par" and to_what == "spot_to_par":
             return cls.spot_to_discount
-        raise ValueError(f"Invalid from '{from_type}' to '{to_type}' combination.")
+        raise ValueError(f"Invalid from '{from_what}' to '{to_what}' combination.")
 
 
 def solve_z_spread(*, target_pv: float, cash_flows: npt.NDArray[np.float64], spots: npt.NDArray[np.float64]) -> float:
@@ -337,6 +337,8 @@ class InterestRateTermStructure:
     forwardcc: np.ndarray
     zeroac: np.ndarray
     zerocc: np.ndarray
+    parac: dict[int, np.ndarray]
+    interval: Literal["Y", "M"]
 
     @property
     def spotac(self) -> np.ndarray:
@@ -346,19 +348,36 @@ class InterestRateTermStructure:
     def spotcc(self) -> np.ndarray:
         return self.zerocc
 
-    @property
-    def max_maturity(self) -> int:
-        return len(self.discount) - 1
+    @classmethod
+    def compute_parac(cls, discount, interval) -> dict[int, np.ndarray]:
+        if interval == "Y":
+            return {1: InterestRateConvertor.discount_to_par(discount, freq=1, time_interval=1)}
+        elif interval == "M":
+            return {n: InterestRateConvertor.discount_to_par(discount, freq=n, time_interval=1 / 12)
+                    for n in (1, 2, 4, 12)}
+        else:
+            raise ValueError("Should never get here")
 
     @classmethod
-    def from_discount(cls, discount, /) -> Self:
-        max_maturity = len(discount) - 1
-        forwardac = np.zeros(max_maturity + 1)
-        forwardcc = np.zeros(max_maturity + 1)
-        zeroac = np.zeros(max_maturity + 1)
-        zerocc = np.zeros(max_maturity + 1)
-        zeroac[1:] = discount[1:] ** (-1 / np.arange(1, max_maturity + 1)) - 1
-        forwardac[1:] = discount[:-1] / discount[1:] - 1
+    def frequency(cls, /, interval: Literal["Y", "M"] = "Y") -> int:
+        if interval == "Y":
+            return 1
+        elif interval == "M":
+            return 12
+        else:
+            raise ValueError(f"Invalid {interval=}, expected 'Y' or 'M'.")
+
+    @classmethod
+    def from_discount(cls, discount, /, interval: Literal["Y", "M"] = "Y") -> Self:
+        n = len(discount)
+        time = np.arange(n)
+        freq = cls.frequency(interval)
+        forwardac = np.zeros(n)
+        forwardcc = np.zeros(n)
+        zeroac = np.zeros(n)
+        zerocc = np.zeros(n)
+        zeroac[1:] = discount[1:] ** (-freq /  time[1:]) - 1.0
+        forwardac[1:] = (discount[:-1] / discount[1:]) ** freq - 1.0
         forwardcc[1:] = np.log1p(forwardac[1:])
         zerocc[1:] = np.log1p(zeroac[1:])
         return InterestRateTermStructure(
@@ -367,18 +386,22 @@ class InterestRateTermStructure:
             forwardcc=forwardcc,
             zeroac=zeroac,
             zerocc=zerocc,
+            parac=cls.compute_parac(discount, interval),
+            interval=interval,
         )
 
     @classmethod
-    def from_zeroac(cls, zeroac, /) -> Self:
-        max_maturity = len(zeroac) - 1
-        discount = np.zeros(max_maturity + 1)
-        forwardac = np.zeros(max_maturity + 1)
-        forwardcc = np.zeros(max_maturity + 1)
-        zerocc = np.zeros(max_maturity + 1)
+    def from_zeroac(cls, zeroac, /, interval: Literal["Y", "M"] = "Y") -> Self:
+        n = len(zeroac)
+        time = np.arange(n)
+        freq = cls.frequency(interval)
+        discount = np.zeros(n)
+        forwardac = np.zeros(n)
+        forwardcc = np.zeros(n)
+        zerocc = np.zeros(n)
         discount[0] = 1.0
-        discount[1:] = (1.0 + zeroac[1:]) ** (1 / np.arange(1, max_maturity + 1))
-        forwardac[1:] = discount[:-1] / discount[1:] - 1
+        discount[1:] = (1.0 + zeroac[1:]) ** (-time[1:] / freq)
+        forwardac[1:] = (discount[:-1] / discount[1:]) ** freq - 1.0
         forwardcc[1:] = np.log1p(forwardac[1:])
         zerocc[1:] = np.log1p(zeroac[1:])
         return InterestRateTermStructure(
@@ -387,19 +410,23 @@ class InterestRateTermStructure:
             zerocc=zerocc,
             forwardac=forwardac,
             forwardcc=forwardcc,
+            parac=cls.compute_parac(discount, interval),
+            interval=interval,
         )
 
     @classmethod
-    def from_forwardac(cls, forwardac, /) -> Self:
-        max_maturity = len(forwardac) - 1
-        discount = np.zeros(max_maturity + 1)
-        forwardcc = np.zeros(max_maturity + 1)
-        zeroac = np.zeros(max_maturity + 1)
-        zerocc = np.zeros(max_maturity + 1)
+    def from_forwardac(cls, forwardac, /, interval: Literal["Y", "M"] = "Y") -> Self:
+        n = len(forwardac)
+        time = np.arange(n)
+        freq = cls.frequency(interval)
+        discount = np.zeros(n)
+        forwardcc = np.zeros(n)
+        zeroac = np.zeros(n)
+        zerocc = np.zeros(n)
         forwardcc[1:] = np.log1p(forwardac[1:])
         discount[0] = 1.0
-        discount[1:] = np.cumprod(1.0 / (1.0 + forwardac[1:]))
-        zeroac[1:] = discount[1:] ** (-1 / np.arange(1, max_maturity + 1)) - 1
+        discount[1:] = np.cumprod((1.0 + forwardac[1:]) ** (-1 / freq))
+        zeroac[1:] = discount[1:] ** (-freq /  time[1:]) - 1.0
         zerocc[1:] = np.log1p(zeroac[1:])
         return InterestRateTermStructure(
             discount=discount,
@@ -407,4 +434,9 @@ class InterestRateTermStructure:
             zerocc=zerocc,
             forwardac=forwardac,
             forwardcc=forwardcc,
+            parac=cls.compute_parac(discount, interval),
+            interval=interval,
         )
+
+    def __len__(self) -> int:
+        return len(self.discount)

@@ -4,15 +4,23 @@ from vates.finmath.rate_conversion import InterestRateTermStructure
 from vates.finmath._smith_wilson import SmithWilsonExtrapolator
 
 
-def extrapolate_interest_rates(rates: np.ndarray, /, has_t0: bool, *args, method: str, **kwargs
+def extrapolate_interest_rates(rates: np.ndarray, /, *args, method: str, **kwargs
                                ) -> InterestRateTermStructure:
+    """
+    Extrapolate interest rates.
+
+    Args:
+        rates (np.ndarray): Rates to be extrapolated, index `0, 1, ..., n` corresponds to term `0, 1, ..., n` in years.
+        *args: Positional argument absorber.
+        method: Extrapolation method.
+        **kwargs: Key-word argument absorber.
+
+    Returns:
+        InterestRateTermStructure: Extrapolated interest rate term structure.
+    """
     if method.lower() in ("smith_wilson", "smithwilson"):
-        if has_t0:
-            rates = rates[1:]  # index `0, 1, ..., n` should correspond to term `1, 2, ..., n-1`.
-        return smith_wilson_extrapolation(rates, *args, **kwargs)
+        return smith_wilson_extrapolation(rates[1:], *args, **kwargs)  # Smith-Wilson can't take year-0
     if method.lower() in ("eiopa_alternative", "eiopa_alt"):
-        if not has_t0:
-            rates = np.insert(arr=rates, obj=0, values=0)  # index `0, 1, ..., n` should correspond to term `0, 1, ..., n`.
         return eiopa_alternative_extrapolation(rates, *args, **kwargs)
     raise ValueError(f"Invalid {method=}.")
 

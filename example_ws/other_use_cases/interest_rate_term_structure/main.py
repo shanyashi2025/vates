@@ -1,5 +1,6 @@
 import json
 import pandas as pd
+import numpy as np
 from pathlib import Path
 try:
     import matplotlib
@@ -14,7 +15,8 @@ def main():
     base_dir = Path(__file__).resolve().parent
     df = pd.read_csv(base_dir / "interest_rate_input.csv")
     rates_in = df["spot_rate"].values
-    has_t0 = (int(df["T"].min()) == 0)
+    if int(df["T"].min()) != 0:
+        rates_in = np.insert(arr=rates_in, obj=0, values=0)
 
     with open(base_dir / "extrapolation_params.json", 'r', encoding='utf-8') as file:
         params_dict = json.load(file)
@@ -23,14 +25,14 @@ def main():
         method = params["method"]
         if method == "eiopa_alternative":
             params["llfr_weight"] = {(item["x"], item["y"]): item["w"] for item in params["llfr_weight"]}
-        rates_out = extrapolate_interest_rates(rates_in, has_t0=has_t0, **params)
+        rates_out = extrapolate_interest_rates(rates_in, **params)
         df = pd.DataFrame(
             data={
                 "discount": rates_out.discount,
                 "spot":rates_out.spotac,
                 "forward": rates_out.forwardac,
             },
-            index=range(rates_out.max_maturity + 1)
+            index=range(len(rates_out))
         )
         df.to_csv(base_dir / f"{key}.csv", index=True)
 

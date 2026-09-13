@@ -119,25 +119,25 @@ class EsgMaster:
             if date_col:
                 self.update_yield_curve(esg_item, date_col)
             else:
-                esg_item.econ_obj.no_change_on_update()
+                esg_item.econ_obj.update(is_unchange=True)
         # update credit bands
         for esg_item in self.credit_bands:
             if date_col:
                 self.update_credit_band(esg_item, date_col)
             else:
-                esg_item.econ_obj.no_change_on_update()
+                esg_item.econ_obj.update(is_unchange=True)
         # update equity indices
         for esg_item in self.equity_indices:
             if date_col:
                 self.update_equity_index(esg_item, date_col, esg_step)
             else:
-                esg_item.econ_obj.compound_growth_on_update()
+                esg_item.econ_obj.update(is_apply_compound_growth=True)
         # update currencies
         for esg_item in self.currencies:
             if date_col:
                 self.update_currency(esg_item, date_col)
             else:
-                esg_item.econ_obj.update(fx_rate=1.0)  # revisit the formula once there are foreign currencies
+                esg_item.econ_obj.update(is_apply_compound_growth=True)
         # update market info
         self.update_market_info(date_col)
 
@@ -179,13 +179,16 @@ class EsgMaster:
 
         # determine rate type and process curve data
         if var.measure == "PRICE":
+            from_what = "discount_factors"
             rates = np.insert(arr=rates, obj=0, values=1)  # let discount_factor = 1 at term 0
-            yield_curve_obj.discount_factors = interpolate_interest_rates(term, rates, method=var.interp_method)
+            value = interpolate_interest_rates(term, rates, method=var.interp_method)
         elif var.measure == "SPOT":
+            from_what = "spot_rates"
             rates = np.insert(arr=rates, obj=0, values=0)  # let spot_rate = 0 at term 0
-            yield_curve_obj.spot_rates = interpolate_interest_rates(term, rates, method=var.interp_method)
+            value = interpolate_interest_rates(term, rates, method=var.interp_method)
         else:
             raise ValueError(f"{var.descr}: invalid {var.measure=}")
+        yield_curve_obj.update(from_what=from_what, value=value)
 
     @staticmethod
     def update_credit_band(esg_item: EsgItem, date_col: str) -> None:
@@ -264,7 +267,7 @@ class EsgMaster:
         else:
             raise ValueError(f"{var.descr}: {var.compound_freq=} not defined.")
 
-        esg_item.econ_obj.update(total_return_index, dividend_yield_ac)
+        esg_item.econ_obj.update(total_return_index=total_return_index, dividend_yield_ac=dividend_yield_ac)
 
     @staticmethod
     def update_currency(esg_item: EsgItem, date_col: str) -> None:

@@ -236,7 +236,7 @@ class ProjModelEngine:
         self,
         *,
         projection_args: dict[str, ...] | None = None,
-    ) -> dict:
+    ) -> Self:
         return self.run(projection_args=projection_args)
 
     def _write_results(self) -> None:

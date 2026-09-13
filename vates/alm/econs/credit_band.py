@@ -19,7 +19,12 @@ class CreditBand:
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    
+    _spread: float | npt.NDArray[np.float64]
+    _spotmult: float | npt.NDArray[np.float64]
+    _prob_of_default_ac: float
+    _recovery_rate: float
+    _last_update: int
+
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
                  'band_id', '_spread', '_spotmult', '_prob_of_default_ac', '_recovery_rate',
                  'tdv_prob_of_default_ac', 'tdv_recovery_rate', 'tdv_spread', 'tdv_spotmult',)
@@ -39,12 +44,6 @@ class CreditBand:
             band_id (str): credit band identifier.
         """
         self.band_id: str = band_id
-        self._spread: float | npt.NDArray[np.float64] | None = None
-        self._spotmult: float | npt.NDArray[np.float64] | None = None
-        self._prob_of_default_ac: float | None = None
-        self._recovery_rate: float | None = None
-        self._last_update: int | None = None
-
         create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=band_id, group='credit')
         self.tdv_prob_of_default_ac: TDimVariable = create_tdv("prob_of_default_ac")
         self.tdv_recovery_rate: TDimVariable = create_tdv("recovery_rate")
@@ -60,35 +59,34 @@ class CreditBand:
                                                            model_engine=model_engine, owner=band_id, group='credit')
 
     @property
-    def last_update(self) -> int | None:
+    def last_update(self) -> int:
         """int: Last update time index."""
         return self._last_update
 
     @property
-    def credit_spread(self) -> float | npt.NDArray[np.float64] | None:
+    def credit_spread(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Credit spread(s) as at period end."""
         return self._spread
 
     @property
-    def credit_spotmult(self) -> float | npt.NDArray[np.float64] | None:
+    def credit_spotmult(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Spot rate multipliers as at period end."""
         return self._spotmult
 
     @property
-    def prob_of_default_ac(self) -> float | None:
+    def prob_of_default_ac(self) -> float:
         """float: Probability of default (annual compounding) in period."""
         return self._prob_of_default_ac
 
     @property
-    def recovery_rate(self) -> float | None:
+    def recovery_rate(self) -> float:
         """float: Recovery rate in period."""
         return self._recovery_rate
 
-    def no_change_on_update(self) -> None:
-        self._on_exit_update()
-
-    def update(self, prop_of_default_ac: float, recovery_rate: float, credit_spotmult: float | npt.NDArray[np.float64],
-               credit_spread: float | npt.NDArray[np.float64]) -> None:
+    def update(self, *, prop_of_default_ac: float = None, recovery_rate: float = None,
+               credit_spotmult: float | npt.NDArray[np.float64] = None,
+               credit_spread: float | npt.NDArray[np.float64] = None,
+               is_unchange: bool = False) -> None:
         """
         Update the credit parameters for the current time step.
 
@@ -97,11 +95,18 @@ class CreditBand:
             recovery_rate (float): Recovery rate.
             credit_spotmult (float | npt.NDArray[np.float64]): Spot rate multipliers.
             credit_spread (float | npt.NDArray[np.float64]): Credit spread(s).
+            is_unchange (bool): True if kept unchanged, defaults to False.
         """
-        self._prob_of_default_ac = prop_of_default_ac
-        self._recovery_rate = recovery_rate
-        self._spotmult = credit_spotmult
-        self._spread = credit_spread
+        if is_unchange:
+            if any(x is not None for x in (prop_of_default_ac, recovery_rate, credit_spotmult, credit_spread)):
+                raise ValueError(f"is_unchange=True but other arguments are given.")
+        else:
+            if any(x is None for x in (prop_of_default_ac, recovery_rate, credit_spotmult, credit_spread)):
+                raise ValueError(f"One or more arguments are None.")
+            self._prob_of_default_ac = prop_of_default_ac
+            self._recovery_rate = recovery_rate
+            self._spotmult = credit_spotmult
+            self._spread = credit_spread
         self._on_exit_update()
 
     def _on_exit_update(self) -> None:

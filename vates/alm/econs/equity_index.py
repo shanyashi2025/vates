@@ -15,9 +15,13 @@ class EquityIndex:
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    
+    _dividend_yield_ac: float
+    _total_return_index: float
+    _total_return_index_prev: float
+    _last_update: int
+
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
-                 'index_id', '_total_return', '_capital_growth', '_dividend_yield', '_dividend_yield_ac', '_total_return_index',
+                 'index_id', '_dividend_yield_ac', '_total_return_index', '_total_return_index_prev',
                  'tdv_tot_return_index', 'tdv_dividend_yield_ac', )
 
     def __init__(
@@ -33,50 +37,51 @@ class EquityIndex:
             index_id (str): Equity index identifier.
         """
         self.index_id: str = index_id
-        self._total_return: float | None = None
-        self._capital_growth: float | None = None
-        self._dividend_yield: float | None = None
-        self._dividend_yield_ac: float | None = None
-        self._total_return_index: float | None = None
-        self._last_update: int | None = None
-
+        self._total_return_index = 1.0
         create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=index_id, group='equity_index')
         self.tdv_tot_return_index: TDimVariable = create_tdv("tot_return_index")
         self.tdv_dividend_yield_ac: TDimVariable = create_tdv("dividend_yield_ac")
 
     @property
-    def last_update(self) -> int | None:
+    def last_update(self) -> int:
         """int: Last update time index."""
         return self._last_update
 
     @property
-    def total_return(self) -> float | None:
+    def total_return(self) -> float:
         """float: Total return in period."""
-        return self._total_return
+        if self._total_return_index_prev == 0:
+            raise ZeroDivisionError(f"{self.index_id}: previous total return index is zero.")
+        return self._total_return_index / self._total_return_index_prev - 1
 
     @property
-    def capital_growth(self) -> float | None:
+    def capital_growth(self) -> float:
         """float: Capital growth in period."""
-        return self._capital_growth
+        return self.total_return - self.dividend_yield
 
     @property
-    def dividend_yield(self) -> float | None:
+    def dividend_yield(self) -> float:
         """float: Dividend yield (monthly) in period."""
-        return self._dividend_yield
+        return (1 + self.dividend_yield_ac) ** (1 / 12) - 1
 
     @property
-    def dividend_yield_ac(self) -> float | None:
+    def dividend_yield_ac(self) -> float:
         """float: Dividend yield (annual compounding) in period."""
         return self._dividend_yield_ac
 
     @property
-    def total_return_index(self) -> float | None:
-        """float: Total return index."""
+    def total_return_index(self) -> float:
+        """float: Current total return index."""
         return self._total_return_index
 
     @property
+    def total_return_index_prev(self) -> float:
+        """float: Previous total return index."""
+        return self._total_return_index_prev
+
+    @property
     def arr_tot_return_index(self) -> TDimVariable:
-        """float: Total return index."""
+        """TDimVariable: Total return index."""
         return self.tdv_tot_return_index
 
     @property
@@ -84,41 +89,32 @@ class EquityIndex:
         """TDepVariable: Dividend yield (annual compounding)."""
         return self.tdv_dividend_yield_ac
 
-    def compound_growth_on_update(self) -> None:
-        """
-        Apply compound growth on the total equity index.
-        """
-        t = self.time
-        self._total_return_index *= 1 + self._total_return
-        self.tdv_tot_return_index[t] = self._total_return_index
-        self.tdv_dividend_yield_ac[t] = self._dividend_yield_ac
-        self._last_update = t
-
-    def update(self, total_return_index: float, dividend_yield_ac: float) -> None:
+    def update(self, *, total_return_index: float = None, dividend_yield_ac: float = None,
+               is_apply_compound_growth: bool = False) -> None:
         """
         Update the equity index values for the current time step.
 
         Args:
             total_return_index (float): New total return index.
             dividend_yield_ac (float): New dividend yield (annual compounding).
+            is_apply_compound_growth (bool): True if applying compound growth on total return index, defaults to False.
         """
-        t = self.time
-
-        self._dividend_yield_ac = dividend_yield_ac
-        self._dividend_yield = (1 + dividend_yield_ac) ** (1 / 12) - 1
-
-        if self._total_return_index is None:
-            pass
-        elif self._total_return_index == 0:
-            raise ZeroDivisionError(f"{self.index_id}: can not calculate total return in period as previous index is 0.")
+        if is_apply_compound_growth:
+            if any(x is not None for x in (total_return_index, dividend_yield_ac)):
+                raise ValueError(f"is_apply_compound_growth=True but other arguments are given.")
+            growth = self._total_return_index / self._total_return_index_prev
+            self._total_return_index_prev = self._total_return_index
+            self._total_return_index *= growth
         else:
-            self._total_return = total_return_index / self._total_return_index - 1
-            self._capital_growth = self._total_return - self._dividend_yield
+            if any(x is None for x in (total_return_index, dividend_yield_ac)):
+                raise ValueError(f"total_return_index or dividend_yield_ac is None.")
+            self._dividend_yield_ac = dividend_yield_ac
+            self._total_return_index_prev = self._total_return_index
+            self._total_return_index = total_return_index
 
-        self._total_return_index = total_return_index
-        self.tdv_tot_return_index[t] = total_return_index
-        self.tdv_dividend_yield_ac[t] = dividend_yield_ac
-
+        t = self.time
+        self.tdv_tot_return_index[t] = self._total_return_index
+        self.tdv_dividend_yield_ac[t] = self._dividend_yield_ac
         self._last_update = t
 
     def __str__(self) -> str:
