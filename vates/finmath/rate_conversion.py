@@ -86,6 +86,8 @@ def convert_interest_rates(rates: np.ndarray, /, *, interval_unit: Literal["Y", 
     """
     from_what = _normalize_rate_alias(from_what, name="from_what")
     to_what = _normalize_rate_alias(to_what, name="to_what")
+    if from_what == to_what:
+        return np.asarray(rates, dtype=float)
     func = InterestRateConvertor.get_func(from_what=from_what, to_what=to_what)
     return func(rates, interval_unit=interval_unit, **kwargs)
 
@@ -332,7 +334,7 @@ def solve_z_spread(*, target_pv: float, cash_flows: npt.NDArray[np.float64], spo
 
     for _ in range(max_iterations):  # max iterations
         spots_plus_z = spots + z
-        discount = convert_interest_rates(spots_plus_z, interval_unit="M", from_what="spot", to_what="discount")
+        discount = InterestRateConvertor.spot_to_discount(spots_plus_z, interval_unit="M")
         pv = np.dot(cash_flows, discount[1: n_months + 1])
 
         if abs(pv / target_pv - 1) < tolerance:
@@ -343,7 +345,7 @@ def solve_z_spread(*, target_pv: float, cash_flows: npt.NDArray[np.float64], spo
             delta = epsilon
         else:
             delta = max(-epsilon, tolerance - 1 - min_spot_val - z)  # ensure (1 + min_spot_val + z + delta) > 0
-        discount = convert_interest_rates(spots_plus_z + delta, interval_unit="M", from_what="spot", to_what="discount")
+        discount = InterestRateConvertor.spot_to_discount(spots_plus_z, interval_unit="M")
         pv_delta = np.dot(cash_flows, discount[1: n_months + 1])
         derivative = (pv_delta - pv) / delta
 

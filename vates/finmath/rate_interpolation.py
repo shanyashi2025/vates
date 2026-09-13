@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.typing as npt
 import math
-from typing import Callable
+from typing import Callable, Literal
 
 
 def interpolate_interest_rates(x: npt.NDArray[np.float64], y: npt.NDArray[np.float64], *, method: str, **kwargs
@@ -131,24 +131,34 @@ class InterestRateInterpolator:
         return y_interp
 
     @classmethod
-    def exponential(cls, x: npt.NDArray[np.float64], y: npt.NDArray[np.float64], *, time_interval: float,
-                    forward_rate_cc: float = math.log(1.045)) -> npt.NDArray[np.float64]:
+    def exponential(cls, x: npt.NDArray[np.float64], y: npt.NDArray[np.float64], *,
+                    interval_unit: Literal["Y", "M"] = "Y", forward_rate_cc: float = math.log(1.045)
+                    ) -> npt.NDArray[np.float64]:
         """
         Perform exponential interpolation between data points of discount factor or zero coupon bond (zcb).
 
         Args:
             x: Array of x-coordinates (must be sorted in ascending order)
             y: Array of y-coordinates corresponding to x (must be positive)
-            time_interval: Time interval in years (e.g. 1 means x repsents year, 1/12 means x repsents months)
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
             forward_rate_cc: Constant forward rate (continuously compounded)
 
         Returns:
             npt.NDArray[np.float64]: Array of interpolated y-values for all integer x-values from 0 to max(x).
+
+        Raises:
+            ValueError: If `interval_unit` is not `"Y"` or `"M"`.
         """
+        if interval_unit == "Y":
+            interval_in_years = 1
+        elif interval_unit == "M":
+            interval_in_years = 1 / 12
+        else:
+            raise ValueError(f"Invalid {interval_unit=}, expected 'Y' or 'M'.")
+
         y_interp = np.zeros(int(x[-1]) + 1)
         y_interp[0] = y[0]
-        z = np.zeros(int(x[-1]) + 1)
-        z[:] = np.exp(-forward_rate_cc * np.arange(0, int(x[-1]) + 1) * time_interval)  # exp(-ft)
+        z = np.exp(-forward_rate_cc * np.arange(0, int(x[-1]) + 1) * interval_in_years)  # exp(-ft)
 
         for i in range(1, len(x)):
             x0, x1 = int(x[i - 1]), int(x[i])
