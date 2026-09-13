@@ -1,5 +1,6 @@
 import numpy as np
 from vates import ProjModelEngine, KeyedArray, alm
+from vates.finmath import convert_interest_rates, interpolate_interest_rates
 from vates.solvency import cn_cross2
 from company_package import (
     run_with_json_config,
@@ -132,12 +133,11 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
 
 def _interp_monthly_spot(spot_in: np.ndarray) -> np.ndarray:
-    from vates.finmath import convert_interest_rates, interpolate_interest_rates
     terms = np.arange(len(spot_in)) * 12 # term in month
     # modify the code to implement other curve interpolation method
-    fwrd_in = convert_interest_rates(spot_in, from_what="spot", to_what="forward")
+    fwrd_in = convert_interest_rates(spot_in, interval_unit="Y", from_what="spot", to_what="forward")
     fwrd_interp = interpolate_interest_rates(terms, fwrd_in, method="next")
-    spot_out = convert_interest_rates(fwrd_interp, time_interval=1/12, from_what="forward", to_what="spot")
+    spot_out = convert_interest_rates(fwrd_interp, interval_unit="M", from_what="forward", to_what="spot")
     return spot_out
 
 

@@ -1,6 +1,5 @@
 import numpy as np
 import numpy.typing as npt
-import math
 from enum import Enum
 from typing import Callable, Literal, Self
 from dataclasses import dataclass
@@ -45,14 +44,34 @@ def _normalize_rate_alias(alias: str, *, name: str) -> str:
         raise ValueError(f"Invalid {name}={alias!r}, expected one of {valid}.") from None
 
 
-def convert_interest_rates(rates: np.ndarray, /, *, time_interval: float = 1, from_what: str, to_what: str, **kwargs
-                           ) -> npt.NDArray[np.float64]:
+def frequency_from_interval_unit(interval_unit: Literal["Y", "M"] = "Y", /) -> int:
+    """Return the number of grid steps per year for the given interval unit.
+
+    Args:
+        interval_unit (Literal["Y", "M"]): Grid interval unit, year or month.
+
+    Returns:
+        int: 1 for yearly, 12 for monthly.
+
+    Raises:
+        ValueError: If `interval_unit` is not `"Y"` or `"M"`.
+    """
+    if interval_unit == "Y":
+        return 1
+    elif interval_unit == "M":
+        return 12
+    else:
+        raise ValueError(f"Invalid {interval_unit=}, expected 'Y' or 'M'.")
+
+
+def convert_interest_rates(rates: np.ndarray, /, *, interval_unit: Literal["Y", "M"] = "Y", from_what: str, to_what: str,
+                           **kwargs) -> npt.NDArray[np.float64]:
     """
     Convert interest rates from one representation to another.
 
     Args:
         rates (np.ndarray): Rates to convert, index `0, 1, ..., n` corresponds to term `0, 1, ..., n`.
-        time_interval (float): Time interval in years between two consecutive entries of `rates`, defaults to 1.
+        interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
         from_what (str): Source representation, one of `"spot"`, `"forward"`, `"discount"`, `"par"`
             (common aliases such as `"zero"` or `"spot_rates"` are accepted).
         to_what (str): Target representation, same accepted values as `from_what`.
@@ -67,118 +86,85 @@ def convert_interest_rates(rates: np.ndarray, /, *, time_interval: float = 1, fr
     from_what = _normalize_rate_alias(from_what, name="from_what")
     to_what = _normalize_rate_alias(to_what, name="to_what")
     func = InterestRateConvertor.get_func(from_what=from_what, to_what=to_what)
-    return func(rates, time_interval=time_interval, **kwargs)
+    return func(rates, interval_unit=interval_unit, **kwargs)
 
 
 class InterestRateConvertor:
 
     @classmethod
-    def frequency(cls, time_interval: float) -> int:
-        if not any(math.isclose(time_interval, 1 / x, abs_tol=1e-9) for x in (1, 2, 4, 12)):
-            raise ValueError(f"Invalid {time_interval=}, expected (1, 1/2, 1/4, 1/12).")
-        return round(1 / time_interval)
-
-    @classmethod
-    def spot_to_discount(cls, spot: npt.NDArray[np.float64], /, *, time_interval: float = 1) -> npt.NDArray[np.float64]:
+    def spot_to_discount(cls, spot: npt.NDArray[np.float64], /, *, interval_unit: Literal["Y", "M"] = "Y"
+                         ) -> npt.NDArray[np.float64]:
         """
         Convert spot rates to discount factors.
 
         Args:
             spot (npt.NDArray[np.float64]): Array of spot rates.
-            time_interval: Time interval in years, defaults to 1.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             npt.NDArray[np.float64]: Array of discount factors.
         """
-        time = np.arange(len(spot)) * time_interval
+        interval_in_years = 1 / frequency_from_interval_unit(interval_unit)
+        time = np.arange(len(spot)) * interval_in_years
         return (1 + spot) ** (-time)
 
     @classmethod
-    def forward_to_discount(cls, forward: npt.NDArray[np.float64], /, *, time_interval: float = 1
+    def forward_to_discount(cls, forward: npt.NDArray[np.float64], /, *, interval_unit: Literal["Y", "M"] = "Y"
                             ) -> npt.NDArray[np.float64]:
         """
         Convert forward rates to discount factors.
 
         Args:
             forward (npt.NDArray[np.float64]): Array of forward rates.
-            time_interval: Time interval in years, defaults to 1.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             npt.NDArray[np.float64]: Array of discount factors.
         """
-        factors = (1 + forward) ** (-time_interval)
+        interval_in_years = 1 / frequency_from_interval_unit(interval_unit)
+        factors = (1 + forward) ** (-interval_in_years)
         return np.cumprod(factors, dtype=float)
 
     @classmethod
-    def discount_to_spot(cls, discount: npt.NDArray[np.float64], /, *, time_interval: float = 1
+    def discount_to_spot(cls, discount: npt.NDArray[np.float64], /, *, interval_unit: Literal["Y", "M"] = "Y"
                          ) -> npt.NDArray[np.float64]:
         """
         Convert discount factors to spot rates.
 
         Args:
             discount (npt.NDArray[np.float64]): Array of discount factors.
-            time_interval: Time interval in years, defaults to 1.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             npt.NDArray[np.float64]: Array of spot rates.
         """
-        time = np.arange(len(discount)) * time_interval
+        interval_in_years = 1 / frequency_from_interval_unit(interval_unit)
+        time = np.arange(len(discount)) * interval_in_years
         spot = np.zeros(len(discount))
         spot[1:] = discount[1:] ** (-1 / time[1:]) - 1
         return spot
 
     @classmethod
-    def discount_to_forward(cls, discount: npt.NDArray[np.float64], /, *, time_interval: float = 1
+    def discount_to_forward(cls, discount: npt.NDArray[np.float64], /, *, interval_unit: Literal["Y", "M"] = "Y"
                             ) -> npt.NDArray[np.float64]:
         """
         Convert discount factors to forward rates.
 
         Args:
             discount (npt.NDArray[np.float64]): Array of discount factors.
-            time_interval: Time interval in years, defaults to 1.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             npt.NDArray[np.float64]: Array of forward rates.
         """
+        frequency = frequency_from_interval_unit(interval_unit)
         forward = np.zeros(len(discount))
-        forward[1:] = (discount[:-1] / discount[1:]) ** (1 / time_interval) - 1
+        forward[1:] = (discount[:-1] / discount[1:]) ** frequency - 1
         return forward
 
-    @staticmethod
-    def _coupon_step(*, time_interval: float, freq: int) -> int:
-        """Return the number of grid steps between two consecutive coupon dates.
-
-        A term structure is a grid where entry `i` corresponds to term `i * time_interval` years. A coupon
-        frequency `freq` can only be represented on the grid when a coupon period (`1 / freq` years) is an
-        integer multiple of `time_interval`.
-
-        Args:
-            time_interval: Time interval in years between two consecutive grid entries.
-            freq: Coupon frequency (1, 2, 4, or 12).
-
-        Returns:
-            int: Number of grid steps between two consecutive coupons.
-
-        Raises:
-            ValueError: If `freq` is invalid or cannot be represented on the given grid.
-        """
-        if freq not in (1, 2, 4, 12):
-            raise ValueError(f"Invalid payment frequency: {freq}. Must be 1, 2, 4, or 12.")
-        if not any(math.isclose(time_interval, 1 / x, abs_tol=1e-9) for x in (1, 2, 4, 12)):
-            raise ValueError(f"Invalid {time_interval=}, expected (1, 1/2, 1/4, 1/12).")
-
-        periods = 1.0 / (freq * time_interval)  # coupon period measured in grid steps
-        step = round(periods)
-        if step < 1 or not math.isclose(periods, step, rel_tol=1e-9, abs_tol=1e-9):
-            raise ValueError(
-                f"Cannot represent coupon frequency {freq} on a grid of {time_interval} year(s) per step: "
-                f"a coupon period spans {periods:.4g} grid step(s)."
-            )
-        return step
-
     @classmethod
-    def discount_to_par(cls, discount: npt.NDArray[np.float64], /, *, time_interval: float = 1, freq: int = 1,
-                        ) -> npt.NDArray[np.float64]:
+    def discount_to_par(cls, discount: npt.NDArray[np.float64], /, *, interval_unit: Literal["Y", "M"] = "Y",
+                        coupon_frequency: int = 1, ) -> npt.NDArray[np.float64]:
         """
         Convert discount factors to par yields.
 
@@ -186,8 +172,8 @@ class InterestRateConvertor:
 
         Args:
             discount (npt.NDArray[np.float64]): Array of discount factors.
-            freq (int): Coupon frequency (1, 2, 4, or 12).
-            time_interval: Time interval in years, defaults to 1.
+            coupon_frequency (int): Coupon frequency (1, 2, 4, or 12).
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             npt.NDArray[np.float64]: Array of par yields (zeros on non-coupon dates).
@@ -195,142 +181,88 @@ class InterestRateConvertor:
         Raises:
             ValueError: If `freq` is invalid or cannot be represented on the grid.
         """
-        step = cls._coupon_step(time_interval=time_interval, freq=freq)
+        grid_frequency = frequency_from_interval_unit(interval_unit)
+        if coupon_frequency not in (1, 2, 4, 12):
+            raise ValueError(f"Invalid payment frequency: {coupon_frequency}. Must be 1, 2, 4, or 12.")
+        if grid_frequency < coupon_frequency:
+            raise ValueError(
+                f"Cannot represent coupon frequency {coupon_frequency} on a grid of {interval_unit} interval unit: "
+                f"a coupon period spans {grid_frequency / coupon_frequency:.4g} grid step(s)."
+            )
+        step = round(grid_frequency / coupon_frequency)
 
         par = np.zeros(len(discount))
         ann_factor = 0.0
         for i in range(step, len(discount), step):
             ann_factor += discount[i]
-            par[i] = (1 - discount[i]) / ann_factor * freq
+            par[i] = (1 - discount[i]) / ann_factor * coupon_frequency
 
         return par
 
     @classmethod
-    def par_to_discount(cls, par: npt.NDArray[np.float64], /, *, time_interval: float = 1,
-                        ) -> npt.NDArray[np.float64]:
-        """
-        Convert par yields to discount factors by bootstrapping.
-
-        Args:
-            par (npt.NDArray[np.float64]): Array of par yields.
-            time_interval: Time interval in years, defaults to 1.
-
-        Returns:
-            npt.NDArray[np.float64]: Array of discount factors.
-
-        Raises:
-            ValueError: If `freq` is invalid or cannot be represented on the grid, if `par` does not end on a
-                coupon date, or if `step > 1` while `fill_method` is None.
-        """
-        freq = cls.frequency(time_interval)
-
-        # step = cls._coupon_step(time_interval=time_interval, freq=freq)
-        n = len(par)
-
-        discount = np.zeros(n)
-        discount[0] = 1.0
-        ann_factor = 0.0
-        for i in range(1, n):
-            discount[i] = (freq - par[i] * ann_factor) / (freq + par[i])
-            ann_factor += discount[i]
-
-        return discount
-
-    @classmethod
-    def spot_to_forward(cls, spot: npt.NDArray[np.float64], /, *, time_interval: float = 1) -> npt.NDArray[np.float64]:
+    def spot_to_forward(cls, spot: npt.NDArray[np.float64], /, *, interval_unit: Literal["Y", "M"] = "Y") -> npt.NDArray[np.float64]:
         """
         Convert spot rates to forward rates.
 
         Args:
             spot (npt.NDArray[np.float64]): Array of spot rates.
-            time_interval: Time interval in years, defaults to 1.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             npt.NDArray[np.float64]: Array of forward rates.
         """
-        discount = cls.spot_to_discount(spot, time_interval=time_interval)
-        return cls.discount_to_forward(discount, time_interval=time_interval)
+        discount = cls.spot_to_discount(spot, interval_unit=interval_unit)
+        return cls.discount_to_forward(discount, interval_unit=interval_unit)
 
     @classmethod
-    def spot_to_par(cls, spot: npt.NDArray[np.float64], /, *, time_interval: float = 1, freq: int,
-                    ) -> npt.NDArray[np.float64]:
+    def spot_to_par(cls, spot: npt.NDArray[np.float64], /, *, interval_unit: Literal["Y", "M"] = "Y",
+                    coupon_frequency: int, ) -> npt.NDArray[np.float64]:
         """
         Convert spot rates to par yields.
 
         Args:
             spot (npt.NDArray[np.float64]): Array of spot rates.
-            freq (int): Coupon frequency (1, 2, 4, or 12).
-            time_interval: Time interval in years, defaults to 1.
+            coupon_frequency (int): Coupon frequency (1, 2, 4, or 12).
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             npt.NDArray[np.float64]: Array of par yields.
         """
-        discount = cls.spot_to_discount(spot, time_interval=time_interval)
-        return cls.discount_to_par(discount, freq=freq, time_interval=time_interval)
+        discount = cls.spot_to_discount(spot, interval_unit=interval_unit)
+        return cls.discount_to_par(discount, coupon_frequency=coupon_frequency, interval_unit=interval_unit)
 
     @classmethod
-    def forward_to_spot(cls, forward: npt.NDArray[np.float64], /, *, time_interval: float = 1) -> npt.NDArray[np.float64]:
+    def forward_to_spot(cls, forward: npt.NDArray[np.float64], /, *, interval_unit: Literal["Y", "M"] = "Y"
+                        ) -> npt.NDArray[np.float64]:
         """
         Convert forward rates to spot rates.
 
         Args:
             forward (npt.NDArray[np.float64]): Array of forward rates.
-            time_interval: Time interval in years, defaults to 1.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             npt.NDArray[np.float64]: Array of spot rates.
         """
-        discount = cls.forward_to_discount(forward, time_interval=time_interval)
-        return cls.discount_to_spot(discount, time_interval=time_interval)
+        discount = cls.forward_to_discount(forward, interval_unit=interval_unit)
+        return cls.discount_to_spot(discount, interval_unit=interval_unit)
 
     @classmethod
-    def forward_to_par(cls, forward: npt.NDArray[np.float64], /, *, time_interval: float = 1, freq: int,
-                       ) -> npt.NDArray[np.float64]:
+    def forward_to_par(cls, forward: npt.NDArray[np.float64], /, *, interval_unit: Literal["Y", "M"] = "Y",
+                       coupon_frequency: int, ) -> npt.NDArray[np.float64]:
         """
         Convert forward rates to par yields.
 
         Args:
             forward (npt.NDArray[np.float64]): Array of forward rates.
-            freq (int): Coupon frequency (1, 2, 4, or 12).
-            time_interval: Time interval in years, defaults to 1.
+            coupon_frequency (int): Coupon frequency (1, 2, 4, or 12).
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             npt.NDArray[np.float64]: Array of par yields.
         """
-        discount = cls.forward_to_discount(forward, time_interval=time_interval)
-        return cls.discount_to_par(discount, freq=freq, time_interval=time_interval)
-
-    @classmethod
-    def par_to_spot(cls, par: npt.NDArray[np.float64], /, *, time_interval: float = 1
-                    ) -> npt.NDArray[np.float64]:
-        """
-        Convert par yields to spot rates.
-
-        Args:
-            par (npt.NDArray[np.float64]): Array of par yields.
-            time_interval: Time interval in years, defaults to 1.
-
-        Returns:
-            npt.NDArray[np.float64]: Array of spot rates.
-        """
-        discount = cls.par_to_discount(par, time_interval=time_interval)
-        return cls.discount_to_spot(discount, time_interval=time_interval)
-
-    @classmethod
-    def par_to_forward(cls, par: npt.NDArray[np.float64], /, *, time_interval: float = 1,
-                       ) -> npt.NDArray[np.float64]:
-        """
-        Convert par yields to forward rates.
-
-        Args:
-            par (npt.NDArray[np.float64]): Array of par yields.
-            time_interval: Time interval in years, defaults to 1.
-
-        Returns:
-            npt.NDArray[np.float64]: Array of forward rates.
-        """
-        discount = cls.par_to_discount(par, time_interval=time_interval)
-        return cls.discount_to_forward(discount, time_interval=time_interval)
+        discount = cls.forward_to_discount(forward, interval_unit=interval_unit)
+        return cls.discount_to_par(discount, coupon_frequency=coupon_frequency, interval_unit=interval_unit)
 
     @classmethod
     def get_func(cls, *, from_what: str, to_what: str) -> Callable:
@@ -364,12 +296,6 @@ class InterestRateConvertor:
             return cls.spot_to_forward
         if from_what == "spot" and to_what == "par":
             return cls.spot_to_par
-        if from_what == "par" and to_what == "discount":
-            return cls.par_to_discount
-        if from_what == "par" and to_what == "forward":
-            return cls.par_to_forward
-        if from_what == "par" and to_what == "spot":
-            return cls.par_to_spot
         raise ValueError(f"Invalid from '{from_what}' to '{to_what}' combination.")
 
 
@@ -401,7 +327,7 @@ def solve_z_spread(*, target_pv: float, cash_flows: npt.NDArray[np.float64], spo
 
     for _ in range(max_iterations):  # max iterations
         spots_plus_z = spots + z
-        discount = InterestRateConvertor.spot_to_discount(spots_plus_z, time_interval=1/12)
+        discount = InterestRateConvertor.spot_to_discount(spots_plus_z, interval_unit="M")
         pv = np.dot(cash_flows, discount[1: n_months + 1])
 
         if abs(pv / target_pv - 1) < tolerance:
@@ -412,7 +338,7 @@ def solve_z_spread(*, target_pv: float, cash_flows: npt.NDArray[np.float64], spo
             delta = epsilon
         else:
             delta = max(-epsilon, tolerance - 1 - min_spot_val - z)  # ensure (1 + min_spot_val + z + delta) > 0
-        discount = InterestRateConvertor.spot_to_discount(spots_plus_z + delta, time_interval=1/12)
+        discount = InterestRateConvertor.spot_to_discount(spots_plus_z + delta, interval_unit="M")
         pv_delta = np.dot(cash_flows, discount[1: n_months + 1])
         derivative = (pv_delta - pv) / delta
 
@@ -487,7 +413,7 @@ class InterestRateTermStructure:
     """Interest rate term structure.
 
     All rate arrays are indexed by term: entry `i` corresponds to term `i` grid steps, where a grid step is
-    one year when `interval_mode == "Y"` and one month when `interval_mode == "M"`.
+    one year when `interval_unit == "Y"` and one month when `interval_unit == "M"`.
 
     Attributes:
         discount (np.ndarray): Discount factors.
@@ -496,7 +422,7 @@ class InterestRateTermStructure:
         zeroac (np.ndarray): Annually compounded zero (spot) rates.
         zerocc (np.ndarray): Continuously compounded zero (spot) rates.
         parac (dict[int, np.ndarray]): Par yields keyed by coupon frequency.
-        interval_mode (Literal["Y", "M"]): Grid interval mode, yearly or monthly.
+        interval_unit (Literal["Y", "M"]): Grid interval unit, yearly or monthly.
     """
     discount: np.ndarray
     forwardac: np.ndarray
@@ -504,11 +430,11 @@ class InterestRateTermStructure:
     zeroac: np.ndarray
     zerocc: np.ndarray
     parac: dict[int, np.ndarray]
-    interval_mode: Literal["Y", "M"]
+    interval_unit: Literal["Y", "M"]
 
     def __post_init__(self) -> None:
-        if self.interval_mode not in ("Y", "M"):
-            raise ValueError(f"Invalid interval_mode={self.interval_mode!r}, expected 'Y' or 'M'.")
+        if self.interval_unit not in ("Y", "M"):
+            raise ValueError(f"Invalid interval_unit={self.interval_unit!r}, expected 'Y' or 'M'.")
         lengths = {len(self.discount), len(self.forwardac), len(self.forwardcc), len(self.zeroac), len(self.zerocc)}
         if len(lengths) != 1:
             raise ValueError(f"Inconsistent rate array lengths: {sorted(lengths)}.")
@@ -531,54 +457,33 @@ class InterestRateTermStructure:
         return len(self.discount) - 1
 
     @classmethod
-    def compute_parac(cls, discount: np.ndarray, interval_mode: Literal["Y", "M"]) -> dict[int, np.ndarray]:
+    def compute_parac(cls, discount: np.ndarray, interval_unit: Literal["Y", "M"]) -> dict[int, np.ndarray]:
         """Compute par yields for every supported coupon frequency on the given grid.
 
         Args:
             discount (np.ndarray): Discount factors.
-            interval_mode (Literal["Y", "M"]): Grid interval mode, yearly or monthly.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, yearly or monthly.
 
         Returns:
             dict[int, np.ndarray]: Par yields keyed by coupon frequency.
         """
-        time_interval = 1 / cls.frequency(interval_mode)
-        freqs = (1,) if interval_mode == "Y" else (1, 2, 4, 12)
-        return {n: InterestRateConvertor.discount_to_par(discount, freq=n, time_interval=time_interval)
+        freqs = (1,) if interval_unit == "Y" else (1, 2, 4, 12)
+        return {n: InterestRateConvertor.discount_to_par(discount, coupon_frequency=n, interval_unit=interval_unit)
                 for n in freqs}
 
     @classmethod
-    def frequency(cls, /, interval_mode: Literal["Y", "M"] = "Y") -> int:
-        """Return the number of grid steps per year for the given interval mode.
-
-        Args:
-            interval_mode (Literal["Y", "M"]): Grid interval mode, yearly or monthly.
-
-        Returns:
-            int: 1 for yearly, 12 for monthly.
-
-        Raises:
-            ValueError: If `interval_mode` is not `"Y"` or `"M"`.
-        """
-        if interval_mode == "Y":
-            return 1
-        elif interval_mode == "M":
-            return 12
-        else:
-            raise ValueError(f"Invalid {interval_mode=}, expected 'Y' or 'M'.")
-
-    @classmethod
-    def from_discount(cls, discount: npt.NDArray[np.float64], /, interval_mode: Literal["Y", "M"] = "Y") -> Self:
+    def from_discount(cls, discount: npt.NDArray[np.float64], /, interval_unit: Literal["Y", "M"] = "Y") -> Self:
         """Build a term structure from discount factors.
 
         Args:
             discount (npt.NDArray[np.float64]): Discount factors, index `0, 1, ..., n` corresponds to term
                 `0, 1, ..., n` grid steps.
-            interval_mode (Literal["Y", "M"]): Grid interval mode, yearly or monthly. Defaults to yearly.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             InterestRateTermStructure: The corresponding term structure.
         """
-        freq = cls.frequency(interval_mode)
+        freq = frequency_from_interval_unit(interval_unit)
         discount = np.array(discount, dtype=float, copy=True)
         n = len(discount)
         time = np.arange(n)
@@ -596,23 +501,23 @@ class InterestRateTermStructure:
             forwardcc=forwardcc,
             zeroac=zeroac,
             zerocc=zerocc,
-            parac=cls.compute_parac(discount, interval_mode),
-            interval_mode=interval_mode,
+            parac=cls.compute_parac(discount, interval_unit),
+            interval_unit=interval_unit,
         )
 
     @classmethod
-    def from_zeroac(cls, zeroac: npt.NDArray[np.float64], /, interval_mode: Literal["Y", "M"] = "Y") -> Self:
+    def from_zeroac(cls, zeroac: npt.NDArray[np.float64], /, interval_unit: Literal["Y", "M"] = "Y") -> Self:
         """Build a term structure from annually compounded zero (spot) rates.
 
         Args:
             zeroac (npt.NDArray[np.float64]): Annually compounded zero rates, index `0, 1, ..., n` corresponds
                 to term `0, 1, ..., n` grid steps.
-            interval_mode (Literal["Y", "M"]): Grid interval mode, yearly or monthly. Defaults to yearly.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             InterestRateTermStructure: The corresponding term structure.
         """
-        freq = cls.frequency(interval_mode)
+        freq = frequency_from_interval_unit(interval_unit)
         zeroac = np.array(zeroac, dtype=float, copy=True)
         n = len(zeroac)
         time = np.arange(n)
@@ -631,23 +536,23 @@ class InterestRateTermStructure:
             zerocc=zerocc,
             forwardac=forwardac,
             forwardcc=forwardcc,
-            parac=cls.compute_parac(discount, interval_mode),
-            interval_mode=interval_mode,
+            parac=cls.compute_parac(discount, interval_unit),
+            interval_unit=interval_unit,
         )
 
     @classmethod
-    def from_forwardac(cls, forwardac: npt.NDArray[np.float64], /, interval_mode: Literal["Y", "M"] = "Y") -> Self:
+    def from_forwardac(cls, forwardac: npt.NDArray[np.float64], /, interval_unit: Literal["Y", "M"] = "Y") -> Self:
         """Build a term structure from annually compounded forward rates.
 
         Args:
             forwardac (npt.NDArray[np.float64]): Annually compounded forward rates, index `0, 1, ..., n`
                 corresponds to term `0, 1, ..., n` grid steps.
-            interval_mode (Literal["Y", "M"]): Grid interval mode, yearly or monthly. Defaults to yearly.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
 
         Returns:
             InterestRateTermStructure: The corresponding term structure.
         """
-        freq = cls.frequency(interval_mode)
+        freq = frequency_from_interval_unit(interval_unit)
         forwardac = np.array(forwardac, dtype=float, copy=True)
         n = len(forwardac)
         time = np.arange(n)
@@ -666,8 +571,8 @@ class InterestRateTermStructure:
             zerocc=zerocc,
             forwardac=forwardac,
             forwardcc=forwardcc,
-            parac=cls.compute_parac(discount, interval_mode),
-            interval_mode=interval_mode,
+            parac=cls.compute_parac(discount, interval_unit),
+            interval_unit=interval_unit,
         )
 
     def __len__(self) -> int:

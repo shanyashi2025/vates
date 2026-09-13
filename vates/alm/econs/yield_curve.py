@@ -79,11 +79,11 @@ class YieldCurve:
         elif any(x is None for x in (from_what, value)):
             raise ValueError(f"`from_what` or `value` is None.")
         elif from_what == "spot_rates":
-            self._yield_curve = InterestRateTermStructure.from_zeroac(value, interval_mode="M")
+            self._yield_curve = InterestRateTermStructure.from_zeroac(value, interval_unit="M")
         elif from_what == "forward_rates":
-            self._yield_curve = InterestRateTermStructure.from_forwardac(value, interval_mode="M")
+            self._yield_curve = InterestRateTermStructure.from_forwardac(value, interval_unit="M")
         elif from_what == "discount_factors":
-            self._yield_curve = InterestRateTermStructure.from_discount(value, interval_mode="M")
+            self._yield_curve = InterestRateTermStructure.from_discount(value, interval_unit="M")
         else:
             raise ValueError(f"Invalid {from_what=}, expected: 'spot_rates', 'forward_rates' or 'discount_factors'.")
 

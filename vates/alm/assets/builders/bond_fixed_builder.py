@@ -4,7 +4,7 @@ import warnings
 from typing import Self
 
 from vates._core import ProjModelEngine
-from vates.finmath import solve_ytm, solve_z_spread, InterestRateConvertor
+from vates.finmath import convert_interest_rates, solve_ytm, solve_z_spread
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.enums import AssetClassification
 from vates.alm.assets.bond_fixed import BondFixed
@@ -128,8 +128,8 @@ class BondFixedBuilder:
                 spots = rf_spots + self.market_spread
 
             n_months = (self.maturity_date - self.issue_date).n
-            par_yield = InterestRateConvertor.spot_to_par(spots, freq=self.coupon_freq, time_interval=1/12)[n_months]
-
+            par_yield = convert_interest_rates(
+                spots, interval_unit="M", from_what="spot", to_what="par", coupon_frequency=self.coupon_freq)[n_months]
             self.coupon_rate = float(par_yield)
 
         else:  # coupon_freq == 0

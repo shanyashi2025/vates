@@ -4,7 +4,7 @@ import numpy.typing as npt
 import warnings
 from dataclasses import dataclass
 
-from vates.finmath import InterestRateConvertor, solve_ytm
+from vates.finmath import convert_interest_rates, solve_ytm
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,7 +183,7 @@ class BondFixedPricer:
         """
         cash_flows = self.cash_flow_gen.get_future_cash_flows(valn_date)
         if cash_flows is not None:  # return None if matured
-            discount = InterestRateConvertor.spot_to_discount(spots, time_interval=1/12)
+            discount = convert_interest_rates(spots, interval_unit="M", from_what="spot", to_what="discount")
             return np.dot(cash_flows, discount[1:len(cash_flows) + 1])
         else:
             return 0.0
