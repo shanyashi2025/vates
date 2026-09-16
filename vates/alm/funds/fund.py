@@ -78,15 +78,10 @@ class Fund:
         )
 
         # rate of return indexers
-        self.rate_of_return_bd: dict[str, _RateOfReturnIndexer] = {}
-        self.rate_of_return_ad: dict[str, _RateOfReturnIndexer] = {}
-        for index, basis in enumerate(asset_report_bases):
-            self.rate_of_return_bd[basis] = _RateOfReturnIndexer(
-                self.calculator.tdv_totass_ror_pc_bd, arr_index=index, divby=100
-            )
-            self.rate_of_return_ad[basis] = _RateOfReturnIndexer(
-                self.calculator.tdv_totass_ror_pc_ad, arr_index=index, divby=100
-            )
+        self.rate_of_return_bd: _RateOfReturnIndexer = _RateOfReturnIndexer(
+            self.calculator.tdv_totass_ror_pc_bd, divby=100)
+        self.rate_of_return_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
+            self.calculator.tdv_totass_ror_pc_ad, divby=100)
 
     @property
     def assets(self) -> list[Asset]:
