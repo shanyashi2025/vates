@@ -26,6 +26,8 @@ class ProjVariable(ABC):
 
     __slots__ = ('__weakref__', 'name', 'owner', 'group', '_dims', '_ndim',)
 
+    _unique_dims = []
+
     def __init__(
         self, name: str,
         /,
@@ -43,12 +45,12 @@ class ProjVariable(ABC):
             name (str): Variable name.
             owner (str): Variable owner.
             group (str): Variable group.
-            dims (list|None): Dimensions.
+            dims (tuple[tuple[str]]|None): Dimensions.
         """
         self.name: str = name
         self.owner: str = owner
         self.group: str = group
-        self._dims: list[list[str]] | None = self._parse_dims(dims)
+        self._dims: tuple[tuple[str]] | None = self._resolve_dims(dims)
         self._ndim: int = len(dims) if dims is not None else 0
         if model_engine is not None:
             model_engine.include_proj_variable(weakref.ref(self))
@@ -74,15 +76,15 @@ class ProjVariable(ABC):
         """int: Number of dimensions (0-3)."""
         return self._ndim
 
-    @staticmethod
-    def _parse_dims(dims) -> list[list[str]] | None:
-        """Normalize dims to a list of label lists.
+    @classmethod
+    def _resolve_dims(cls, dims) -> tuple[tuple] | None:
+        """Normalize dims to a tuple of label lists.
 
         Args:
-            dims: None, a list of lists, or a list of Enum classes.
+            dims: None, a list of lists (of str or int), or Enum classes.
 
         Returns:
-            list[list[str]] | None: Normalized labels or None.
+            tuple[tuple[str]] | None: Normalized labels or None.
 
         Raises:
             ValueError: If dims are malformed or exceed 3 dimensions.
@@ -90,31 +92,34 @@ class ProjVariable(ABC):
         if dims is None:
             return None
 
-        import copy
-        dims = copy.deepcopy(dims)
-
-        if not isinstance(dims, list):
+        if not isinstance(dims, (list, tuple)):
             raise ValueError("dims must be a list.")
         if len(dims) > 3:
             raise ValueError("Number of dimensions exceeds maximum (3).")
 
-        result = []
+        def _maybe_convert_to_str(x) -> str:
+            if isinstance(x, str):
+                return x
+            elif isinstance(x, int):
+                return str(x)
+            else:
+                raise ValueError(f"{x}: variable dimension list should contain str or int.")
+
+        resolved = []
         for dim in dims:
             if isinstance(dim, list):
-                for index, value in enumerate(dim):
-                    if type(value) == str:
-                        pass
-                    elif type(value) == int:
-                        dim[index] = str(value)
-                    else:
-                        raise ValueError("Variable dimension list should contain str or int.")
-                result.append(dim)
+                resolved.append(tuple([_maybe_convert_to_str(x) for x in dim]))
             elif issubclass(dim, Enum):
-                result.append([x.name for x in dim])
+                resolved.append(tuple([x.name for x in dim]))
             else:
-                raise ValueError("Variable dimension must be either list or enumeration.")
+                raise ValueError(f"{dim}: variable dimension must be either list or enumeration.")
 
-        return result
+        resolved = tuple(resolved)
+        for dim in cls._unique_dims:
+            if resolved == dim:
+                return dim
+        cls._unique_dims.append(resolved)
+        return resolved
 
     @abstractmethod
     def __getitem__(self, index):

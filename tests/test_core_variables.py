@@ -52,17 +52,18 @@ class TestConstVariable:
     def test_dims_from_enum(self, configured):
         v = ConstVariable("e", model_engine=configured, owner="o", group="g",
                           dims=[_AssetType])
-        assert v.dims == [["EQUITY", "BOND"]]
+        assert v.dims == (("EQUITY", "BOND"), )
 
     def test_int_labels_coerced_to_str(self, configured):
         v = ConstVariable("i", model_engine=configured, owner="o", group="g",
                           dims=[[0, 1]])
-        assert v.dims == [["0", "1"]]
+        assert v.dims == (("0", "1"), )
 
     def test_max_three_dims(self, configured):
         dims = [["a", "b"], ["c"], ["d"]]
         v = ConstVariable("3d", model_engine=configured, owner="o", group="g", dims=dims)
         assert v.ndim == 3
+        assert v.dims == (("a", "b"), ("c", ), ("d", ))
 
     def test_four_dims_rejected(self, configured):
         with pytest.raises(ValueError):
