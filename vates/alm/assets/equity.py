@@ -31,9 +31,6 @@ class Equity(Asset):
         asset_id: str = "",
         is_profile: bool = False,
         currency: Currency | None = None,
-        asset_category: str = "",
-        fund_id: str = "",
-        allocation_group: str = "",
         purchase_date: pd.Period | None = None
     ):
         """
@@ -43,9 +40,6 @@ class Equity(Asset):
             asset_id (str): Asset identifier.
             is_profile (bool): Ture if profile asset, False if existing asset.
             currency (Currency): Asset currency.
-            asset_category (str): Asset category.
-            fund_id (str): Fund identifier.
-            allocation_group (str): Allocation group.
             market_value (float): Market value.
             purchase_cost (float | None): Purchase cost.
             equity_index (EquityIndex): Associated equity index.
@@ -53,8 +47,7 @@ class Equity(Asset):
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=1,
-                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,
-                         asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
+                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,)
         self._equity_index: EquityIndex = equity_index
         self._mv: float = market_value
         self._purchase_cost: float | None = purchase_cost

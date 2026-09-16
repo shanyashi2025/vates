@@ -274,11 +274,14 @@ class AssetMaster:
         for asset_id, row in df_flt.iterrows():
             currency_id = row["currency_id"]
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
+            ifrs_classification = "FVTPL"
+            local_classification = "FVTPL"
+            alloc_classification = "FVTPL"
             report_basis_to_attr = cls.get_report_basis_to_attr(
                 asset_cls="cash",
-                ifrs_classification="FVTPL",
-                local_classification="FVTPL",
-                alloc_classification="FVTPL",
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                alloc_classification=alloc_classification,
             )
 
             # create instance
@@ -286,10 +289,7 @@ class AssetMaster:
                 asset_cls="cash",
                 model_engine=model_engine,
                 asset_id=asset_id,
-                asset_category=ASSET_CATEGORY_MAPPING["cash"],
-                fund_id=row["fund_id"],
                 report_basis_to_attr=report_basis_to_attr,
-                allocation_group=row["allocation_group"],
                 currency=currency,
                 nominal=row["nominal"],
                 market_info=market_info,
@@ -297,9 +297,12 @@ class AssetMaster:
                 ret_id_short_pos=row["negative_cash_balance_ret_id"]
             )
             # dynamically create attribute(s)
-            for col in df_flt.columns:
-                if col.startswith('tag__'):
-                    setattr(cash, col[5:], row[col])
+            setattr(cash, 'ifrs_classification', ifrs_classification)
+            setattr(cash, 'local_classification', local_classification)
+            setattr(cash, 'alloc_classification', alloc_classification)
+            setattr(cash, "category", ASSET_CATEGORY_MAPPING["cash"])
+            setattr(cash, "allocation_group", row["allocation_group"])
+            setattr(cash, "fund_id", row["fund_id"])
             # append to list
             cash_list.append(cash)
 
@@ -372,9 +375,6 @@ class AssetMaster:
                 asset_cls="fixed_bond",
                 build_pipeline=row["build_pipeline"] if "build_pipeline" in df.columns else None,
                 asset_id=asset_id,
-                asset_category=ASSET_CATEGORY_MAPPING['fixed_bond'],
-                fund_id=row["fund_id"],
-                allocation_group=row["allocation_group"],
                 currency=currency,
                 issue_date=pd.Period(row["issue_date"], freq='M'),
                 maturity_date=pd.Period(row["maturity_date"], freq='M'),
@@ -395,6 +395,9 @@ class AssetMaster:
             setattr(fixed_bond, 'ifrs_classification', ifrs_classification)
             setattr(fixed_bond, 'local_classification', local_classification)
             setattr(fixed_bond, 'alloc_classification', alloc_classification)
+            setattr(fixed_bond, "category", ASSET_CATEGORY_MAPPING["fixed_bond"])
+            setattr(fixed_bond, "allocation_group", row["allocation_group"])
+            setattr(fixed_bond, "fund_id", row["fund_id"])
             if is_cash_flow_provided:
                 setattr(fixed_bond, 'provided_cash_flow_id', provided_cash_flow_id)
             # append to list
@@ -481,9 +484,6 @@ class AssetMaster:
                 asset_cls="fixed_bond",
                 build_pipeline='coupon_rate',
                 asset_id=f"{str_cal_ym}{_asset_id}",
-                asset_category=ASSET_CATEGORY_MAPPING['fixed_bond'],
-                fund_id=fund_id,
-                allocation_group=row["allocation_group"],
                 currency=currency,
                 issue_date=p,
                 maturity_date=p + row["maturity_term_y"] * 12,
@@ -503,6 +503,9 @@ class AssetMaster:
             setattr(fixed_bond, 'ifrs_classification', ifrs_classification)
             setattr(fixed_bond, 'local_classification', local_classification)
             setattr(fixed_bond, 'alloc_classification', alloc_classification)
+            setattr(fixed_bond, "category", ASSET_CATEGORY_MAPPING["fixed_bond"])
+            setattr(fixed_bond, "allocation_group", row["allocation_group"])
+            setattr(fixed_bond, "fund_id", row["fund_id"])
             # append to list
             fixed_bond_list.append(fixed_bond)
 
@@ -556,9 +559,6 @@ class AssetMaster:
                 asset_cls="equity",
                 model_engine=model_engine,
                 asset_id=asset_id,
-                asset_category=ASSET_CATEGORY_MAPPING["equity"],
-                fund_id=row["fund_id"],
-                allocation_group=row["allocation_group"],
                 report_basis_to_attr=report_basis_to_attr,
                 currency=currency,
                 market_value=row["market_value"],
@@ -570,6 +570,9 @@ class AssetMaster:
             setattr(equity, 'ifrs_classification', ifrs_classification)
             setattr(equity, 'local_classification', local_classification)
             setattr(equity, 'alloc_classification', alloc_classification)
+            setattr(equity, "category", ASSET_CATEGORY_MAPPING["equity"])
+            setattr(equity, "allocation_group", row["allocation_group"])
+            setattr(equity, "fund_id", row["fund_id"])
             # append to list
             equity_list.append(equity)
 
@@ -624,9 +627,6 @@ class AssetMaster:
                 asset_cls="equity",
                 model_engine=model_engine,
                 asset_id=f"{str_cal_ym}{_asset_id}",
-                asset_category=ASSET_CATEGORY_MAPPING['equity'],
-                fund_id=fund_id,
-                allocation_group=row["allocation_group"],
                 report_basis_to_attr=report_basis_to_attr,
                 currency=currency,
                 market_value=row["amount"],
@@ -637,6 +637,9 @@ class AssetMaster:
             setattr(equity, 'ifrs_classification', ifrs_classification)
             setattr(equity, 'local_classification', local_classification)
             setattr(equity, 'alloc_classification', alloc_classification)
+            setattr(equity, "category", ASSET_CATEGORY_MAPPING["equity"])
+            setattr(equity, "allocation_group", row["allocation_group"])
+            setattr(equity, "fund_id", row["fund_id"])
             # append to list
             equity_list.append(equity)
 
@@ -695,10 +698,7 @@ class AssetMaster:
                 model_engine=model_engine,
                 build_pipeline=row["build_pipeline"] if "build_pipeline" in df.columns else None,
                 asset_id=asset_id,
-                asset_category=ASSET_CATEGORY_MAPPING['equity_option'],
-                fund_id=row["fund_id"],
                 report_basis_to_attr=report_basis_to_attr,
-                allocation_group=row["allocation_group"],
                 currency=currency,
                 call_or_put=row["call_or_put"],
                 exercise_date=pd.Period(row["exercise_date"], freq='M'),
@@ -716,6 +716,9 @@ class AssetMaster:
             setattr(equity_option, 'ifrs_classification', ifrs_classification)
             setattr(equity_option, 'local_classification', local_classification)
             setattr(equity_option, 'alloc_classification', alloc_classification)
+            setattr(equity_option, "category", ASSET_CATEGORY_MAPPING["equity_option"])
+            setattr(equity_option, "allocation_group", row["allocation_group"])
+            setattr(equity_option, "fund_id", row["fund_id"])
             # append to list
             equity_option_list.append(equity_option)
 

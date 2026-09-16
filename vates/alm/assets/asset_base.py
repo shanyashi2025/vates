@@ -1,5 +1,6 @@
-from abc import ABC, abstractmethod
 import pandas as pd
+import uuid
+from abc import ABC, abstractmethod
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.alm.econs import Currency
@@ -16,15 +17,12 @@ class Asset(ABC):
         _purchase_date (pd.Period): Purchase date.
         _currency (Currency): Currency of the asset.
         _report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute, {"MV": "market_value"}
-        _asset_category (str): Asset category.
-        _fund_id (str): Associated fund identifier.
-        _allocation_group (str): Allocation group for the asset.
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state', '_asset_id', '_is_profile', '_units',
-                 '_purchase_date', '_currency', '_report_basis_to_attr', '_asset_category', '_fund_id', '_allocation_group')
+                 '_purchase_date', '_currency', '_report_basis_to_attr',)
 
     def __init__(
         self,
@@ -36,9 +34,6 @@ class Asset(ABC):
         purchase_date: pd.Period | None,
         currency: Currency | None,
         report_basis_to_attr: dict[str, str],
-        asset_category: str,
-        fund_id: str,
-        allocation_group: str
     ):
         """
         Initialize the Asset.
@@ -51,19 +46,13 @@ class Asset(ABC):
             purchase_date (pd.Period): Purchase date. Set to initilization date if input is None.
             currency (Currency): Asset currency.
             report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute, {"MV": "market_value"}
-            asset_category (str): Asset category.
-            fund_id (str): Fund identifier.
-            allocation_group (str): Allocation group.
         """
-        self._asset_id: str = asset_id
+        self._asset_id: str = asset_id or str(uuid.uuid4())
         self._is_profile: bool = is_profile
         self._units: float = units
         self._purchase_date: pd.Period = purchase_date or (self.period if self._is_profile else None)
         self._currency: Currency | None = currency
         self._report_basis_to_attr: dict[str, str] = report_basis_to_attr | {"MV": "market_value"}  # "MV" is always required
-        self._asset_category: str = asset_category
-        self._fund_id: str = fund_id
-        self._allocation_group: str = allocation_group
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
@@ -85,18 +74,6 @@ class Asset(ABC):
     @property
     def currency(self) -> Currency:
         return self._currency
-
-    @property
-    def asset_category(self) -> str:
-        return self._asset_category
-
-    @property
-    def fund_id(self) -> str:
-        return self._fund_id
-
-    @property
-    def allocation_group(self) -> str:
-        return self._allocation_group
 
     @property
     def purchase_date(self) -> pd.Period:

@@ -227,12 +227,12 @@ class _RateOfReturnIndexer:
         if isinstance(keys, tuple):
             t, *dims = keys
         else:
-            t, dims = keys, ()
+            t, dims = keys, None
 
         if self._tdv.ndim != len(dims):
             raise ValueError(f"'{self._tdv.name}' ndim = {self._tdv.ndim}, but {dims} is provided.")
 
-        dim_index = tuple([self._tdv.dims[i].index(dim_name) for i, dim_name in enumerate(dims)])
+        dim_index = tuple([self._tdv.dims[i].index(dim_name) for i, dim_name in enumerate(dims)]) if dims else None
         if isinstance(t, pd.PeriodIndex):
             val = 1
             for tt in t:
@@ -240,5 +240,5 @@ class _RateOfReturnIndexer:
             return val - 1
         return self._ror(t, dim_index)
 
-    def _ror(self, t: int | pd.Period, dim_index: tuple[int, ...] = ()) -> float:
-        return float(self._tdv.result[(t,) + dim_index]) / self._divby
+    def _ror(self, t: int | pd.Period, dim_index: tuple[int] | None) -> float:
+        return (self._tdv[t][dim_index] if dim_index else self._tdv[t]) / self._divby

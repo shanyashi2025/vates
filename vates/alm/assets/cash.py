@@ -27,9 +27,6 @@ class Cash(Asset):
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         currency: Currency | None = None,
-        asset_category: str = "",
-        fund_id: str = "",
-        allocation_group: str = "",
         market_info: MarketInfo | None = None,
         ret_id: str | None = "",
         ret_id_short_pos: str | None = None,
@@ -42,9 +39,6 @@ class Cash(Asset):
         Args:
             asset_id (str): Asset identifier.
             currency (Currency): Asset currency.
-            asset_category (str): Asset category.
-            fund_id (str): Fund identifier.
-            allocation_group (str): Allocation group.
             nominal (float): Nominal value.
             market_info (MarketInfo): Market information.
             ret_id (str): Identifier of cash return.
@@ -53,8 +47,7 @@ class Cash(Asset):
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False, units=1,
-                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,
-                         asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
+                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr)
         self._nominal: float = nominal
         self._market_info: MarketInfo | None = market_info
         self._ret_id: str = ret_id

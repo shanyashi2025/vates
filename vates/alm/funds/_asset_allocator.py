@@ -64,7 +64,7 @@ class AssetAllocator:
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer',
-                 'name', 'connector', 'rebalance_policy', 'ag_seq_list', 'asset_report_bases',
+                 'name', 'connector', 'rebalance_policy', 'ag_seq_list', 'asset_report_bases', 'alloc_group_attr',
                  'tdv_fund_size', 'tdv_ag_repval_bd', 'tdv_ag_repval_ad', 'tdv_ag_alloc_pc_bd', 'tdv_ag_alloc_pc_ad',)
 
     def __init__(
@@ -75,12 +75,14 @@ class AssetAllocator:
         connector: AssetLiabConnector,
         rebalance_policy: dict[str, RebalancePolicyParams],
         asset_report_bases: list[str],
+        allocation_group_attr: str,
     ):
         self.name: str = name
         self.connector: AssetLiabConnector = connector
         self.rebalance_policy = rebalance_policy
         self.ag_seq_list = self.list_ag_in_sequence(self.name, rebalance_policy)
         self.asset_report_bases: list[str] = asset_report_bases
+        self.alloc_group_attr: str = allocation_group_attr
 
         tdv_kwargs = {"model_engine": model_engine, "owner": self.name, "group": 'rebalance'}
         self.tdv_fund_size = TDimVariable("fund_size", **tdv_kwargs)
@@ -90,11 +92,11 @@ class AssetAllocator:
         self.tdv_ag_alloc_pc_ad = TDimVariable("ag_alloc_pc_ad", dims=[self.ag_seq_list], **tdv_kwargs)
 
     @staticmethod
-    def list_ag_in_sequence(fund_id: str, rebalance_policy: dict[str, RebalancePolicyParams]) -> list[str]:
+    def list_ag_in_sequence(name: str, rebalance_policy: dict[str, RebalancePolicyParams]) -> list[str]:
         """List allocation group in sequence.
 
             Args:
-                fund_id (str): Fund.
+                name (str): Name.
                 rebalance_policy: dict[str, RebalancePolicyParams]: Rebalance policy by allocation group.
 
             Returns:
@@ -111,9 +113,9 @@ class AssetAllocator:
         for ag, policy in rebalance_policy.items():
             seq = policy.sequence
             if seq - 1 not in range(max_seq):
-                raise ValueError(f'Fund {fund_id} allocation group {ag}: invalid sequence {seq}, expected 1 to {max_seq}.')
+                raise ValueError(f'Fund {name} allocation group {ag}: invalid sequence {seq}, expected 1 to {max_seq}.')
             if ag_list[seq - 1] is not None:
-                raise ValueError(f'Fund {fund_id}: both allocation group {ag} and {ag_list[seq - 1]} have the same '
+                raise ValueError(f'Fund {name}: both allocation group {ag} and {ag_list[seq - 1]} have the same '
                                  f'rebalance sequence {seq}.')
             ag_list[seq - 1] = ag
             if policy.buysell_approach != AssetBuySellApproach.RESIDUAL:
@@ -236,7 +238,7 @@ class AssetAllocator:
                 cash_asset = None
                 for asset in self.connector.assets:
                     if isinstance(asset, Cash) and self.rebalance_policy[
-                        asset.allocation_group].buysell_approach == AssetBuySellApproach.RESIDUAL:
+                        getattr(asset, self.alloc_group_attr)].buysell_approach == AssetBuySellApproach.RESIDUAL:
                         cash_asset = asset
                         break
                 if cash_asset is None:
@@ -306,7 +308,7 @@ class AssetAllocator:
 
         if buysell == 'sell':
             for asset in self.connector.assets:
-                if asset.allocation_group == allocation_group:
+                if getattr(asset, self.alloc_group_attr) == allocation_group:
                     val_bd, mv_bd = asset.get_report_value(asset_size_basis), asset.market_value
                     asset.sell_propn(propn)
                     val_ad, mv_ad = asset.get_report_value(asset_size_basis), asset.market_value
@@ -314,7 +316,7 @@ class AssetAllocator:
                     rgl += (mv_bd - mv_ad) - (val_bd - val_ad)
         elif buysell == 'buy_scale_exist':
             for asset in self.connector.assets:
-                if asset.allocation_group == allocation_group:
+                if getattr(asset, self.alloc_group_attr) == allocation_group:
                     mv_bd = asset.market_value
                     asset.buy_propn(propn)
                     mv_ad = asset.market_value
@@ -322,7 +324,7 @@ class AssetAllocator:
         elif buysell == 'buy_profile':
             if not assets_profile: raise ValueError("Can't buy assets from empty profile.")
             for asset in assets_profile:
-                if asset.allocation_group == allocation_group:
+                if getattr(asset, self.alloc_group_attr) == allocation_group:
                     asset.buy_profile_scale(scale=propn)
                     self.connector.assets.append(asset)
                     proceeds -= asset.market_value
@@ -357,9 +359,9 @@ class AssetAllocator:
         asset_count: dict[str, int] = {ag: 0 for ag in self.ag_seq_list}
 
         for asset in assets:
-            ag = asset.allocation_group
+            ag = getattr(asset, self.alloc_group_attr)
             if ag not in asset_rep_value:
-                raise ValueError(f'Asset {asset.asset_id} (in fund {asset.fund_id}): allocation group {ag} not included '
+                raise ValueError(f'Asset {asset.asset_id}: allocation group {ag} not included '
                                  f'the fund reblance policy.')
             asset_rep_value[ag] += np.array(asset.get_report_value(self.asset_report_bases), dtype=float)
             asset_count[ag] += 1

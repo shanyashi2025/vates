@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -58,9 +59,6 @@ class BondFixed(Asset):
         is_profile: bool = False,
         units: float = 1.0,
         currency: Currency | None = None,
-        asset_category: str = "",
-        fund_id: str = "",
-        allocation_group: str = "",
         provided_cash_flow_dict: dict[str, np.ndarray] | None = None,
         credit_band: CreditBand | None = None,
         purchase_date: pd.Period | None = None,
@@ -74,9 +72,6 @@ class BondFixed(Asset):
             is_profile (bool): Ture if profile asset, False if existing asset.
             units (float): Number of bond units.
             currency (Currency): Asset currency.
-            asset_category (str): Asset category.
-            fund_id (str): Fund identifier.
-            allocation_group (str): Allocation group.
             report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
             issue_date (pd.Period): Issue date of the bond.
             maturity_date (pd.Period): Maturity date of the bond.
@@ -94,8 +89,7 @@ class BondFixed(Asset):
             _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
-                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,
-                         asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
+                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr)
 
         self._params = BondFixedParameters(
             issue_date=issue_date,
@@ -121,29 +115,19 @@ class BondFixed(Asset):
         self.risk_calc = BondFixedRiskCalculator(self.pricer)
 
         # validate profile price
-        if is_profile:
-            tolerance = max(max(abs(self._mv_price_dirty), abs(self._abv_price_dirty) * 1e-6), 1e-8)
-            if abs(self._abv_price_dirty - self._mv_price_dirty) > tolerance:
-                ValueError(f"Profile bond {self.asset_id}: abv_price={self._abv_price_dirty:.4f} != "
-                           f"mv_price={self._mv_price_dirty:.4f}")
+        if is_profile and not math.isclose(self._abv_price_dirty, self._mv_price_dirty, rel_tol=1e-6, abs_tol=1e-8):
+            ValueError(f"Profile bond {self.asset_id}: abv_price={self._abv_price_dirty:.4f} != "
+                       f"mv_price={self._mv_price_dirty:.4f}")
 
-        if self.time is not None:
-            # validate mv price
-            valid, price = self._validate_current_price("mv", self._mv_price_dirty)
-            if not valid:
-                msg = f"Bond {asset_id} mv_price: input={self._mv_price_dirty:.4f} != calculated={price:.4f}."
-                if _bypass_init_validation:
-                    warnings.warn(msg)
-                else:
-                    raise ValueError(msg)
-            # validate abv price
-            valid, price = self._validate_current_price("abv", self._abv_price_dirty)
-            if not valid:
-                msg = f"Bond {asset_id} abv_price: input={self._abv_price_dirty:.4f} != calculated={price:.4f}."
-                if _bypass_init_validation:
-                    warnings.warn(msg)
-                else:
-                    raise ValueError(msg)
+        if not _bypass_init_validation:
+            if self.time is None:
+                warnings.warn(f"'time' is None, can\'t perform init validation.")
+            calc_price = self.pricer.calculate_market_price(self.period, self.ra_spots)
+            if not math.isclose(self._mv_price_dirty, calc_price, rel_tol=1e-6, abs_tol=1e-8):
+                raise ValueError(f"Bond {asset_id} mv_price {self._mv_price_dirty:.4f} != calculated {calc_price:.4f}.")
+            calc_price = self.pricer.calculate_amortized_price(self.period, self._amort_rate)
+            if not math.isclose(self._abv_price_dirty, calc_price, rel_tol=1e-6, abs_tol=1e-8):
+                raise ValueError(f"Bond {asset_id} abv_price {self._abv_price_dirty:.4f} != calculated {calc_price:.4f}.")
 
         # Initialize TDepVariable
         create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='bond')
@@ -355,19 +339,3 @@ class BondFixed(Asset):
         self.tdv_units_ad[t] = self._units
         self.tdv_mv_ad[t] = self.market_value
         self.tdv_abv_ad[t] = self.amortized_book_value
-
-    def _validate_current_price(self, mv_or_abv: str, /, price: float, tolerance: float | None = None
-                                ) -> tuple[bool, float | None]:
-        """
-        Validate the price.
-        """
-        if price <= 0 and abs(price) > 1e-8:
-            return False, None
-        if mv_or_abv == "mv":
-            calc_price = self.pricer.calculate_market_price(self.period, self.ra_spots)
-        elif mv_or_abv == "abv":
-            calc_price = self.pricer.calculate_amortized_price(self.period, self._amort_rate)
-        else:
-            return False, None
-        tolerance = tolerance or max(price * 1e-6, 1e-8)
-        return abs(price - calc_price) <= tolerance, calc_price

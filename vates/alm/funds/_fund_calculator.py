@@ -19,8 +19,8 @@ class FundCalculator:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', 'name', 'connector',
-                 'asset_categories', 'asset_report_bases',)
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'name', 'connector',
+                 'asset_categories', 'asset_category_attr', 'asset_report_bases',)
 
     def __init__(
         self,
@@ -29,11 +29,13 @@ class FundCalculator:
         model_engine: ProjModelEngine | None = None,
         connector: AssetLiabConnector,
         asset_categories: list[str],
+        asset_category_attr: str,
         asset_report_bases: list[str],
     ):
         self.name: str = name
         self.connector: AssetLiabConnector = connector
         self.asset_categories: list[str] = asset_categories
+        self.asset_category_attr: str = asset_category_attr
         self.asset_report_bases: list[str] = asset_report_bases
 
         # Initialize time-dimensioned variables for output
@@ -81,7 +83,7 @@ class FundCalculator:
 
         # Aggregate asset cash flow
         tot_cash_flow = self.connector.groupby_sum_asset_cash_flow()
-        cat_cash_flow = self.connector.groupby_sum_asset_cash_flow(groupby="asset_category", in_list=self.asset_categories)
+        cat_cash_flow = self.connector.groupby_sum_asset_cash_flow(groupby=self.asset_category_attr, in_list=self.asset_categories)
         cat_cash_flow = np.array(cat_cash_flow) # convert to np array
         self.tdv_asset_cash_flow[t] = cat_cash_flow
         self.tdv_totass_cash_flow[t] = tot_cash_flow
@@ -175,7 +177,7 @@ class FundCalculator:
 
         tot_rep_value = self.connector.groupby_sum_asset_report_value(basis=self.asset_report_bases)
         cat_rep_value = self.connector.groupby_sum_asset_report_value(
-            basis=self.asset_report_bases, groupby="asset_category", in_list=self.asset_categories)
+            basis=self.asset_report_bases, groupby=self.asset_category_attr, in_list=self.asset_categories)
         cat_rep_value = np.array(cat_rep_value)  # convert to np array
 
         if timing == "bd":

@@ -48,10 +48,11 @@ class Fund:
         fund_id: str,
         *,
         model_engine: ProjModelEngine | None = None,
-        asset_allocator = None,
         rebalance_policy: dict[str, RebalancePolicyParams] = None,
-        asset_categories: list[str] = None,
         asset_report_bases: list[str] = None,
+        asset_categories: list[str] = None,
+        asset_category_attr: str = "category",
+        asset_allocation_group_attr: str = "allocation_group"
     ) -> None:
         """
         Initialize a Fund object.
@@ -59,22 +60,26 @@ class Fund:
         Args:
             fund_id (str): Fund identifier.
             rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
+            asset_report_bases (list[str]): Asset reporting bases.
             asset_categories (list[str]): Asset categories to be reported.
+            asset_category_attr (str): Named attribute for asset category, defaults to "category".
+            asset_allocation_group_attr (str): Named attribute for asset allocation group, defaults to "allocation_group".
         """
         self.fund_id = fund_id
         # Asset and liab collections
         self._connector: AssetLiabConnector = AssetLiabConnector()
         self._primary_cash_asset: Cash | None = None
-        # self._assembled: bool = False
-        self._asset_report_bases: list[str] = asset_report_bases
+        self._asset_report_bases: list[str] = asset_report_bases or ["MV"]
 
         self.calculator: FundCalculator = FundCalculator(
             name=fund_id, model_engine=model_engine, connector=self._connector,
-            asset_categories=asset_categories, asset_report_bases=asset_report_bases
+            asset_report_bases=self._asset_report_bases,
+            asset_categories=asset_categories, asset_category_attr=asset_category_attr,
         )
-        self._allocator: AssetAllocator = asset_allocator or AssetAllocator(
+        self._allocator: AssetAllocator = AssetAllocator(
             name=fund_id, model_engine=model_engine, connector=self._connector,
-            rebalance_policy=rebalance_policy, asset_report_bases=asset_report_bases
+            asset_report_bases=self._asset_report_bases,
+            rebalance_policy=rebalance_policy, allocation_group_attr= asset_allocation_group_attr,
         )
 
         # rate of return indexers
@@ -109,9 +114,6 @@ class Fund:
 
         """
         maybe_check_state(self, ("initialized", self.time))
-
-        # if self._assembled:
-        #     warnings.warn(f"Fund has already been assembled.")
 
         if existing_assets is None:
             pass
@@ -149,7 +151,6 @@ class Fund:
         self.calculator.aggregate_liabs_value("bd")
         self.calculator.aggregate_liabs_value("ad")
 
-        # self._assembled = True
         self._state = ("assembled", self.time)
 
     @property

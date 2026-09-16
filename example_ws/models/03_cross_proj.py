@@ -56,6 +56,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     mc_inputer_dict: dict[str, cn_cross2.MinCapInputer] = {}
 
     df = file_df_dict['funds']
+    fund_id_list = df.index.to_list()
     for fund_id in df.index:
         cross_account_type = cn_cross2.AccountType(df.loc[fund_id, 'cross_account_type'].upper())
         mc_unit_dict[fund_id] = cn_cross2.MinCapUnit(name=fund_id, model_engine=model, account_type=cross_account_type)
@@ -91,26 +92,30 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
         # --- (3) build asset objects that are in-force as at the time point ---
         aging_assets_df_dict = {
             item: model.read_csv(
-                aging_assets_input_filelist_df.at[date_index, item], keep_default_na=False, allow_not_found=True) for
-            item in asset_filename_list
+                aging_assets_input_filelist_df.at[date_index, item], keep_default_na=False, allow_not_found=True)
+            for item in asset_filename_list
         }
-        aging_assets_master = AssetMaster.existing_from_df(aging_assets_df_dict, model_engine=model, econs=esg_master)
+        aging_assets_master_dict = {
+            item: AssetMaster.existing_from_df(
+                aging_assets_df_dict, model_engine=model, econs=esg_master, fund_id=item)
+            for item in fund_id_list
+        }
 
         # --- (4) calculate asset mc input ---
         mc_factor_equity = cross_mc_factor_df.at[date_index, 'mc_factor_equity']
         mc_factor_spread = cross_mc_factor_df.at[date_index, 'mc_factor_spread']
-        for asset in aging_assets_master.all:
-            type_asset = type(asset)
-            mc_inputer = mc_inputer_dict[asset.fund_id]
-            if type_asset == alm.assets.Equity:
+        for fund_id in fund_id_list:
+            aging_assets_master = aging_assets_master_dict[fund_id]
+            mc_inputer = mc_inputer_dict[fund_id]
+            # equity risk mc
+            for asset in aging_assets_master.equity_ls:
                 mc_inputer.mc_equity += asset.market_value * mc_factor_equity
-            elif type_asset == alm.assets.BondFixed:
+            # interest rate risk mc
+            for asset in aging_assets_master.fixed_bond_ls:
                 mc_inputer.aa_int_base += asset.pricer.calculate_market_price(p, cross_intba_spot) * asset.units
                 mc_inputer.aa_int_up += asset.pricer.calculate_market_price(p, cross_intup_spot) * asset.units
                 mc_inputer.aa_int_dn += asset.pricer.calculate_market_price(p, cross_intdn_spot) * asset.units
                 mc_inputer.mc_spread += asset.market_value * mc_factor_spread
-            # elif type_asset == ...:
-            #     ...
 
         # --- (5) collect liability mc input ---
         for _, row in liabs_df.iterrows():

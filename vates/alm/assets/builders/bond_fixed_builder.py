@@ -26,9 +26,6 @@ class BondFixedBuilder:
         self,
         model_engine: ProjModelEngine,
         asset_id: str,
-        asset_category: str,
-        fund_id: str,
-        allocation_group: str,
         report_basis_to_attr: dict[str, str],
         currency: Currency,
         units: float,
@@ -55,9 +52,6 @@ class BondFixedBuilder:
             model_engine: Model engine object.
             is_profile (bool): Ture if profile asset, False if existing asset.
             asset_id (str): Asset identifier.
-            asset_category (str): Asset category.
-            fund_id (str): Fund identifier.
-            allocation_group (str): Allocation group for the bond.
             report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
             currency (Currency): Currency.
             units (float): Number of units.
@@ -76,9 +70,6 @@ class BondFixedBuilder:
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
-        self.asset_category: str = asset_category
-        self.fund_id: str = fund_id
-        self.allocation_group: str = allocation_group
         self.report_basis_to_attr: dict[str, str] = report_basis_to_attr
         self.currency: Currency = currency
         self.units: float = units
@@ -318,9 +309,6 @@ class BondFixedBuilder:
         return BondFixed(
             model_engine=self.model_engine,
             asset_id=self.asset_id,
-            asset_category=self.asset_category,
-            fund_id=self.fund_id,
-            allocation_group=self.allocation_group,
             report_basis_to_attr=self.report_basis_to_attr,
             currency=self.currency,
             units=self.units,

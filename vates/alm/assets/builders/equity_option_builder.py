@@ -22,10 +22,7 @@ class EquityOptionBuilder:
         self,
         model_engine: ProjModelEngine,
         asset_id: str,
-        asset_category: str,
-        fund_id: str,
         report_basis_to_attr: dict[str, str],
-        allocation_group: str,
         currency: Currency,
         is_profile: bool,
         call_or_put: CallOrPut,
@@ -47,10 +44,7 @@ class EquityOptionBuilder:
         Args:
             model: Model object.
             asset_id (str): Asset identifier.
-            asset_category (str): Asset category.
-            fund_id (str): Fund identifier.
             report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
-            allocation_group (str): Allocation group.
             currency (Currency): Asset currency.
             is_profile (bool): Ture if profile asset, False if existing asset.
             call_or_put (CallOrPut): Call or put option.
@@ -66,10 +60,7 @@ class EquityOptionBuilder:
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
-        self.asset_category: str = asset_category
-        self.fund_id: str = fund_id
         self.report_basis_to_attr: dict[str, str] = report_basis_to_attr
-        self.allocation_group: str = allocation_group
         self.currency: Currency = currency
         self.is_profile: bool = is_profile
         self.call_or_put: CallOrPut = call_or_put
@@ -142,10 +133,7 @@ class EquityOptionBuilder:
         return EquityOption(
             model_engine=self.model_engine,
             asset_id=self.asset_id,
-            asset_category=self.asset_category,
-            fund_id=self.fund_id,
             report_basis_to_attr=self.report_basis_to_attr,
-            allocation_group=self.allocation_group,
             currency=self.currency,
             is_profile=self.is_profile,
             call_or_put=self.call_or_put,

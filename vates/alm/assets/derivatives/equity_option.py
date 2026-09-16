@@ -44,9 +44,6 @@ class EquityOption(Asset):
         is_profile: bool = False,
         units: float = 1.0,
         currency: Currency | None = None,
-        asset_category: str = "",
-        fund_id: str = "",
-        allocation_group: str = "",
         report_basis_to_attr: dict[str, str],
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
@@ -59,9 +56,6 @@ class EquityOption(Asset):
             is_profile (bool): Ture if profile asset, False if existing asset.
             units (float): Number of equity option units, +ve/-ve means long/short position.
             currency (Currency): Asset currency.
-            asset_category (str): Asset category.
-            fund_id (str): Fund identifier.
-            allocation_group (str): Allocation group.
             call_or_put (CallOrPut): Call or put option.
             exercise_date (pd.Period): Option exercise date.
             price (float): Option price (market value).
@@ -75,8 +69,7 @@ class EquityOption(Asset):
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
-                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,
-                         asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
+                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr)
         self._call_or_put: CallOrPut = CallOrPut[call_or_put.upper()] if isinstance(call_or_put, str) else call_or_put
         self._exercise_date: pd.Period = exercise_date
         self._price: float = price
@@ -88,21 +81,17 @@ class EquityOption(Asset):
         self._is_pay_dividend: bool = is_pay_dividend
         self._cash_flow: float = 0.0
 
-        if self.time is not None:
-            # validate initial price
+        if not _bypass_init_validation:
+            if self.time is None:
+                warnings.warn(f"'time' is None, can\'t perform init validation.")
             calc_price = BlackScholesCalculator.price(
                 call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
                 q=math.log(1 + self._equity_index.dividend_yield_ac) if self._is_pay_dividend else 0.0,
                 sigma=self._std_dev, tau=self.os_term_m / 12
             )
-            tolerance = max(abs(price) * 1e-6, 1e-8)
-            if abs(price - calc_price) > tolerance:
-                msg = f"Equity option {self.asset_id} price: input={price: .4f} != calculated={calc_price: .4f}."
-                if _bypass_init_validation:
-                    warnings.warn(msg)
-                else:
-                    raise ValueError(msg)
+            if not math.isclose(self._price, calc_price, rel_tol=1e-6, abs_tol=1e-8):
+                raise ValueError(f"Equity option {self.asset_id} price {price:.4f} != calculated {calc_price:.4f}.")
 
         # create array variables
         create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='equity_option')
