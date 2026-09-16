@@ -6,6 +6,7 @@ from typing import Literal
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 from vates.finmath import InterestRateTermStructure
+from vates.utils import maybe_check_state
 
 
 @add_projection_time_synchronizer
@@ -20,9 +21,8 @@ class YieldCurve:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     _curve: InterestRateTermStructure | None
-    _last_update: int | None
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
                  'curve_id', '_curve', 'tdv_spot_rates',)
 
     def __init__(
@@ -41,7 +41,6 @@ class YieldCurve:
         """
         self.curve_id = curve_id
         self._curve: InterestRateTermStructure | None = None
-        self._last_update: int | None = None
 
         if tdv_term_dim is not None:
             for value in tdv_term_dim:
@@ -57,11 +56,7 @@ class YieldCurve:
 
         self.tdv_spot_rates: TDimVariable = TDimVariable("spot_rate", dims=[tdv_term_dim],
                                                          model_engine=model_engine, owner=curve_id, group='yield_curve')
-
-    @property
-    def last_update(self) -> int | None:
-        """int | None: Last update time index, or None if the curve has never been updated."""
-        return self._last_update
+        self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     def update(self, *, from_what: Literal["spot_rates", "forward_rates", "discount_factors"] = None,
                value: npt.NDArray[np.float64] = None, is_unchange: bool = False) -> None:
@@ -88,26 +83,35 @@ class YieldCurve:
             raise ValueError(f"Invalid {from_what=}, expected: 'spot_rates', 'forward_rates' or 'discount_factors'.")
 
         self._on_exit_update()
+        self._state = ("updated", self.time)
 
     @property
-    def spot_rates(self) -> npt.NDArray[np.float64] | None:
+    def state(self) -> tuple[str, int]:
+        return self._state
+
+    @property
+    def spot_rates(self) -> npt.NDArray[np.float64]:
         """npt.NDArray[np.float64] | None: Spot rates, or None if the curve has not been initialized."""
-        return None if self._curve is None else self._curve.spotac
+        maybe_check_state(self, ("updated", self.time))
+        return self._curve.spotac
 
     @property
-    def discount_factors(self) -> npt.NDArray[np.float64] | None:
+    def discount_factors(self) -> npt.NDArray[np.float64]:
         """npt.NDArray[np.float64] | None: Discount factors, or None if the curve has not been initialized."""
-        return None if self._curve is None else self._curve.discount
+        maybe_check_state(self, ("updated", self.time))
+        return self._curve.discount
 
     @property
-    def forward_rates(self) -> npt.NDArray[np.float64] | None:
+    def forward_rates(self) -> npt.NDArray[np.float64]:
         """npt.NDArray[np.float64] | None: Forward rates, or None if the curve has not been initialized."""
-        return None if self._curve is None else self._curve.forwardac
+        maybe_check_state(self, ("updated", self.time))
+        return self._curve.forwardac
 
     @property
-    def par_yields(self) -> dict[int, npt.NDArray[np.float64]] | None:
+    def par_yields(self) -> dict[int, npt.NDArray[np.float64]]:
         """dict[int, npt.NDArray[np.float64]] | None: Par yields, or None if the curve has not been initialized."""
-        return None if self._curve is None else self._curve.parac
+        maybe_check_state(self, ("updated", self.time))
+        return self._curve.parac
 
     def _on_exit_update(self) -> None:
         if self._curve is None:
@@ -117,7 +121,6 @@ class YieldCurve:
         n = len(spots)
         tdv_term_dim = (int(i) for i in self.tdv_spot_rates.dims[0])
         self.tdv_spot_rates[t] = np.array([0.0 if i >= n else spots[i] for i in tdv_term_dim])
-        self._last_update = t
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.curve_id}'"

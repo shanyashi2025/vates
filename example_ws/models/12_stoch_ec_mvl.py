@@ -87,8 +87,8 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             rebalance_params = model.fund_master.rebalance_params_dict[fund_id]
 
             # step 1: assets roll forward
-            update_mv_price = (p.year == model.START_YEAR) or (p.month % esg_step == 0)
-            fund_assets_roll_forward(fund, update_mv_price=update_mv_price)
+            is_update_mv_price = (p.year == model.START_YEAR) or (p.month % esg_step == 0)
+            fund_assets_roll_forward(fund, is_update_mv_price=is_update_mv_price)
 
             # step 2: liabs roll forward
             fund_liabs_roll_forward(

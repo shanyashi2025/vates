@@ -3,6 +3,7 @@ import numpy.typing as npt
 import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
+from vates.utils import maybe_check_state
 
 
 @add_projection_time_synchronizer
@@ -23,9 +24,8 @@ class CreditBand:
     _spotmult: float | npt.NDArray[np.float64]
     _prob_of_default_ac: float
     _recovery_rate: float
-    _last_update: int
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
                  'band_id', '_spread', '_spotmult', '_prob_of_default_ac', '_recovery_rate',
                  'tdv_prob_of_default_ac', 'tdv_recovery_rate', 'tdv_spread', 'tdv_spotmult',)
 
@@ -57,30 +57,34 @@ class CreditBand:
         else: # has term structure
             self.tdv_spotmult: TDimVariable = TDimVariable("credit_spotmult", dims=[tdv_spotmult_term_dim],
                                                            model_engine=model_engine, owner=band_id, group='credit')
+        self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
-    def last_update(self) -> int:
-        """int: Last update time index."""
-        return self._last_update
+    def state(self) -> tuple[str, int]:
+        return self._state
 
     @property
     def credit_spread(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Credit spread(s) as at period end."""
+        maybe_check_state(self, ("updated", self.time))
         return self._spread
 
     @property
     def credit_spotmult(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Spot rate multipliers as at period end."""
+        maybe_check_state(self, ("updated", self.time))
         return self._spotmult
 
     @property
     def prob_of_default_ac(self) -> float:
         """float: Probability of default (annual compounding) in period."""
+        maybe_check_state(self, ("updated", self.time))
         return self._prob_of_default_ac
 
     @property
     def recovery_rate(self) -> float:
         """float: Recovery rate in period."""
+        maybe_check_state(self, ("updated", self.time))
         return self._recovery_rate
 
     def update(self, *, prop_of_default_ac: float = None, recovery_rate: float = None,
@@ -108,6 +112,7 @@ class CreditBand:
             self._spotmult = credit_spotmult
             self._spread = credit_spread
         self._on_exit_update()
+        self._state = ("updated", self.time)
 
     def _on_exit_update(self) -> None:
         t = self.time
@@ -141,7 +146,6 @@ class CreditBand:
                 self.tdv_spotmult[t] = self._spotmult[min(arr_len, 12)]  # store first year value only
             else:
                 self.tdv_spotmult[t] = np.array([0 if i > arr_len else self._spotmult[i] for i in tdv_term_dim])
-        self._last_update = t
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.band_id}'"

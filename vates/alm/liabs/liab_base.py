@@ -26,7 +26,7 @@ class Liab(ABC):
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', '_liab_id', '_fund_id', '_currency',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state', '_liab_id', '_fund_id', '_currency',
                  '_entry_date', '_num_pols', '_surr_val', '_math_res', '_acct_value', '_asset_share', '_cash_flow',
                  '_prem_inc')
 
@@ -70,7 +70,11 @@ class Liab(ABC):
         self._asset_share: float = asset_share_if
         self._cash_flow: float = 0.0
         self._prem_inc: float = 0.0
-        self._tt_dict: dict[str, int] = {"roll_forward": self.time, "update_ad": self.time}
+        self._state: tuple[str, int] = ("initialized", self.time or 0)
+
+    @property
+    def state(self) -> tuple[str, int]:
+        return self._state
 
     @property
     def liab_id(self) -> str:
@@ -87,16 +91,6 @@ class Liab(ABC):
     @property
     def entry_date(self) -> pd.Period:
         return self._entry_date
-
-    @property
-    def last_roll_forward(self) -> int | None:
-        """int | None: Last roll forward time index."""
-        return self._tt_dict['roll_forward']
-
-    @property
-    def last_update_ad(self) -> int | None:
-        """int | None: Last update after dealing time index."""
-        return self._tt_dict['update_ad']
 
     @abstractmethod
     def roll_forward(self, *args, **kwargs):

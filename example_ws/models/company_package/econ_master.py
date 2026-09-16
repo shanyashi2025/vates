@@ -299,10 +299,6 @@ class EsgMaster:
             short_rate_id = f'{curve_id}:short_rate'
             if short_rate_id not in data:
                 data[short_rate_id] = market_info_obj.get(f'{short_rate_id}:next', 0)
-                if curve_obj.last_update != market_info_obj.time:
-                    warnings.warn(f'{curve_id} is not updated on {market_info_obj.time} ({market_info_obj.period}), '
-                                  f'skip update the corresponding short rate.')
-                    continue
                 data[f'{short_rate_id}:next'] = (1 / curve_obj.discount_factors[1]) ** 12 - 1  # convert to annual effective rates
 
         for key, value in data.items():

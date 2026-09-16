@@ -104,8 +104,6 @@ class BondFixedBuilder:
         Derive coupon rate based on yields at the point of purchase, assuming bond is purchased at par.
         """
         if self.coupon_freq != 0:
-            if self.rf_curve.last_update != self.time:
-                raise ValueError(f"Risk free curve is not updated on {self.time} ({self.period}).")
             if self.market_spread is None:
                 self.market_spread = 0
                 warnings.warn(f'{self.asset_id}: market_spread not specified, set to 0.')
@@ -113,8 +111,6 @@ class BondFixedBuilder:
             rf_spots = self.rf_curve.spot_rates
 
             if self.credit_band:
-                if self.credit_band.last_update != self.time:
-                    raise ValueError(f"Credit band is not updated on {self.time} ({self.period}).")
                 spots = calculate_risk_adj_spot(
                     rf_spots=rf_spots,
                     mult=self.credit_band.credit_spotmult,
@@ -169,8 +165,6 @@ class BondFixedBuilder:
         """
         if self.mv_price is None:
             raise ValueError('mv_price need to be set first.')
-        if self.rf_curve.last_update != self.time:
-            raise ValueError(f"Risk free curve not updated on {self.time} ({self.period}).")
         rf_spots = self.rf_curve.spot_rates
 
         if self.credit_band:
@@ -208,7 +202,6 @@ class BondFixedBuilder:
         Calculate the market price using the set market spread.
         """
         if self.market_spread is None: raise ValueError('market_spread need to be set first.')
-        if self.rf_curve.last_update != self.time: raise ValueError(f"Risk free curve not updated on {self.time} ({self.period}).")
 
         rf_spots = self.rf_curve.spot_rates
         if self.credit_band:
@@ -242,7 +235,6 @@ class BondFixedBuilder:
         Set market spread to zero and goal seek the face value that gives market price.
         """
         if self.mv_price is None: raise ValueError('mv_price need to be set first.')
-        if self.rf_curve.last_update != self.time: raise ValueError(f"Risk free curve not updated on {self.time} ({self.period}).")
 
         self.market_spread = 0
         rf_spots = self.rf_curve.spot_rates

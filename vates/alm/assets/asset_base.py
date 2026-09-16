@@ -23,7 +23,7 @@ class Asset(ABC):
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', '_asset_id', '_is_profile', '_units',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state', '_asset_id', '_is_profile', '_units',
                  '_purchase_date', '_currency', '_report_basis_to_attr', '_asset_category', '_fund_id', '_allocation_group')
 
     def __init__(
@@ -64,9 +64,11 @@ class Asset(ABC):
         self._asset_category: str = asset_category
         self._fund_id: str = fund_id
         self._allocation_group: str = allocation_group
-        self._tt_dict: dict[str, int] = {"roll_forward": self.time}
-        if not self._is_profile:
-            self._tt_dict['dealing'] = self.time
+        self._state: tuple[str, int] = ("initialized", self.time or 0)
+
+    @property
+    def state(self) -> tuple[str, int]:
+        return self._state
 
     @property
     def asset_id(self) -> str:
@@ -137,16 +139,6 @@ class Asset(ABC):
         elif isinstance(basis, list):
             return [getattr(self, self._report_basis_to_attr[x]) for x in basis]
         raise TypeError(f"Invalid type of basis {type(basis)}, expected 'str' or 'list[str]'.")
-
-    @property
-    def last_roll_forward(self) -> int:
-        """int: Last roll forward time index."""
-        return self._tt_dict.get('roll_forward', None)
-
-    @property
-    def last_dealing(self) -> int:
-        """int: Last update after dealing time index."""
-        return self._tt_dict.get('dealing', None)
 
     @abstractmethod
     def roll_forward(self, *args, **kwargs):

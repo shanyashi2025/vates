@@ -2,9 +2,9 @@ import pandas as pd
 import warnings
 
 from vates._core import ProjModelEngine, TDimVariable
-from vates.utils import t_checker
 from vates.alm.econs import Currency, EquityIndex
 from vates.alm.assets.asset_base import Asset
+from vates.alm.assets._utils import maybe_check_asset_state_roll, maybe_check_asset_state_close
 
 
 class Equity(Asset):
@@ -84,25 +84,23 @@ class Equity(Asset):
     def is_alive(self) -> bool:
         return True
 
-    @t_checker({"roll_forward": -1}, "roll_forward")
+    @maybe_check_asset_state_roll
     def roll_forward(self, **kwargs) -> None:
         """
         Roll the equity asset forward one period, updating value and dividend.
         """
-        t = self.time
         self._disposal_proceeds = 0  # reset
-
-        if self._equity_index.last_update != t:
-            raise ValueError(f"{self._equity_index.index_id} is not updated on {t} ({self.period}).")
 
         dividend = self._mv * self._equity_index.dividend_yield
         self._cash_flow = dividend
         self._mv = self._mv * (1 + self._equity_index.capital_growth)  # total return = capital growth + dividend yield
 
+        t = self.time
         self.tdv_dividend[t] = dividend
         self.tdv_cash_flow[t] = self._cash_flow
         self.tdv_mv_bd[t] = self._mv
         self.tdv_purch_cost_bd[t] = self._purchase_cost
+        self._state = ("rolled", t)
 
     def buy_propn(self, propn: float) -> None:
         """
@@ -153,7 +151,7 @@ class Equity(Asset):
         self._purchase_cost = self._mv  # purchased cost is determined as the initial carrying amount
         self._is_profile = False
 
-    @t_checker({"roll_forward": 0}, "dealing")
+    @maybe_check_asset_state_close
     def close_dealing(self, **kwargs) -> None:
         """
         Update the equity asset after dealing.

@@ -4,7 +4,6 @@ import pandas as pd
 import warnings
 
 from vates._core import ProjModelEngine, TDimVariable
-from vates.utils import t_checker
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.assets.asset_base import Asset
 from vates.alm.assets._bond_fixed_component import (
@@ -14,7 +13,7 @@ from vates.alm.assets._bond_fixed_component import (
     BondFixedPricer,
     BondFixedRiskCalculator,
 )
-from vates.alm.assets._utils import calculate_risk_adj_spot
+from vates.alm.assets._utils import calculate_risk_adj_spot, maybe_check_asset_state_roll, maybe_check_asset_state_close
 
 
 class BondFixed(Asset):
@@ -34,7 +33,7 @@ class BondFixed(Asset):
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
     __slots__ = ('_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
-                 '_credit_band', '_cash_flow', 'cash_flow_gen', 'pricer', 'risk_calc', '_risk_mectrics'
+                 '_credit_band', '_cash_flow', 'cash_flow_gen', 'pricer', 'risk_calc',
                  'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
                  'tdv_interest', 'tdv_principal', 'tdv_default_recovery', 'tdv_mv_price', 'tdv_abv_price',
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad',)
@@ -112,7 +111,6 @@ class BondFixed(Asset):
         self._rf_curve: YieldCurve = rf_curve
         self._credit_band: CreditBand | None = credit_band
         self._cash_flow: float = 0.0
-        self._risk_mectrics: dict[str, float] | None = None
 
         # Compose with specialized components
         if provided_cash_flow_dict is None:
@@ -233,7 +231,6 @@ class BondFixed(Asset):
     def is_alive_beg(self) -> bool:
         return self._params.issue_date < self.period <= self._params.maturity_date
 
-    @t_checker({"roll_forward": 0}, "risk_metrics")
     def calculate_risk_metrics(self, eff_dur_delta: float = 0.001):
         """
         Calculate all risk metrics for the bond.
@@ -241,20 +238,12 @@ class BondFixed(Asset):
         Args:
             eff_dur_delta (float): Delta yiled curve for effective duration calculation.
         """
-        self._risk_mectrics = self.risk_calc.calculate_all_risk_metrics(
+        return self.risk_calc.calculate_all_risk_metrics(
             valn_date=self.period, market_price=self._mv_price_dirty, spots=self.ra_spots, eff_dur_delta=eff_dur_delta
         )
 
-    @property
-    def risk_metrics(self) -> dict[str, float] | None:
-        if self._risk_mectrics is not None:
-            last_calc_time = self._tt_dict["risk_metrics"]
-            if last_calc_time != self.time:
-                warnings.warn(f"Risk metrics are not latest, they were calculated at time {last_calc_time}.")
-        return self._risk_mectrics
-
-    @t_checker({"roll_forward": -1}, "roll_forward")
-    def roll_forward(self, *, update_mv_price: bool = True, **kwargs) -> None:
+    @maybe_check_asset_state_roll
+    def roll_forward(self, *, is_update_mv_price: bool = True, **kwargs) -> None:
         """
         Roll the bond forward one period, updating units, prices, and cash flows.
         """
@@ -293,11 +282,7 @@ class BondFixed(Asset):
         self._abv_price_dirty = abv_price_st * (1 + self._amort_rate / freq) ** (freq / 12) - coupon_paid - principal_paid
         # valid, price = self._validate_current_price("abv", self._abv_price_dirty)
 
-        if update_mv_price:
-            if self._rf_curve.last_update != t:
-                raise ValueError(f"{self._rf_curve.curve_id} is not updated on {t} ({p}).")
-            if self._credit_band is not None and self._credit_band.last_update != t:
-                raise ValueError(f"{self._credit_band.band_id} is not updated on {t} ({p}).")
+        if is_update_mv_price:
             self._mv_price_dirty = self.pricer.calculate_market_price(p, self.ra_spots)
 
         # Update arrays
@@ -361,7 +346,7 @@ class BondFixed(Asset):
         self._units = self._units * scale
         self._is_profile = False
 
-    @t_checker({"roll_forward": 0}, "dealing")
+    @maybe_check_asset_state_close
     def close_dealing(self) -> None:
         """
         Update the bond after dealing, storing units and values.

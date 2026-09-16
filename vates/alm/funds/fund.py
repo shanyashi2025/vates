@@ -4,7 +4,7 @@ from enum import Enum, unique
 from typing import Optional
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
-from vates.utils import t_checker
+from vates.utils import maybe_check_state
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
 from vates.alm.funds._asset_allocator import AssetAllocator, RebalancePolicyParams, TargetWeight
@@ -39,8 +39,8 @@ class Fund:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict',
-                 'fund_id', '_connector', '_primary_cash_asset', '_assembled', 'calculator', '_allocator',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
+                 'fund_id', '_connector', '_primary_cash_asset', 'calculator', '_allocator',
                  'rate_of_return_mv_bd', 'rate_of_return_mv_ad', 'rate_of_return_fav_bd', 'rate_of_return_fav_ad')
 
     def __init__(
@@ -65,7 +65,7 @@ class Fund:
         # Asset and liab collections
         self._connector: AssetLiabConnector = AssetLiabConnector()
         self._primary_cash_asset: Cash | None = None
-        self._assembled: bool = False
+        # self._assembled: bool = False
         self._asset_report_bases: list[str] = asset_report_bases
 
         self.calculator: FundCalculator = FundCalculator(
@@ -82,6 +82,12 @@ class Fund:
             self.calculator.tdv_totass_ror_pc_bd, divby=100)
         self.rate_of_return_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
             self.calculator.tdv_totass_ror_pc_ad, divby=100)
+
+        self._state: tuple[str, int] = ("initialized", self.time or 0)
+
+    @property
+    def state(self) -> tuple[str, int]:
+        return self._state
 
     @property
     def assets(self) -> list[Asset]:
@@ -102,8 +108,10 @@ class Fund:
             existing_liabs (Liab | list[Liab] | None): Existing liabilities to be included.
 
         """
-        if self._assembled:
-            warnings.warn(f"Fund has already been assembled.")
+        maybe_check_state(self, ("initialized", self.time))
+
+        # if self._assembled:
+        #     warnings.warn(f"Fund has already been assembled.")
 
         if existing_assets is None:
             pass
@@ -141,7 +149,8 @@ class Fund:
         self.calculator.aggregate_liabs_value("bd")
         self.calculator.aggregate_liabs_value("ad")
 
-        self._assembled = True
+        # self._assembled = True
+        self._state = ("assembled", self.time)
 
     @property
     def primary_cash_asset(self) -> Cash | None:
@@ -154,21 +163,24 @@ class Fund:
                 warnings.warn(f"No cash assets available.")
         return self._primary_cash_asset
 
-    @t_checker({"proc_assets_bd": -1, "proc_assets_ad": -1}, "proc_assets_bd")
     def process_assets_before_dealing(self) -> None:
         """Process asset cash flows and reported values before dealing (bd)."""
+        if self._state != ("assembled", self.time - 1):
+            maybe_check_state(self, ("closed", self.time - 1))
         self.calculator.process_assets_before_dealing()
         self._connector.accumulate_free_estate(self.calculator.tdv_totass_cash_flow[self.time])
+        self._state = ("proc_assets_bd", self.time)
 
-    @t_checker({"proc_liabs_bd": -1, "proc_liabs_ad": -1, "proc_assets_bd": 0}, "proc_liabs_bd")
     def process_liabs_before_dealing(self) -> None:
         """Process liability cash flows and balance sheet variables before dealing (bd)."""
+        maybe_check_state(self, ("proc_assets_bd", self.time))
         self.calculator.process_liabs_before_dealing()
         self._connector.accumulate_free_estate(self.calculator.tdv_totliab_cash_flow[self.time])
+        self._state = ("proc_liabs_bd", self.time)
 
-    @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
     def no_action_on_rebalance(self) -> None:
         """Skip asset rebalance, invest free proceeds into primary cash."""
+        maybe_check_state(self, ("proc_liabs_bd", self.time))
         t = self.time
         self.calculator.tdv_free_estate_bd[t] = self._connector.free_estate
         # just invest free_estate into primary cash, no other action, free_estate is reset to zero
@@ -177,8 +189,8 @@ class Fund:
             asset.close_dealing()
         self.calculator.tdv_free_estate_ad[t] = self._connector.free_estate # should be zero
         self.calculator.process_assets_after_dealing()
+        self._state = ("closed", self.time)
 
-    @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
     def rebalance_assets(self, *, fund_size_type: str | FundSizeType, asset_size_basis: str,
                          target_weight: dict[str, TargetWeight], assets_profile: list[Asset] | None = None, **kwargs
                          ) -> None:
@@ -190,6 +202,7 @@ class Fund:
             target_weight (dict[str, TargetWeight]): Target allocation by group.
             assets_profile (list[Asset] | None=None): Profile assets for purchases (e.g., bonds).
         """
+        maybe_check_state(self, ("proc_liabs_bd", self.time))
         t, p = self.time, self.period
         fund_size_type = FundSizeType[fund_size_type.upper()] if isinstance(fund_size_type, str) else fund_size_type
 
@@ -217,6 +230,8 @@ class Fund:
         if abs((val_bd - val_ad) - recon_rgl) > 0.01:
             warnings.warn(f"Fund {self.fund_id} at {p=} realized gain/loss reconciliation break, "
                           f"calculator: {val_bd - val_ad} != allocator: {recon_rgl}")
+
+        self._state = ("closed", self.time)
 
     def _get_fund_size(self, *, fund_size_type: FundSizeType, asset_size_basis: str) -> float:
         """Get the fund size based on the fund size type and basis.
@@ -249,12 +264,10 @@ class Fund:
             return max(self._connector.totliab_asset_share, self._connector.totliab_surr_value)
         raise ValueError(f"Unknown fund size type: {fund_size_type}.")
 
-    @t_checker({"proc_liabs_ad": -1, "proc_liabs_bd": 0, "proc_assets_ad": 0}, "proc_liabs_ad")
     def process_liabs_after_dealing(self) -> None:
         """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""
         self.calculator.process_liabs_after_dealing()
 
-    @t_checker({"proc_assets_ad": 0})
     def transfer_free_proceeds_to_other(self, other: Optional['Fund']) -> None:
         """Transfer free proceeds to the other fund.
 

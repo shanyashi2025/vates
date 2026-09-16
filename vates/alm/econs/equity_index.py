@@ -1,6 +1,7 @@
 import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
+from vates.utils import maybe_check_state
 
 
 @add_projection_time_synchronizer
@@ -18,9 +19,8 @@ class EquityIndex:
     _dividend_yield_ac: float
     _total_return_index: float
     _total_return_index_prev: float
-    _last_update: int
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
                  'index_id', '_dividend_yield_ac', '_total_return_index', '_total_return_index_prev',
                  'tdv_tot_return_index', 'tdv_dividend_yield_ac', )
 
@@ -41,15 +41,16 @@ class EquityIndex:
         create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=index_id, group='equity_index')
         self.tdv_tot_return_index: TDimVariable = create_tdv("tot_return_index")
         self.tdv_dividend_yield_ac: TDimVariable = create_tdv("dividend_yield_ac")
+        self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
-    def last_update(self) -> int:
-        """int: Last update time index."""
-        return self._last_update
+    def state(self) -> tuple[str, int]:
+        return self._state
 
     @property
     def total_return(self) -> float:
         """float: Total return in period."""
+        maybe_check_state(self, ("updated", self.time))
         if self._total_return_index_prev == 0:
             raise ZeroDivisionError(f"{self.index_id}: previous total return index is zero.")
         return self._total_return_index / self._total_return_index_prev - 1
@@ -57,26 +58,31 @@ class EquityIndex:
     @property
     def capital_growth(self) -> float:
         """float: Capital growth in period."""
+        maybe_check_state(self, ("updated", self.time))
         return self.total_return - self.dividend_yield
 
     @property
     def dividend_yield(self) -> float:
         """float: Dividend yield (monthly) in period."""
+        maybe_check_state(self, ("updated", self.time))
         return (1 + self.dividend_yield_ac) ** (1 / 12) - 1
 
     @property
     def dividend_yield_ac(self) -> float:
         """float: Dividend yield (annual compounding) in period."""
+        maybe_check_state(self, ("updated", self.time))
         return self._dividend_yield_ac
 
     @property
     def total_return_index(self) -> float:
         """float: Current total return index."""
+        maybe_check_state(self, ("updated", self.time))
         return self._total_return_index
 
     @property
     def total_return_index_prev(self) -> float:
         """float: Previous total return index."""
+        maybe_check_state(self, ("updated", self.time))
         return self._total_return_index_prev
 
     @property
@@ -115,7 +121,7 @@ class EquityIndex:
         t = self.time
         self.tdv_tot_return_index[t] = self._total_return_index
         self.tdv_dividend_yield_ac[t] = self._dividend_yield_ac
-        self._last_update = t
+        self._state = ("updated", t)
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.index_id}'"

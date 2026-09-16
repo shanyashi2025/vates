@@ -4,9 +4,9 @@ import warnings
 
 from vates._core import ProjModelEngine, TDimVariable
 from vates.finmath import CallOrPut, BlackScholesCalculator
-from vates.utils import t_checker
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.asset_base import Asset
+from vates.alm.assets._utils import maybe_check_asset_state_roll, maybe_check_asset_state_close
 
 class EquityOption(Asset):
     """
@@ -141,7 +141,7 @@ class EquityOption(Asset):
     def is_alive_beg(self) -> bool:
         return self.period <= self._exercise_date
 
-    @t_checker({"roll_forward": -1}, "roll_forward")
+    @maybe_check_asset_state_roll
     def roll_forward(self, **kwargs) -> None:
         """
         Roll the equity option asset forward one period.
@@ -153,11 +153,6 @@ class EquityOption(Asset):
             self._price = 0
             self._cash_flow = 0
             return
-
-        if self._equity_index.last_update != t:
-            raise ValueError(f"{self._equity_index.index_id} not updated on {t} ({self.period}).")
-        if self._rf_curve.last_update != t:
-            raise ValueError(f"{self._rf_curve.curve_id} not updated on {t} ({self.period}).")
 
         if self._is_pay_dividend:
             self._stock_price = self._stock_price * (1 + self._equity_index.capital_growth)
@@ -235,7 +230,7 @@ class EquityOption(Asset):
         self._units = self._units * scale
         self._is_profile = False
 
-    @t_checker({"roll_forward": 0}, "dealing")
+    @maybe_check_asset_state_close
     def close_dealing(self, **kwargs) -> None:
         """
         Update the equity option asset after dealing.

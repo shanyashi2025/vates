@@ -2,9 +2,9 @@ import pandas as pd
 
 from vates import ProjModelEngine
 from vates._core import TDimVariable
-from vates.utils import t_checker
 from vates.alm.econs import Currency, MarketInfo
 from vates.alm.assets.asset_base import Asset
+from vates.alm.assets._utils import maybe_check_asset_state_roll, maybe_check_asset_state_close
 
 
 class Cash(Asset):
@@ -82,20 +82,17 @@ class Cash(Asset):
     def ret_id_short_pos(self) -> str:
         return self._ret_id_short_pos
 
-    @t_checker({"roll_forward": -1}, "roll_forward")
+    @maybe_check_asset_state_roll
     def roll_forward(self, *, ret_rate: float | None = None, ret_rate_pos: float | None = None, **kwargs) -> None:
         """
         Roll the cash asset forward one period.
         """
-        t = self.time
-
         ret = ret_rate if self._nominal >= 0 else ret_rate_pos
         if ret is None:
             ret_id = self._ret_id if self._nominal >= 0 else self._ret_id_short_pos
-            if self._market_info.last_update[ret_id] != t:
-                raise ValueError(f"{self._market_info} is not updated on {t} ({self.period}).")
             ret = self._market_info.get(ret_id)
 
+        t = self.time
         self._nominal = self._nominal * (1 + ret) ** (1 / 12)
         self.tdv_cash_flow[t] = 0.0
         self.tdv_mv_bd[t] = self.market_value
@@ -134,7 +131,7 @@ class Cash(Asset):
         # should never get here
         pass
 
-    @t_checker({"roll_forward": 0}, "dealing")
+    @maybe_check_asset_state_close
     def close_dealing(self, **kwargs) -> None:
         """
         Update the cash asset after dealing.

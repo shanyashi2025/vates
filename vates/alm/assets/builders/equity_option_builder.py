@@ -93,11 +93,6 @@ class EquityOptionBuilder:
         """
         Calculate the market price using the volatility (standard deviation).
         """
-        if self.is_pay_dividend and self.equity_index.last_update != self.time:
-            raise ValueError(f"{self.equity_index.index_id} not updated on {self.time} ({self.period}).")
-        if self.rf_curve.last_update != self.time:
-            raise ValueError(f"{self.rf_curve.curve_id} not updated on {self.time} ({self.period}).")
-
         self.price = BlackScholesCalculator.price(
             call_or_put=self.call_or_put, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
@@ -111,11 +106,6 @@ class EquityOptionBuilder:
         """
         Calculate the implied volatility.
         """
-        if self.equity_index.last_update != self.time:
-            raise ValueError(f"{self.equity_index.index_id} not updated on {self.time} ({self.period}).")
-        if self.rf_curve.last_update != self.time:
-            raise ValueError(f"{self.rf_curve.curve_id} not updated on {self.time} ({self.period}).")
-
         self.std_dev = BlackScholesCalculator.implied_volatility(
             call_or_put=self.call_or_put, price=self.price, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),

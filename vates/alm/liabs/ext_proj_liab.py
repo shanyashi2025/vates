@@ -1,9 +1,9 @@
 import pandas as pd
 
 from vates._core import ProjModelEngine, TDimVariable
-from vates.utils import t_checker
 from vates.alm.econs import Currency
 from vates.alm.liabs.liab_base import Liab
+from vates.alm.liabs._utils import maybe_check_asset_state_roll, maybe_check_asset_state_close
 
 
 class ExtProjLiab(Liab):
@@ -66,7 +66,7 @@ class ExtProjLiab(Liab):
         self.tdv_asset_share_bd[t] = self._asset_share
         self.tdv_asset_share_ad[t] = self._asset_share
 
-    @t_checker({"roll_forward": -1, "update_ad": -1}, "roll_forward")
+    @maybe_check_asset_state_roll
     def roll_forward(self, **kwargs):
         """
         Roll the liability forward one period, updating variables and calculating cash flow.
@@ -89,7 +89,7 @@ class ExtProjLiab(Liab):
         self.tdv_acct_value_bd[t] = self._acct_value
         self.tdv_asset_share_bd[t] = self._asset_share
 
-    @t_checker({"update_ad": -1, "roll_forward": 0}, "update_ad")
+    @maybe_check_asset_state_close
     def update_ad(self, **kwargs) -> None:
         """
         Update the liability after dealing, adjusting asset share.

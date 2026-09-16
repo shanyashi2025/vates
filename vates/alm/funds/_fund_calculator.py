@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
-from vates.utils import t_checker
+from vates.utils import maybe_check_state
 from vates.alm.funds._utils import AssetLiabConnector
 
 
@@ -72,14 +72,12 @@ class FundCalculator:
         self.tdv_asset_inv_ret_ad: TDimVariable = create_tdv("asset_inv_ret_ad")
         self.tdv_asset_ror_pc_ad: TDimVariable = create_tdv("asset_ror_pc_ad")
 
-    @t_checker({"proc_assets_bd": -1, "proc_assets_ad": -1}, "proc_assets_bd")
     def process_assets_before_dealing(self) -> None:
         """Process asset values and returns before dealing (bd).
         """
         t = self.time
         for asset in self.connector.assets:
-            if asset.last_roll_forward != t:
-                raise ValueError(f"Asset {asset.asset_id} is not rolled on {t} ({self.period}).")
+            maybe_check_state(asset, ("rolled", t))
 
         # Aggregate asset cash flow
         tot_cash_flow = self.connector.groupby_sum_asset_cash_flow()
@@ -116,15 +114,10 @@ class FundCalculator:
         self.tdv_totass_inv_ret_bd[t] = totass_inv_ret
         self.tdv_totass_ror_pc_bd[t] = totass_ror * 100
 
-    @t_checker({"proc_assets_ad": -1, "proc_assets_bd": 0, "proc_liabs_bd": 0}, "proc_assets_ad")
     def process_assets_after_dealing(self) -> None:
         """Summarize asset values and returns after dealing (ad).
         """
         t = self.time
-        for asset in self.connector.assets:
-            if asset.last_dealing != t:
-                raise ValueError(f"Asset {asset.asset_id} is not updated after dealing (ad) on {t} ({self.period}).")
-
         # Aggregate asset value
         self.aggregate_assets_value("ad")
 
@@ -174,12 +167,17 @@ class FundCalculator:
         Raises:
             ValueError: If an asset is not rolled or updated for the current period, or if timing is invalid.
         """
+        t = self.time
+        if t > 0:
+            s = "rolled" if timing == "bd" else "closed"
+            for asset in self.connector.assets:
+                maybe_check_state(asset, (s, t))
+
         tot_rep_value = self.connector.groupby_sum_asset_report_value(basis=self.asset_report_bases)
         cat_rep_value = self.connector.groupby_sum_asset_report_value(
             basis=self.asset_report_bases, groupby="asset_category", in_list=self.asset_categories)
         cat_rep_value = np.array(cat_rep_value)  # convert to np array
 
-        t = self.time
         if timing == "bd":
             self.tdv_asset_rep_value_bd[t] = cat_rep_value
             self.tdv_totass_rep_value_bd[t] = tot_rep_value
@@ -189,14 +187,13 @@ class FundCalculator:
         else:
             raise ValueError(f"Invalid asset aggregation {timing=}.")
 
-    @t_checker({"proc_liabs_bd": -1, "proc_liabs_ad": -1, "proc_assets_bd": 0}, "proc_liabs_bd", )
     def process_liabs_before_dealing(self) -> None:
         """Process liability values and cash flows before dealing (bd).
         """
         t = self.time
         for liab in self.connector.liabs:
-            if liab.last_roll_forward != t:
-                raise ValueError(f"Liab {liab.liab_id} is not rolled on {t} ({self.period}).")
+            for asset in self.connector.assets:
+                maybe_check_state(liab, ("rolled", t))
 
         # Aggregate liability cash flow
         self.tdv_totliab_cash_flow[t] = sum(liab.cash_flow for liab in self.connector.liabs)
@@ -204,7 +201,6 @@ class FundCalculator:
         # Aggregate liability value
         self.aggregate_liabs_value("bd")
 
-    @t_checker({"proc_liabs_ad": -1, "proc_liabs_bd": 0, "proc_assets_ad": 0}, "proc_liabs_ad", )
     def process_liabs_after_dealing(self):
         """Process liability values and cash flows after dealing (ad).
         """
@@ -228,8 +224,8 @@ class FundCalculator:
             tot_asset_share = 0.0
 
             for liab in self.connector.liabs:
-                if liab.last_roll_forward != t:
-                    raise ValueError(f"Liab {liab.liab_id} is not rolled on {t} ({self.period}).")
+                if t > 0:
+                    maybe_check_state(liab, ("rolled", t))
 
                 tot_num_pols += liab.num_pols
                 tot_surr_val += liab.surr_val
@@ -248,11 +244,8 @@ class FundCalculator:
             tot_asset_share = 0.0
 
             for liab in self.connector.liabs:
-                if liab.last_roll_forward != t:
-                    raise ValueError(f"Liab {liab.liab_id} is not rolled on {t} ({self.period}).")
-
-                if liab.last_update_ad != t:
-                    raise ValueError(f"Liab {liab.liab_id} is not updated after dealing (ad) on t={t} ({self.period}).")
+                if t > 0:
+                    maybe_check_state(liab, ("closed", t))
 
                 tot_acct_value += liab.acct_value
                 tot_asset_share += liab.asset_share

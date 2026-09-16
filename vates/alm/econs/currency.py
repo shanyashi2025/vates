@@ -1,6 +1,7 @@
 import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
+from vates.utils import maybe_check_state
 
 
 @add_projection_time_synchronizer
@@ -16,9 +17,8 @@ class Currency:
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     _fx_rate: float
     _fx_rate_prev: float
-    _last_update: int
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', "_state",
                  'currency_id', '_fx_rate', '_fx_rate_prev', 'tdv_fx_rate', )
 
     def __init__(
@@ -36,20 +36,22 @@ class Currency:
         self.currency_id: str = currency_id
         self._fx_rate = 1.0
         self.tdv_fx_rate: TDimVariable = TDimVariable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
+        self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
-    def last_update(self) -> int:
-        """int: Last update time index."""
-        return self._last_update
+    def state(self) -> tuple[str, int]:
+        return self._state
 
     @property
     def fx_rate(self) -> float:
         """float: Current FX rate"""
+        maybe_check_state(self, ("updated", self.time))
         return self._fx_rate
 
     @property
     def fx_rate_prev(self) -> float:
         """float: Previous FX rate"""
+        maybe_check_state(self, ("updated", self.time))
         return self._fx_rate_prev
 
     @property
@@ -80,7 +82,7 @@ class Currency:
 
         t = self.time
         self.tdv_fx_rate[t] = fx_rate
-        self._last_update = t
+        self._state = ("updated", t)
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.currency_id}'"
