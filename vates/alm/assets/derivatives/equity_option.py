@@ -5,7 +5,6 @@ import warnings
 from vates._core import ProjModelEngine, TDimVariable
 from vates.finmath import CallOrPut, BlackScholesCalculator
 from vates.utils import t_checker
-from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.asset_base import Asset
 
@@ -48,7 +47,7 @@ class EquityOption(Asset):
         asset_category: str = "",
         fund_id: str = "",
         allocation_group: str = "",
-        classification: AssetClassification | str = AssetClassification.FVTPL,
+        report_basis_to_attr: dict[str, str],
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
     ):
@@ -72,11 +71,11 @@ class EquityOption(Asset):
             rf_curve (YieldCurve): Risk-free curve.
             std_dev (float): Standard deviation, i.e. volatility.
             is_pay_dividend (bool): True if paying dividend, otherwise False.
-            classification (AssetClassification): Asset classification. Defaults to FVTPL.
+            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
-                         purchase_date=purchase_date, currency=currency, classification=classification,
+                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,
                          asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
         self._call_or_put: CallOrPut = CallOrPut[call_or_put.upper()] if isinstance(call_or_put, str) else call_or_put
         self._exercise_date: pd.Period = exercise_date
@@ -120,7 +119,7 @@ class EquityOption(Asset):
             self.tdv_units_ad[t] = self._units
             self.tdv_stock_price[t] = self._stock_price
             self.tdv_price[t] = self._price
-            self.tdv_mv_ad[t] = self.mv
+            self.tdv_mv_ad[t] = self.market_value
 
     @property
     def std_dev(self) -> float:
@@ -183,7 +182,7 @@ class EquityOption(Asset):
         self.tdv_units_bd[t] = self._units
         self.tdv_stock_price[t] = self._stock_price
         self.tdv_price[t] = self._price
-        self.tdv_mv_bd[t] = self.mv
+        self.tdv_mv_bd[t] = self.market_value
         self.tdv_cash_flow[t] = self._cash_flow
 
     def get_greeks(self) -> dict:
@@ -219,8 +218,9 @@ class EquityOption(Asset):
         Raises:
             ValueError: If propn is negative.
         """
-        if propn < 0: raise ValueError("Can not sell negative proportion of an exsiting equity option.")
-        if propn > 1: raise ValueError("Can not sell >100% proportion of an exsiting equity option.")
+        if not (0 < propn <=1):
+            warnings.warn(f"Buying proportion {propn:.4f} of an exsiting equity option '{self._asset_id}', "
+                          f"normally expected: 0 < proportion <=1.")
         self._units -= self._units * propn
 
     def buy_profile_scale(self, scale: float) -> None:
@@ -230,7 +230,8 @@ class EquityOption(Asset):
         Args:
             scale (float): Scaling factor.
         """
-        if not self._is_profile: raise ValueError("This equity option object is not a profile.")
+        if not self._is_profile:
+            raise ValueError("This equity option object is not a profile.")
         self._units = self._units * scale
         self._is_profile = False
 
@@ -241,25 +242,15 @@ class EquityOption(Asset):
         """
         t = self.time
         self.tdv_units_ad[t] = self._units
-        self.tdv_mv_ad[t] = self.mv
+        self.tdv_mv_ad[t] = self.market_value
 
     @property
     def mv_price(self) -> float:
         return self._price
 
     @property
-    def mv(self) -> float:
+    def market_value(self) -> float:
         """float: Market value of the equity option asset."""
-        return self.mv_price * self._units
-
-    @property
-    def fav(self) -> float:
-        """float: Fund accouting value of the equity option asset."""
-        return self.mv_price * self._units
-
-    @property
-    def bsv(self) -> float:
-        """float: Balance sheet value of the equity option asset."""
         return self.mv_price * self._units
 
     @property

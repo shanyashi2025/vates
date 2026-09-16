@@ -280,8 +280,11 @@ class StochExecutor:
 
             try:
                 model_instance.run(projection_args=projection_args)
-                result.append(model_instance.runlog)
+                runlog = model_instance.runlog
+                result.append(runlog)
                 output_files.extend(model_instance._result_files)
+                if success and not ("execution" in runlog and runlog["execution"].get("success")):
+                    success = False
 
             except Exception as e:
                 traceback.print_exc()

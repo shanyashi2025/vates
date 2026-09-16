@@ -1,2 +1,2 @@
-﻿ref_no,fund_id,fund_size_type,fund_size_basis,fund_rebalance_freq,asset_categories
-1,cd_fund,MATH_RES,FAV,1,CASH;EQUITY;BOND
+﻿ref_no,fund_id,fund_size_type,fund_size_basis,fund_rebalance_freq,asset_categories,asset_report_bases
+1,cd_fund,MATH_RES,FAV,1,CASH;EQUITY;BOND,MV;FAV;BSV

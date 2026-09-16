@@ -1,10 +1,7 @@
 from abc import ABC, abstractmethod
-import numpy as np
-import numpy.typing as npt
 import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
-from vates.alm.enums import AssetRepBasis, AssetClassification
 from vates.alm.econs import Currency
 
 @add_projection_time_synchronizer
@@ -18,7 +15,7 @@ class Asset(ABC):
         _units (float): Number of assets
         _purchase_date (pd.Period): Purchase date.
         _currency (Currency): Currency of the asset.
-        _classification (AssetClassification): Asset classification.
+        _report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute, {"MV": "market_value"}
         _asset_category (str): Asset category.
         _fund_id (str): Associated fund identifier.
         _allocation_group (str): Allocation group for the asset.
@@ -27,7 +24,7 @@ class Asset(ABC):
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', '_asset_id', '_is_profile', '_units',
-                 '_purchase_date', '_currency', '_classification', '_asset_category', '_fund_id', '_allocation_group')
+                 '_purchase_date', '_currency', '_report_basis_to_attr', '_asset_category', '_fund_id', '_allocation_group')
 
     def __init__(
         self,
@@ -38,7 +35,7 @@ class Asset(ABC):
         units: float,
         purchase_date: pd.Period | None,
         currency: Currency | None,
-        classification: AssetClassification | str,
+        report_basis_to_attr: dict[str, str],
         asset_category: str,
         fund_id: str,
         allocation_group: str
@@ -53,7 +50,7 @@ class Asset(ABC):
             units (float): Number of assets
             purchase_date (pd.Period): Purchase date. Set to initilization date if input is None.
             currency (Currency): Asset currency.
-            classification (AssetClassification): Asset classification.
+            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute, {"MV": "market_value"}
             asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
@@ -63,8 +60,7 @@ class Asset(ABC):
         self._units: float = units
         self._purchase_date: pd.Period = purchase_date or (self.period if self._is_profile else None)
         self._currency: Currency | None = currency
-        self._classification: AssetClassification = AssetClassification[classification.upper()] \
-            if isinstance(classification, str) else classification
+        self._report_basis_to_attr: dict[str, str] = report_basis_to_attr | {"MV": "market_value"}  # "MV" is always required
         self._asset_category: str = asset_category
         self._fund_id: str = fund_id
         self._allocation_group: str = allocation_group
@@ -101,10 +97,6 @@ class Asset(ABC):
         return self._allocation_group
 
     @property
-    def classification(self) -> AssetClassification:
-        return self._classification
-
-    @property
     def purchase_date(self) -> pd.Period:
         return self._purchase_date
 
@@ -121,7 +113,7 @@ class Asset(ABC):
 
     @property
     @abstractmethod
-    def mv(self):
+    def market_value(self):
         """
         Abstract property for market value.
 
@@ -130,43 +122,21 @@ class Asset(ABC):
         """
         pass
 
-    @property
-    @abstractmethod
-    def fav(self):
+    def get_report_value(self, basis: str | list[str] | None = None, /) -> float | list[float] | dict[str, float]:
         """
-        Abstract property for fund accounting value.
+        Get reported value(s).
 
         Returns:
-            float: Fund accounting value (to be implemented by subclasses).
+            float | list[float] | dict[str, float]: The reported value of for a given basis, list of reported values
+                corresponding to the given list of bases, or all reported values as a dict.
         """
-        pass
-
-    @property
-    @abstractmethod
-    def bsv(self) :
-        """
-        Abstract property for balance sheet value.
-
-        Returns:
-            float: Balance sheet value (to be implemented by subclasses).
-        """
-        pass
-
-    @property
-    def rep_value(self) -> npt.NDArray[np.float64]:
-        """
-        Get all reported values as a numpy array.
-
-        Returns:
-            npt.NDArray[np.float64]: Array of reported values.
-        """
-        result = np.zeros(len(AssetRepBasis))
-
-        result[AssetRepBasis.MV.value] = self.mv
-        result[AssetRepBasis.FAV.value] = self.fav
-        result[AssetRepBasis.BSV.value] = self.bsv
-
-        return result
+        if basis is None:
+            return {key: getattr(self, val) for key, val in self._report_basis_to_attr.items()}
+        elif isinstance(basis, str):
+            return getattr(self, self._report_basis_to_attr[basis])
+        elif isinstance(basis, list):
+            return [getattr(self, self._report_basis_to_attr[x]) for x in basis]
+        raise TypeError(f"Invalid type of basis {type(basis)}, expected 'str' or 'list[str]'.")
 
     @property
     def last_roll_forward(self) -> int:

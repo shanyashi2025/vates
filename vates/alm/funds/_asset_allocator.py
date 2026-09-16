@@ -6,9 +6,9 @@ import warnings
 from typing import Self
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
-from vates.alm.enums import AssetRepBasis, AssetBuySellApproach, AssetPurchaseMethod
+from vates.alm.enums import AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.assets import Asset, Cash
-from vates.alm.funds._utils import ALContainer
+from vates.alm.funds._utils import AssetLiabConnector
 
 
 @dataclass(slots=True, frozen=True)
@@ -64,25 +64,28 @@ class AssetAllocator:
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer',
-                 'fund_id', 'container', 'rebalance_policy', 'ag_seq_list',
+                 'name', 'connector', 'rebalance_policy', 'ag_seq_list', 'asset_report_bases',
                  'tdv_fund_size', 'tdv_ag_repval_bd', 'tdv_ag_repval_ad', 'tdv_ag_alloc_pc_bd', 'tdv_ag_alloc_pc_ad',)
 
     def __init__(
         self,
         *,
+        name: str,
         model_engine: ProjModelEngine | None = None,
-        container: ALContainer,
-        rebalance_policy: dict[str, RebalancePolicyParams]
+        connector: AssetLiabConnector,
+        rebalance_policy: dict[str, RebalancePolicyParams],
+        asset_report_bases: list[str],
     ):
-        self.container: ALContainer = container
-        self.fund_id: str = self.container.name
+        self.name: str = name
+        self.connector: AssetLiabConnector = connector
         self.rebalance_policy = rebalance_policy
-        self.ag_seq_list = self.list_ag_in_sequence(self.fund_id, rebalance_policy)
+        self.ag_seq_list = self.list_ag_in_sequence(self.name, rebalance_policy)
+        self.asset_report_bases: list[str] = asset_report_bases
 
-        tdv_kwargs = {"model_engine": model_engine, "owner": self.fund_id, "group": 'rebalance'}
+        tdv_kwargs = {"model_engine": model_engine, "owner": self.name, "group": 'rebalance'}
         self.tdv_fund_size = TDimVariable("fund_size", **tdv_kwargs)
-        self.tdv_ag_repval_bd = TDimVariable("ag_repval_bd", dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
-        self.tdv_ag_repval_ad = TDimVariable("ag_repval_ad", dims=[self.ag_seq_list, AssetRepBasis], **tdv_kwargs)
+        self.tdv_ag_repval_bd = TDimVariable("ag_repval_bd", dims=[self.ag_seq_list, asset_report_bases], **tdv_kwargs)
+        self.tdv_ag_repval_ad = TDimVariable("ag_repval_ad", dims=[self.ag_seq_list, asset_report_bases], **tdv_kwargs)
         self.tdv_ag_alloc_pc_bd = TDimVariable("ag_alloc_pc_bd", dims=[self.ag_seq_list], **tdv_kwargs)
         self.tdv_ag_alloc_pc_ad = TDimVariable("ag_alloc_pc_ad", dims=[self.ag_seq_list], **tdv_kwargs)
 
@@ -125,14 +128,14 @@ class AssetAllocator:
 
         return ag_list
 
-    def rebalance(self, *, fund_size: float, asset_size_basis: AssetRepBasis,
+    def rebalance(self, *, fund_size: float, asset_size_basis: str,
                   target_weight: dict[str, TargetWeight], assets_profile: list[Asset] | None=None,
                   **kwargs) -> float:
         """Rebalance assets in the fund to match the target allocation.
 
         Args:
             fund_size (float): Total size for allocation.
-            asset_size_basis (AssetRepBasis): Basis for sizing (usually FAV or BSV).
+            asset_size_basis (str): Basis for sizing (e.g. FAV or BSV).
             target_weight (dict[str, TargetWeight]): Target allocations weight by group.
             assets_profile (list[Asset] | None): Profile assets for reference.
 
@@ -147,31 +150,32 @@ class AssetAllocator:
         # initialize fund size
         self.tdv_fund_size[t] = fund_size
         if fund_size < 0:
-            warnings.warn(f'{p} {self.fund_id}: negative fund size ({fund_size:.2f}) will be treated as zero whereby '
+            warnings.warn(f'{p} {self.name}: negative fund size ({fund_size:.2f}) will be treated as zero whereby '
                           'all existing assets will be sold to reblance.')
         fund_size = max(fund_size, 0.0001)  # to prevent divide by zero error
 
         # --- step 1: aggregate existing and profile asset reported value by allocation group ---
+        size_basis_index: int = self.asset_report_bases.index(asset_size_basis)
         # --- existing asset ---
-        exist_asset_repval, exist_asset_count = self._sum_by_alloc_group(self.container.assets, self.ag_seq_list)
+        exist_asset_repval, exist_asset_count = self._sum_by_alloc_group(self.connector.assets)
         self.tdv_ag_repval_bd[t] = np.array([val for val in exist_asset_repval.values()])
-        exist_asset_value = {key: arr[asset_size_basis.value] for key, arr in exist_asset_repval.items()}
+        exist_asset_value = {key: arr[size_basis_index] for key, arr in exist_asset_repval.items()}
         self.tdv_ag_alloc_pc_bd[t] = self._calculate_ag_weight(exist_asset_value, fund_size) * 100
         # --- profile asset ---
-        profile_asset_repval, profile_asset_count = self._sum_by_alloc_group(assets_profile, self.ag_seq_list)
-        profile_asset_value = {key: arr[asset_size_basis.value] for key, arr in profile_asset_repval.items()}
+        profile_asset_repval, profile_asset_count = self._sum_by_alloc_group(assets_profile)
+        profile_asset_value = {key: arr[size_basis_index] for key, arr in profile_asset_repval.items()}
 
         # --- step 2: cross-validate asset groups ---
         for ag, policy in self.rebalance_policy.items():
             if policy.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and exist_asset_count[ag] == 0:
-                raise ValueError(f"Fund {self.fund_id} asset allocation group {ag}: "
+                raise ValueError(f"Fund {self.name} asset allocation group {ag}: "
                                  f"purchase method=SCALE_UP_EXISTING but not found in exsiting assets.")
             if policy.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and profile_asset_count[ag] == 0:
-                raise ValueError(f"Fund {self.fund_id} asset allocation group {ag}: "
+                raise ValueError(f"Fund {self.name} asset allocation group {ag}: "
                                  f"purchase method=PURCHASE_PROFILE but not found in profile.")
             if policy.buysell_approach not in [AssetBuySellApproach.NO_TRADE, AssetBuySellApproach.RESIDUAL] and\
                     ag not in target_weight:
-                raise ValueError(f"Fund {self.fund_id} asset allocation group {ag}: "
+                raise ValueError(f"Fund {self.name} asset allocation group {ag}: "
                                  f"buy/sell appraoch={policy.buysell_approach} but not found in target allocation.")
             if ag not in target_weight: # add dummy weights
                 target_weight[ag] = TargetWeight(tgt_weight=0, min_weight=0, max_weight=0)
@@ -186,7 +190,7 @@ class AssetAllocator:
             buysell_app = policy.buysell_approach
             pur_method = policy.purchase_method
             # obtain the asset value of the allocation group
-            ag_exist_value, ag_profile_value = exist_asset_value[ag], profile_asset_value[ag]
+            ag_exist_value, ag_profile_value = float(exist_asset_value[ag]), float(profile_asset_value[ag])
             # calculate the target and min/max value
             wgt = target_weight[ag]
             tgt_value = fund_size * wgt.tgt_weight
@@ -205,33 +209,38 @@ class AssetAllocator:
         for ag, trade_decn in ag_trade_decn.items():
             if trade_decn[0] == "none":
                 continue
-            proceeds, rgl = self._trade_asset(ag, trade_decn, assets_profile)
+            proceeds, rgl = self._trade_asset(
+                allocation_group=ag,
+                trade_decn=trade_decn,
+                assets_profile=assets_profile,
+                asset_size_basis=asset_size_basis
+            )
             free_proceeds += proceeds
             realized_gl += rgl
 
         # --- step 4: process residual groups ---
-        exist_asset_repval, _ = self._sum_by_alloc_group(self.container.assets, self.ag_seq_list)
-        exist_asset_value = {key: arr[asset_size_basis.value] for key, arr in exist_asset_repval.items()}
+        exist_asset_repval, _ = self._sum_by_alloc_group(self.connector.assets)
+        exist_asset_value = {key: arr[size_basis_index] for key, arr in exist_asset_repval.items()}
         total_exist_value = sum(exist_asset_value.values())
         value_gap = fund_size - total_exist_value
         tolerance = max(abs(fund_size * 1e-6), 0.01)
 
         if abs(value_gap) > tolerance:
             if res_ag_count == 0:
-                raise ValueError(f"Fund {self.fund_id} has not met target allocation "
+                raise ValueError(f"Fund {self.name} has not met target allocation "
                                  f"but no residual allocation group to process.")
 
             if res_ag_exist_value == 0:
                 # This would be very extreme case when total residual allocation_group (usually cash) balance is zero.
                 # Utilize cash asset to safely proceed
                 cash_asset = None
-                for asset in self.container.assets:
+                for asset in self.connector.assets:
                     if isinstance(asset, Cash) and self.rebalance_policy[
                         asset.allocation_group].buysell_approach == AssetBuySellApproach.RESIDUAL:
                         cash_asset = asset
                         break
                 if cash_asset is None:
-                    raise ValueError(f"Fund {self.fund_id}: no cash asset (allocation group = residual) is available for sclaing.")
+                    raise ValueError(f"Fund {self.name}: no cash asset (allocation group = residual) is available for sclaing.")
                 cash_asset.invest_new_money(value_gap)
                 free_proceeds -= value_gap
             else:  # scale residual allocation_group
@@ -244,13 +253,18 @@ class AssetAllocator:
 
                 for ag, policy in self.rebalance_policy.items():
                     if policy.buysell_approach == AssetBuySellApproach.RESIDUAL:
-                        proceeds, rgl = self._trade_asset(ag, trade_decn, assets_profile)
+                        proceeds, rgl = self._trade_asset(
+                            allocation_group=ag,
+                            trade_decn=trade_decn,
+                            assets_profile=assets_profile,
+                            asset_size_basis=asset_size_basis,
+                        )
                         free_proceeds += proceeds
                         realized_gl += rgl
 
         # step 5: validate if target allocations met
-        exist_asset_repval, _ = self._sum_by_alloc_group(self.container.assets, self.ag_seq_list)
-        exist_asset_value = {key: arr[asset_size_basis.value] for key, arr in exist_asset_repval.items()}
+        exist_asset_repval, _ = self._sum_by_alloc_group(self.connector.assets)
+        exist_asset_value = {key: arr[size_basis_index] for key, arr in exist_asset_repval.items()}
         self.tdv_ag_repval_ad[t] = np.array([val for val in exist_asset_repval.values()])
         self.tdv_ag_alloc_pc_ad[t] = self._calculate_ag_weight(exist_asset_value, fund_size) * 100
 
@@ -260,15 +274,15 @@ class AssetAllocator:
             wgt = target_weight[ag]
             if not self._validate_allocation(ag, buysell_app, current_weight, wgt.min_weight, wgt.max_weight):
                 raise ValueError(
-                    f"Fund {self.fund_id}, target allocaion is not met for {ag} at {p}: "
+                    f"Fund {self.name}, target allocaion is not met for {ag} at {p}: "
                     f"min={wgt.min_weight: .4f}, max={wgt.max_weight: .4f}, "
                     f"current={current_weight: .4f}.")
 
-        self.container.accumulate_free_estate(free_proceeds)
+        self.connector.accumulate_free_estate(free_proceeds)
         return realized_gl
 
-    def _trade_asset(self, allocation_group: str, trade_decn: tuple[str, float],
-                     assets_profile: list[Asset] | None) -> tuple[float, float]:
+    def _trade_asset(self, *, allocation_group: str, trade_decn: tuple[str, float],
+                     assets_profile: list[Asset] | None, asset_size_basis: str) -> tuple[float, float]:
         """Execute a trade for a given allocation group.
 
         Args:
@@ -277,6 +291,7 @@ class AssetAllocator:
                 buysell (str): Buy/sell type (buy_scale_exist/buy_profile/sell).
                 propn (float): Proportion of asset to trade.
             assets_profile (list[Asset] | None): Profile assets for rebalance.
+            asset_size_basis (str): Asset basis for allocation.
 
         Returns:
             tuple[float, float]: (proceeds, realized_gain_loss).
@@ -290,27 +305,27 @@ class AssetAllocator:
         rgl: float = 0.0  # realized gain or loss
 
         if buysell == 'sell':
-            for asset in self.container.assets:
+            for asset in self.connector.assets:
                 if asset.allocation_group == allocation_group:
-                    fav_bd, mv_bd = asset.fav, asset.mv
+                    val_bd, mv_bd = asset.get_report_value(asset_size_basis), asset.market_value
                     asset.sell_propn(propn)
-                    fav_ad, mv_ad = asset.fav, asset.mv
+                    val_ad, mv_ad = asset.get_report_value(asset_size_basis), asset.market_value
                     proceeds += mv_bd - mv_ad
-                    rgl += (mv_bd - mv_ad) - (fav_bd - fav_ad)
+                    rgl += (mv_bd - mv_ad) - (val_bd - val_ad)
         elif buysell == 'buy_scale_exist':
-            for asset in self.container.assets:
+            for asset in self.connector.assets:
                 if asset.allocation_group == allocation_group:
-                    mv_bd = asset.mv
+                    mv_bd = asset.market_value
                     asset.buy_propn(propn)
-                    mv_ad = asset.mv
+                    mv_ad = asset.market_value
                     proceeds += mv_bd - mv_ad
         elif buysell == 'buy_profile':
             if not assets_profile: raise ValueError("Can't buy assets from empty profile.")
             for asset in assets_profile:
                 if asset.allocation_group == allocation_group:
                     asset.buy_profile_scale(scale=propn)
-                    self.container.assets.append(asset)
-                    proceeds -= asset.mv
+                    self.connector.assets.append(asset)
+                    proceeds -= asset.market_value
 
         return proceeds, rgl
 
@@ -327,28 +342,26 @@ class AssetAllocator:
         if fund_size <= 0: return np.zeros([len(ag_asset_value_dict)])
         return np.array([ag_asset_value_dict[ag] / fund_size for i, ag in enumerate(ag_asset_value_dict)])
 
-    @staticmethod
-    def _sum_by_alloc_group(assets: list[Asset], ag_list: list[str]
+    def _sum_by_alloc_group(self, assets: list[Asset]
                             ) -> tuple[dict[str, npt.NDArray[np.float64]], dict[str, int]]:
         """Aggregate asset reported values by allocation group.
 
         Args:
             assets (list[Asset]): Assets to aggregate.
-            ag_list (list[str]): List of allocation group.
 
         Returns:
             dict[str, npt.NDArray[np.float64]]: Mapping from allocation group to aggregated asset reported value.
             dict[str, int]: Mapping from allocation group to asset counts.
         """
-        asset_rep_value: dict = {ag: np.zeros(len(AssetRepBasis)) for ag in ag_list}
-        asset_count: dict = {ag: 0 for ag in ag_list}
+        asset_rep_value: dict[str, np.ndarray] = {ag: np.zeros(len(self.asset_report_bases)) for ag in self.ag_seq_list}
+        asset_count: dict[str, int] = {ag: 0 for ag in self.ag_seq_list}
 
         for asset in assets:
             ag = asset.allocation_group
             if ag not in asset_rep_value:
                 raise ValueError(f'Asset {asset.asset_id} (in fund {asset.fund_id}): allocation group {ag} not included '
                                  f'the fund reblance policy.')
-            asset_rep_value[ag] += asset.rep_value
+            asset_rep_value[ag] += np.array(asset.get_report_value(self.asset_report_bases), dtype=float)
             asset_count[ag] += 1
 
         return asset_rep_value, asset_count
@@ -435,4 +448,4 @@ class AssetAllocator:
         return target_met
 
     def __str__(self) -> str:
-        return f"{type(self).__name__} - '{self.fund_id}'"
+        return f"{type(self).__name__} - '{self.name}'"

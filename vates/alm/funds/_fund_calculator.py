@@ -3,15 +3,14 @@ import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 from vates.utils import t_checker
-from vates.alm.enums import AssetRepBasis
-from vates.alm.funds._utils import ALContainer
+from vates.alm.funds._utils import AssetLiabConnector
 
 
 @add_projection_time_synchronizer
 class FundCalculator:
     """Performs aggregation and performance calculations for a fund.
 
-    Computes asset and liability aggregates, investment returns, URGL/RGL, and
+    Computes asset and liability aggregates, investment returns, and
     stores time-dimensioned arrays for reporting by class and total.
 
     Attributes:
@@ -20,26 +19,27 @@ class FundCalculator:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', 'container', 'asset_categories_enum')
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_tt_dict', 'name', 'connector',
+                 'asset_categories', 'asset_report_bases',)
 
     def __init__(
         self,
         *,
+        name: str,
         model_engine: ProjModelEngine | None = None,
-        container: ALContainer,
-        asset_categories: list[str]
+        connector: AssetLiabConnector,
+        asset_categories: list[str],
+        asset_report_bases: list[str],
     ):
-        self.container: ALContainer = container
-        self.asset_categories_enum: dict[str, int] = {item: i for i, item in enumerate(asset_categories)}
+        self.name: str = name
+        self.connector: AssetLiabConnector = connector
+        self.asset_categories: list[str] = asset_categories
+        self.asset_report_bases: list[str] = asset_report_bases
 
-        # Initialize time-dimensioned variables used for reporting
-        fund_id = self.container.name
+        # Initialize time-dimensioned variables for output
         # dims = None
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=fund_id, group='fund')
+        create_tdv = lambda x: TDimVariable(x, model_engine=model_engine, owner=self.name, group='fund')
         self.tdv_totass_cash_flow: TDimVariable = create_tdv("totass_cash_flow")
-        self.tdv_totass_urgl_bd: TDimVariable = create_tdv("totass_urgl_bd")
-        self.tdv_totass_urgl_ad: TDimVariable = create_tdv("totass_urgl_ad")
-        self.tdv_totass_rgl_ad: TDimVariable = create_tdv("totass_rgl_ad")
         self.tdv_totliab_cash_flow: TDimVariable = create_tdv("totliab_cash_flow")
         self.tdv_tot_num_pols: TDimVariable = create_tdv("tot_no_pols_if")
         self.tdv_tot_surr_val: TDimVariable = create_tdv("tot_surr_val_if")
@@ -52,22 +52,19 @@ class FundCalculator:
         self.tdv_free_estate_ad: TDimVariable = create_tdv("free_estate_ad")
         self.tdv_proceeds_transferred_in: TDimVariable = create_tdv("proceeds_transferred_in")
         self.tdv_proceeds_transferred_out: TDimVariable = create_tdv("proceeds_transferred_out")
-        # dims = AssetRepBasis
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[AssetRepBasis])
+        # dims = asset_report_bases
+        create_tdv = lambda x: TDimVariable(x, model_engine=model_engine, owner=self.name, group='fund', dims=[asset_report_bases])
         self.tdv_totass_rep_value_bd: TDimVariable = create_tdv("totass_rep_value_bd")
         self.tdv_totass_rep_value_ad: TDimVariable = create_tdv("totass_rep_value_ad")
         self.tdv_totass_inv_ret_bd: TDimVariable = create_tdv("totass_inv_ret_bd")
         self.tdv_totass_ror_pc_bd: TDimVariable = create_tdv("totass_ror_pc_bd")
         self.tdv_totass_inv_ret_ad: TDimVariable = create_tdv("totass_inv_ret_ad")
         self.tdv_totass_ror_pc_ad: TDimVariable = create_tdv("totass_ror_pc_ad")
-        # dims = AssetClass
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[asset_categories])
+        # dims = asset_categories
+        create_tdv = lambda x: TDimVariable(x, model_engine=model_engine, owner=self.name, group='fund', dims=[asset_categories])
         self.tdv_asset_cash_flow: TDimVariable = create_tdv("asset_cash_flow")
-        self.tdv_asset_urgl_bd: TDimVariable = create_tdv("asset_urgl_bd")
-        self.tdv_asset_urgl_ad: TDimVariable = create_tdv("asset_urgl_ad")
-        self.tdv_asset_rgl_ad: TDimVariable = create_tdv("asset_rgl_ad")
-        # dims = AssetClass,AssetRepBasis
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=fund_id, group='fund', dims=[asset_categories, AssetRepBasis])
+        # dims = asset_categories, asset_report_bases
+        create_tdv = lambda x: TDimVariable(x, model_engine=model_engine, owner=self.name, group='fund', dims=[asset_categories, asset_report_bases])
         self.tdv_asset_rep_value_bd: TDimVariable = create_tdv("asset_rep_value_bd")
         self.tdv_asset_rep_value_ad: TDimVariable = create_tdv("asset_rep_value_ad")
         self.tdv_asset_inv_ret_bd: TDimVariable = create_tdv("asset_inv_ret_bd")
@@ -80,29 +77,38 @@ class FundCalculator:
         """Process asset values and returns before dealing (bd).
         """
         t = self.time
+        for asset in self.connector.assets:
+            if asset.last_roll_forward != t:
+                raise ValueError(f"Asset {asset.asset_id} is not rolled on {t} ({self.period}).")
+
+        # Aggregate asset cash flow
+        tot_cash_flow = self.connector.groupby_sum_asset_cash_flow()
+        cat_cash_flow = self.connector.groupby_sum_asset_cash_flow(groupby="asset_category", in_list=self.asset_categories)
+        cat_cash_flow = np.array(cat_cash_flow) # convert to np array
+        self.tdv_asset_cash_flow[t] = cat_cash_flow
+        self.tdv_totass_cash_flow[t] = tot_cash_flow
 
         # Aggregate asset value and asset cash flow
-        self._aggregate_assets_cash_flow()
         self.aggregate_assets_value("bd")
 
         # Calculate rates of return
-        asset_inv_ret = np.zeros((len(self.asset_categories_enum), len(AssetRepBasis)))
-        asset_ror = np.zeros((len(self.asset_categories_enum), len(AssetRepBasis)))
-        totass_inv_ret = np.zeros(len(AssetRepBasis))
-        totass_ror = np.zeros(len(AssetRepBasis))
+        asset_inv_ret = np.zeros((len(self.asset_categories), len(self.asset_report_bases)))
+        asset_ror = np.zeros((len(self.asset_categories), len(self.asset_report_bases)))
+        totass_inv_ret = np.zeros(len(self.asset_report_bases))
+        totass_ror = np.zeros(len(self.asset_report_bases))
 
-        for i in range(len(AssetRepBasis)):
+        for i in range(len(self.asset_report_bases)):
             totass_inv_ret[i], totass_ror[i] = self._calculate_investment_return(
-                float(self.tdv_totass_rep_value_ad[t - 1][i]),
-                float(self.tdv_totass_cash_flow[t]),
-                float(self.tdv_totass_rep_value_bd[t][i])
+                prev_val=float(self.tdv_totass_rep_value_ad[t - 1][i]),
+                cash_flow=float(self.tdv_totass_cash_flow[t]),
+                curr_val=float(self.tdv_totass_rep_value_bd[t][i])
             )
 
-            for j in range(len(self.asset_categories_enum)):
+            for j in range(len(self.asset_categories)):
                 asset_inv_ret[j, i], asset_ror[j, i] = self._calculate_investment_return(
-                    float(self.tdv_asset_rep_value_ad[t - 1][j, i]),
-                    float(self.tdv_asset_cash_flow[t][j]),
-                    float(self.tdv_asset_rep_value_bd[t][j, i])
+                    prev_val=(self.tdv_asset_rep_value_ad[t - 1][j, i]),
+                    cash_flow=float(self.tdv_asset_cash_flow[t][j]),
+                    curr_val=float(self.tdv_asset_rep_value_bd[t][j, i])
                 )
 
         self.tdv_asset_inv_ret_bd[t] = asset_inv_ret
@@ -115,22 +121,21 @@ class FundCalculator:
         """Summarize asset values and returns after dealing (ad).
         """
         t = self.time
+        for asset in self.connector.assets:
+            if asset.last_dealing != t:
+                raise ValueError(f"Asset {asset.asset_id} is not updated after dealing (ad) on {t} ({self.period}).")
 
         # Aggregate asset value
         self.aggregate_assets_value("ad")
 
-        # Calculate realized gain / loss
-        self.tdv_asset_rgl_ad[t] = self.tdv_asset_urgl_bd[t] - self.tdv_asset_urgl_ad[t]
-        self.tdv_totass_rgl_ad[t] = self.tdv_totass_urgl_bd[t] - self.tdv_totass_urgl_ad[t]
-
         # Calculate rates of return
-        asset_inv_ret = np.zeros((len(self.asset_categories_enum), len(AssetRepBasis)))
-        asset_ror = np.zeros((len(self.asset_categories_enum), len(AssetRepBasis)))
-        totass_inv_ret = np.zeros(len(AssetRepBasis))
-        totass_ror = np.zeros(len(AssetRepBasis))
-        mv_index = AssetRepBasis.MV.value
+        asset_inv_ret = np.zeros((len(self.asset_categories), len(self.asset_report_bases)))
+        asset_ror = np.zeros((len(self.asset_categories), len(self.asset_report_bases)))
+        totass_inv_ret = np.zeros(len(self.asset_report_bases))
+        totass_ror = np.zeros(len(self.asset_report_bases))
+        mv_index = self.asset_report_bases.index("MV")
 
-        for i in range(len(AssetRepBasis)):
+        for i in range(len(self.asset_report_bases)):
             if i == mv_index:  # asset dealing doesn't impact MV basis
                 totass_inv_ret[i] = self.tdv_totass_inv_ret_bd[t][i]
                 totass_ror[i] = self.tdv_totass_ror_pc_bd[t][i] / 100
@@ -140,7 +145,7 @@ class FundCalculator:
                 totass_inv_ret[i] = self.tdv_totass_inv_ret_bd[t][i] + gl_from_dealing
                 totass_ror[i] = 0 if totass_inv_ret[i] == 0 else totass_inv_ret[i] / self.tdv_totass_rep_value_ad[t - 1][i]
 
-            for j in range(len(self.asset_categories_enum)):
+            for j in range(len(self.asset_categories)):
                 if i == mv_index:  # asset dealing doesn't impact MV basis
                     asset_inv_ret[j, i] = self.tdv_asset_inv_ret_bd[t][j, i]
                     asset_ror[j, i] = self.tdv_asset_ror_pc_bd[t][j, i] / 100
@@ -160,27 +165,6 @@ class FundCalculator:
         self.tdv_totass_inv_ret_ad[t] = totass_inv_ret
         self.tdv_totass_ror_pc_ad[t] = totass_ror * 100
 
-    def _aggregate_assets_cash_flow(self) -> None:
-        """Aggregate cash flows from all assets.
-
-        Raises:
-            ValueError: If any asset is not rolled for the current period.
-        """
-        t = self.time
-        cls_cash_flow = np.zeros(len(self.asset_categories_enum))
-        tot_cash_flow = 0.0
-
-        for asset in self.container.assets:
-            if asset.last_roll_forward != t:
-                raise ValueError(f"Asset {asset.asset_id} is not rolled on {t} ({self.period}).")
-
-            cash_flow = asset.cash_flow
-            cls_cash_flow[self.asset_categories_enum[asset.asset_category],] += cash_flow
-            tot_cash_flow += cash_flow
-
-        self.tdv_asset_cash_flow[t] = cls_cash_flow
-        self.tdv_totass_cash_flow[t] = tot_cash_flow
-
     def aggregate_assets_value(self, timing: str) -> None:
         """Aggregate values from all assets in the fund.
 
@@ -190,34 +174,18 @@ class FundCalculator:
         Raises:
             ValueError: If an asset is not rolled or updated for the current period, or if timing is invalid.
         """
+        tot_rep_value = self.connector.groupby_sum_asset_report_value(basis=self.asset_report_bases)
+        cat_rep_value = self.connector.groupby_sum_asset_report_value(
+            basis=self.asset_report_bases, groupby="asset_category", in_list=self.asset_categories)
+        cat_rep_value = np.array(cat_rep_value)  # convert to np array
+
         t = self.time
-        cls_rep_value = np.zeros([len(self.asset_categories_enum), len(AssetRepBasis)])
-        tot_rep_value = np.zeros(len(AssetRepBasis))
-
-        for asset in self.container.assets:
-            if asset.last_roll_forward != t:
-                raise ValueError(f"Asset {asset.asset_id} is not rolled on {t} ({self.period}).")
-
-            if timing == "ad" and asset.last_dealing != t:
-                raise ValueError(f"Asset {asset.asset_id} is not updated after dealing (ad) on {t} ({self.period}).")
-
-            rep_value = asset.rep_value
-            cls_rep_value[self.asset_categories_enum[asset.asset_category],] += rep_value
-            tot_rep_value += rep_value
-
-        cls_urgl = cls_rep_value[:, AssetRepBasis.MV.value] - cls_rep_value[:, AssetRepBasis.FAV.value]
-        tot_urgl = tot_rep_value[AssetRepBasis.MV.value] - tot_rep_value[AssetRepBasis.FAV.value]
-
         if timing == "bd":
-            self.tdv_asset_rep_value_bd[t] = cls_rep_value
+            self.tdv_asset_rep_value_bd[t] = cat_rep_value
             self.tdv_totass_rep_value_bd[t] = tot_rep_value
-            self.tdv_asset_urgl_bd[t] = cls_urgl
-            self.tdv_totass_urgl_bd[t] = tot_urgl
         elif timing == "ad":
-            self.tdv_asset_rep_value_ad[t] = cls_rep_value
+            self.tdv_asset_rep_value_ad[t] = cat_rep_value
             self.tdv_totass_rep_value_ad[t] = tot_rep_value
-            self.tdv_asset_urgl_ad[t] = cls_urgl
-            self.tdv_totass_urgl_ad[t] = tot_urgl
         else:
             raise ValueError(f"Invalid asset aggregation {timing=}.")
 
@@ -225,25 +193,16 @@ class FundCalculator:
     def process_liabs_before_dealing(self) -> None:
         """Process liability values and cash flows before dealing (bd).
         """
-        # Aggregate liability value and cash flow
-        self._aggregate_liabs_cash_flow()
-        self.aggregate_liabs_value("bd")
-
-    def _aggregate_liabs_cash_flow(self) -> None:
-        """Aggregate cash flows from all liabilities.
-
-        Raises:
-            ValueError: If any liability is not rolled for the current period.
-        """
         t = self.time
-        tot_cash_flow = 0.0
-
-        for liab in self.container.liabs:
+        for liab in self.connector.liabs:
             if liab.last_roll_forward != t:
                 raise ValueError(f"Liab {liab.liab_id} is not rolled on {t} ({self.period}).")
-            tot_cash_flow += liab.cash_flow
 
-        self.tdv_totliab_cash_flow[t] = tot_cash_flow
+        # Aggregate liability cash flow
+        self.tdv_totliab_cash_flow[t] = sum(liab.cash_flow for liab in self.connector.liabs)
+
+        # Aggregate liability value
+        self.aggregate_liabs_value("bd")
 
     @t_checker({"proc_liabs_ad": -1, "proc_liabs_bd": 0, "proc_assets_ad": 0}, "proc_liabs_ad", )
     def process_liabs_after_dealing(self):
@@ -268,7 +227,7 @@ class FundCalculator:
             tot_acct_value = 0.0
             tot_asset_share = 0.0
 
-            for liab in self.container.liabs:
+            for liab in self.connector.liabs:
                 if liab.last_roll_forward != t:
                     raise ValueError(f"Liab {liab.liab_id} is not rolled on {t} ({self.period}).")
 
@@ -288,7 +247,7 @@ class FundCalculator:
             tot_acct_value = 0.0
             tot_asset_share = 0.0
 
-            for liab in self.container.liabs:
+            for liab in self.connector.liabs:
                 if liab.last_roll_forward != t:
                     raise ValueError(f"Liab {liab.liab_id} is not rolled on {t} ({self.period}).")
 
@@ -326,4 +285,4 @@ class FundCalculator:
             return ret, ret / prev_val
 
     def __str__(self) -> str:
-        return f"{type(self).__name__} - '{self.container.name}'"
+        return f"{type(self).__name__} - '{self.name}'"

@@ -1,8 +1,8 @@
 import pandas as pd
+import warnings
 
 from vates._core import ProjModelEngine, TDimVariable
 from vates.utils import t_checker
-from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, EquityIndex
 from vates.alm.assets.asset_base import Asset
 
@@ -14,19 +14,19 @@ class Equity(Asset):
     Attributes:
         _equity_index (EquityIndex): Associated equity index.
         _mv (float): Market value of the equity asset.
-        _fav (float): Fund accouting value of the equity asset.
+        _purchase_cost (float | None): Purchase cost of the equity asset.
         tdv_dividend (float): Dividend for the current period.
     """
-    __slots__ = ('_equity_index', '_mv', '_fav', '_cash_flow',
-                 'tdv_cash_flow', 'tdv_dividend', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_fav_bd', 'tdv_fav_ad',)
+    __slots__ = ('_equity_index', '_mv', '_purchase_cost', '_cash_flow', '_disposal_proceeds',
+                 'tdv_cash_flow', 'tdv_dividend', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purch_cost_bd', 'tdv_purch_cost_ad',)
 
     def __init__(
         self,
         *,
-        mv: float,
+        market_value: float,
         equity_index: EquityIndex,
-        fav: float | None = None,
-        classification: AssetClassification | str = AssetClassification.FVTPL,
+        purchase_cost: float | None = None,
+        report_basis_to_attr: dict[str, str],
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,
@@ -46,46 +46,39 @@ class Equity(Asset):
             asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
-            mv (float): Market value.
-            fav (float): Fund accouting value.
+            market_value (float): Market value.
+            purchase_cost (float | None): Purchase cost.
             equity_index (EquityIndex): Associated equity index.
-            classification (AssetClassification): Asset classification.
+            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=1,
-                         purchase_date=purchase_date, currency=currency, classification=classification,
+                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,
                          asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
         self._equity_index: EquityIndex = equity_index
-        self._mv: float = mv
-        self._fav: float = fav or mv
-        if self.classification == AssetClassification.FVTPL:
-            if abs(self._mv - self._fav) > 1e-8:
-                raise ValueError(f'FVTPL equity {self.asset_id}: fav={self._fav} != mv={self._mv}.')
-        elif self.classification == AssetClassification.FVOCI:
-            pass
-        else:
-            raise ValueError(f'Equity {self.asset_id}: invalid asset classification: {self.classification}, '
-                             f'epxected FVTPL or FVOCI')
+        self._mv: float = market_value
+        self._purchase_cost: float | None = purchase_cost
 
         if abs(self._mv) < 1e-8:
             self._mv = 1e-8  # to prevent crash when proportionally buy new asset
-        if abs(self._fav) < 1e-8:
-            self._fav = 1e-8
+        if self._purchase_cost is not None and abs(self._purchase_cost) < 1e-8:
+            self._purchase_cost = 1e-8
 
         self._cash_flow: float = 0.0
+        self._disposal_proceeds: float = 0.0
 
         create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='equity')
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_dividend: TDimVariable = create_tdv("dividend")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
-        self.tdv_fav_bd: TDimVariable = create_tdv("fav_bd")
-        self.tdv_fav_ad: TDimVariable = create_tdv("fav_ad")
+        self.tdv_purch_cost_bd: TDimVariable = create_tdv("purch_cost_bd")
+        self.tdv_purch_cost_ad: TDimVariable = create_tdv("purch_cost_ad")
 
         if not is_profile:
             t = self.time
             self.tdv_mv_ad[t] = self._mv
-            self.tdv_fav_ad[t] = self._fav
+            self.tdv_purch_cost_ad[t] = self._purchase_cost
 
     @property
     def is_alive(self) -> bool:
@@ -97,6 +90,7 @@ class Equity(Asset):
         Roll the equity asset forward one period, updating value and dividend.
         """
         t = self.time
+        self._disposal_proceeds = 0  # reset
 
         if self._equity_index.last_update != t:
             raise ValueError(f"{self._equity_index.index_id} is not updated on {t} ({self.period}).")
@@ -104,15 +98,11 @@ class Equity(Asset):
         dividend = self._mv * self._equity_index.dividend_yield
         self._cash_flow = dividend
         self._mv = self._mv * (1 + self._equity_index.capital_growth)  # total return = capital growth + dividend yield
-        if self.classification == AssetClassification.FVTPL:
-            self._fav = self._mv
-        elif self.classification == AssetClassification.FVOCI:
-            pass  # fav is kept unchanged, as capital growth not recognised
 
         self.tdv_dividend[t] = dividend
         self.tdv_cash_flow[t] = self._cash_flow
         self.tdv_mv_bd[t] = self._mv
-        self.tdv_fav_bd[t] = self._fav
+        self.tdv_purch_cost_bd[t] = self._purchase_cost
 
     def buy_propn(self, propn: float) -> None:
         """
@@ -120,16 +110,13 @@ class Equity(Asset):
 
         Args:
             propn (float): Proportion to buy.
-
-        Raises:
-            ValueError: If propn is negative.
         """
         if propn < 0:
-            raise ValueError("Can not buy negative proportion of an exsiting equity.")
-        if self.classification != AssetClassification.FVTPL:
-            raise ValueError(f"Equity asset {self.asset_id}: can not buy proportion of a non-FVTPL equitiy.")
-        self._mv += self._mv * propn
-        self._fav += self._fav * propn
+            warnings.warn(f"Buying negative proportion ({propn:.4f}) of an exsiting equity '{self._asset_id}'.")
+        amount = self._mv * propn
+        self._mv += amount
+        if self._purchase_cost is not None:
+            self._purchase_cost += amount  # the difference between market value and purchase cost doesn't change (in dollar amount)
 
     def sell_propn(self, propn: float) -> None:
         """
@@ -137,14 +124,19 @@ class Equity(Asset):
 
         Args:
             propn (float): Proportion to sell.
-
-        Raises:
-            ValueError: If propn is negative.
         """
-        if propn < 0: raise ValueError("Can not sell negative proportion of an exsiting equity.")
-        if propn > 1: raise ValueError("Can not sell >100% proportion of an exsiting equity.")
-        self._mv -= self._mv * propn
-        self._fav -= self._fav * propn
+        if not (0 < propn <=1):
+            warnings.warn(f"Buying proportion {propn:.4f} of an exsiting equity '{self._asset_id}', "
+                          f"normally expected: 0 < proportion <=1.")
+        amount = self._mv * propn
+        self._mv -= amount
+        if self._purchase_cost is not None:
+            self._purchase_cost -= amount  # the difference between market value and purchase cost doesn't change (in dollar amount)
+        self._disposal_proceeds += amount  # record the amount of money received when selling (proportion of) the equity
+
+    @property
+    def disposal_proceeds(self) -> float:
+        return self._disposal_proceeds
 
     def buy_profile_scale(self, scale: float) -> None:
         """
@@ -153,10 +145,12 @@ class Equity(Asset):
         Args:
             scale (float): Scaling factor.
         """
-        if not self._is_profile: raise ValueError("This equity object is not a profile.")
-        if scale < 0: raise ValueError("Can not scale equity profile by a negative number.")
+        if not self._is_profile:
+            raise ValueError("This equity object is not a profile.")
+        if scale < 0:
+            warnings.warn(f"Scaling equity profile '{self._asset_id}' by a negative number ({scale:.4f}).")
         self._mv = self._mv * scale
-        self._fav = self._fav * scale
+        self._purchase_cost = self._mv  # purchased cost is determined as the initial carrying amount
         self._is_profile = False
 
     @t_checker({"roll_forward": 0}, "dealing")
@@ -166,26 +160,17 @@ class Equity(Asset):
         """
         t = self.time
         self.tdv_mv_ad[t] = self._mv
-        self.tdv_fav_ad[t] = self._fav
+        self.tdv_purch_cost_ad[t] = self._purchase_cost
 
     @property
-    def mv(self) -> float:
+    def market_value(self) -> float:
         """float: Market value of the equity asset."""
         return self._mv
 
     @property
-    def fav(self) -> float:
-        """float: Fund accouting value of the equity asset."""
-        return self._fav
-
-    @property
-    def bsv(self) -> float:
-        """float: Balance sheet value of the equity asset."""
-        if self.classification in (AssetClassification.FVTPL, AssetClassification.FVOCI):
-            return self._mv
-        else:
-            raise ValueError(f'Equity asset {self.asset_id}: invalid asset classification: {self.classification}, '
-                             f'epxected FVTPL or FVOCI')
+    def purchase_cost(self) -> float | None:
+        """float: Purchase cost of the equity asset."""
+        return self._purchase_cost
 
     @property
     def cash_flow(self) -> float:

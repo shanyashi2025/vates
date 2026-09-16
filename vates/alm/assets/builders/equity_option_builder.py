@@ -3,22 +3,28 @@ import pandas as pd
 import warnings
 from typing import Self
 
-from vates._core import ProjModelEngine
+from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.finmath import CallOrPut, BlackScholesCalculator
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.derivatives import EquityOption
 
 
+@add_projection_time_synchronizer()
 class EquityOptionBuilder:
     """
     Builder for creating and initializing EquityOption objects.
     """
+
+    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+
     def __init__(
         self,
         model_engine: ProjModelEngine,
         asset_id: str,
         asset_category: str,
         fund_id: str,
+        report_basis_to_attr: dict[str, str],
         allocation_group: str,
         currency: Currency,
         is_profile: bool,
@@ -43,6 +49,7 @@ class EquityOptionBuilder:
             asset_id (str): Asset identifier.
             asset_category (str): Asset category.
             fund_id (str): Fund identifier.
+            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
             allocation_group (str): Allocation group.
             currency (Currency): Asset currency.
             is_profile (bool): Ture if profile asset, False if existing asset.
@@ -61,6 +68,7 @@ class EquityOptionBuilder:
         self.asset_id: str = asset_id
         self.asset_category: str = asset_category
         self.fund_id: str = fund_id
+        self.report_basis_to_attr: dict[str, str] = report_basis_to_attr
         self.allocation_group: str = allocation_group
         self.currency: Currency = currency
         self.is_profile: bool = is_profile
@@ -78,25 +86,17 @@ class EquityOptionBuilder:
         self.std_dev: float | None = std_dev
 
     @property
-    def p(self) -> pd.Period:
-        return self.model_engine.period
-
-    @property
-    def t(self) -> int:
-        return self.model_engine.time
-
-    @property
     def os_term_m(self) -> int:
-        return (self.exercise_date - self.p).n
+        return (self.exercise_date - self.period).n
 
     def calculate_market_price(self) -> Self:
         """
         Calculate the market price using the volatility (standard deviation).
         """
-        if self.is_pay_dividend and self.equity_index.last_update != self.t:
-            raise ValueError(f"{self.equity_index.index_id} not updated on {self.t} ({self.p}).")
-        if self.rf_curve.last_update != self.t:
-            raise ValueError(f"{self.rf_curve.curve_id} not updated on {self.t} ({self.p}).")
+        if self.is_pay_dividend and self.equity_index.last_update != self.time:
+            raise ValueError(f"{self.equity_index.index_id} not updated on {self.time} ({self.period}).")
+        if self.rf_curve.last_update != self.time:
+            raise ValueError(f"{self.rf_curve.curve_id} not updated on {self.time} ({self.period}).")
 
         self.price = BlackScholesCalculator.price(
             call_or_put=self.call_or_put, s=self.stock_price, k=self.strike_price,
@@ -111,10 +111,10 @@ class EquityOptionBuilder:
         """
         Calculate the implied volatility.
         """
-        if self.equity_index.last_update != self.t:
-            raise ValueError(f"{self.equity_index.index_id} not updated on {self.t} ({self.p}).")
-        if self.rf_curve.last_update != self.t:
-            raise ValueError(f"{self.rf_curve.curve_id} not updated on {self.t} ({self.p}).")
+        if self.equity_index.last_update != self.time:
+            raise ValueError(f"{self.equity_index.index_id} not updated on {self.time} ({self.period}).")
+        if self.rf_curve.last_update != self.time:
+            raise ValueError(f"{self.rf_curve.curve_id} not updated on {self.time} ({self.period}).")
 
         self.std_dev = BlackScholesCalculator.implied_volatility(
             call_or_put=self.call_or_put, price=self.price, s=self.stock_price, k=self.strike_price,
@@ -154,6 +154,7 @@ class EquityOptionBuilder:
             asset_id=self.asset_id,
             asset_category=self.asset_category,
             fund_id=self.fund_id,
+            report_basis_to_attr=self.report_basis_to_attr,
             allocation_group=self.allocation_group,
             currency=self.currency,
             is_profile=self.is_profile,

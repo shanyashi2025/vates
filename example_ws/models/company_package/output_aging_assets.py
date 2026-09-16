@@ -37,9 +37,11 @@ class AgingEquity:
     currency_id: str
     fund_id: str
     allocation_group: str
-    asset_classification: str
-    mv: float
-    fav: float
+    ifrs_classification: str
+    local_classification: str
+    alloc_classification: str
+    market_value: float
+    purchase_cost: float
     equity_index_id: str
     purchase_date: pd.Period
 
@@ -51,9 +53,11 @@ class AgingEquity:
             currency_id='none' if equity.currency is None else equity.currency.currency_id,
             fund_id=equity.fund_id,
             allocation_group=equity.allocation_group,
-            asset_classification=equity.classification.value,
-            mv=equity.mv,
-            fav=equity.fav,
+            ifrs_classification=getattr(equity, 'ifrs_classification'),
+            local_classification=getattr(equity, 'local_classification'),
+            alloc_classification=getattr(equity, 'alloc_classification'),
+            market_value=equity.market_value,
+            purchase_cost=equity.purchase_cost or 0.0,
             equity_index_id=getattr(equity, '_equity_index').index_id,
             purchase_date=equity.purchase_date,
         )
@@ -66,7 +70,9 @@ class AgingBond:
     currency_id: str
     fund_id: str
     allocation_group: str
-    asset_classification: str
+    ifrs_classification: str
+    local_classification: str
+    alloc_classification: str
     issue_date: pd.Period
     maturity_date: pd.Period
     coupon_rate: float
@@ -92,7 +98,9 @@ class AgingBond:
             currency_id='none' if bond.currency is None else bond.currency.currency_id,
             fund_id=bond.fund_id,
             allocation_group=bond.allocation_group,
-            asset_classification=bond.classification.value,
+            ifrs_classification=getattr(bond, 'ifrs_classification'),
+            local_classification=getattr(bond, 'local_classification'),
+            alloc_classification=getattr(bond, 'alloc_classification'),
             issue_date=params.issue_date,
             maturity_date=params.maturity_date,
             coupon_freq=params.coupon_freq,

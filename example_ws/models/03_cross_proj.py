@@ -103,12 +103,12 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
             type_asset = type(asset)
             mc_inputer = mc_inputer_dict[asset.fund_id]
             if type_asset == alm.assets.Equity:
-                mc_inputer.mc_equity += asset.mv * mc_factor_equity
+                mc_inputer.mc_equity += asset.market_value * mc_factor_equity
             elif type_asset == alm.assets.BondFixed:
                 mc_inputer.aa_int_base += asset.pricer.calculate_market_price(p, cross_intba_spot) * asset.units
                 mc_inputer.aa_int_up += asset.pricer.calculate_market_price(p, cross_intup_spot) * asset.units
                 mc_inputer.aa_int_dn += asset.pricer.calculate_market_price(p, cross_intdn_spot) * asset.units
-                mc_inputer.mc_spread += asset.mv * mc_factor_spread
+                mc_inputer.mc_spread += asset.market_value * mc_factor_spread
             # elif type_asset == ...:
             #     ...
 

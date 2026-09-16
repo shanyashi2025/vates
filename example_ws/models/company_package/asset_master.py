@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
-from typing import Self
+from typing import Self, NamedTuple
 
 from vates import ProjModelEngine
-from vates.alm import create_asset, Cash, BondFixed, Equity, EquityOption, YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
+from vates.alm import create_asset, Asset, Cash, BondFixed, Equity, EquityOption, YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 from .econ_master import EsgMaster
 
 ASSET_CATEGORY_MAPPING = {
@@ -13,16 +13,15 @@ ASSET_CATEGORY_MAPPING = {
     'equity_option': 'EQ_DERIV'
 }
 
-ASSET_CLASSIFICATION_MAPPING = {
-    "FVTPL": "FVTPL",
-    "FVOCI": "FVOCI",
-    "AC": "AC",
-    "HFT": "FVTPL",  # Held for Trading
-    "AFS": "FVOCI",  # Available for Sale
-    "HTM": "AC",     # Held for Maturity
-}
+class AssetReportBasisKey(NamedTuple):
+    asset_cls: str
+    ifrs_classification: str
+    local_classification: str
+    alloc_classification: str
 
 class AssetMaster:
+
+    _unique_report_basis_to_attr: dict[AssetReportBasisKey, dict[str, str]] = {}
 
     def __init__(
         self,
@@ -37,8 +36,96 @@ class AssetMaster:
         self.equity_ls: list[Equity] = equity_ls or []
         self.equity_option_ls: list[EquityOption] = equity_option_ls or []
 
+    @classmethod
+    def get_report_basis_to_attr(cls, asset_cls: str, ifrs_classification: str, local_classification: str,
+                                 alloc_classification: str) -> dict[str, str]:
+        key = AssetReportBasisKey(
+            asset_cls=asset_cls,
+            ifrs_classification=ifrs_classification,
+            local_classification=local_classification,
+            alloc_classification=alloc_classification,
+        )
+        if key in cls._unique_report_basis_to_attr:
+            return cls._unique_report_basis_to_attr[key]
+
+        report_bases: dict[str, str] = {
+            "MV": "market_value",
+            # "IFRS_PL": None,
+            # "IFRS_BS": None,
+            # "LOCAL_PL": None,
+            # "LOCAL_BS": None,
+            # "BSV": None,
+            # "FAV": None,
+        }
+
+        classification = ifrs_classification.upper()
+        if classification == "FVTPL":
+            report_bases["IFRS_PL"] = "market_value"
+            report_bases["IFRS_BS"] = "market_value"
+        elif classification == "FVOCI":
+            if asset_cls == "fixed_bond":
+                report_bases["IFRS_PL"] = "amortized_book_value"
+            elif asset_cls == "equity":
+                report_bases["IFRS_PL"] = "purchase_cost"
+            else:
+                raise ValueError(f"'{asset_cls} can not be classified as 'FVOCI' under IFRS basis.")
+            report_bases["IFRS_BS"] = "market_value"
+        elif classification == "AC":
+            if asset_cls == "fixed_bond":
+                report_bases["IFRS_PL"] = "amortized_book_value"
+                report_bases["IFRS_BS"] = "amortized_book_value"
+            else:
+                raise ValueError(f"'{asset_cls} can not be classified as 'AC' under IFRS basis.")
+        else:
+            raise ValueError(f"Invalid IFRS basis {classification=}, expected: ('FVTPL', 'FVOCI', 'AC').")
+
+        classification = local_classification.upper()
+        if classification == "FVTPL":
+            report_bases["LOCAL_PL"] = "market_value"
+            report_bases["LOCAL_BS"] = "market_value"
+        elif classification == "FVOCI":
+            if asset_cls == "fixed_bond":
+                report_bases["LOCAL_PL"] = "amortized_book_value"
+            elif asset_cls == "equity":
+                report_bases["LOCAL_PL"] = "purchase_cost"
+            else:
+                raise ValueError(f"'{asset_cls} can not be classified as 'FVOCI' under Local basis.")
+            report_bases["LOCAL_BS"] = "market_value"
+        elif classification == "AC":
+            if asset_cls == "fixed_bond":
+                report_bases["LOCAL_PL"] = "amortized_book_value"
+                report_bases["LOCAL_BS"] = "amortized_book_value"
+            else:
+                raise ValueError(f"'{asset_cls} can not be classified as 'AC' under Local basis.")
+        else:
+            raise ValueError(f"Invalid Local basis {classification=}, expected: ('FVTPL', 'FVOCI', 'AC').")
+
+        classification = alloc_classification.upper()
+        if classification in ("FVTPL", "TRADING", "HFT"):
+            report_bases["FAV"] = "market_value"
+            report_bases["BSV"] = "market_value"
+        elif classification in ("FVOCI", "AFS"):
+            if asset_cls == "fixed_bond":
+                report_bases["FAV"] = "amortized_book_value"
+            elif asset_cls == "equity":
+                report_bases["FAV"] = "purchase_cost"
+            else:
+                raise ValueError(f"'{asset_cls} can not be classified as 'FVOCI' under Allocation basis.")
+            report_bases["BSV"] = "market_value"
+        elif classification in ("AC", "HTM"):
+            if asset_cls == "fixed_bond":
+                report_bases["FAV"] = "amortized_book_value"
+                report_bases["BSV"] = "amortized_book_value"
+            else:
+                raise ValueError(f"'{asset_cls} can not be classified as 'AC' under Allocation basis.")
+        else:
+            raise ValueError(f"Invalid Allocation basis {classification=}, expected: ('FVTPL', 'FVOCI', 'AC').")
+
+        cls._unique_report_basis_to_attr[key] = report_bases
+        return report_bases
+
     @property
-    def all(self) -> list:
+    def all(self) -> list[Asset]:
         return self.cash_ls + self.fixed_bond_ls + self.equity_ls + self.equity_option_ls
 
     @classmethod
@@ -187,6 +274,13 @@ class AssetMaster:
         for asset_id, row in df_flt.iterrows():
             currency_id = row["currency_id"]
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
+            report_basis_to_attr = cls.get_report_basis_to_attr(
+                asset_cls="cash",
+                ifrs_classification="FVTPL",
+                local_classification="FVTPL",
+                alloc_classification="FVTPL",
+            )
+
             # create instance
             cash = create_asset(
                 asset_cls="cash",
@@ -194,6 +288,7 @@ class AssetMaster:
                 asset_id=asset_id,
                 asset_category=ASSET_CATEGORY_MAPPING["cash"],
                 fund_id=row["fund_id"],
+                report_basis_to_attr=report_basis_to_attr,
                 allocation_group=row["allocation_group"],
                 currency=currency,
                 nominal=row["nominal"],
@@ -261,6 +356,16 @@ class AssetMaster:
             else:
                 provided_cash_flow_dict = None
 
+            ifrs_classification = row["ifrs_classification"]
+            local_classification = row["local_classification"]
+            alloc_classification = row["alloc_classification"]
+            report_basis_to_attr = cls.get_report_basis_to_attr(
+                asset_cls="fixed_bond",
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                alloc_classification=alloc_classification,
+            )
+
             # create instance
             fixed_bond = create_asset(
                 model_engine=model_engine,
@@ -278,7 +383,7 @@ class AssetMaster:
                 face_value=row["face_value"],
                 provided_cash_flow_dict=provided_cash_flow_dict,
                 units=row["units"],
-                classification=ASSET_CLASSIFICATION_MAPPING[row["asset_classification"]],
+                report_basis_to_attr=report_basis_to_attr,
                 rf_curve=rf_curve,
                 credit_band=credit_band,
                 abv_price=row["abv_price_dirty"],
@@ -287,11 +392,11 @@ class AssetMaster:
                 is_profile=False
             )
             # dynamically create attribute(s)
+            setattr(fixed_bond, 'ifrs_classification', ifrs_classification)
+            setattr(fixed_bond, 'local_classification', local_classification)
+            setattr(fixed_bond, 'alloc_classification', alloc_classification)
             if is_cash_flow_provided:
                 setattr(fixed_bond, 'provided_cash_flow_id', provided_cash_flow_id)
-            for col in df_flt.columns:
-                if col.startswith('tag__'):
-                    setattr(fixed_bond, col[5:], row[col])
             # append to list
             fixed_bond_list.append(fixed_bond)
 
@@ -361,6 +466,15 @@ class AssetMaster:
             rf_curve = next((x for x in yield_curves if x.curve_id == rf_curve_id), None)
             credit_band_id = row["credit_band_id"]
             credit_band = next((x for x in credit_bands if x.band_id == credit_band_id), None)
+            ifrs_classification = row["ifrs_classification"]
+            local_classification = row["local_classification"]
+            alloc_classification = row["alloc_classification"]
+            report_basis_to_attr = cls.get_report_basis_to_attr(
+                asset_cls="fixed_bond",
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                alloc_classification=alloc_classification,
+            )
 
             fixed_bond = create_asset(
                 model_engine=model_engine,
@@ -377,7 +491,7 @@ class AssetMaster:
                 face_value=row["face_value"],
                 redemp_sched=None,
                 units=row["units"],
-                classification=ASSET_CLASSIFICATION_MAPPING[row["asset_classification"]],
+                report_basis_to_attr=report_basis_to_attr,
                 rf_curve=rf_curve,
                 credit_band=credit_band,
                 abv_price=row["face_value"],
@@ -386,9 +500,9 @@ class AssetMaster:
                 is_profile=True
             )
             # dynamically create attribute(s)
-            for col in df_flt.columns:
-                if col.startswith('tag__'):
-                    setattr(fixed_bond, col[5:], row[col])
+            setattr(fixed_bond, 'ifrs_classification', ifrs_classification)
+            setattr(fixed_bond, 'local_classification', local_classification)
+            setattr(fixed_bond, 'alloc_classification', alloc_classification)
             # append to list
             fixed_bond_list.append(fixed_bond)
 
@@ -427,6 +541,16 @@ class AssetMaster:
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
             equity_index_id = row["equity_index_id"]
             equity_index = next((x for x in equity_indices if x.index_id == equity_index_id), None)
+            ifrs_classification = row["ifrs_classification"]
+            local_classification = row["local_classification"]
+            alloc_classification = row["alloc_classification"]
+            report_basis_to_attr = cls.get_report_basis_to_attr(
+                asset_cls="equity",
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                alloc_classification=alloc_classification,
+            )
+
             # create instance
             equity = create_asset(
                 asset_cls="equity",
@@ -435,17 +559,17 @@ class AssetMaster:
                 asset_category=ASSET_CATEGORY_MAPPING["equity"],
                 fund_id=row["fund_id"],
                 allocation_group=row["allocation_group"],
-                classification=ASSET_CLASSIFICATION_MAPPING[row["asset_classification"]],
+                report_basis_to_attr=report_basis_to_attr,
                 currency=currency,
-                mv=row["mv"],
-                fav=row["fav"],
+                market_value=row["market_value"],
+                purchase_cost=row["purchase_cost"],
                 equity_index=equity_index,
                 is_profile=False
             )
             # dynamically create attribute(s)
-            for col in df_flt.columns:
-                if col.startswith('tag__'):
-                    setattr(equity, col[5:], row[col])
+            setattr(equity, 'ifrs_classification', ifrs_classification)
+            setattr(equity, 'local_classification', local_classification)
+            setattr(equity, 'alloc_classification', alloc_classification)
             # append to list
             equity_list.append(equity)
 
@@ -486,6 +610,15 @@ class AssetMaster:
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
             equity_index_id = row["equity_index_id"]
             equity_index = next((x for x in equity_indices if x.index_id == equity_index_id), None)
+            ifrs_classification = row["ifrs_classification"]
+            local_classification = row["local_classification"]
+            alloc_classification = row["alloc_classification"]
+            report_basis_to_attr = cls.get_report_basis_to_attr(
+                asset_cls="equity",
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                alloc_classification=alloc_classification,
+            )
             # create instance
             equity = create_asset(
                 asset_cls="equity",
@@ -494,17 +627,16 @@ class AssetMaster:
                 asset_category=ASSET_CATEGORY_MAPPING['equity'],
                 fund_id=fund_id,
                 allocation_group=row["allocation_group"],
-                classification=ASSET_CLASSIFICATION_MAPPING[row["asset_classification"]],
+                report_basis_to_attr=report_basis_to_attr,
                 currency=currency,
-                mv=row["amount"],
-                fav=row["amount"],
+                market_value=row["amount"],
                 equity_index=equity_index,
                 is_profile=True
             )
             # dynamically create attribute(s)
-            for col in df_flt.columns:
-                if col.startswith('tag__'):
-                    setattr(equity, col[5:], row[col])
+            setattr(equity, 'ifrs_classification', ifrs_classification)
+            setattr(equity, 'local_classification', local_classification)
+            setattr(equity, 'alloc_classification', alloc_classification)
             # append to list
             equity_list.append(equity)
 
@@ -547,6 +679,15 @@ class AssetMaster:
             equity_index = next((x for x in equity_indices if x.index_id == equity_index_id), None)
             rf_curve_id = row["rf_curve_id"]
             rf_curve = next((x for x in yield_curves if x.curve_id == rf_curve_id), None)
+            ifrs_classification = row["ifrs_classification"]
+            local_classification = row["local_classification"]
+            alloc_classification = row["alloc_classification"]
+            report_basis_to_attr = cls.get_report_basis_to_attr(
+                asset_cls="equity_option",
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                alloc_classification=alloc_classification,
+            )
 
             # create instance
             equity_option = create_asset(
@@ -556,6 +697,7 @@ class AssetMaster:
                 asset_id=asset_id,
                 asset_category=ASSET_CATEGORY_MAPPING['equity_option'],
                 fund_id=row["fund_id"],
+                report_basis_to_attr=report_basis_to_attr,
                 allocation_group=row["allocation_group"],
                 currency=currency,
                 call_or_put=row["call_or_put"],
@@ -571,9 +713,9 @@ class AssetMaster:
                 is_profile=False
             )
             # dynamically create attribute(s)
-            for col in df_flt.columns:
-                if col.startswith('tag__'):
-                    setattr(equity_option, col[5:], row[col])
+            setattr(equity_option, 'ifrs_classification', ifrs_classification)
+            setattr(equity_option, 'local_classification', local_classification)
+            setattr(equity_option, 'alloc_classification', alloc_classification)
             # append to list
             equity_option_list.append(equity_option)
 

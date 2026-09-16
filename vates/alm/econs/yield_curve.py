@@ -15,15 +15,15 @@ class YieldCurve:
 
     Attributes:
         curve_id (str): Yield curve identifier.
-        _yield_curve (InterestRateTermStructure): Yield curve (interest rate term structure)
+        _curve (InterestRateTermStructure): Yield curve (interest rate term structure)
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    _yield_curve: InterestRateTermStructure | None
+    _curve: InterestRateTermStructure | None
     _last_update: int | None
 
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
-                 'curve_id', '_yield_curve', 'tdv_spot_rates',)
+                 'curve_id', '_curve', 'tdv_spot_rates',)
 
     def __init__(
         self,
@@ -40,7 +40,7 @@ class YieldCurve:
             tdv_term_dim (list[int] | None): List of terms (in months) to be output.
         """
         self.curve_id = curve_id
-        self._yield_curve: InterestRateTermStructure | None = None
+        self._curve: InterestRateTermStructure | None = None
         self._last_update: int | None = None
 
         if tdv_term_dim is not None:
@@ -79,11 +79,11 @@ class YieldCurve:
         elif any(x is None for x in (from_what, value)):
             raise ValueError(f"`from_what` or `value` is None.")
         elif from_what == "spot_rates":
-            self._yield_curve = InterestRateTermStructure.from_zeroac(value, interval_unit="M")
+            self._curve = InterestRateTermStructure.from_zeroac(value, interval_unit="M")
         elif from_what == "forward_rates":
-            self._yield_curve = InterestRateTermStructure.from_forwardac(value, interval_unit="M")
+            self._curve = InterestRateTermStructure.from_forwardac(value, interval_unit="M")
         elif from_what == "discount_factors":
-            self._yield_curve = InterestRateTermStructure.from_discount(value, interval_unit="M")
+            self._curve = InterestRateTermStructure.from_discount(value, interval_unit="M")
         else:
             raise ValueError(f"Invalid {from_what=}, expected: 'spot_rates', 'forward_rates' or 'discount_factors'.")
 
@@ -92,28 +92,28 @@ class YieldCurve:
     @property
     def spot_rates(self) -> npt.NDArray[np.float64] | None:
         """npt.NDArray[np.float64] | None: Spot rates, or None if the curve has not been initialized."""
-        return None if self._yield_curve is None else self._yield_curve.spotac
+        return None if self._curve is None else self._curve.spotac
 
     @property
     def discount_factors(self) -> npt.NDArray[np.float64] | None:
         """npt.NDArray[np.float64] | None: Discount factors, or None if the curve has not been initialized."""
-        return None if self._yield_curve is None else self._yield_curve.discount
+        return None if self._curve is None else self._curve.discount
 
     @property
     def forward_rates(self) -> npt.NDArray[np.float64] | None:
         """npt.NDArray[np.float64] | None: Forward rates, or None if the curve has not been initialized."""
-        return None if self._yield_curve is None else self._yield_curve.forwardac
+        return None if self._curve is None else self._curve.forwardac
 
     @property
     def par_yields(self) -> dict[int, npt.NDArray[np.float64]] | None:
         """dict[int, npt.NDArray[np.float64]] | None: Par yields, or None if the curve has not been initialized."""
-        return None if self._yield_curve is None else self._yield_curve.parac
+        return None if self._curve is None else self._curve.parac
 
     def _on_exit_update(self) -> None:
-        if self._yield_curve is None:
+        if self._curve is None:
             raise ValueError("Yield curve has not been initialized; call `update(...)` before `is_unchange=True`.")
         t = self.time
-        spots = self._yield_curve.spotac
+        spots = self._curve.spotac
         n = len(spots)
         tdv_term_dim = (int(i) for i in self.tdv_spot_rates.dims[0])
         self.tdv_spot_rates[t] = np.array([0.0 if i >= n else spots[i] for i in tdv_term_dim])

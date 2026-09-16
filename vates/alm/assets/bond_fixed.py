@@ -5,7 +5,6 @@ import warnings
 
 from vates._core import ProjModelEngine, TDimVariable
 from vates.utils import t_checker
-from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.assets.asset_base import Asset
 from vates.alm.assets._bond_fixed_component import (
@@ -54,7 +53,7 @@ class BondFixed(Asset):
         abv_price: float,
         amort_rate: float,
         rf_curve: YieldCurve,
-        classification: AssetClassification | str,
+        report_basis_to_attr: dict[str, str],
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,
@@ -79,7 +78,7 @@ class BondFixed(Asset):
             asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group.
-            classification (AssetClassification): Asset classification.
+            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
             issue_date (pd.Period): Issue date of the bond.
             maturity_date (pd.Period): Maturity date of the bond.
             coupon_rate (float): Coupon rate.
@@ -96,7 +95,7 @@ class BondFixed(Asset):
             _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
-                         purchase_date=purchase_date, currency=currency, classification=classification,
+                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,
                          asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
 
         self._params = BondFixedParameters(
@@ -170,8 +169,8 @@ class BondFixed(Asset):
         self.tdv_abv_price[t] = self._abv_price_dirty
         if not is_profile:
             self.tdv_units_ad[t] = self._units
-            self.tdv_mv_ad[t] = self.mv
-            self.tdv_abv_ad[t] = self.abv
+            self.tdv_mv_ad[t] = self.market_value
+            self.tdv_abv_ad[t] = self.amortized_book_value
 
     @property
     def mv_price(self) -> float:
@@ -182,36 +181,14 @@ class BondFixed(Asset):
         return self._abv_price_dirty
 
     @property
-    def mv(self) -> float:
+    def market_value(self) -> float:
         """float: Market value of the bond asset."""
         return self.mv_price * self._units
 
     @property
-    def abv(self) -> float:
+    def amortized_book_value(self) -> float:
         """float: Amortized book value of the bond asset."""
         return self.abv_price * self._units
-
-    @property
-    def fav(self) -> float:
-        if self.classification == AssetClassification.FVTPL:
-            return self.mv
-        elif self.classification == AssetClassification.FVOCI:
-            return self.abv
-        elif self.classification == AssetClassification.AC:
-            return self.abv
-        else:
-            raise ValueError(f"Bond {self.asset_id}: invalid asset classification {self.classification}.")
-
-    @property
-    def bsv(self) -> float:
-        if self.classification == AssetClassification.FVTPL:
-            return self.mv
-        elif self.classification == AssetClassification.FVOCI:
-            return self.mv
-        elif self.classification == AssetClassification.AC:
-            return self.abv
-        else:
-            raise ValueError(f"Bond {self.asset_id}: invalid asset classification {self.classification}.")
 
     @property
     def market_spread(self) -> float:
@@ -329,8 +306,8 @@ class BondFixed(Asset):
         self.tdv_units_bd[t] = self._units
         self.tdv_units_default[t] = units_default
         self.tdv_units_maturity[t] = units_maturity
-        self.tdv_mv_bd[t] = self.mv
-        self.tdv_abv_bd[t] = self.abv
+        self.tdv_mv_bd[t] = self.market_value
+        self.tdv_abv_bd[t] = self.amortized_book_value
         self.tdv_interest[t] = interest
         self.tdv_principal[t] = principal
         self.tdv_default_recovery[t] = default_recovery
@@ -391,8 +368,8 @@ class BondFixed(Asset):
         """
         t = self.time
         self.tdv_units_ad[t] = self._units
-        self.tdv_mv_ad[t] = self.mv
-        self.tdv_abv_ad[t] = self.abv
+        self.tdv_mv_ad[t] = self.market_value
+        self.tdv_abv_ad[t] = self.amortized_book_value
 
     def _validate_current_price(self, mv_or_abv: str, /, price: float, tolerance: float | None = None
                                 ) -> tuple[bool, float | None]:

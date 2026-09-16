@@ -1,20 +1,20 @@
 from enum import Enum, unique
 
 
-@unique
-class AssetRepBasis(Enum):
-    """Enum for asset reporting basis."""
-    MV = 0
-    FAV = 1
-    BSV = 2
-
-
-@unique
-class AssetClassification(Enum):
-    """Enum for asset classification types."""
-    FVTPL = "FVTPL"
-    FVOCI = "FVOCI"
-    AC = "AC"
+# @unique
+# class AssetRepBasis(Enum):
+#     """Enum for asset reporting basis."""
+#     MV = 0
+#     FAV = 1
+#     BSV = 2
+#
+#
+# @unique
+# class AssetClassification(Enum):
+#     """Enum for asset classification types."""
+#     FVTPL = "FVTPL"
+#     FVOCI = "FVOCI"
+#     AC = "AC"
 
 
 @unique

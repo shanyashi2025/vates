@@ -3,10 +3,9 @@ import pandas as pd
 import warnings
 from typing import Self
 
-from vates._core import ProjModelEngine
+from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.finmath import convert_interest_rates, solve_ytm, solve_z_spread
 from vates.alm.econs import Currency, YieldCurve, CreditBand
-from vates.alm.enums import AssetClassification
 from vates.alm.assets.bond_fixed import BondFixed
 from vates.alm.assets._bond_fixed_component import (
     BondFixedParameters, BondFixedCashFlowGenerator, BondFixedCashFlowProvider, BondFixedPricer
@@ -14,10 +13,15 @@ from vates.alm.assets._bond_fixed_component import (
 from vates.alm.assets._utils import calculate_risk_adj_spot
 
 
+@add_projection_time_synchronizer
 class BondFixedBuilder:
     """
     Builder for creating and initializing BondFixed objects.
     """
+
+    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+
     def __init__(
         self,
         model_engine: ProjModelEngine,
@@ -25,7 +29,7 @@ class BondFixedBuilder:
         asset_category: str,
         fund_id: str,
         allocation_group: str,
-        classification: AssetClassification | str,
+        report_basis_to_attr: dict[str, str],
         currency: Currency,
         units: float,
         issue_date: pd.Period,
@@ -54,7 +58,7 @@ class BondFixedBuilder:
             asset_category (str): Asset category.
             fund_id (str): Fund identifier.
             allocation_group (str): Allocation group for the bond.
-            classification (AssetClassification): Asset classification.
+            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
             currency (Currency): Currency.
             units (float): Number of units.
             rf_curve (YieldCurve): Risk-free yield curve
@@ -75,7 +79,7 @@ class BondFixedBuilder:
         self.asset_category: str = asset_category
         self.fund_id: str = fund_id
         self.allocation_group: str = allocation_group
-        self.classification: AssetClassification = classification
+        self.report_basis_to_attr: dict[str, str] = report_basis_to_attr
         self.currency: Currency = currency
         self.units: float = units
         self.issue_date: pd.Period = issue_date
@@ -95,21 +99,13 @@ class BondFixedBuilder:
         self.mv_price: float | None = mv_price
         self.market_spread: float | None = market_spread
 
-    @property
-    def p(self) -> pd.Period:
-        return self.model_engine.period
-
-    @property
-    def t(self) -> int:
-        return self.model_engine.time
-
     def derive_coupon_rate(self) -> Self:
         """
         Derive coupon rate based on yields at the point of purchase, assuming bond is purchased at par.
         """
         if self.coupon_freq != 0:
-            if self.rf_curve.last_update != self.t:
-                raise ValueError(f"Risk free curve is not updated on {self.t} ({self.p}).")
+            if self.rf_curve.last_update != self.time:
+                raise ValueError(f"Risk free curve is not updated on {self.time} ({self.period}).")
             if self.market_spread is None:
                 self.market_spread = 0
                 warnings.warn(f'{self.asset_id}: market_spread not specified, set to 0.')
@@ -117,8 +113,8 @@ class BondFixedBuilder:
             rf_spots = self.rf_curve.spot_rates
 
             if self.credit_band:
-                if self.credit_band.last_update != self.t:
-                    raise ValueError(f"Credit band is not updated on {self.t} ({self.p}).")
+                if self.credit_band.last_update != self.time:
+                    raise ValueError(f"Credit band is not updated on {self.time} ({self.period}).")
                 spots = calculate_risk_adj_spot(
                     rf_spots=rf_spots,
                     mult=self.credit_band.credit_spotmult,
@@ -160,7 +156,7 @@ class BondFixedBuilder:
         freq = 1 if self.coupon_freq == 0 else self.coupon_freq  # 1 for zero coupon bond
         self.amort_rate = solve_ytm(
             target_pv=self.abv_price,
-            cash_flows=cash_flow_gen.get_future_cash_flows(self.p),
+            cash_flows=cash_flow_gen.get_future_cash_flows(self.period),
             freq=freq,
             initial_guess=self.coupon_rate
         )
@@ -173,8 +169,8 @@ class BondFixedBuilder:
         """
         if self.mv_price is None:
             raise ValueError('mv_price need to be set first.')
-        if self.rf_curve.last_update != self.t:
-            raise ValueError(f"Risk free curve not updated on {self.t} ({self.p}).")
+        if self.rf_curve.last_update != self.time:
+            raise ValueError(f"Risk free curve not updated on {self.time} ({self.period}).")
         rf_spots = self.rf_curve.spot_rates
 
         if self.credit_band:
@@ -201,7 +197,7 @@ class BondFixedBuilder:
 
         self.market_spread = solve_z_spread(
             target_pv=self.mv_price,
-            cash_flows=cash_flow_gen.get_future_cash_flows(self.p),
+            cash_flows=cash_flow_gen.get_future_cash_flows(self.period),
             spots=spots
         )
 
@@ -212,7 +208,7 @@ class BondFixedBuilder:
         Calculate the market price using the set market spread.
         """
         if self.market_spread is None: raise ValueError('market_spread need to be set first.')
-        if self.rf_curve.last_update != self.t: raise ValueError(f"Risk free curve not updated on {self.t} ({self.p}).")
+        if self.rf_curve.last_update != self.time: raise ValueError(f"Risk free curve not updated on {self.time} ({self.period}).")
 
         rf_spots = self.rf_curve.spot_rates
         if self.credit_band:
@@ -237,7 +233,7 @@ class BondFixedBuilder:
             cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
         pricer = BondFixedPricer(cash_flow_gen)
 
-        self.mv_price = pricer.calculate_market_price(self.p, spots)
+        self.mv_price = pricer.calculate_market_price(self.period, spots)
 
         return self
 
@@ -246,7 +242,7 @@ class BondFixedBuilder:
         Set market spread to zero and goal seek the face value that gives market price.
         """
         if self.mv_price is None: raise ValueError('mv_price need to be set first.')
-        if self.rf_curve.last_update != self.t: raise ValueError(f"Risk free curve not updated on {self.t} ({self.p}).")
+        if self.rf_curve.last_update != self.time: raise ValueError(f"Risk free curve not updated on {self.time} ({self.period}).")
 
         self.market_spread = 0
         rf_spots = self.rf_curve.spot_rates
@@ -272,7 +268,7 @@ class BondFixedBuilder:
             cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
         pricer = BondFixedPricer(cash_flow_gen)
 
-        calc_price = pricer.calculate_market_price(self.p, spots)  # typically > mv_price if market_spread > 0
+        calc_price = pricer.calculate_market_price(self.period, spots)  # typically > mv_price if market_spread > 0
         self.face_value *= self.mv_price / calc_price  # scale face_value that gives mv_price
 
         return self
@@ -317,13 +313,13 @@ class BondFixedBuilder:
         # Validate initial price
         tolerance = max(self.mv_price * 1e-6, self.abv_price * 1e-6, 1e-8)
         if self.is_profile and abs(self.abv_price - self.mv_price) > tolerance:
-            raise ValueError(f'Bond {self.asset_id} at {self.p}: abv_price != mv_price at purchase, '
+            raise ValueError(f'Bond {self.asset_id} at {self.period}: abv_price != mv_price at purchase, '
                              f'abv={self.abv_price:.4f}, mv={self.mv_price:.4f}')
 
         # Validate timing constraints
-        if not self.is_profile and self.issue_date > self.p:
-            raise ValueError(f"Issue date of existing bond should not be later than {self.p}.")
-        if self.is_profile and self.issue_date != self.p:
+        if not self.is_profile and self.issue_date > self.period:
+            raise ValueError(f"Issue date of existing bond should not be later than {self.period}.")
+        if self.is_profile and self.issue_date != self.period:
             raise ValueError(f"New bond must be initialized at purchase {self.issue_date}.")
 
         # Create the bond
@@ -333,7 +329,7 @@ class BondFixedBuilder:
             asset_category=self.asset_category,
             fund_id=self.fund_id,
             allocation_group=self.allocation_group,
-            classification=self.classification,
+            report_basis_to_attr=self.report_basis_to_attr,
             currency=self.currency,
             units=self.units,
             issue_date=self.issue_date,

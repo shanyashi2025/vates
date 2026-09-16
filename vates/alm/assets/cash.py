@@ -3,7 +3,6 @@ import pandas as pd
 from vates import ProjModelEngine
 from vates._core import TDimVariable
 from vates.utils import t_checker
-from vates.alm.enums import AssetClassification
 from vates.alm.econs import Currency, MarketInfo
 from vates.alm.assets.asset_base import Asset
 
@@ -34,7 +33,7 @@ class Cash(Asset):
         market_info: MarketInfo | None = None,
         ret_id: str | None = "",
         ret_id_short_pos: str | None = None,
-        classification: AssetClassification | str = AssetClassification.FVTPL,
+        report_basis_to_attr: dict[str, str],
         purchase_date: pd.Period | None = None
     ):
         """
@@ -50,11 +49,11 @@ class Cash(Asset):
             market_info (MarketInfo): Market information.
             ret_id (str): Identifier of cash return.
             ret_id_short_pos (str): Identifier of cash return on short cash positions.
-            classification (AssetClassification): Asset classification. Defaults to FVTPL.
+            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False, units=1,
-                         purchase_date=purchase_date, currency=currency, classification=classification,
+                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,
                          asset_category=asset_category, fund_id=fund_id, allocation_group=allocation_group)
         self._nominal: float = nominal
         self._market_info: MarketInfo | None = market_info
@@ -65,7 +64,7 @@ class Cash(Asset):
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
-        self.tdv_mv_ad[self.time] = self.mv
+        self.tdv_mv_ad[self.time] = self.market_value
 
     @property
     def is_alive(self) -> bool:
@@ -99,7 +98,7 @@ class Cash(Asset):
 
         self._nominal = self._nominal * (1 + ret) ** (1 / 12)
         self.tdv_cash_flow[t] = 0.0
-        self.tdv_mv_bd[t] = self.mv
+        self.tdv_mv_bd[t] = self.market_value
 
     def invest_new_money(self, amount: float) -> None:
         """
@@ -140,21 +139,11 @@ class Cash(Asset):
         """
         Update the cash asset after dealing.
         """
-        self.tdv_mv_ad[self.time] = self.mv
+        self.tdv_mv_ad[self.time] = self.market_value
 
     @property
-    def mv(self) -> float:
+    def market_value(self) -> float:
         """float: Market value of the cash asset."""
-        return self._nominal
-
-    @property
-    def fav(self) -> float:
-        """float: Funa accounting value of the cash asset."""
-        return self._nominal
-
-    @property
-    def bsv(self) -> float:
-        """float: Balance sheet value of the cash asset."""
         return self._nominal
 
     @property

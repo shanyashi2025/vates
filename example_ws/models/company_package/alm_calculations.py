@@ -92,8 +92,8 @@ def liabs_update_ad(fund: Fund) -> None:
     if fund.liabs:
         for liab in fund.liabs:
             t, p = fund.time, fund.period
-            if getattr(liab, 'liab_type', None) == 'Par_CD':
-                as_rgl_ret = fund.rate_of_return_fav_ad[t] - fund.rate_of_return_fav_bd[t]
+            if getattr(liab, 'liab_type', "") == 'Par_CD':
+                as_rgl_ret = fund.rate_of_return_ad["FAV"][t] - fund.rate_of_return_bd["FAV"][t]
                 asset_share_if = liab.arr_asset_share_bd[t] + liab.arr_asset_share_ad[t - 1] * as_rgl_ret
                 liab.update_ad(asset_share_if=asset_share_if)
             else:

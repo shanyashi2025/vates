@@ -5,6 +5,7 @@ from vates.alm import funds
 # assets
 from vates.alm.assets import (
     create_asset,
+    Asset,
     Cash,
     BondFixed,
     Equity,
@@ -34,8 +35,6 @@ from vates.alm.funds import (
 )
 # enums
 from vates.alm.enums import (
-    AssetRepBasis,
-    AssetClassification,
     AssetBuySellApproach,
     AssetPurchaseMethod,
 )
@@ -47,6 +46,7 @@ __all__ = [
     'funds',
     # assets
     'create_asset',
+    'Asset',
     'Cash',
     'BondFixed',
     'Equity',
@@ -66,8 +66,6 @@ __all__ = [
     'RebalancePolicyParams',
     'TargetWeight',
     # Enums
-    'AssetRepBasis',
-    'AssetClassification',
     'AssetBuySellApproach',
     'AssetPurchaseMethod',
 ]
