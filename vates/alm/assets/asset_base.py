@@ -1,6 +1,7 @@
 import pandas as pd
 import uuid
 from abc import ABC, abstractmethod
+from typing import overload
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.alm.econs import Currency
@@ -100,6 +101,18 @@ class Asset(ABC):
             float: Market value (to be implemented by subclasses).
         """
         pass
+
+    @overload
+    def get_report_value(self, basis: str, /) -> float:
+        ...
+
+    @overload
+    def get_report_value(self, basis: list[str], /) -> list[float]:
+        ...
+
+    @overload
+    def get_report_value(self, basis: None = None, /) -> dict[str, float]:
+        ...
 
     def get_report_value(self, basis: str | list[str] | None = None, /) -> float | list[float] | dict[str, float]:
         """

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from typing import overload
 
 from vates._core import TDimVariable
 from vates.alm.assets import Asset
@@ -35,12 +36,28 @@ class AssetLiabConnector:
         self._free_estate = 0.0
         return amount
 
+    @overload
+    def groupby_sum_asset_cash_flow(self, *, groupby: None = None, in_list: None = None,) -> float:
+        ...
+
+    @overload
+    def groupby_sum_asset_cash_flow(self, *, groupby: str, in_list: str,) -> float:
+        ...
+
+    @overload
+    def groupby_sum_asset_cash_flow(self, *, groupby: str, in_list: list[str],) -> list[float]:
+        ...
+
+    @overload
+    def groupby_sum_asset_cash_flow(self, *, groupby: str, in_list: None = None,) -> dict[str, float]:
+        ...
+
     def groupby_sum_asset_cash_flow(
         self,
         *,
         groupby: str | None = None,
         in_list: str | list[str] | None = None,
-    ) -> float | list[float] | dict[str, float]:  # maybe add @overload
+    ) -> float | list[float] | dict[str, float]:
         """
         path 1:
             (groupby: None, in_list: None): -> float
@@ -88,13 +105,45 @@ class AssetLiabConnector:
 
         raise ValueError(f"Calculation not defined: {groupby=}, {in_list=}")
 
+    @overload
+    def groupby_sum_asset_report_value(self, *, basis: str, groupby: None = None, in_list: None = None) -> float:
+        ...
+
+    @overload
+    def groupby_sum_asset_report_value(self, *, basis: str, groupby: str, in_list: str) -> float:
+        ...
+
+    @overload
+    def groupby_sum_asset_report_value(self, *, basis: str, groupby: str, in_list: list[str]) -> list[float]:
+        ...
+
+    @overload
+    def groupby_sum_asset_report_value(self, *, basis: str, groupby: str, in_list: None) -> dict[str, float]:
+        ...
+
+    @overload
+    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: None = None, in_list: None = None) -> np.ndarray:
+        ...
+
+    @overload
+    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: str, in_list: str) -> np.ndarray:
+        ...
+
+    @overload
+    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: str, in_list: list[str]) -> list[np.ndarray]:
+        ...
+
+    @overload
+    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: str, in_list: None) -> dict[str, np.ndarray]:
+        ...
+
     def groupby_sum_asset_report_value(
         self,
         *,
         basis: str | list[str],
+        groupby: str | None = None ,
         in_list: str | list[str] | None = None,
-        groupby: str | None = None
-    ) -> float | np.ndarray | list[float | np.ndarray] | dict[str, float | np.ndarray]:  # maybe add @overload
+    ) -> float | np.ndarray | list[float | np.ndarray] | dict[str, float | np.ndarray]:
         """
         path 1:
             (basis: str, groupby: None, in_list: None): -> float
