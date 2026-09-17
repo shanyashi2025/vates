@@ -131,7 +131,7 @@ class AssetLiabConnector:
         ...
 
     @overload
-    def groupby_sum_asset_report_value(self, *, basis: str, groupby: str, in_list: None) -> dict[str, float]:
+    def groupby_sum_asset_report_value(self, *, basis: str, groupby: str, in_list: None = None) -> dict[str, float]:
         ...
 
     @overload
@@ -147,7 +147,7 @@ class AssetLiabConnector:
         ...
 
     @overload
-    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: str, in_list: None) -> dict[str, np.ndarray]:
+    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: str, in_list: None = None) -> dict[str, np.ndarray]:
         ...
 
     def groupby_sum_asset_report_value(
@@ -185,10 +185,10 @@ class AssetLiabConnector:
         if isinstance(basis, str):
             # --- path 1 ---
             if groupby is None and in_list is None:
-                return sum(x.get_report_value(basis) for x in self._assets)  # float
+                return sum(getattr(x, basis) for x in self._assets)  # float
             # --- path 2 ---
             if groupby is not None and isinstance(in_list, str):
-                return sum(x.get_report_value(basis) for x in self._assets if getattr(x, groupby) == in_list)  # float
+                return sum(getattr(x, basis) for x in self._assets if getattr(x, groupby) == in_list)  # float
             # --- path 3 ---
             if groupby is not None and isinstance(in_list, list):
                 total: list[float] = [0.0] * len(in_list)
@@ -198,7 +198,7 @@ class AssetLiabConnector:
                 for asset in self._assets:
                     key = getattr(asset, groupby)
                     if key in key_to_index:
-                        val = asset.get_report_value(basis)
+                        val = getattr(asset, basis)
                         total[key_to_index[key]] += val
                 return total  # list[float]
             # --- path 4 ---
@@ -206,7 +206,7 @@ class AssetLiabConnector:
                 total: dict[str, float] = {}
                 for asset in self._assets:
                     key = getattr(asset, groupby)
-                    val = asset.get_report_value(basis)
+                    val = getattr(asset, basis)
                     if key in total:
                         total[key] += val
                     else:
@@ -219,9 +219,9 @@ class AssetLiabConnector:
             if groupby is None and in_list is None:
                 total: list[float] = [0.0] * n_basis
                 for asset in self._assets:
-                    val = asset.get_report_value(basis)
                     for i in range(n_basis):
-                        total[i] += val[i]
+                        val = getattr(asset, basis[i])
+                        total[i] += val
                 return np.array(total, dtype=float)  # np.ndarray
             # --- path 6 ---
             if groupby is not None and isinstance(in_list, str):
@@ -229,9 +229,9 @@ class AssetLiabConnector:
                 for asset in self._assets:
                     key = getattr(asset, groupby)
                     if key == in_list:
-                        val = asset.get_report_value(basis)
                         for i in range(n_basis):
-                            total[i] += val[i]
+                            val = getattr(asset, basis[i])
+                            total[i] += val
                 return np.array(total, dtype=float)  # np.ndarray
             # --- path 7 ---
             if groupby is not None and isinstance(in_list, list):
@@ -241,21 +241,21 @@ class AssetLiabConnector:
                     key = getattr(asset, groupby)
                     idx = key_to_index[key]
                     if key in key_to_index:
-                        val = asset.get_report_value(basis)
                         for i in range(n_basis):
-                            total[idx][i] += val[i]
+                            val = getattr(asset, basis[i])
+                            total[idx][i] += val
                 return [np.array(x, dtype=float) for x in total]  # list[np.ndarray]
             # --- path 8 ---
             if groupby is not None and in_list is None:
                 total: dict[str, list[float]] = {}
                 for asset in self._assets:
                     key = getattr(asset, groupby)
-                    val = asset.get_report_value(basis)
                     if key in total:
                         for i in range(n_basis):
-                            total[key][i] += val[i]
+                            val = getattr(asset, basis[i])
+                            total[key][i] += val
                     else:
-                        total[key] = val
+                        total[key] = [getattr(asset, bas) for bas in basis]
                 return {key: np.array(val, dtype=float) for key, val in total.items()}  # dict[str, np.ndarray]
 
             raise ValueError(f"Calculation not defined: {groupby=}, {in_list=}")
@@ -275,6 +275,9 @@ class AssetLiabConnector:
     @property
     def totliab_asset_share(self) -> float:
         return sum(x.asset_share for x in self._liabs)
+
+    def get_totliab_attr(self, attr: str) -> float:
+        return sum(getattr(x, attr, 0.0) for x in self._liabs)
 
     def get_size(self, *, size_type: FundSizeType, asset_size_basis: str = "MV") -> float:
         """Get the fund size based on the fund size type and basis.

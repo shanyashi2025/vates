@@ -22,7 +22,7 @@ class EquityOptionBuilder:
         self,
         model_engine: ProjModelEngine,
         asset_id: str,
-        report_basis_to_attr: dict[str, str],
+        flex_attr_map: dict[str, str],
         currency: Currency,
         is_profile: bool,
         call_or_put: CallOrPut,
@@ -44,7 +44,7 @@ class EquityOptionBuilder:
         Args:
             model: Model object.
             asset_id (str): Asset identifier.
-            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
+            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
             currency (Currency): Asset currency.
             is_profile (bool): Ture if profile asset, False if existing asset.
             call_or_put (CallOrPut): Call or put option.
@@ -60,7 +60,7 @@ class EquityOptionBuilder:
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
-        self.report_basis_to_attr: dict[str, str] = report_basis_to_attr
+        self.flex_attr_map: dict[str, str] = flex_attr_map
         self.currency: Currency = currency
         self.is_profile: bool = is_profile
         self.call_or_put: CallOrPut = call_or_put
@@ -133,7 +133,7 @@ class EquityOptionBuilder:
         return EquityOption(
             model_engine=self.model_engine,
             asset_id=self.asset_id,
-            report_basis_to_attr=self.report_basis_to_attr,
+            flex_attr_map=self.flex_attr_map,
             currency=self.currency,
             is_profile=self.is_profile,
             call_or_put=self.call_or_put,

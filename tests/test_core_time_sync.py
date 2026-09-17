@@ -180,7 +180,7 @@ class TestProjectionTimeSynchronizer:
 
         s = ProjectionTimeSynchronizer()
         obs = Observer()
-        s.attach_time_observer(obs)
+        s.maybe_attach_time_observer(obs)
         s.set(time=1)
         s.set(time=2)
         assert calls == [1, 2]
@@ -188,7 +188,7 @@ class TestProjectionTimeSynchronizer:
     def test_detach_time_observer_removes(self):
         s = ProjectionTimeSynchronizer()
         observer = self._Observer()
-        s.attach_time_observer(observer)
+        s.maybe_attach_time_observer(observer)
         assert len(s._time_observers) == 1
         s.detach_time_observer(observer)
         assert len(s._time_observers) == 0
@@ -197,7 +197,7 @@ class TestProjectionTimeSynchronizer:
 
     def test_detach_time_observer_absent_noop(self):
         s = ProjectionTimeSynchronizer()
-        s.attach_time_observer(self._Observer())
+        s.maybe_attach_time_observer(self._Observer())
         s.detach_time_observer(self._Observer())  # different instance -> not found
         assert len(s._time_observers) == 1
         # detaching from an empty list is harmless
@@ -211,8 +211,8 @@ class TestProjectionTimeSynchronizer:
         # notifications.
         s = ProjectionTimeSynchronizer()
         observer = self._Observer()
-        s.attach_time_observer(observer)
-        s.attach_time_observer(observer)
+        s.maybe_attach_time_observer(observer)
+        s.maybe_attach_time_observer(observer)
         assert len(s._time_observers) == 1  # duplicate ignored
         s.set(time=1)
         assert observer.calls == 1
@@ -222,7 +222,7 @@ class TestProjectionTimeSynchronizer:
         # `update_on_time_change` method; it is never registered, so it neither
         # crashes at notify time nor needs pruning.
         s = ProjectionTimeSynchronizer()
-        s.attach_time_observer(_NoUpdate())
+        s.maybe_attach_time_observer(_NoUpdate())
         assert len(s._time_observers) == 0
         s.set(time=1)  # nothing to notify; no crash
         assert len(s._time_observers) == 0
@@ -232,8 +232,8 @@ class TestProjectionTimeSynchronizer:
         # from being registered or notified.
         s = ProjectionTimeSynchronizer()
         observer = self._Observer()
-        s.attach_time_observer(_NoUpdate())  # silently skipped at attach
-        s.attach_time_observer(observer)
+        s.maybe_attach_time_observer(_NoUpdate())  # silently skipped at attach
+        s.maybe_attach_time_observer(observer)
         assert len(s._time_observers) == 1
         s.set(time=1)
         assert observer.calls == 1
@@ -252,12 +252,12 @@ class TestProjectionTimeSynchronizer:
         s = ProjectionTimeSynchronizer()
 
         dead = self._Observer()
-        s.attach_time_observer(dead)
+        s.maybe_attach_time_observer(dead)
         del dead  # only the weakref remains -> dead
 
         live = [self._Observer() for _ in range(4)]
         for observer in live:
-            s.attach_time_observer(observer)
+            s.maybe_attach_time_observer(observer)
         gc.collect()
         s.set(time=1)
         assert len(s._time_observers) == 5  # dead ref retained (20% < threshold)
@@ -265,7 +265,7 @@ class TestProjectionTimeSynchronizer:
     def test_dead_observer_pruned_when_over_threshold(self):
         # 1 dead of 1 total = 100%, over the 25% threshold -> pruned after notify.
         s = ProjectionTimeSynchronizer()
-        s.attach_time_observer(self._Observer())
+        s.maybe_attach_time_observer(self._Observer())
         gc.collect()  # the observer has no other reference after the call returns
         s.set(time=1)
         assert len(s._time_observers) == 0

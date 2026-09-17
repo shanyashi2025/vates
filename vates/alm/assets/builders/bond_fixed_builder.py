@@ -26,7 +26,7 @@ class BondFixedBuilder:
         self,
         model_engine: ProjModelEngine,
         asset_id: str,
-        report_basis_to_attr: dict[str, str],
+        flex_attr_map: dict[str, str],
         currency: Currency,
         units: float,
         issue_date: pd.Period,
@@ -52,7 +52,7 @@ class BondFixedBuilder:
             model_engine: Model engine object.
             is_profile (bool): Ture if profile asset, False if existing asset.
             asset_id (str): Asset identifier.
-            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
+            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
             currency (Currency): Currency.
             units (float): Number of units.
             rf_curve (YieldCurve): Risk-free yield curve
@@ -70,7 +70,7 @@ class BondFixedBuilder:
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
-        self.report_basis_to_attr: dict[str, str] = report_basis_to_attr
+        self.flex_attr_map: dict[str, str] = flex_attr_map
         self.currency: Currency = currency
         self.units: float = units
         self.issue_date: pd.Period = issue_date
@@ -309,7 +309,7 @@ class BondFixedBuilder:
         return BondFixed(
             model_engine=self.model_engine,
             asset_id=self.asset_id,
-            report_basis_to_attr=self.report_basis_to_attr,
+            flex_attr_map=self.flex_attr_map,
             currency=self.currency,
             units=self.units,
             issue_date=self.issue_date,

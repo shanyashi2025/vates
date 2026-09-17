@@ -390,7 +390,7 @@ class AssetAllocator:
             if idx is None:
                 raise ValueError(f'Asset {asset.asset_id}: allocation group {key} not included '
                                  f'the fund reblance policy.')
-            asset_size[idx] += asset.get_report_value(size_basis)
+            asset_size[idx] += getattr(asset, size_basis)
             asset_count[idx] += 1
 
         return asset_size, asset_count

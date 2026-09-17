@@ -44,7 +44,7 @@ class EquityOption(Asset):
         is_profile: bool = False,
         units: float = 1.0,
         currency: Currency | None = None,
-        report_basis_to_attr: dict[str, str],
+        flex_attr_map: dict[str, str],
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
     ):
@@ -65,11 +65,11 @@ class EquityOption(Asset):
             rf_curve (YieldCurve): Risk-free curve.
             std_dev (float): Standard deviation, i.e. volatility.
             is_pay_dividend (bool): True if paying dividend, otherwise False.
-            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
+            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
-                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr)
+                         purchase_date=purchase_date, currency=currency, flex_attr_map=flex_attr_map)
         self._call_or_put: CallOrPut = CallOrPut[call_or_put.upper()] if isinstance(call_or_put, str) else call_or_put
         self._exercise_date: pd.Period = exercise_date
         self._price: float = price

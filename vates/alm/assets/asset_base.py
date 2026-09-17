@@ -1,7 +1,6 @@
 import pandas as pd
 import uuid
 from abc import ABC, abstractmethod
-from typing import overload
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.alm.econs import Currency
@@ -17,13 +16,13 @@ class Asset(ABC):
         _units (float): Number of assets
         _purchase_date (pd.Period): Purchase date.
         _currency (Currency): Currency of the asset.
-        _report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute, {"MV": "market_value"}
+        _flex_attr_map (dict[str, str]): Dict of string to named attribute, {"MV": "market_value"}
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state', '_asset_id', '_is_profile', '_units',
-                 '_purchase_date', '_currency', '_report_basis_to_attr',)
+                 '_purchase_date', '_currency', '_flex_attr_map',)
 
     def __init__(
         self,
@@ -34,7 +33,7 @@ class Asset(ABC):
         units: float,
         purchase_date: pd.Period | None,
         currency: Currency | None,
-        report_basis_to_attr: dict[str, str],
+        flex_attr_map: dict[str, str] | None,
     ):
         """
         Initialize the Asset.
@@ -46,14 +45,14 @@ class Asset(ABC):
             units (float): Number of assets
             purchase_date (pd.Period): Purchase date. Set to initilization date if input is None.
             currency (Currency): Asset currency.
-            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute, {"MV": "market_value"}
+            flex_attr_map (dict[str, str]): Dict of string to named attribute, {"MV": "market_value"}
         """
         self._asset_id: str = asset_id or str(uuid.uuid4())
         self._is_profile: bool = is_profile
         self._units: float = units
         self._purchase_date: pd.Period = purchase_date or (self.period if self._is_profile else None)
         self._currency: Currency | None = currency
-        self._report_basis_to_attr: dict[str, str] = report_basis_to_attr | {"MV": "market_value"}  # "MV" is always required
+        self._flex_attr_map: dict[str, str] | None = flex_attr_map
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
@@ -101,34 +100,6 @@ class Asset(ABC):
             float: Market value (to be implemented by subclasses).
         """
         pass
-
-    @overload
-    def get_report_value(self, basis: str, /) -> float:
-        ...
-
-    @overload
-    def get_report_value(self, basis: list[str], /) -> list[float]:
-        ...
-
-    @overload
-    def get_report_value(self, basis: None = None, /) -> dict[str, float]:
-        ...
-
-    def get_report_value(self, basis: str | list[str] | None = None, /) -> float | list[float] | dict[str, float]:
-        """
-        Get reported value(s).
-
-        Returns:
-            float | list[float] | dict[str, float]: The reported value of for a given basis, list of reported values
-                corresponding to the given list of bases, or all reported values as a dict.
-        """
-        if basis is None:
-            return {key: getattr(self, val) for key, val in self._report_basis_to_attr.items()}
-        elif isinstance(basis, str):
-            return getattr(self, self._report_basis_to_attr[basis])
-        elif isinstance(basis, list):
-            return [getattr(self, self._report_basis_to_attr[x]) for x in basis]
-        raise TypeError(f"Invalid type of basis {type(basis)}, expected 'str' or 'list[str]'.")
 
     @abstractmethod
     def roll_forward(self, *args, **kwargs):
@@ -180,6 +151,25 @@ class Asset(ABC):
         Abstract method to update the asset after dealing.
         """
         pass
+
+    def __getattr__(self, item):
+        try:
+            flex_map = object.__getattribute__(self, "_flex_attr_map")
+        except AttributeError:
+            raise AttributeError(item) from None
+
+        if flex_map is None or item not in flex_map:
+            raise AttributeError(item)
+
+        target = flex_map[item]
+
+        if target == item:
+            raise AttributeError(item)
+
+        try:
+            return object.__getattribute__(self, target)
+        except AttributeError:
+            raise AttributeError(item) from None
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.asset_id}'"

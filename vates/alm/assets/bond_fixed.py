@@ -53,7 +53,7 @@ class BondFixed(Asset):
         abv_price: float,
         amort_rate: float,
         rf_curve: YieldCurve,
-        report_basis_to_attr: dict[str, str],
+        flex_attr_map: dict[str, str],
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,
@@ -72,7 +72,7 @@ class BondFixed(Asset):
             is_profile (bool): Ture if profile asset, False if existing asset.
             units (float): Number of bond units.
             currency (Currency): Asset currency.
-            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
+            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
             issue_date (pd.Period): Issue date of the bond.
             maturity_date (pd.Period): Maturity date of the bond.
             coupon_rate (float): Coupon rate.
@@ -89,7 +89,7 @@ class BondFixed(Asset):
             _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
-                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr)
+                         purchase_date=purchase_date, currency=currency, flex_attr_map=flex_attr_map)
 
         self._params = BondFixedParameters(
             issue_date=issue_date,

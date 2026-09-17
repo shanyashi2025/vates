@@ -26,7 +26,7 @@ class Equity(Asset):
         market_value: float,
         equity_index: EquityIndex,
         purchase_cost: float | None = None,
-        report_basis_to_attr: dict[str, str],
+        flex_attr_map: dict[str, str],
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,
@@ -43,11 +43,11 @@ class Equity(Asset):
             market_value (float): Market value.
             purchase_cost (float | None): Purchase cost.
             equity_index (EquityIndex): Associated equity index.
-            report_basis_to_attr (dict[str, str]): Dict of asset reporting basis to named attribute.
+            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=1,
-                         purchase_date=purchase_date, currency=currency, report_basis_to_attr=report_basis_to_attr,)
+                         purchase_date=purchase_date, currency=currency, flex_attr_map=flex_attr_map, )
         self._equity_index: EquityIndex = equity_index
         self._mv: float = market_value
         self._purchase_cost: float | None = purchase_cost
