@@ -1,26 +1,15 @@
 import pandas as pd
 import warnings
-from enum import Enum, unique
+
 from typing import Optional
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.utils import maybe_check_state
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
-from vates.alm.funds._asset_allocator import AssetAllocator, RebalancePolicyParams, TargetWeight
+from vates.alm.funds._asset_allocator import AssetAllocator, AssetAllocationGroup, TargetWeight
 from vates.alm.funds._fund_calculator import FundCalculator
-from vates.alm.funds._utils import AssetLiabConnector, _RateOfReturnIndexer
-
-@unique
-class FundSizeType(Enum):
-    """Enum for fund size types."""
-    FUND = "FUND"
-    SURR_VALUE = "SURR_VALUE"
-    MATH_RES = "MATH_RES"
-    ACCT_VALUE = "ACCT_VALUE"
-    ASSET_SHARE = "ASSET_SHARE"
-    MAX_AS_MATH = "MAX_AS_MATH"
-    MAX_AS_CSV = "MAX_AS_CSV"
+from vates.alm.funds._utils import AssetLiabConnector, _RateOfReturnIndexer, FundSizeType
 
 
 @add_projection_time_synchronizer
@@ -40,15 +29,15 @@ class Fund:
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
-                 'fund_id', '_connector', '_primary_cash_asset', 'calculator', '_allocator',
-                 'rate_of_return_mv_bd', 'rate_of_return_mv_ad', 'rate_of_return_fav_bd', 'rate_of_return_fav_ad')
+                 'fund_id', '_connector', '_primary_cash_asset', '_asset_report_bases', 'calculator', '_allocator',
+                 'rate_of_return_bd', 'rate_of_return_AD', )
 
     def __init__(
         self,
         fund_id: str,
         *,
         model_engine: ProjModelEngine | None = None,
-        rebalance_policy: dict[str, RebalancePolicyParams] = None,
+        asset_allocation_groups: list[AssetAllocationGroup] = None,
         asset_report_bases: list[str] = None,
         asset_categories: list[str] = None,
         asset_category_attr: str = "category",
@@ -59,7 +48,7 @@ class Fund:
 
         Args:
             fund_id (str): Fund identifier.
-            rebalance_policy (dict[str, RebalancePolicyParams]): Rebalance policy by allocation group.
+            asset_allocation_groups (list[AssetAllocationGroup]): List of asset allocation groups.
             asset_report_bases (list[str]): Asset reporting bases.
             asset_categories (list[str]): Asset categories to be reported.
             asset_category_attr (str): Named attribute for asset category, defaults to "category".
@@ -79,7 +68,7 @@ class Fund:
         self._allocator: AssetAllocator = AssetAllocator(
             name=fund_id, model_engine=model_engine, connector=self._connector,
             asset_report_bases=self._asset_report_bases,
-            rebalance_policy=rebalance_policy, allocation_group_attr= asset_allocation_group_attr,
+            allocation_groups=asset_allocation_groups, allocation_group_attr= asset_allocation_group_attr,
         )
 
         # rate of return indexers
@@ -193,15 +182,15 @@ class Fund:
         self._state = ("closed", self.time)
 
     def rebalance_assets(self, *, fund_size_type: str | FundSizeType, asset_size_basis: str,
-                         target_weight: dict[str, TargetWeight], assets_profile: list[Asset] | None = None, **kwargs
-                         ) -> None:
+                         target_weights: dict[str, TargetWeight] | None, profile_assets: list[Asset] | None = None,
+                         **kwargs) -> None:
         """Rebalance assets per target allocation and optional profile.
 
         Args:
             fund_size_type (str | FundSizeType): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
             asset_size_basis (str): Basis for sizing against fund (usually FAV or BSV).
-            target_weight (dict[str, TargetWeight]): Target allocation by group.
-            assets_profile (list[Asset] | None=None): Profile assets for purchases (e.g., bonds).
+            target_weights (dict[str, TargetWeight]): Target weight by allocation group.
+            profile_assets (list[Asset] | None=None): Profile assets for purchases (e.g., bonds).
         """
         maybe_check_state(self, ("proc_liabs_bd", self.time))
         t, p = self.time, self.period
@@ -209,61 +198,30 @@ class Fund:
 
         self.calculator.tdv_free_estate_bd[t] = self._connector.free_estate
         # process rebalance
-        fund_size = self._get_fund_size(fund_size_type=fund_size_type, asset_size_basis=asset_size_basis)
-        recon_rgl = self._allocator.rebalance(
-            fund_size=fund_size,
-            asset_size_basis=asset_size_basis,
-            target_weight=target_weight,
-            assets_profile=assets_profile,
+        self._allocator.rebalance(
+            total_size=self.get_fund_size(size_type=fund_size_type, asset_size_basis=asset_size_basis),
+            size_basis=asset_size_basis,
+            target_weights=target_weights,
+            profile_assets=profile_assets,
             **kwargs
         )
         for asset in self.assets:
             asset.close_dealing()
         self.calculator.tdv_free_estate_ad[t] = self._connector.free_estate
         self.calculator.process_assets_after_dealing()
-        # reconcile realized gain/loss
-        size_basis_index = self._asset_report_bases.index(asset_size_basis)
-        mv_basis_index = self._asset_report_bases.index("MV")
-
-        val_bd = self.calculator.tdv_totass_rep_value_bd[t][mv_basis_index] - self.calculator.tdv_totass_rep_value_bd[t][size_basis_index]
-        val_ad = self.calculator.tdv_totass_rep_value_ad[t][mv_basis_index] - self.calculator.tdv_totass_rep_value_ad[t][size_basis_index]
-
-        if abs((val_bd - val_ad) - recon_rgl) > 0.01:
-            warnings.warn(f"Fund {self.fund_id} at {p=} realized gain/loss reconciliation break, "
-                          f"calculator: {val_bd - val_ad} != allocator: {recon_rgl}")
-
         self._state = ("closed", self.time)
 
-    def _get_fund_size(self, *, fund_size_type: FundSizeType, asset_size_basis: str) -> float:
+    def get_fund_size(self, *, size_type: FundSizeType, asset_size_basis: str = "MV") -> float:
         """Get the fund size based on the fund size type and basis.
 
         Args:
-            fund_size_type (str): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
-            asset_size_basis (str): Asset reporting basis use for rebalance (usually FAV or BSV).
+            size_type (str): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
+            asset_size_basis (str): Asset reporting basis use for rebalance, defaults to "MV"
 
         Returns:
             float: Computed fund size on the requested basis.
-
-        Raises:
-            ValueError: If fund size type is invalid.
         """
-        if fund_size_type == FundSizeType.FUND:
-            # return self._connector.get_totass_value(asset_size_basis, include_free_estate=True)
-            return self._connector.groupby_sum_asset_report_value(basis=asset_size_basis) + self._connector.free_estate
-            # # need to include free_estate
-        elif fund_size_type == FundSizeType.SURR_VALUE:
-            return self._connector.totliab_surr_value
-        elif fund_size_type == FundSizeType.MATH_RES:
-            return self._connector.totliab_math_res
-        elif fund_size_type == FundSizeType.ACCT_VALUE:
-            return self._connector.totliab_acct_value
-        elif fund_size_type == FundSizeType.ASSET_SHARE:
-            return self._connector.totliab_asset_share
-        elif fund_size_type == FundSizeType.MAX_AS_MATH:
-            return max(self._connector.totliab_asset_share, self._connector.totliab_math_res)
-        elif fund_size_type == FundSizeType.MAX_AS_CSV:
-            return max(self._connector.totliab_asset_share, self._connector.totliab_surr_value)
-        raise ValueError(f"Unknown fund size type: {fund_size_type}.")
+        return self._connector.get_size(size_type=size_type, asset_size_basis=asset_size_basis)
 
     def process_liabs_after_dealing(self) -> None:
         """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""

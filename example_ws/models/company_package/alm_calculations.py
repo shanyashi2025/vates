@@ -103,7 +103,7 @@ def liabs_update_ad(fund: Fund) -> None:
 
 
 def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance_params: FundRebalanceParams,
-                            assets_df_dict: dict, econs: dict | EsgMaster, asset_allocation_df: pd.DataFrame):
+                            assets_df_dict: dict, econs: dict | EsgMaster, asset_mix_df: pd.DataFrame):
     fund_id = fund.fund_id
     period = fund.period
 
@@ -111,18 +111,18 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
         profile_assets = AssetMaster.profile_from_df(
             assets_df_dict, model_engine=model_engine, econs=econs, fund_id=fund_id
         ).all
-        target_allocation = build_target_allocation(asset_allocation_df, fund_id, str(period.year * 100 + period.month))
+        target_weights = build_target_weights(asset_mix_df, fund_id, str(period.year * 100 + period.month))
         fund.rebalance_assets(
             fund_size_type=rebalance_params.fund_size_type,
             asset_size_basis=rebalance_params.asset_size_basis,
-            target_weight=target_allocation,
-            assets_profile=profile_assets
+            target_weights=target_weights,
+            profile_assets=profile_assets
         )
     else:
         fund.no_action_on_rebalance()
 
 
-def build_target_allocation(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[str, 'TargetWeight']:
+def build_target_weights(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[str, 'TargetWeight']:
     """
     Build a dictionary of target allocations for a fund from a DataFrame.
 
@@ -134,7 +134,7 @@ def build_target_allocation(df: pd.DataFrame, fund_id: str, date_col: str) -> di
     Returns:
         dict: Mapping of allocation group to TargetAllocation.
     """
-    target_allocation: dict = {}
+    target_weights: dict = {}
 
     df_flt: pd.DataFrame = df.copy()
     if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
@@ -144,6 +144,6 @@ def build_target_allocation(df: pd.DataFrame, fund_id: str, date_col: str) -> di
         tgt_wgt = row[date_col] / 100
         min_wgt = tgt_wgt + row["lower_allow_pc"] / 100
         max_wgt = tgt_wgt + row["upper_allow_pc"] / 100
-        target_allocation[allocation_group] = TargetWeight(tgt_weight=tgt_wgt, min_weight=min_wgt, max_weight=max_wgt)
+        target_weights[allocation_group] = TargetWeight(tgt_weight=tgt_wgt, min_weight=min_wgt, max_weight=max_wgt)
 
-    return target_allocation
+    return target_weights

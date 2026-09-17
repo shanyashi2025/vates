@@ -30,7 +30,7 @@ from vates.alm.liabs import (
 from vates.alm.funds import (
     Fund,
     FundSizeType,
-    RebalancePolicyParams,
+    AssetAllocationGroup,
     TargetWeight,
 )
 # enums
@@ -63,7 +63,7 @@ __all__ = [
     # funds
     'Fund',
     'FundSizeType',
-    'RebalancePolicyParams',
+    'AssetAllocationGroup',
     'TargetWeight',
     # Enums
     'AssetBuySellApproach',

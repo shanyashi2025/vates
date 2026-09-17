@@ -1,7 +1,7 @@
 import numpy as np
 import warnings
 
-from vates.global_conf import STATE_CHECK_STRICTNESS_LEVEL,StrictnessLevel
+from vates.global_conf import STRICTNESS_LEVEL,StrictnessLevel
 
 def new_business_convolve(nb_profile: np.ndarray, nb_premium: float, sales_file: np.ndarray,
                           output_len: int | None = None) -> np.ndarray:
@@ -10,7 +10,7 @@ def new_business_convolve(nb_profile: np.ndarray, nb_premium: float, sales_file:
     return conv if output_len is None else conv[:, :output_len]
 
 def maybe_check_state(obj, expectation, /, *, state_attr: str = "state",
-                      strictness: StrictnessLevel = STATE_CHECK_STRICTNESS_LEVEL) -> bool:
+                      strictness: StrictnessLevel = STRICTNESS_LEVEL) -> bool:
     if strictness == StrictnessLevel.BYPASS:
         return True
 

@@ -9,5 +9,5 @@ esg_params,esg_params.json
 market_info,market_info.csv
 liabs,liabs.csv
 epl,epl.csv
-rebalance_policy,rebalance_policy.csv
-asset_allocation,asset_allocation.csv
+asset_allocation_groups,asset_allocation_groups.csv
+asset_mix,asset_mix.csv

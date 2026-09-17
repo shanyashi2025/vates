@@ -49,11 +49,11 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     fund_master = FundMaster.from_df(
         df=file_df_dict['funds'],
         model_engine=model,
-        rebalance_policy_df=file_df_dict['rebalance_policy'],
+        asset_allocation_groups_df=file_df_dict['asset_allocation_groups'],
     )
 
     assets_df_dict = file_df_dict
-    asset_allocation_df = file_df_dict["asset_allocation"]
+    asset_mix_df = file_df_dict["asset_mix"]
     liabs_df = file_df_dict["liabs"]
     aging_assets_output_config_df = file_df_dict.get("aging_assets_output_config")
 
@@ -100,7 +100,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                     rebalance_params=rebalance_params,
                     assets_df_dict=assets_df_dict,
                     econs=esg_master,
-                    asset_allocation_df=asset_allocation_df
+                    asset_mix_df=asset_mix_df
                 )
 
                 # step 4: liabs update after dealing (ad)

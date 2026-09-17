@@ -1,10 +1,23 @@
 import pandas as pd
 import numpy as np
 from typing import overload
+from enum import Enum, unique
 
 from vates._core import TDimVariable
 from vates.alm.assets import Asset
 from vates.alm.liabs import Liab
+
+@unique
+class FundSizeType(Enum):
+    """Enum for fund size types."""
+    FUND = "FUND"
+    SURR_VALUE = "SURR_VALUE"
+    MATH_RES = "MATH_RES"
+    ACCT_VALUE = "ACCT_VALUE"
+    ASSET_SHARE = "ASSET_SHARE"
+    MAX_AS_MATH = "MAX_AS_MATH"
+    MAX_AS_CSV = "MAX_AS_CSV"
+
 
 class AssetLiabConnector:
     """Asset liability connector
@@ -262,6 +275,36 @@ class AssetLiabConnector:
     @property
     def totliab_asset_share(self) -> float:
         return sum(x.asset_share for x in self._liabs)
+
+    def get_size(self, *, size_type: FundSizeType, asset_size_basis: str = "MV") -> float:
+        """Get the fund size based on the fund size type and basis.
+
+        Args:
+            size_type (str): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
+            asset_size_basis (str): Asset reporting basis use for rebalance, defaults to "MV"
+
+        Returns:
+            float: Computed fund size on the requested basis.
+
+        Raises:
+            ValueError: If fund size type is invalid.
+        """
+        if size_type == FundSizeType.FUND:
+            return self.groupby_sum_asset_report_value(basis=asset_size_basis) + self.free_estate
+            # # need to include free_estate
+        elif size_type == FundSizeType.SURR_VALUE:
+            return self.totliab_surr_value
+        elif size_type == FundSizeType.MATH_RES:
+            return self.totliab_math_res
+        elif size_type == FundSizeType.ACCT_VALUE:
+            return self.totliab_acct_value
+        elif size_type == FundSizeType.ASSET_SHARE:
+            return self.totliab_asset_share
+        elif size_type == FundSizeType.MAX_AS_MATH:
+            return max(self.totliab_asset_share, self.totliab_math_res)
+        elif size_type == FundSizeType.MAX_AS_CSV:
+            return max(self.totliab_asset_share, self.totliab_surr_value)
+        raise ValueError(f"Unknown fund size type: {size_type}.")
 
 
 class _RateOfReturnIndexer:

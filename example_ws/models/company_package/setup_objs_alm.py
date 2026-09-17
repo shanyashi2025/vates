@@ -3,7 +3,7 @@ from typing import List, Dict, Self
 import pandas as pd
 
 from vates import ProjModelEngine
-from vates.alm import Currency, Liab, ExtProjLiab, Fund, RebalancePolicyParams
+from vates.alm import Currency, Liab, ExtProjLiab, Fund, AssetAllocationGroup
 
 
 @dataclass
@@ -42,7 +42,7 @@ class FundMaster:
         df: pd.DataFrame,
         *,
         model_engine: ProjModelEngine,
-        rebalance_policy_df: pd.DataFrame
+        asset_allocation_groups_df: pd.DataFrame
     ) -> Self:
         funds = []
         ph_funds = []
@@ -54,7 +54,7 @@ class FundMaster:
             fund = Fund(
                 fund_id=fund_id,
                 model_engine=model_engine,
-                rebalance_policy=cls.build_rebalance_policy_from_df(rebalance_policy_df, fund_id=fund_id),
+                asset_allocation_groups=cls.build_asset_allocation_groups_from_df(asset_allocation_groups_df, fund_id=fund_id),
                 asset_categories=row["asset_categories"].split(';'),
                 asset_report_bases=row["asset_report_bases"].split(';'),
             )
@@ -68,39 +68,39 @@ class FundMaster:
             funds.append(fund)
             rebalance_params_dict[fund_id] = FundRebalanceParams(
                 fund_size_type=row["fund_size_type"].upper(),
-                asset_size_basis=row["fund_size_basis"].upper(),
+                asset_size_basis=row["asset_size_basis"].upper(),
                 rebalance_freq=row["fund_rebalance_freq"]  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
             )
 
         return FundMaster(funds=funds, ph_funds=ph_funds, sh_fund=sh_fund, rebalance_params_dict=rebalance_params_dict)
 
     @classmethod
-    def build_rebalance_policy_from_df(cls, df: pd.DataFrame, *, fund_id: str) -> Dict[str, 'RebalancePolicyParams']:
+    def build_asset_allocation_groups_from_df(cls, df: pd.DataFrame, *, fund_id: str) -> list[AssetAllocationGroup]:
         """
-        Build a dictionary of rebalance policy for a fund from a DataFrame.
+        Build a list of allocation groups for a fund from a DataFrame.
 
         Args:
             df (pd.DataFrame): DataFrame containing rebalance policy parameters.
             fund_id (str): Fund the rebalance policy for.
 
         Returns:
-            dict: Mapping of allocation group to AssetStrategyParams.
+            list[AssetAllocationGroup]: List of allocation groups.
         """
-        rebalance_policy: dict = {}
+        allocation_groups: list[AssetAllocationGroup] = []
 
         df_flt: pd.DataFrame = df.copy()
         df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
 
         for idx, row in df_flt.iterrows():
-            allocation_group = row["allocation_group"]
-
-            rebalance_policy[allocation_group] = RebalancePolicyParams.create(
+            alloc_group = AssetAllocationGroup(
+                name=row["allocation_group"],
                 sequence=row["sequence"],
                 buysell_approach=row["buysell_approach"],
                 purchase_method=row["purchase_method"],
             )
+            allocation_groups.append(alloc_group)
 
-        return rebalance_policy
+        return allocation_groups
 
 def build_liabs(model_engine: ProjModelEngine, df: pd.DataFrame, fund_id: str | None,
                 currencies: List['Currency']) -> List['Liab']:

@@ -25,8 +25,8 @@ if version.parse(pd.__version__) >= version.parse("3.0.0"):
           f"2.3.x. To install a specific version, use `pip install pandas==2.3.3`.")
 
 def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str, assets_df_dict: dict,
-                    liabs_df: pd.DataFrame, funds_df: pd.DataFrame, rebalance_policy_df: pd.DataFrame,
-                    epl: KeyedArray, asset_allocation_df: pd.DataFrame):
+                    liabs_df: pd.DataFrame, funds_df: pd.DataFrame, asset_allocation_groups_df: pd.DataFrame,
+                    epl: KeyedArray, asset_mix_df: pd.DataFrame):
 
     t, p = model.time, model.period
     str_date = str(p.year * 100 + p.month)
@@ -57,7 +57,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
         model.fund_master = FundMaster.from_df(
             df=funds_df,
             model_engine=model,
-            rebalance_policy_df=rebalance_policy_df,
+            asset_allocation_groups_df=asset_allocation_groups_df,
         )
 
         for fund in model.fund_master.funds:
@@ -105,7 +105,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
                 rebalance_params=rebalance_params,
                 assets_df_dict=assets_df_dict,
                 econs=model.esg_master,
-                asset_allocation_df=asset_allocation_df
+                asset_mix_df=asset_mix_df
             )
 
             # step 4: liabs update after dealing (ad)
@@ -152,7 +152,7 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
     del file_df_dict['epl']
 
     assets_df_dict = file_df_dict
-    asset_allocation_df = file_df_dict["asset_allocation"]
+    asset_mix_df = file_df_dict["asset_mix"]
     liabs_df = file_df_dict["liabs"]
 
     stoch.run(
@@ -163,8 +163,8 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
             "liabs_df": liabs_df,
             "epl": epl,
             "funds_df": file_df_dict['funds'],
-            "rebalance_policy_df": file_df_dict['rebalance_policy'],
-            "asset_allocation_df": asset_allocation_df,
+            "asset_allocation_groups_df": file_df_dict['asset_allocation_groups'],
+            "asset_mix_df": asset_mix_df,
         }
     )
 

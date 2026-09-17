@@ -5,4 +5,4 @@ class StrictnessLevel(Enum):
     WARN = auto()
     ERROR = auto()
 
-STATE_CHECK_STRICTNESS_LEVEL = StrictnessLevel.BYPASS
+STRICTNESS_LEVEL = StrictnessLevel.BYPASS
