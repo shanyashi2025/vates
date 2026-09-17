@@ -39,7 +39,7 @@ class AgingEquity:
     allocation_group: str
     ifrs_classification: str
     local_classification: str
-    alloc_classification: str
+    stat_classification: str
     market_value: float
     purchase_cost: float
     equity_index_id: str
@@ -55,7 +55,7 @@ class AgingEquity:
             allocation_group=getattr(equity, "allocation_group"),
             ifrs_classification=getattr(equity, 'ifrs_classification'),
             local_classification=getattr(equity, 'local_classification'),
-            alloc_classification=getattr(equity, 'alloc_classification'),
+            stat_classification=getattr(equity, 'stat_classification'),
             market_value=equity.market_value,
             purchase_cost=equity.purchase_cost or 0.0,
             equity_index_id=getattr(equity, '_equity_index').index_id,
@@ -72,7 +72,7 @@ class AgingBond:
     allocation_group: str
     ifrs_classification: str
     local_classification: str
-    alloc_classification: str
+    stat_classification: str
     issue_date: pd.Period
     maturity_date: pd.Period
     coupon_rate: float
@@ -100,7 +100,7 @@ class AgingBond:
             allocation_group=getattr(bond, "allocation_group"),
             ifrs_classification=getattr(bond, 'ifrs_classification'),
             local_classification=getattr(bond, 'local_classification'),
-            alloc_classification=getattr(bond, 'alloc_classification'),
+            stat_classification=getattr(bond, 'stat_classification'),
             issue_date=params.issue_date,
             maturity_date=params.maturity_date,
             coupon_freq=params.coupon_freq,
