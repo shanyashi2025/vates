@@ -41,7 +41,9 @@ class Fund:
         asset_report_bases: list[str] = None,
         asset_categories: list[str] = None,
         asset_category_attr: str = "category",
-        asset_allocation_group_attr: str = "allocation_group"
+        asset_allocation_group_attr: str = "allocation_group",
+        liab_report_attrs_bd: list[str] = None,
+        liab_report_attrs_ad: list[str] = None,
     ) -> None:
         """
         Initialize a Fund object.
@@ -53,6 +55,8 @@ class Fund:
             asset_categories (list[str]): Asset categories to be reported.
             asset_category_attr (str): Named attribute for asset category, defaults to "category".
             asset_allocation_group_attr (str): Named attribute for asset allocation group, defaults to "allocation_group".
+            liab_report_attrs_bd (list[str]): List of liability reporting attributes.
+            liab_report_attrs_ad (list[str]): List of liability reporting attributes.
         """
         self.fund_id = fund_id
         # Asset and liab collections
@@ -64,6 +68,7 @@ class Fund:
             name=fund_id, model_engine=model_engine, connector=self._connector,
             asset_report_bases=self._asset_report_bases,
             asset_categories=asset_categories, asset_category_attr=asset_category_attr,
+            liab_report_attrs_bd=liab_report_attrs_bd or [], liab_report_attrs_ad=liab_report_attrs_ad or []
         )
         self._allocator: AssetAllocator = AssetAllocator(
             name=fund_id, model_engine=model_engine, connector=self._connector,

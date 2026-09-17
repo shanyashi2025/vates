@@ -57,47 +57,61 @@ def fund_liabs_roll_forward(fund: Fund, epl: KeyedArray | None = None, as_inv_re
         div_out = epl.at[liab_id, "div_out", date_col]
         invexp_out = 0 #epl.at[liab_id, "invexp_out", date_col]
         mat_out = epl.at[liab_id, "mat_out", date_col]
-        acct_value_if = 0.0  # for universal life and unit-linked products
-        asset_share_if = 0.0  # for participating products
 
-        liab_type = getattr(liab, 'liab_type', None)
+        liab_type = getattr(liab, 'liab_type', "")
         if liab_type == 'Par_CD':
             cash_flow = prem_inc - comm_out - exp_out - death_out - crben_out - ann_out - surr_out - mat_out \
                         - div_out - invexp_out
-            asset_share_if = liab.arr_asset_share_ad[t - 1] * (1 + as_inv_ret) + cash_flow * (1 + as_cf_ret)
+            asset_share_prev = liab.asset_share_if_ad
+            asset_share_if_bd = asset_share_prev * (1 + as_inv_ret) + cash_flow * (1 + as_cf_ret)
+            liab.roll_forward(
+                cash_flow=cash_flow,
+                prem_inc=prem_inc,
+                no_pols_if=no_pols_if,
+                math_res_if=math_res_if,
+                surr_val_if=surr_val_if,
+                asset_share_prev=asset_share_prev,
+                asset_share_if_bd=asset_share_if_bd,
+            )
         elif liab_type == 'Par_CD_Flex':
             cash_flow = prem_inc - comm_out - exp_out - death_out - ann_out - surr_out - mat_out - invexp_out
-            math_res_prev = liab.math_res
+            math_res_prev = liab.math_res_if
             div_out = max(cash_flow * (1 + as_cf_ret) + math_res_prev * as_inv_ret - (math_res_if - math_res_prev),
                           0) * 0.7
             cash_flow -= div_out
+            liab.roll_forward(
+                cash_flow=cash_flow,
+                prem_inc=prem_inc,
+                no_pols_if=no_pols_if,
+                math_res_if=math_res_if,
+                surr_val_if=surr_val_if,
+                asset_share_if_bd=0,
+            )
         else:
             cash_flow = prem_inc - comm_out - exp_out - death_out - crben_out - ann_out - surr_out - mat_out \
                         - div_out - invexp_out
-
-        liab.roll_forward(
-            cash_flow=cash_flow,
-            prem_inc=prem_inc,
-            no_pols_if=no_pols_if,
-            math_res_if=math_res_if,
-            surr_val_if=surr_val_if,
-            acct_value_if=acct_value_if,
-            asset_share_if=asset_share_if
-        )
+            liab.roll_forward(
+                cash_flow=cash_flow,
+                prem_inc=prem_inc,
+                no_pols_if=no_pols_if,
+                math_res_if=math_res_if,
+                surr_val_if=surr_val_if,
+                asset_share_if_bd=0,
+            )
 
     fund.process_liabs_before_dealing()
 
 
-def liabs_update_ad(fund: Fund) -> None:
+def liabs_close_dealing(fund: Fund) -> None:
     if fund.liabs:
         for liab in fund.liabs:
             t, p = fund.time, fund.period
             if getattr(liab, 'liab_type', "") == 'Par_CD':
                 as_rgl_ret = fund.rate_of_return_ad[t, "FAV"] - fund.rate_of_return_bd[t, "FAV"]
-                asset_share_if = liab.arr_asset_share_bd[t] + liab.arr_asset_share_ad[t - 1] * as_rgl_ret
-                liab.update_ad(asset_share_if=asset_share_if)
+                asset_share_if_ad = liab.asset_share_if_bd + liab.asset_share_prev * as_rgl_ret
+                liab.close_dealing(asset_share_if_ad=asset_share_if_ad)
             else:
-                liab.update_ad()
+                liab.close_dealing(asset_share_if_ad=0.0)
 
     fund.process_liabs_after_dealing()
 

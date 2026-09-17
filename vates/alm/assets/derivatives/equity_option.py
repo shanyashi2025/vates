@@ -40,11 +40,11 @@ class EquityOption(Asset):
         std_dev: float = None,
         is_pay_dividend: bool = False,
         model_engine: ProjModelEngine | None = None,
-        asset_id: str = "",
+        asset_id: str | None = None,
         is_profile: bool = False,
         units: float = 1.0,
         currency: Currency | None = None,
-        flex_attr_map: dict[str, str],
+        flex_attr_map: dict[str, str] | None = None,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
     ):

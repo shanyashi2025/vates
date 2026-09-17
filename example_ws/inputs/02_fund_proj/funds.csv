@@ -1,5 +1,5 @@
-﻿ref_no,fund_id,fund_type,fund_size_type,asset_size_basis,fund_rebalance_freq,asset_categories,asset_report_bases
-1,trad_fund,Policyholder,MATH_RES,FAV,12,CASH;EQUITY;BOND,MV;FAV;BSV;IFRS_PL;IFRS_BS;LOCAL_PL;LOCAL_BS
-2,cd1_fund,Policyholder,ASSET_SHARE,FAV,12,CASH;EQUITY;BOND,MV;FAV;BSV;IFRS_PL;IFRS_BS;LOCAL_PL;LOCAL_BS
-3,cd2_fund,Policyholder,MAX_AS_MATH,BSV,12,CASH;EQUITY;BOND,MV;FAV;BSV;IFRS_PL;IFRS_BS;LOCAL_PL;LOCAL_BS
-4,sh_fund,Shareholder,FUND,FAV,12,CASH;EQUITY;BOND,MV;FAV;BSV;IFRS_PL;IFRS_BS;LOCAL_PL;LOCAL_BS
+﻿ref_no,fund_id,fund_type,fund_size_type,asset_size_basis,fund_rebalance_freq,asset_categories,asset_report_bases,liab_report_vars_bd,liab_report_vars_ad
+1,trad_fund,Policyholder,MATH_RES,FAV,12,CASH;EQUITY;BOND,MV;FAV;BSV;IFRS_PL;IFRS_BS;LOCAL_PL;LOCAL_BS,no_pols_if;surr_val_if;math_res_if,none
+2,cd1_fund,Policyholder,ASSET_SHARE,FAV,12,CASH;EQUITY;BOND,MV;FAV;BSV;IFRS_PL;IFRS_BS;LOCAL_PL;LOCAL_BS,no_pols_if;surr_val_if;math_res_if;asset_share_if_bd,asset_share_if_ad
+3,cd2_fund,Policyholder,MAX_AS_MATH,BSV,12,CASH;EQUITY;BOND,MV;FAV;BSV;IFRS_PL;IFRS_BS;LOCAL_PL;LOCAL_BS,no_pols_if;surr_val_if;math_res_if;asset_share_if_bd,asset_share_if_ad
+4,sh_fund,Shareholder,FUND,FAV,12,CASH;EQUITY;BOND,MV;FAV;BSV;IFRS_PL;IFRS_BS;LOCAL_PL;LOCAL_BS,none,none

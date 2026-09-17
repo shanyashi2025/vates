@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
+from vates.global_conf import STRICTNESS_LEVEL, StrictnessLevel
 from vates.utils import maybe_check_state
 from vates.alm.funds._utils import AssetLiabConnector
 
@@ -20,7 +21,8 @@ class FundCalculator:
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'name', 'connector',
-                 'asset_categories', 'asset_category_attr', 'asset_report_bases',)
+                 'asset_categories', 'asset_category_attr', 'asset_report_bases',
+                 'liab_report_attrs_bd', 'liab_report_attrs_ad',)
 
     def __init__(
         self,
@@ -31,25 +33,27 @@ class FundCalculator:
         asset_categories: list[str],
         asset_category_attr: str,
         asset_report_bases: list[str],
+        liab_report_attrs_bd: list[str],
+        liab_report_attrs_ad: list[str],
     ):
         self.name: str = name
         self.connector: AssetLiabConnector = connector
         self.asset_categories: list[str] = asset_categories
         self.asset_category_attr: str = asset_category_attr
         self.asset_report_bases: list[str] = asset_report_bases
+        self.liab_report_attrs_bd: list[str] = liab_report_attrs_bd
+        self.liab_report_attrs_ad: list[str] = liab_report_attrs_ad
 
         # Initialize time-dimensioned variables for output
         # dims = None
         create_tdv = lambda x: TDimVariable(x, model_engine=model_engine, owner=self.name, group='fund')
         self.tdv_totass_cash_flow: TDimVariable = create_tdv("totass_cash_flow")
         self.tdv_totliab_cash_flow: TDimVariable = create_tdv("totliab_cash_flow")
-        self.tdv_tot_num_pols: TDimVariable = create_tdv("tot_no_pols_if")
-        self.tdv_tot_surr_val: TDimVariable = create_tdv("tot_surr_val_if")
-        self.tdv_tot_math_res: TDimVariable = create_tdv("tot_math_res_if")
-        self.tdv_tot_acct_val_bd: TDimVariable = create_tdv("tot_acct_val_if_bd")
-        self.tdv_tot_acct_val_ad: TDimVariable = create_tdv("tot_acct_val_if_ad")
-        self.tdv_tot_asset_share_bd: TDimVariable = create_tdv("tot_asset_share_if_bd")
-        self.tdv_tot_asset_share_ad: TDimVariable = create_tdv("tot_asset_share_if_ad")
+        self.tdv_totliab_attrs_bd: list[TDimVariable] = [
+            create_tdv(f"totliab_{name}") for name in self.liab_report_attrs_bd]
+        self.tdv_totliab_attrs_ad: list[TDimVariable] = [
+            create_tdv(f"totliab_{name}") for name in self.liab_report_attrs_ad]
+
         self.tdv_free_estate_bd: TDimVariable = create_tdv("free_estate_bd")
         self.tdv_free_estate_ad: TDimVariable = create_tdv("free_estate_ad")
         self.tdv_proceeds_transferred_in: TDimVariable = create_tdv("proceeds_transferred_in")
@@ -194,8 +198,7 @@ class FundCalculator:
         """
         t = self.time
         for liab in self.connector.liabs:
-            for asset in self.connector.assets:
-                maybe_check_state(liab, ("rolled", t))
+            maybe_check_state(liab, ("rolled", t))
 
         # Aggregate liability cash flow
         self.tdv_totliab_cash_flow[t] = sum(liab.cash_flow for liab in self.connector.liabs)
@@ -218,43 +221,13 @@ class FundCalculator:
             ValueError: If a liability is not rolled/updated for the current period, or if timing is invalid.
         """
         t = self.time
+        is_allow_missing = STRICTNESS_LEVEL != StrictnessLevel.ERROR
         if timing == "bd":
-            tot_num_pols = 0.0
-            tot_surr_val = 0.0
-            tot_math_res = 0.0
-            tot_acct_value = 0.0
-            tot_asset_share = 0.0
-
-            for liab in self.connector.liabs:
-                if t > 0:
-                    maybe_check_state(liab, ("rolled", t))
-
-                tot_num_pols += liab.num_pols
-                tot_surr_val += liab.surr_val
-                tot_math_res += liab.math_res
-                tot_acct_value += liab.acct_value
-                tot_asset_share += liab.asset_share
-
-            self.tdv_tot_num_pols[t] = tot_num_pols
-            self.tdv_tot_surr_val[t] = tot_surr_val
-            self.tdv_tot_math_res[t] = tot_math_res
-            self.tdv_tot_acct_val_bd[t] = tot_acct_value
-            self.tdv_tot_asset_share_bd[t] = tot_asset_share
-
+            for attr_name, tdv in zip(self.liab_report_attrs_bd, self.tdv_totliab_attrs_bd):
+                tdv[t] = self.connector.get_totliab_attr(attr_name, is_allow_missing=is_allow_missing)
         elif timing == "ad":
-            tot_acct_value = 0.0
-            tot_asset_share = 0.0
-
-            for liab in self.connector.liabs:
-                if t > 0:
-                    maybe_check_state(liab, ("closed", t))
-
-                tot_acct_value += liab.acct_value
-                tot_asset_share += liab.asset_share
-
-            self.tdv_tot_acct_val_ad[t] = tot_acct_value
-            self.tdv_tot_asset_share_ad[t] = tot_asset_share
-
+            for attr_name, tdv in zip(self.liab_report_attrs_ad, self.tdv_totliab_attrs_ad):
+                tdv[t] = self.connector.get_totliab_attr(attr_name, is_allow_missing=is_allow_missing)
         else:
             raise ValueError(f"Invalid liab aggregation {timing=}.")
 

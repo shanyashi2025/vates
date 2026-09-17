@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict, Self
+from typing import List, Self
 import pandas as pd
 
 from vates import ProjModelEngine
@@ -57,6 +57,8 @@ class FundMaster:
                 asset_allocation_groups=cls.build_asset_allocation_groups_from_df(asset_allocation_groups_df, fund_id=fund_id),
                 asset_categories=row["asset_categories"].split(';'),
                 asset_report_bases=row["asset_report_bases"].split(';'),
+                liab_report_attrs_bd=row["liab_report_vars_bd"].split(';') if row["liab_report_vars_bd"] != 'none' else None,
+                liab_report_attrs_ad=row["liab_report_vars_ad"].split(';') if row["liab_report_vars_ad"] != 'none' else None,
             )
             if "fund_type" in row:
                 if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
@@ -136,7 +138,8 @@ def build_liabs(model_engine: ProjModelEngine, df: pd.DataFrame, fund_id: str | 
                 no_pols_if=row["no_pols_if"],
                 math_res_if=row["math_res_if"],
                 surr_val_if=row["surr_val_if"],
-                asset_share_if=row["asset_share_if"]
+                asset_share_if_bd=row["asset_share_if"],
+                asset_share_if_ad=row["asset_share_if"],
             )
         else:
             raise ValueError(f"Invalid liab class {liab_class}.")

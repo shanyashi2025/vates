@@ -28,7 +28,7 @@ class Equity(Asset):
         purchase_cost: float | None = None,
         flex_attr_map: dict[str, str],
         model_engine: ProjModelEngine | None = None,
-        asset_id: str = "",
+        asset_id: str | None = None,
         is_profile: bool = False,
         currency: Currency | None = None,
         purchase_date: pd.Period | None = None

@@ -25,7 +25,7 @@ class Cash(Asset):
         *,
         nominal: float,
         model_engine: ProjModelEngine | None = None,
-        asset_id: str = "",
+        asset_id: str | None = None,
         currency: Currency | None = None,
         market_info: MarketInfo | None = None,
         ret_id: str | None = "",

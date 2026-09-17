@@ -2,7 +2,7 @@ from .alm_calculations import (
     rebalance_this_month,
     fund_assets_roll_forward,
     fund_liabs_roll_forward,
-    liabs_update_ad,
+    liabs_close_dealing,
     fund_reblance_if_needed,
 )
 from .asset_master import AssetMaster
@@ -35,7 +35,7 @@ __all__ = [
     # calculations
     'fund_assets_roll_forward',
     'fund_liabs_roll_forward',
-    'liabs_update_ad',
+    'liabs_close_dealing',
     'output_aging_assets',
 
 ]

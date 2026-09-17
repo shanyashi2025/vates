@@ -9,7 +9,7 @@ from company_package import (
     fund_assets_roll_forward,
     fund_liabs_roll_forward,
     fund_reblance_if_needed,
-    liabs_update_ad,
+    liabs_close_dealing,
     output_aging_assets,
 )
 
@@ -104,7 +104,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 )
 
                 # step 4: liabs update after dealing (ad)
-                liabs_update_ad(fund=fund)
+                liabs_close_dealing(fund=fund)
 
                 # step 5: transfer accumulated free proceeds to shareholder fund
                 if not is_sh_fund:

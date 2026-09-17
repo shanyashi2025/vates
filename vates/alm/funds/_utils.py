@@ -262,22 +262,24 @@ class AssetLiabConnector:
 
     @property
     def totliab_surr_value(self) -> float:
-        return sum(x.surr_val for x in self._liabs)
+        return sum(x.surr_val_if for x in self._liabs)
 
     @property
     def totliab_math_res(self) -> float:
-        return sum(x.math_res for x in self._liabs)
+        return sum(x.math_res_if for x in self._liabs)
 
     @property
     def totliab_acct_value(self) -> float:
-        return sum(x.acct_value for x in self._liabs)
+        return sum(x.acct_value_if for x in self._liabs)
 
     @property
     def totliab_asset_share(self) -> float:
-        return sum(x.asset_share for x in self._liabs)
+        return sum(x.asset_share_if_bd for x in self._liabs)
 
-    def get_totliab_attr(self, attr: str) -> float:
-        return sum(getattr(x, attr, 0.0) for x in self._liabs)
+    def get_totliab_attr(self, attr: str, /, *, is_allow_missing: bool = False) -> float:
+        if is_allow_missing:
+            return sum(getattr(x, attr, 0.0) for x in self._liabs)
+        return sum(getattr(x, attr) for x in self._liabs)
 
     def get_size(self, *, size_type: FundSizeType, asset_size_basis: str = "MV") -> float:
         """Get the fund size based on the fund size type and basis.

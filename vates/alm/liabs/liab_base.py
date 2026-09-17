@@ -1,8 +1,9 @@
 """
 Defines the abstract Liab class.
 """
-from abc import ABC, abstractmethod
 import pandas as pd
+import uuid
+from abc import ABC, abstractmethod
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.alm.econs import Currency
@@ -14,35 +15,23 @@ class Liab(ABC):
 
     Attributes:
         _liab_id (str): Liability identifier.
-        _fund_id (str): Fund identifier.
         _currency (Currency): Currency of the liability.
         _entry_date (pd.Period): Entry date of the liability.
-        _num_pols (float): Number of policies in force.
-        _surr_val (float): Surrender value in force.
-        _math_res (float): Mathematical reserve in force.
-        _acct_value (float): Account value in force.
-        _asset_share (float): Asset share in force.
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state', '_liab_id', '_fund_id', '_currency',
-                 '_entry_date', '_num_pols', '_surr_val', '_math_res', '_acct_value', '_asset_share', '_cash_flow',
-                 '_prem_inc')
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state', '_liab_id', '_currency',
+                 '_entry_date', '_flex_attr_map',)
 
     def __init__(
         self,
         *,
         model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `add_projection_time_synchronizer`
         liab_id: str,
-        fund_id: str,
-        currency: Currency,
-        entry_date: pd.Period,
-        no_pols_if: float,
-        surr_val_if: float,
-        math_res_if: float,
-        acct_value_if: float,
-        asset_share_if: float
+        currency: Currency | None,
+        entry_date: pd.Period | None,
+        flex_attr_map: dict[str, str] | None,
     ):
         """
         Initialize a liability object.
@@ -50,26 +39,14 @@ class Liab(ABC):
         Args:
             model_engine: Model engine object.
             liab_id (str): Liability identifier.
-            fund_id (str): Fund identifier.
             currency (Currency): Currency of the liability.
             entry_date (pd.Period): Entry date of the liability.
-            no_pols_if (float): Number of policies in force.
-            surr_val_if (float): Surrender value in force.
-            math_res_if (float): Mathematical reserve in force.
-            acct_value_if (float): Account value in force.
-            asset_share_if (float): Asset share in force.
+            flex_attr_map (dict[str, str]): Dict of string to named attribute, {"MATH_RES": "math_reserve"}
         """
-        self._liab_id: str = liab_id
-        self._fund_id: str = fund_id
+        self._liab_id: str = liab_id or str(uuid.uuid4())
         self._currency: Currency = currency
         self._entry_date: pd.Period = entry_date
-        self._num_pols: float = no_pols_if
-        self._surr_val: float = surr_val_if
-        self._math_res: float = math_res_if
-        self._acct_value: float = acct_value_if
-        self._asset_share: float = asset_share_if
-        self._cash_flow: float = 0.0
-        self._prem_inc: float = 0.0
+        self._flex_attr_map: dict[str, str] | None = flex_attr_map
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
@@ -79,10 +56,6 @@ class Liab(ABC):
     @property
     def liab_id(self) -> str:
         return self._liab_id
-
-    @property
-    def fund_id(self) -> str:
-        return self._fund_id
 
     @property
     def currency(self) -> Currency:
@@ -100,46 +73,27 @@ class Liab(ABC):
         pass
 
     @abstractmethod
-    def update_ad(self, *args, **kwargs):
+    def close_dealing(self, *args, **kwargs):
         """
         Abstract method to update the liability after dealing.
         """
         pass
 
     @property
+    @abstractmethod
     def cash_flow(self) -> float:
-        """float: Cash flow in period"""
-        return self._cash_flow
+        """
+        Abstract method to get the cash flow in period.
+        """
+        pass
 
     @property
+    @abstractmethod
     def prem_inc(self) -> float:
-        """float: Premium income in period"""
-        return self._prem_inc
-
-    @property
-    def num_pols(self) -> float:
-        """float: Number of policies in force."""
-        return self._num_pols
-
-    @property
-    def surr_val(self) -> float:
-        """float: Surrender value in force."""
-        return self._surr_val
-
-    @property
-    def math_res(self) -> float:
-        """float: Mathematical reserve in force."""
-        return self._math_res
-
-    @property
-    def acct_value(self) -> float:
-        """float: Account value."""
-        return self._acct_value
-
-    @property
-    def asset_share(self) -> float:
-        """float: Asset share."""
-        return self._asset_share
+        """
+        Abstract method to get the premium income in period.
+        """
+        pass
 
     @property
     @abstractmethod
@@ -157,53 +111,24 @@ class Liab(ABC):
         """
         pass
 
-    @property
-    @abstractmethod
-    def arr_surr_val(self):
-        """
-        Abstract property for surrender value. as at a date.
-        """
-        pass
+    def __getattr__(self, item):
+        try:
+            flex_map = object.__getattribute__(self, "_flex_attr_map")
+        except AttributeError:
+            raise AttributeError(item) from None
 
-    @property
-    @abstractmethod
-    def arr_math_res(self):
-        """
-        Abstract property for mathematical reserve as at a date.
-        """
-        pass
+        if flex_map is None or item not in flex_map:
+            raise AttributeError(item)
 
-    @property
-    @abstractmethod
-    def arr_acct_value_bd(self):
-        """
-        Abstract property for account value before dealing as at a date.
-        """
-        pass
+        target = flex_map[item]
 
-    @property
-    @abstractmethod
-    def arr_acct_value_ad(self):
-        """
-        Abstract property for account value after dealing as at a date.
-        """
-        pass
+        if target == item:
+            raise AttributeError(item)
 
-    @property
-    @abstractmethod
-    def arr_asset_share_bd(self):
-        """
-        Abstract property for asset share before dealing as at a date.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def arr_asset_share_ad(self):
-        """
-        Abstract property for asset share after dealing as at a date.
-        """
-        pass
+        try:
+            return object.__getattribute__(self, target)
+        except AttributeError:
+            raise AttributeError(item) from None
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self._liab_id}'"

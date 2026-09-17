@@ -12,7 +12,7 @@ from company_package import (
     fund_assets_roll_forward,
     fund_liabs_roll_forward,
     fund_reblance_if_needed,
-    liabs_update_ad,
+    liabs_close_dealing,
 )
 
 try:
@@ -109,7 +109,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             )
 
             # step 4: liabs update after dealing (ad)
-            liabs_update_ad(fund=fund)
+            liabs_close_dealing(fund=fund)
 
             # step 5: transfer accumulated free proceeds to shareholder fund
             fund.transfer_free_proceeds_to_other(None)  # shareholder fund is None
