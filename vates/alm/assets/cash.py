@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import Self
 
 from vates import ProjModelEngine
 from vates._core import TDimVariable
@@ -117,7 +118,7 @@ class Cash(Asset):
         """
         self._nominal -= self._nominal * propn
 
-    def scale_profile(self, *args, **kwargs) -> None:
+    def scale_profile(self, *args, **kwargs) -> Self:
         """
         Not applicable for cash assets.
         """

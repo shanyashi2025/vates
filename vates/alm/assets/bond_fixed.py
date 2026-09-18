@@ -357,7 +357,7 @@ class BondFixed(Asset):
             credit_band=self._credit_band,
             purchase_date=self.period,
         )
-        self._copy_flex_attrs_to(clone)
+        self._copy_dynamic_attrs_to(clone)
         self._n_clone += 1
         return clone
 

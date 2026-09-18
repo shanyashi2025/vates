@@ -6,7 +6,10 @@ from abc import ABC, abstractmethod
 from typing import Self
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
+from vates.global_conf import CheckLevel
 from vates.alm.econs import Currency
+
+_IMMUTABLE = (type(None), bool, int, float, str, bytes, tuple, frozenset)
 
 @add_projection_time_synchronizer
 class Asset(ABC):
@@ -24,6 +27,7 @@ class Asset(ABC):
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    _mutable_attr_check: CheckLevel = CheckLevel.ERROR
 
     __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', '_state', '_asset_id', '_is_profile', '_units',
                  '_purchase_date', '_currency', '_flex_attr_map',)
@@ -144,21 +148,25 @@ class Asset(ABC):
         """Return a new, non-profile asset scaled by `scale`; leave self unchanged."""
         pass
 
-    def _copy_flex_attrs_to(self, clone) -> None:
+    def _copy_dynamic_attrs_to(self, clone: Self, *, check_level: CheckLevel | None = None) -> None:
         if clone is self:
             warnings.warn("Ignore copying attributes to self.")
             return
 
-        for key, val in self.__dict__.items():
-            if not isinstance(val, (type(None), bool, str, int, float, tuple, frozenset, bytes)):
-                warnings.warn(f"Shallow-copying non-immutable attribute '{key}'; profile and clone will share this object.")
-            setattr(clone, key, val)
+        if check_level is None:
+            check_level = self._mutable_attr_check
 
-        #  Shallow copy aliases mutable values by design. The warning acknowledges it but does not prevent it: after clone, profile.__dict__[k] is
-        #  clone.__dict__[k] for a list/dict. Since there’s no immutability guarantee, a clone mutating that list would corrupt the reusable profile. Given the small
-        #  set of expected metadata, I’d rather copy selectively/deep rather than warn-and-share. Two options: copy.deepcopy(val) for non-immutable values (only if
-        #  those are guaranteed copyable), or better, move dynamic metadata into one explicit mapping (_flex_attrs) and deep-copy that. A whitelist based on
-        #  _flex_attr_map values + known metadata keys is the most predictable.
+        for key, val in self.__dict__.items():
+            if check_level == CheckLevel.BYPASS:
+                pass
+            elif not isinstance(val, _IMMUTABLE):
+                msg = (f"Dynamic attribute '{key}' on profile '{self._asset_id}' is {type(val).__name__}, which is mutable. "
+                       f"Profiles must stay immutable; store mutable metadata elsewhere or register it as shared.")
+                if check_level == CheckLevel.ERROR:
+                    raise TypeError(msg)
+                if check_level == CheckLevel.WARN:
+                    warnings.warn(msg)
+            setattr(clone, key, val)
 
     @abstractmethod
     def close_dealing(self, *args, **kwargs):

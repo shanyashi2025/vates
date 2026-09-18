@@ -158,7 +158,7 @@ class Equity(Asset):
             currency=self._currency,
             purchase_date=self.period,
         )
-        self._copy_flex_attrs_to(clone)
+        self._copy_dynamic_attrs_to(clone)
         self._n_clone += 1
         return clone
 

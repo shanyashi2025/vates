@@ -242,7 +242,7 @@ class EquityOption(Asset):
             flex_attr_map=self._flex_attr_map,
             purchase_date=self.period,
         )
-        self._copy_flex_attrs_to(clone)
+        self._copy_dynamic_attrs_to(clone)
         self._n_clone += 1
         return clone
 
