@@ -276,8 +276,8 @@ class AssetLiabConnector:
     def totliab_asset_share(self) -> float:
         return sum(x.asset_share_if_bd for x in self._liabs)
 
-    def get_totliab_attr(self, attr: str, /, *, is_allow_missing: bool = False) -> float:
-        if is_allow_missing:
+    def get_totliab_attr(self, attr: str, /, *, treat_missing_as_0: bool = False) -> float:
+        if treat_missing_as_0:
             return sum(getattr(x, attr, 0.0) for x in self._liabs)
         return sum(getattr(x, attr) for x in self._liabs)
 

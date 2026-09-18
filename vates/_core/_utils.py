@@ -45,7 +45,7 @@ class ProjectionTimeSynchronizer:
             self._period += n
         self._notify_on_time_change()
 
-    def maybe_attach_time_observer(self, observer, /) -> None:
+    def attach_eligible_time_observer(self, observer, /) -> None:
         ref = observer if isinstance(observer, weakref.ref) else weakref.ref(observer)
         obs = ref()
         if obs is None or ref in self._time_observers or not hasattr(obs, "update_on_time_change"):
@@ -126,7 +126,7 @@ def add_projection_time_synchronizer(_cls=None, /):
                     raise ValueError(f"Failed to add projection time synchronizer.")
 
             setattr(self, "_time_synchronizer", time_synchronizer)
-            time_synchronizer.maybe_attach_time_observer(self)  # `time_synchronizer` will refuse to attach the object if it doesn't have `update_on_time_change` method
+            time_synchronizer.attach_eligible_time_observer(self)  # `time_synchronizer` will refuse to attach the object if it doesn't have `update_on_time_change` method
 
             if original_init and original_init is not object.__init__:
                 original_init(self, *args, **kwargs)

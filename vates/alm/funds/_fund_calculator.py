@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
-from vates.global_conf import STRICTNESS_LEVEL, StrictnessLevel
-from vates.utils import maybe_check_state
+from vates.global_conf import CHECK_LEVEL, CheckLevel
+from vates.utils import maybe_raise_if_ne
 from vates.alm.funds._utils import AssetLiabConnector
 
 
@@ -82,8 +82,9 @@ class FundCalculator:
         """Process asset values and returns before dealing (bd).
         """
         t = self.time
-        for asset in self.connector.assets:
-            maybe_check_state(asset, ("rolled", t))
+        if CHECK_LEVEL != CheckLevel.BYPASS:
+            for asset in self.connector.assets:
+                maybe_raise_if_ne(asset._state, ("rolled", t))
 
         # Aggregate asset cash flow
         tot_cash_flow = self.connector.groupby_sum_asset_cash_flow()
@@ -174,10 +175,10 @@ class FundCalculator:
             ValueError: If an asset is not rolled or updated for the current period, or if timing is invalid.
         """
         t = self.time
-        if t > 0:
+        if t > 0 and CHECK_LEVEL != CheckLevel.BYPASS:
             s = "rolled" if timing == "bd" else "closed"
             for asset in self.connector.assets:
-                maybe_check_state(asset, (s, t))
+                maybe_raise_if_ne(asset._state, (s, t))
 
         tot_rep_value = self.connector.groupby_sum_asset_report_value(basis=self.asset_report_bases)
         cat_rep_value = self.connector.groupby_sum_asset_report_value(
@@ -197,8 +198,9 @@ class FundCalculator:
         """Process liability values and cash flows before dealing (bd).
         """
         t = self.time
-        for liab in self.connector.liabs:
-            maybe_check_state(liab, ("rolled", t))
+        if CHECK_LEVEL != CheckLevel.BYPASS:
+            for liab in self.connector.liabs:
+                maybe_raise_if_ne(liab._state, ("rolled", t))
 
         # Aggregate liability cash flow
         self.tdv_totliab_cash_flow[t] = sum(liab.cash_flow for liab in self.connector.liabs)
@@ -221,13 +223,12 @@ class FundCalculator:
             ValueError: If a liability is not rolled/updated for the current period, or if timing is invalid.
         """
         t = self.time
-        is_allow_missing = STRICTNESS_LEVEL != StrictnessLevel.ERROR
         if timing == "bd":
             for attr_name, tdv in zip(self.liab_report_attrs_bd, self.tdv_totliab_attrs_bd):
-                tdv[t] = self.connector.get_totliab_attr(attr_name, is_allow_missing=is_allow_missing)
+                tdv[t] = self.connector.get_totliab_attr(attr_name)
         elif timing == "ad":
             for attr_name, tdv in zip(self.liab_report_attrs_ad, self.tdv_totliab_attrs_ad):
-                tdv[t] = self.connector.get_totliab_attr(attr_name, is_allow_missing=is_allow_missing)
+                tdv[t] = self.connector.get_totliab_attr(attr_name)
         else:
             raise ValueError(f"Invalid liab aggregation {timing=}.")
 

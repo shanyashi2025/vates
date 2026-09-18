@@ -3,7 +3,7 @@ import numpy.typing as npt
 import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
-from vates.utils import maybe_check_state
+from vates.utils import maybe_raise_if_ne
 
 
 @add_projection_time_synchronizer
@@ -60,31 +60,27 @@ class CreditBand:
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
-    def state(self) -> tuple[str, int]:
-        return self._state
-
-    @property
     def credit_spread(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Credit spread(s) as at period end."""
-        maybe_check_state(self, ("updated", self.time))
+        maybe_raise_if_ne(self._state, ("updated", self.time))
         return self._spread
 
     @property
     def credit_spotmult(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Spot rate multipliers as at period end."""
-        maybe_check_state(self, ("updated", self.time))
+        maybe_raise_if_ne(self._state, ("updated", self.time))
         return self._spotmult
 
     @property
     def prob_of_default_ac(self) -> float:
         """float: Probability of default (annual compounding) in period."""
-        maybe_check_state(self, ("updated", self.time))
+        maybe_raise_if_ne(self._state, ("updated", self.time))
         return self._prob_of_default_ac
 
     @property
     def recovery_rate(self) -> float:
         """float: Recovery rate in period."""
-        maybe_check_state(self, ("updated", self.time))
+        maybe_raise_if_ne(self._state, ("updated", self.time))
         return self._recovery_rate
 
     def update(self, *, prop_of_default_ac: float = None, recovery_rate: float = None,

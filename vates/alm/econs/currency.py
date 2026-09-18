@@ -1,7 +1,7 @@
 import pandas as pd
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
-from vates.utils import maybe_check_state
+from vates.utils import maybe_raise_if_ne
 
 
 @add_projection_time_synchronizer
@@ -39,19 +39,15 @@ class Currency:
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
-    def state(self) -> tuple[str, int]:
-        return self._state
-
-    @property
     def fx_rate(self) -> float:
         """float: Current FX rate"""
-        maybe_check_state(self, ("updated", self.time))
+        maybe_raise_if_ne(self._state, ("updated", self.time))
         return self._fx_rate
 
     @property
     def fx_rate_prev(self) -> float:
         """float: Previous FX rate"""
-        maybe_check_state(self, ("updated", self.time))
+        maybe_raise_if_ne(self._state, ("updated", self.time))
         return self._fx_rate_prev
 
     @property

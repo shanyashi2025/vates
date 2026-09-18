@@ -4,7 +4,7 @@ import warnings
 from typing import Optional
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
-from vates.utils import maybe_check_state
+from vates.utils import maybe_raise_if_ne
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
 from vates.alm.funds._asset_allocator import AssetAllocator, AssetAllocationGroup, TargetWeight
@@ -85,10 +85,6 @@ class Fund:
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
-    def state(self) -> tuple[str, int]:
-        return self._state
-
-    @property
     def assets(self) -> list[Asset]:
         return self._connector.assets
 
@@ -107,7 +103,7 @@ class Fund:
             existing_liabs (Liab | list[Liab] | None): Existing liabilities to be included.
 
         """
-        maybe_check_state(self, ("initialized", self.time))
+        maybe_raise_if_ne(self._state, ("initialized", self.time))
 
         if existing_assets is None:
             pass
@@ -161,21 +157,21 @@ class Fund:
     def process_assets_before_dealing(self) -> None:
         """Process asset cash flows and reported values before dealing (bd)."""
         if self._state != ("assembled", self.time - 1):
-            maybe_check_state(self, ("closed", self.time - 1))
+            maybe_raise_if_ne(self._state, ("closed", self.time - 1))
         self.calculator.process_assets_before_dealing()
         self._connector.accumulate_free_estate(self.calculator.tdv_totass_cash_flow[self.time])
         self._state = ("proc_assets_bd", self.time)
 
     def process_liabs_before_dealing(self) -> None:
         """Process liability cash flows and balance sheet variables before dealing (bd)."""
-        maybe_check_state(self, ("proc_assets_bd", self.time))
+        maybe_raise_if_ne(self._state, ("proc_assets_bd", self.time))
         self.calculator.process_liabs_before_dealing()
         self._connector.accumulate_free_estate(self.calculator.tdv_totliab_cash_flow[self.time])
         self._state = ("proc_liabs_bd", self.time)
 
     def no_action_on_rebalance(self) -> None:
         """Skip asset rebalance, invest free proceeds into primary cash."""
-        maybe_check_state(self, ("proc_liabs_bd", self.time))
+        maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
         t = self.time
         self.calculator.tdv_free_estate_bd[t] = self._connector.free_estate
         # just invest free_estate into primary cash, no other action, free_estate is reset to zero
@@ -197,7 +193,7 @@ class Fund:
             target_weights (dict[str, TargetWeight]): Target weight by allocation group.
             profile_assets (list[Asset] | None=None): Profile assets for purchases (e.g., bonds).
         """
-        maybe_check_state(self, ("proc_liabs_bd", self.time))
+        maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
         t, p = self.time, self.period
         fund_size_type = FundSizeType[fund_size_type.upper()] if isinstance(fund_size_type, str) else fund_size_type
 

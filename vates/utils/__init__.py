@@ -6,7 +6,7 @@ from vates.utils.risk_module import (
     SubRisk
 )
 from vates.utils.uncategorized import (
-    maybe_check_state,
+    maybe_raise_if_ne,
     new_business_convolve,
     class_lazy_property,
 )
@@ -21,7 +21,7 @@ __all__ = [
     'RiskModule',
     'SubRisk',
     # uncategorized
-    'maybe_check_state',
+    'maybe_raise_if_ne',
     'new_business_convolve',
     'class_lazy_property',
 

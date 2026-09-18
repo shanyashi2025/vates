@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto, unique
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
-from vates.global_conf import STRICTNESS_LEVEL, StrictnessLevel
+from vates.global_conf import CHECK_LEVEL, CheckLevel
 from vates.alm.assets import Asset, Cash
 from vates.alm.enums import AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.funds._utils import AssetLiabConnector
@@ -137,13 +137,13 @@ class AssetAllocationGroup:
             raise ValueError(f"Invalid asset buy/sell approach: {self._buysell_approach}")
 
     def validate_allocation(self, total_size: float, tolerance: float = 1e-4,
-                            strictness: StrictnessLevel = STRICTNESS_LEVEL) -> bool:
+                            strictness: CheckLevel = CHECK_LEVEL) -> bool:
         """Validate if the allocation for a group meets the target.
 
         Args:
             total_size (float): Total size.
             tolerance (float): Tolerance for validation (default 0.0001).
-            strictness (StrictnessLevel): Strictness for validation, defaults to STRICTNESS_LEVEL.
+            strictness (CheckLevel): Strictness for validation, defaults to STRICTNESS_LEVEL.
 
         Returns:
             bool: True if the allocation meets the target, False otherwise.
@@ -162,7 +162,7 @@ class AssetAllocationGroup:
         if not is_pass:
             msg = (f"{self.name} target allocaion is not met: current={current_weight:.4f}, "
                    f"min={self.target_weight.min_weight:.4f}, max={self.target_weight.max_weight:.4f}")
-            if strictness == STRICTNESS_LEVEL.ERROR:
+            if strictness == CHECK_LEVEL.ERROR:
                 raise ValueError(msg)
             else:
                 warnings.warn(msg)
@@ -317,7 +317,7 @@ class AssetAllocator:
         current_asset_size, _ = self._groupby_sum_asset_size(self.connector.assets, size_basis)
         for i, ag in enumerate(self.alloc_groups):
             ag.current_size = current_asset_size[i]
-            ag.validate_allocation(total_size=total_size, strictness=STRICTNESS_LEVEL)
+            ag.validate_allocation(total_size=total_size, strictness=CHECK_LEVEL)
 
         # step 6: add free proceeds to free estate
         self.connector.accumulate_free_estate(free_proceeds)

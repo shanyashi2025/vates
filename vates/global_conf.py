@@ -1,8 +1,12 @@
+import os
+from dotenv import load_dotenv
 from enum import Enum, auto
 
-class StrictnessLevel(Enum):
+load_dotenv()
+
+class CheckLevel(Enum):
     BYPASS = auto()
     WARN = auto()
     ERROR = auto()
 
-STRICTNESS_LEVEL = StrictnessLevel.BYPASS
+CHECK_LEVEL = CheckLevel[os.getenv("VATES_CHECK_LEVEL", "BYPASS").upper()]

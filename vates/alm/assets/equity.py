@@ -26,7 +26,7 @@ class Equity(Asset):
         market_value: float,
         equity_index: EquityIndex,
         purchase_cost: float | None = None,
-        flex_attr_map: dict[str, str],
+        flex_attr_map: dict[str, str] | None = None,
         model_engine: ProjModelEngine | None = None,
         asset_id: str | None = None,
         is_profile: bool = False,

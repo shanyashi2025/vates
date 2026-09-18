@@ -3,7 +3,7 @@ import pandas as pd
 from vates._core import ProjModelEngine, TDimVariable
 from vates.alm.econs import Currency
 from vates.alm.liabs.liab_base import Liab
-from vates.alm.liabs._utils import maybe_check_asset_state_roll, maybe_check_asset_state_close
+from vates.alm.liabs._utils import maybe_check_liab_state_roll, maybe_check_liab_state_close
 
 
 class ExtProjLiab(Liab):
@@ -45,7 +45,7 @@ class ExtProjLiab(Liab):
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_prem_inc: TDimVariable = create_tdv("prem_inc")
 
-    @maybe_check_asset_state_roll
+    @maybe_check_liab_state_roll
     def roll_forward(self, cash_flow: float, prem_inc: float, **kwargs):
         """
         Roll the liability forward one period, updating variables and calculating cash flow.
@@ -58,7 +58,7 @@ class ExtProjLiab(Liab):
         self.tdv_cash_flow[self.time] = self._cash_flow
         self.tdv_prem_inc[self.time] = self._prem_inc
 
-    @maybe_check_asset_state_close
+    @maybe_check_liab_state_close
     def close_dealing(self, **kwargs) -> None:
         """
         Update the liability after dealing, adjusting asset share.

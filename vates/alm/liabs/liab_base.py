@@ -50,10 +50,6 @@ class Liab(ABC):
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
-    def state(self) -> tuple[str, int]:
-        return self._state
-
-    @property
     def liab_id(self) -> str:
         return self._liab_id
 

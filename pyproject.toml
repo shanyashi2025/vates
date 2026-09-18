@@ -14,6 +14,7 @@ authors = [
 ]
 keywords = ["actuarial model", "asset-liability model", "alm"]
 dependencies = [
+    "dotenv",
     "numpy",
     "pandas",
 ]
