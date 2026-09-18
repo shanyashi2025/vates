@@ -29,7 +29,6 @@ from vates.alm.liabs import (
 # funds
 from vates.alm.funds import (
     Fund,
-    FundSizeType,
     AssetAllocationGroup,
     TargetWeight,
 )
@@ -62,7 +61,6 @@ __all__ = [
     'ExtProjLiab',
     # funds
     'Fund',
-    'FundSizeType',
     'AssetAllocationGroup',
     'TargetWeight',
     # Enums

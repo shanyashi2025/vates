@@ -1,22 +1,10 @@
 import pandas as pd
 import numpy as np
-from typing import overload
-from enum import Enum, unique
+from typing import overload, Callable
 
 from vates._core import TDimVariable
 from vates.alm.assets import Asset
 from vates.alm.liabs import Liab
-
-@unique
-class FundSizeType(Enum):
-    """Enum for fund size types."""
-    FUND = "FUND"
-    SURR_VALUE = "SURR_VALUE"
-    MATH_RES = "MATH_RES"
-    ACCT_VALUE = "ACCT_VALUE"
-    ASSET_SHARE = "ASSET_SHARE"
-    MAX_AS_MATH = "MAX_AS_MATH"
-    MAX_AS_CSV = "MAX_AS_CSV"
 
 
 class AssetLiabConnector:
@@ -276,40 +264,71 @@ class AssetLiabConnector:
     def totliab_asset_share(self) -> float:
         return sum(x.asset_share_if_bd for x in self._liabs)
 
-    def get_totliab_attr(self, attr: str, /, *, treat_missing_as_0: bool = False) -> float:
+    def get_totasset_attr(self, name: str, /, *, treat_missing_as_0: bool = False) -> float:
+        return self.get_total_value(self._assets, name, treat_missing_as_0=treat_missing_as_0)
+
+    def get_totliab_attr(self, name: str, /, *, treat_missing_as_0: bool = False) -> float:
+        return self.get_total_value(self._liabs, name, treat_missing_as_0=treat_missing_as_0)
+
+    @classmethod
+    def get_total_value(cls, obj_list: list, name: str, /, *, treat_missing_as_0: bool = False) -> float:
         if treat_missing_as_0:
-            return sum(getattr(x, attr, 0.0) for x in self._liabs)
-        return sum(getattr(x, attr) for x in self._liabs)
+            return sum(getattr(obj, name, 0.0) for obj in obj_list)
+        return sum(getattr(obj, name) for obj in obj_list)
 
-    def get_size(self, *, size_type: FundSizeType, asset_size_basis: str = "MV") -> float:
-        """Get the fund size based on the fund size type and basis.
+    @overload
+    def get_size(self, *, func: None = None, key: str) -> float:
+        ...
 
-        Args:
-            size_type (str): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
-            asset_size_basis (str): Asset reporting basis use for rebalance, defaults to "MV"
+    @overload
+    def get_size(self, *, func: Callable, key: str) -> float:
+        ...
 
-        Returns:
-            float: Computed fund size on the requested basis.
+    @overload
+    def get_size(self, *, func: Callable, key: tuple[str, ...]) -> float:
+        ...
 
-        Raises:
-            ValueError: If fund size type is invalid.
+    @overload
+    def get_size(self, *, func: Callable, key: dict[str, str]) -> float:
+        ...
+
+    def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str]) -> float:
         """
-        if size_type == FundSizeType.FUND:
-            return self.groupby_sum_asset_report_value(basis=asset_size_basis) + self.free_estate
-            # # need to include free_estate
-        elif size_type == FundSizeType.SURR_VALUE:
-            return self.totliab_surr_value
-        elif size_type == FundSizeType.MATH_RES:
-            return self.totliab_math_res
-        elif size_type == FundSizeType.ACCT_VALUE:
-            return self.totliab_acct_value
-        elif size_type == FundSizeType.ASSET_SHARE:
-            return self.totliab_asset_share
-        elif size_type == FundSizeType.MAX_AS_MATH:
-            return max(self.totliab_asset_share, self.totliab_math_res)
-        elif size_type == FundSizeType.MAX_AS_CSV:
-            return max(self.totliab_asset_share, self.totliab_surr_value)
-        raise ValueError(f"Unknown fund size type: {size_type}.")
+        path 1:
+            (func: None, key: str)
+        path 2:
+            (func: Callable, key: str)
+        path 3:
+            (func: Callable, key: tuple[str])
+        path 4:
+            (func: Callable, key: dict[str, str])
+        """
+        if func is None:
+            return self.get_single_measure(key)
+        if isinstance(key, str):
+            return func(self.get_single_measure(key))
+        elif isinstance(key, tuple):
+            args = tuple([self.get_single_measure(x) for x in key])
+            return func(*args)
+        elif isinstance(key, dict):
+            kwargs = {k: self.get_single_measure(v) for k, v in key.items()}
+            return func(**kwargs)
+        raise TypeError(f"Invalid {type(key)=}, expected 'str', 'tuple', 'dict'.")
+
+    def get_single_measure(self, key: str) -> float:
+        if not isinstance(key, str):
+            raise TypeError(f"Invalid {type(key)=}, expected 'str'.")
+
+        if "." not in key:
+            return getattr(self, key)
+
+        owner, name, *_ = key.split(".")
+        if owner == "asset":
+            return self.get_total_value(self._assets, name)
+        elif owner in ("liab", "liability"):
+            return self.get_total_value(self._liabs, name)
+        else:
+            raise ValueError(f"Invalid '{key}', expected 'asset.foo' or 'liab.foo'.")
 
 
 class _RateOfReturnIndexer:

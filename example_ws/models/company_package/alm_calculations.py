@@ -126,8 +126,27 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
             assets_df_dict, model_engine=model_engine, econs=econs, fund_id=fund_id
         ).all
         target_weights = build_target_weights(asset_mix_df, fund_id, str(period.year * 100 + period.month))
+        size_type = rebalance_params.fund_size_type.upper()
+
+        if size_type == "FUND":
+            total_size = fund.get_size(func=lambda x, y: x + y, key=(f"asset.{rebalance_params.asset_size_basis}", "free_estate"))
+        elif size_type == "MATH_RES":
+            total_size = fund.get_size(key="liab.math_res_if")
+        elif size_type == "SURR_VALUE":
+            total_size = fund.get_size(key="liab.surr_val_if")
+        elif size_type == "ACCT_VALUE":
+            total_size = fund.get_size(key="liab.acct_val_if")
+        elif size_type == "ASSET_SHARE":
+            total_size = fund.get_size(key="liab.asset_share_if_bd")
+        elif size_type == "MAX_AS_MATH":
+            total_size = fund.get_size(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+        elif size_type == "MAX_AS_CSV":
+            total_size = fund.get_size(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+        else:
+            raise ValueError(f"Invalid {size_type=}.")
+
         fund.rebalance_assets(
-            fund_size_type=rebalance_params.fund_size_type,
+            total_size=total_size,
             asset_size_basis=rebalance_params.asset_size_basis,
             target_weights=target_weights,
             profile_assets=profile_assets

@@ -1,7 +1,6 @@
 import pandas as pd
 import warnings
-
-from typing import Optional
+from typing import Callable, Optional, overload
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.utils import maybe_raise_if_ne
@@ -9,7 +8,7 @@ from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
 from vates.alm.funds._asset_allocator import AssetAllocator, AssetAllocationGroup, TargetWeight
 from vates.alm.funds._fund_calculator import FundCalculator
-from vates.alm.funds._utils import AssetLiabConnector, _RateOfReturnIndexer, FundSizeType
+from vates.alm.funds._utils import AssetLiabConnector, _RateOfReturnIndexer
 
 
 @add_projection_time_synchronizer
@@ -182,25 +181,24 @@ class Fund:
         self.calculator.process_assets_after_dealing()
         self._state = ("closed", self.time)
 
-    def rebalance_assets(self, *, fund_size_type: str | FundSizeType, asset_size_basis: str,
+    def rebalance_assets(self, *, total_size: float, asset_size_basis: str,
                          target_weights: dict[str, TargetWeight] | None, profile_assets: list[Asset] | None = None,
                          **kwargs) -> None:
         """Rebalance assets per target allocation and optional profile.
 
         Args:
-            fund_size_type (str | FundSizeType): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
+            total_size (float): Total size for allocation.
             asset_size_basis (str): Basis for sizing against fund (usually FAV or BSV).
             target_weights (dict[str, TargetWeight]): Target weight by allocation group.
             profile_assets (list[Asset] | None=None): Profile assets for purchases (e.g., bonds).
         """
         maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
         t, p = self.time, self.period
-        fund_size_type = FundSizeType[fund_size_type.upper()] if isinstance(fund_size_type, str) else fund_size_type
 
         self.calculator.tdv_free_estate_bd[t] = self._connector.free_estate
         # process rebalance
         self._allocator.rebalance(
-            total_size=self.get_fund_size(size_type=fund_size_type, asset_size_basis=asset_size_basis),
+            total_size=total_size,
             size_basis=asset_size_basis,
             target_weights=target_weights,
             profile_assets=profile_assets,
@@ -212,17 +210,22 @@ class Fund:
         self.calculator.process_assets_after_dealing()
         self._state = ("closed", self.time)
 
-    def get_fund_size(self, *, size_type: FundSizeType, asset_size_basis: str = "MV") -> float:
-        """Get the fund size based on the fund size type and basis.
+    def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str]) -> float:
+        """ Get the fund size of the requested key
 
         Args:
-            size_type (str): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.).
-            asset_size_basis (str): Asset reporting basis use for rebalance, defaults to "MV"
+            func (Callable | None): Function, defaults to None.
+            key (str | tuple[str, ...] | dict[str, str]): Requested key, use `asset.<attr_name>` and/or `liab.<attr_name>`
+                to indicate an attribute of assets or liabilities.
 
-        Returns:
-            float: Computed fund size on the requested basis.
+        Examples:
+            1. get_size(key="liab.math_res_if")
+            2. get_size(func=lambda x, y: max(x, y), key=("liab.surr_val_bd", "liab.math_res_if")
+            3. get_size(func=lambda x, y: max(x, y), key={"x": "liab.surr_val_bd", "y": "liab.math_res_if"})
+            4. get_size(func=lambda x, y: x + y, key=(f"asset.FAV", "free_estate"))
+
         """
-        return self._connector.get_size(size_type=size_type, asset_size_basis=asset_size_basis)
+        return self._connector.get_size(func=func, key=key)
 
     def process_liabs_after_dealing(self) -> None:
         """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""
