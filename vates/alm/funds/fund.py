@@ -210,13 +210,15 @@ class Fund:
         self.calculator.process_assets_after_dealing()
         self._state = ("closed", self.time)
 
-    def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str]) -> float:
+    def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
+                 treat_missing_as_0: bool = False) -> float:
         """ Get the fund size of the requested key
 
         Args:
             func (Callable | None): Function, defaults to None.
             key (str | tuple[str, ...] | dict[str, str]): Requested key, use `asset.<attr_name>` and/or `liab.<attr_name>`
                 to indicate an attribute of assets or liabilities.
+            treat_missing_as_0 (bool): True if treat value of missing attribute as 0.0, defaults to False.
 
         Examples:
             1. get_size(key="liab.math_res_if")
@@ -225,7 +227,7 @@ class Fund:
             4. get_size(func=lambda x, y: x + y, key=(f"asset.FAV", "free_estate"))
 
         """
-        return self._connector.get_size(func=func, key=key)
+        return self._connector.get_size(func=func, key=key, treat_missing_as_0=treat_missing_as_0)
 
     def process_liabs_after_dealing(self) -> None:
         """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""

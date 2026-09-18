@@ -37,246 +37,226 @@ class AssetLiabConnector:
         self._free_estate = 0.0
         return amount
 
-    def sum_asset(self, name: str, /, *, treat_missing_as_0: bool = False) -> float:
-        return self._sum_all(self._assets, name, treat_missing_as_0=treat_missing_as_0)
+    @overload
+    def sum_asset(self, key: str, /, *, treat_missing_as_0: bool = False) -> float:
+        ...
 
+    @overload
+    def sum_asset(self, name: list[str], /, *, treat_missing_as_0: bool = False) -> np.ndarray:
+        ...
+
+    def sum_asset(self, name: str | list[str], /, *, treat_missing_as_0: bool = False) -> float | np.ndarray:
+        return self._sum(self._assets, name=name, treat_missing_as_0=treat_missing_as_0)
+
+    @overload
     def sum_liab(self, name: str, /, *, treat_missing_as_0: bool = False) -> float:
-        return self._sum_all(self._liabs, name, treat_missing_as_0=treat_missing_as_0)
+        ...
+
+    @overload
+    def sum_liab(self, name: list[str], /, *, treat_missing_as_0: bool = False) -> np.ndarray:
+        ...
+
+    def sum_liab(self, name: str | list[str], /, *, treat_missing_as_0: bool = False) -> float | np.ndarray:
+        return self._sum(self._liabs, name=name, treat_missing_as_0=treat_missing_as_0)
 
     @classmethod
-    def _sum_all(cls, obj_list: list, name: str, /, *, treat_missing_as_0: bool = False) -> float:
-        if treat_missing_as_0:
-            return sum(getattr(obj, name, 0.0) for obj in obj_list)
-        return sum(getattr(obj, name) for obj in obj_list)
+    def _sum(cls, obj_list: list, /, *, name: str | list[str], treat_missing_as_0: bool = False) -> float | np.ndarray:
+        default = 0.0 if treat_missing_as_0 else None
+        if isinstance(name, str):
+            return sum(getattr(obj, name, default) for obj in obj_list)
+        elif isinstance(name, list):
+            n_name: int = len(name)
+            total: list[float] = [0.0] * n_name
+            for i in range(n_name):
+                total[i] = sum(getattr(obj, name[i], default) for obj in obj_list)
+            return np.array(total, dtype=float)
+        else:
+            raise TypeError(f"Invalid {type(name)=}, expected 'str' or 'list[str]'.")
 
     @overload
-    def groupby_sum_asset_cash_flow(self, *, groupby: None = None, in_list: None = None,) -> float:
+    def groupby_sum_asset(self, name: str, /, *, groupby: str, in_list: str, treat_missing_as_0: bool = False) -> float:
         ...
 
     @overload
-    def groupby_sum_asset_cash_flow(self, *, groupby: str, in_list: str,) -> float:
+    def groupby_sum_asset(self, name: str, /, *, groupby: str, in_list: list[str], treat_missing_as_0: bool = False
+                          ) -> list[float]:
         ...
 
     @overload
-    def groupby_sum_asset_cash_flow(self, *, groupby: str, in_list: list[str],) -> list[float]:
+    def groupby_sum_asset(self, name: str, /, *, groupby: str, in_list: None = None, treat_missing_as_0: bool = False
+                          ) -> dict[str, float]:
         ...
 
     @overload
-    def groupby_sum_asset_cash_flow(self, *, groupby: str, in_list: None = None,) -> dict[str, float]:
+    def groupby_sum_asset(self, name: list[str], /, *, groupby: str, in_list: str, treat_missing_as_0: bool = False
+                          ) -> np.ndarray:
         ...
 
-    def groupby_sum_asset_cash_flow(
+    @overload
+    def groupby_sum_asset(self, name: list[str], /, *, groupby: str, in_list: list[str], treat_missing_as_0: bool = False
+                          ) -> list[np.ndarray]:
+        ...
+
+    @overload
+    def groupby_sum_asset(self, name: list[str], /, *, groupby: str, in_list: None = None, treat_missing_as_0: bool = False
+                          ) -> dict[str, np.ndarray]:
+        ...
+
+    def groupby_sum_asset(
         self,
+        name: str | list[str],
+        /,
         *,
-        groupby: str | None = None,
+        groupby: str,
         in_list: str | list[str] | None = None,
-    ) -> float | list[float] | dict[str, float]:
-        """
-        path 1:
-            (groupby: None, in_list: None): -> float
-        path 2:
-            (groupby: str, in_list: str): -> float
-        path 3:
-            (groupby: str, in_list: list[str]): -> list[float]
-        path 4:
-            (groupby: str, in_list: None): -> dict[str, float]
-        """
-        if groupby is not None and not isinstance(groupby, str):
-            raise TypeError(f"Invalid type of 'groupby': {type(groupby)}, expected 'str'.")
-        if in_list is not None and not isinstance(in_list, (str, list)):
-            raise TypeError(f"Invalid type of 'in_list': {type(in_list)}, expected 'str' or 'list[str]'.")
-        # --- path 1 ---
-        if groupby is None and in_list is None:
-            return sum(x.cash_flow for x in self._assets)
-        # --- path 2 ---
-        if groupby is not None and isinstance(in_list, str):
-            return sum(x.cash_flow for x in self._assets if getattr(x, groupby) == in_list)
-        # --- path 3 ---
-        if groupby is not None and isinstance(in_list, list):
-            total: list[float] = [0.0] * len(in_list)
-            key_to_index: dict[str, int] = {item: index for index, item in enumerate(in_list)}
-            if len(total) != len(key_to_index):
-                raise ValueError(f"'in_list' constains duplicate values: {in_list}.")
-            for asset in self._assets:
-                key = getattr(asset, groupby)
-                idx = key_to_index[key]
-                if key in key_to_index:
-                    val = asset.cash_flow
-                    total[idx] += val
-            return total  # list[float]
-        # --- path 4 ---
-        if groupby is not None and in_list is None:
-            total: dict[str, float] = {}
-            for asset in self._assets:
-                key = getattr(asset, groupby)
-                val = asset.cash_flow
-                if key in total:
-                    total[key] += val
-                else:
-                    total[key] = val
-            return total  # dict[str, float]
-
-        raise ValueError(f"Calculation not defined: {groupby=}, {in_list=}")
+        treat_missing_as_0: bool = False,
+    ) -> float | np.ndarray | list[float | np.ndarray] | dict[str, float | np.ndarray]:
+        return self._groupby_sum(self._assets, name=name, groupby=groupby, in_list=in_list,
+                                 treat_missing_as_0=treat_missing_as_0)
 
     @overload
-    def groupby_sum_asset_report_value(self, *, basis: str, groupby: None = None, in_list: None = None) -> float:
+    def groupby_sum_liab(self, name: str, /, *, groupby: str, in_list: str, treat_missing_as_0: bool = False) -> float:
         ...
 
     @overload
-    def groupby_sum_asset_report_value(self, *, basis: str, groupby: str, in_list: str) -> float:
+    def groupby_sum_liab(self, name: str, /, *, groupby: str, in_list: list[str], treat_missing_as_0: bool = False
+                         ) -> list[float]:
         ...
 
     @overload
-    def groupby_sum_asset_report_value(self, *, basis: str, groupby: str, in_list: list[str]) -> list[float]:
+    def groupby_sum_liab(self, name: str, /, *, groupby: str, in_list: None = None, treat_missing_as_0: bool = False
+                         ) -> dict[str, float]:
         ...
 
     @overload
-    def groupby_sum_asset_report_value(self, *, basis: str, groupby: str, in_list: None = None) -> dict[str, float]:
+    def groupby_sum_liab(self, name: list[str], /, *, groupby: str, in_list: str, treat_missing_as_0: bool = False
+                         ) -> np.ndarray:
         ...
 
     @overload
-    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: None = None, in_list: None = None) -> np.ndarray:
+    def groupby_sum_liab(self, name: list[str], /, *, groupby: str, in_list: list[str], treat_missing_as_0: bool = False
+                         ) -> list[np.ndarray]:
         ...
 
     @overload
-    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: str, in_list: str) -> np.ndarray:
+    def groupby_sum_liab(self, name: list[str], /, *, groupby: str, in_list: None = None, treat_missing_as_0: bool = False
+                         ) -> dict[str, np.ndarray]:
         ...
 
-    @overload
-    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: str, in_list: list[str]) -> list[np.ndarray]:
-        ...
-
-    @overload
-    def groupby_sum_asset_report_value(self, *, basis: list[str], groupby: str, in_list: None = None) -> dict[str, np.ndarray]:
-        ...
-
-    def groupby_sum_asset_report_value(
+    def groupby_sum_liab(
         self,
+        name: str | list[str],
+        /,
         *,
-        basis: str | list[str],
-        groupby: str | None = None ,
+        groupby: str,
         in_list: str | list[str] | None = None,
+        treat_missing_as_0: bool = False,
+    ) -> float | np.ndarray | list[float | np.ndarray] | dict[str, float | np.ndarray]:
+        return self._groupby_sum(self._liabs, name=name, groupby=groupby, in_list=in_list,
+                                 treat_missing_as_0=treat_missing_as_0)
+
+    @classmethod
+    def _groupby_sum(
+            cls,
+            obj_list: list,
+            /,
+            *,
+            name: str | list[str],
+            groupby: str,
+            in_list: str | list[str] | None = None,
+            treat_missing_as_0: bool = False,
     ) -> float | np.ndarray | list[float | np.ndarray] | dict[str, float | np.ndarray]:
         """
         path 1:
-            (basis: str, groupby: None, in_list: None): -> float
+            (name: str, groupby: str, in_list: str): -> float
         path 2:
-            (basis: str, groupby: str, in_list: str): -> float
+            (name: str, groupby: str, in_list: list[str]): -> list[float]
         path 3:
-            (basis: str, groupby: str, in_list: list[str]): -> list[float]
+            (name: str, groupby: str, in_list: None): -> dict[str, float]
         path 4:
-            (basis: str, groupby: str, in_list: None): -> dict[str, float]
+            (name: list[str], groupby: str, in_list: str): -> np.ndarray
         path 5:
-            (basis: list[str], groupby: None, in_list: None): -> np.ndarray
+            (name: list[str], groupby: str, in_list: list[str]): -> list[np.ndarray]
         path 6:
-            (basis: list[str], groupby: str, in_list: str): -> np.ndarray
-        path 7:
-            (basis: list[str], groupby: str, in_list: list[str]): -> list[np.ndarray]
-        path 8:
-            (basis: list[str], groupby: str, in_list: None): -> dict[str, np.ndarray]
+            (name: list[str], groupby: str, in_list: None): -> dict[str, np.ndarray]
         """
-        if not isinstance(basis, (str, list)):
-            raise TypeError(f"Invalid type of basis {type(basis)}, expected 'str' or 'list[str]'.")
-        if groupby is not None and not isinstance(groupby, str):
+        if not isinstance(groupby, str):
             raise TypeError(f"Invalid type of 'groupby': {type(groupby)}, expected 'str'.")
+        if not isinstance(name, (str, list)):
+            raise TypeError(f"Invalid type of name {type(name)}, expected 'str' or 'list[str]'.")
         if in_list is not None and not isinstance(in_list, (str, list)):
             raise TypeError(f"Invalid type of 'in_list': {type(in_list)}, expected 'str' or 'list[str]'.")
+        default = 0.0 if treat_missing_as_0 else None
 
-        if isinstance(basis, str):
+        if isinstance(name, str):
             # --- path 1 ---
-            if groupby is None and in_list is None:
-                return sum(getattr(x, basis) for x in self._assets)  # float
+            if isinstance(in_list, str):
+                return sum(getattr(obj, name, default) for obj in obj_list if getattr(obj, groupby) == in_list)  # float
             # --- path 2 ---
-            if groupby is not None and isinstance(in_list, str):
-                return sum(getattr(x, basis) for x in self._assets if getattr(x, groupby) == in_list)  # float
-            # --- path 3 ---
-            if groupby is not None and isinstance(in_list, list):
+            if isinstance(in_list, list):
                 total: list[float] = [0.0] * len(in_list)
                 key_to_index: dict[str, int] = {item: index for index, item in enumerate(in_list)}
                 if len(total) != len(key_to_index):
                     raise ValueError(f"'in_list' constains duplicate values: {in_list}.")
-                for asset in self._assets:
-                    key = getattr(asset, groupby)
+                for obj in obj_list:
+                    key = getattr(obj, groupby)
                     if key in key_to_index:
-                        val = getattr(asset, basis)
+                        val = getattr(obj, name, default)
                         total[key_to_index[key]] += val
                 return total  # list[float]
-            # --- path 4 ---
-            if groupby is not None and in_list is None:
+            # --- path 3 ---
+            if in_list is None:
                 total: dict[str, float] = {}
-                for asset in self._assets:
-                    key = getattr(asset, groupby)
-                    val = getattr(asset, basis)
+                for obj in obj_list:
+                    key = getattr(obj, groupby)
+                    val = getattr(obj, name, default)
                     if key in total:
                         total[key] += val
                     else:
                         total[key] = val
                 return total  # dict[str, float]
             raise ValueError(f"Calculation not defined: {groupby=}, {in_list=}")
-        else: # isinstance(basis, list)
-            n_basis = len(basis)
-            # --- path 5 ---
-            if groupby is None and in_list is None:
-                total: list[float] = [0.0] * n_basis
-                for asset in self._assets:
-                    for i in range(n_basis):
-                        val = getattr(asset, basis[i])
-                        total[i] += val
-                return np.array(total, dtype=float)  # np.ndarray
-            # --- path 6 ---
-            if groupby is not None and isinstance(in_list, str):
-                total: list[float] = [0.0] * n_basis
-                for asset in self._assets:
-                    key = getattr(asset, groupby)
+        else:  # isinstance(basis, list)
+            n_name = len(name)
+            # --- path 4 ---
+            if isinstance(in_list, str):
+                total: list[float] = [0.0] * n_name
+                for obj in obj_list:
+                    key = getattr(obj, groupby)
                     if key == in_list:
-                        for i in range(n_basis):
-                            val = getattr(asset, basis[i])
+                        for i in range(n_name):
+                            val = getattr(obj, name[i], default)
                             total[i] += val
                 return np.array(total, dtype=float)  # np.ndarray
-            # --- path 7 ---
-            if groupby is not None and isinstance(in_list, list):
-                total: list[list[float]] = [[0.0] * n_basis for _ in in_list]
+            # --- path 5 ---
+            if isinstance(in_list, list):
+                total: list[list[float]] = [[0.0] * n_name for _ in in_list]
                 key_to_index: dict[str, int] = {item: index for index, item in enumerate(in_list)}
-                for asset in self._assets:
-                    key = getattr(asset, groupby)
+                for obj in obj_list:
+                    key = getattr(obj, groupby)
                     idx = key_to_index[key]
                     if key in key_to_index:
-                        for i in range(n_basis):
-                            val = getattr(asset, basis[i])
+                        for i in range(n_name):
+                            val = getattr(obj, name[i], default)
                             total[idx][i] += val
                 return [np.array(x, dtype=float) for x in total]  # list[np.ndarray]
-            # --- path 8 ---
-            if groupby is not None and in_list is None:
+            # --- path 6 ---
+            if in_list is None:
                 total: dict[str, list[float]] = {}
-                for asset in self._assets:
-                    key = getattr(asset, groupby)
+                for obj in obj_list:
+                    key = getattr(obj, groupby)
                     if key in total:
-                        for i in range(n_basis):
-                            val = getattr(asset, basis[i])
+                        for i in range(n_name):
+                            val = getattr(obj, name[i], default)
                             total[key][i] += val
                     else:
-                        total[key] = [getattr(asset, bas) for bas in basis]
+                        total[key] = [getattr(obj, bas) for bas in name]
                 return {key: np.array(val, dtype=float) for key, val in total.items()}  # dict[str, np.ndarray]
 
             raise ValueError(f"Calculation not defined: {groupby=}, {in_list=}")
 
-    @overload
-    def get_size(self, *, func: None = None, key: str) -> float:
-        ...
-
-    @overload
-    def get_size(self, *, func: Callable, key: str) -> float:
-        ...
-
-    @overload
-    def get_size(self, *, func: Callable, key: tuple[str, ...]) -> float:
-        ...
-
-    @overload
-    def get_size(self, *, func: Callable, key: dict[str, str]) -> float:
-        ...
-
-    def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str]) -> float:
+    def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
+                 treat_missing_as_0: bool = False) -> float:
         """
         path 1:
             (func: None, key: str)
@@ -288,29 +268,29 @@ class AssetLiabConnector:
             (func: Callable, key: dict[str, str])
         """
         if func is None:
-            return self._get_size_measure(key)
+            return self._get_size_measure(key, treat_missing_as_0)
         if isinstance(key, str):
-            return func(self._get_size_measure(key))
+            return func(self._get_size_measure(key, treat_missing_as_0))
         elif isinstance(key, tuple):
-            args = tuple([self._get_size_measure(x) for x in key])
+            args = tuple([self._get_size_measure(x, treat_missing_as_0) for x in key])
             return func(*args)
         elif isinstance(key, dict):
-            kwargs = {k: self._get_size_measure(v) for k, v in key.items()}
+            kwargs = {k: self._get_size_measure(v, treat_missing_as_0) for k, v in key.items()}
             return func(**kwargs)
         raise TypeError(f"Invalid {type(key)=}, expected 'str', 'tuple', 'dict'.")
 
-    def _get_size_measure(self, key: str) -> float:
+    def _get_size_measure(self, key: str, treat_missing_as_0: bool = False) -> float:
         if not isinstance(key, str):
             raise TypeError(f"Invalid {type(key)=}, expected 'str'.")
 
         if "." not in key:
-            return getattr(self, key)
+            return getattr(self, key, 0.0 if treat_missing_as_0 else None)
 
         owner, name, *_ = key.split(".")
         if owner == "asset":
-            return self._sum_all(self._assets, name)
+            return self._sum(self._assets, name=name, treat_missing_as_0=treat_missing_as_0)
         elif owner in ("liab", "liability"):
-            return self._sum_all(self._liabs, name)
+            return self._sum(self._liabs, name=name, treat_missing_as_0=treat_missing_as_0)
         else:
             raise ValueError(f"Invalid '{key}', expected 'asset.foo' or 'liab.foo'.")
 

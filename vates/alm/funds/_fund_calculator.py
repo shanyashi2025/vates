@@ -87,8 +87,8 @@ class FundCalculator:
                 maybe_raise_if_ne(asset._state, ("rolled", t))
 
         # Aggregate asset cash flow
-        tot_cash_flow = self.connector.groupby_sum_asset_cash_flow()
-        cat_cash_flow = self.connector.groupby_sum_asset_cash_flow(groupby=self.asset_category_attr, in_list=self.asset_categories)
+        tot_cash_flow = self.connector.sum_asset("cash_flow")
+        cat_cash_flow = self.connector.groupby_sum_asset("cash_flow", groupby=self.asset_category_attr, in_list=self.asset_categories)
         cat_cash_flow = np.array(cat_cash_flow) # convert to np array
         self.tdv_asset_cash_flow[t] = cat_cash_flow
         self.tdv_totass_cash_flow[t] = tot_cash_flow
@@ -180,9 +180,9 @@ class FundCalculator:
             for asset in self.connector.assets:
                 maybe_raise_if_ne(asset._state, (s, t))
 
-        tot_rep_value = self.connector.groupby_sum_asset_report_value(basis=self.asset_report_bases)
-        cat_rep_value = self.connector.groupby_sum_asset_report_value(
-            basis=self.asset_report_bases, groupby=self.asset_category_attr, in_list=self.asset_categories)
+        tot_rep_value = self.connector.sum_asset(self.asset_report_bases)
+        cat_rep_value = self.connector.groupby_sum_asset(
+            self.asset_report_bases, groupby=self.asset_category_attr, in_list=self.asset_categories)
         cat_rep_value = np.array(cat_rep_value)  # convert to np array
 
         if timing == "bd":
