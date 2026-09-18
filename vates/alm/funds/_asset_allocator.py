@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto, unique
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
-from vates.global_conf import CHECK_LEVEL, CheckLevel
+from vates.global_conf import CheckLevel
 from vates.alm.assets import Asset, Cash
 from vates.alm.enums import AssetBuySellApproach, AssetPurchaseMethod
 from vates.alm.funds._utils import AssetLiabConnector
@@ -55,19 +55,29 @@ class AssetAllocationGroup:
     """
 
     __slots__ = ("_name", "_sequence", "_buysell_approach", "_purchase_method", "target_weight",
-                 "current_size", "profile_size", "trade_decision")
+                 "current_conn", "profile_conn", "current_size", "profile_size", "trade_decision")
+
+    _alloc_check: CheckLevel = CheckLevel.WARN
 
     def __init__(self, *, name: str, sequence: int, buysell_approach: AssetBuySellApproach | str,
                  purchase_method: AssetPurchaseMethod | str,
-                 tgt_weight: float = 0.0, min_weight: float = 0.0, max_weight: float = 0.0):
+                 tgt_weight: float | None = None, min_weight: float | None = None, max_weight: float | None = None):
         self._name: str = name
         self._sequence: int = sequence
         self._buysell_approach: AssetBuySellApproach = AssetBuySellApproach[buysell_approach.upper()] \
             if isinstance(buysell_approach, str) else buysell_approach
         self._purchase_method: AssetPurchaseMethod = AssetPurchaseMethod[purchase_method.upper()] \
             if isinstance(purchase_method, str) else purchase_method
-        self.target_weight: TargetWeight = TargetWeight(
-            tgt_weight=tgt_weight, min_weight=min_weight, max_weight=max_weight)
+        if tgt_weight is None:
+            self.target_weight: TargetWeight | None = None
+        else:
+            self.target_weight: TargetWeight | None = TargetWeight(
+                tgt_weight=tgt_weight,
+                min_weight=tgt_weight if min_weight is None else min_weight,
+                max_weight=tgt_weight if max_weight is None else max_weight
+            )
+        self.current_conn: AssetLiabConnector | None = None
+        self.profile_conn: AssetLiabConnector | None = None
         self.current_size: float | None = None
         self.profile_size: float | None = None
         self.trade_decision: TradeDecision | None = None
@@ -97,7 +107,10 @@ class AssetAllocationGroup:
         Raises:
             ValueError: If an invalid asset buy/sell approach is provided.
         """
-        tgt_size, min_size, max_size = self.target_weight.to_size(total_size)
+        if self.target_weight is not None:
+            tgt_size, min_size, max_size = self.target_weight.to_size(total_size)
+        else:
+            tgt_size, min_size, max_size = None, None, None
 
         if self._buysell_approach == AssetBuySellApproach.NO_TRADE:
             self.trade_decision = TradeDecision(action=BuySellAction.NO_ACTION)
@@ -137,37 +150,45 @@ class AssetAllocationGroup:
             raise ValueError(f"Invalid asset buy/sell approach: {self._buysell_approach}")
 
     def validate_allocation(self, total_size: float, tolerance: float = 1e-4,
-                            strictness: CheckLevel = CHECK_LEVEL) -> bool:
+                            check_level: CheckLevel | None = None) -> None:
         """Validate if the allocation for a group meets the target.
 
         Args:
             total_size (float): Total size.
             tolerance (float): Tolerance for validation (default 0.0001).
-            strictness (CheckLevel): Strictness for validation, defaults to STRICTNESS_LEVEL.
+            check_level (CheckLevel): Check level for validation against allocation, defaults to None.
 
         Returns:
             bool: True if the allocation meets the target, False otherwise.
         """
+        if check_level is None:
+            check_level = self._alloc_check
+
+        if check_level == CheckLevel.BYPASS:
+            return
+
+        if self.buysell_approach in (AssetBuySellApproach.RESIDUAL, AssetBuySellApproach.NO_TRADE):
+            return
+
         current_weight = self.current_size / total_size
 
-        if self.buysell_approach == AssetBuySellApproach.RESIDUAL or self.buysell_approach == AssetBuySellApproach.NO_TRADE:
-            is_pass = True
-        elif self.buysell_approach == AssetBuySellApproach.BUY_HOLD:
+        if self.buysell_approach == AssetBuySellApproach.BUY_HOLD:
             is_pass = self.target_weight.min_weight <= current_weight + tolerance
         elif self.buysell_approach == AssetBuySellApproach.BUY_SELL:
             is_pass = self.target_weight.min_weight - tolerance <= current_weight <= self.target_weight.max_weight + tolerance
         else:
             raise ValueError(f"{self.name}: invalid asset buy/sell appraoch {self.buysell_approach}.")
 
-        if not is_pass:
-            msg = (f"{self.name} target allocaion is not met: current={current_weight:.4f}, "
-                   f"min={self.target_weight.min_weight:.4f}, max={self.target_weight.max_weight:.4f}")
-            if strictness == CHECK_LEVEL.ERROR:
-                raise ValueError(msg)
-            else:
-                warnings.warn(msg)
+        if is_pass:
+            return
 
-        return is_pass
+        msg = (f"{self.name} target allocaion is not met: current={current_weight:.4f}, "
+               f"min={self.target_weight.min_weight:.4f}, max={self.target_weight.max_weight:.4f}")
+        if check_level == CheckLevel.ERROR:
+            raise ValueError(msg)
+        else:
+            warnings.warn(msg)
+
 
 @add_projection_time_synchronizer
 class AssetAllocator:
@@ -183,7 +204,7 @@ class AssetAllocator:
     period: pd.Period  # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer',
-                 'name', 'connector', 'alloc_groups', 'alloc_group_attr', 'asset_report_bases',
+                 'name', 'connector', 'alloc_groups', 'alloc_group_attr', 'asset_report_bases', 'alloc_group_names',
                  'tdv_fund_size', 'tdv_ag_size_bd', 'tdv_ag_size_ad', 'tdv_ag_wgt_pc_bd', 'tdv_ag_wgt_pc_ad',)
 
     def __init__(
@@ -200,15 +221,15 @@ class AssetAllocator:
         self.connector: AssetLiabConnector = connector
         self.alloc_groups: list[AssetAllocationGroup] = self._sequence_alloc_groups(allocation_groups)
         self.alloc_group_attr: str = allocation_group_attr
+        self.alloc_group_names: list[str] = [ag.name for ag in self.alloc_groups]
         self.asset_report_bases: list[str] = asset_report_bases
 
         tdv_kwargs = {"model_engine": model_engine, "owner": self.name, "group": 'rebalance'}
         self.tdv_fund_size = TDimVariable("fund_size", **tdv_kwargs)
-        alloc_group_names = [ag.name for ag in self.alloc_groups]
-        self.tdv_ag_size_bd = TDimVariable("size_bd", dims=[alloc_group_names], **tdv_kwargs)
-        self.tdv_ag_size_ad = TDimVariable("size_ad", dims=[alloc_group_names], **tdv_kwargs)
-        self.tdv_ag_wgt_pc_bd = TDimVariable("weight_pc_bd", dims=[alloc_group_names], **tdv_kwargs)
-        self.tdv_ag_wgt_pc_ad = TDimVariable("weight_pc_ad", dims=[alloc_group_names], **tdv_kwargs)
+        self.tdv_ag_size_bd = TDimVariable("size_bd", dims=[self.alloc_group_names], **tdv_kwargs)
+        self.tdv_ag_size_ad = TDimVariable("size_ad", dims=[self.alloc_group_names], **tdv_kwargs)
+        self.tdv_ag_wgt_pc_bd = TDimVariable("weight_pc_bd", dims=[self.alloc_group_names], **tdv_kwargs)
+        self.tdv_ag_wgt_pc_ad = TDimVariable("weight_pc_ad", dims=[self.alloc_group_names], **tdv_kwargs)
 
     def _sequence_alloc_groups(self, alloc_groups: list[AssetAllocationGroup]) -> list[AssetAllocationGroup]:
         """Sort allocation group by sequence.
@@ -259,39 +280,21 @@ class AssetAllocator:
         t, p = self.time, self.period
         free_proceeds = 0
 
-        size_basis_index: int = self.asset_report_bases.index(size_basis)
-        profile_assets = profile_assets or []
         self.tdv_fund_size[t] = total_size
-
         # validate fund size
         if total_size < 0:
             warnings.warn(f'{p} {self.name}: negative fund size ({total_size:.2f}) will be treated as zero, and '
                           'all existing assets will be sold to reblance.')
-        total_size = max(total_size, 0.0001)  # to prevent divide by zero error
+        total_size = max(total_size, 0.0001)  # to prevent ZeroDivisionError
 
-        # --- step 1: aggregate existing and profile asset size by allocation group ---
-        exist_asset_size, exist_asset_count = self._groupby_sum_asset_size(self.connector.assets, size_basis)
-        profile_asset_size, profile_asset_count = self._groupby_sum_asset_size(profile_assets, size_basis)
-        for i, ag in enumerate(self.alloc_groups):
-            ag.current_size = exist_asset_size[i]
-            ag.profile_size = profile_asset_size[i]
+        # --- step 1: compute existing and profile asset size ---
+        self._alloc_groups_create_connect(profile_assets=profile_assets, size_basis=size_basis)  # also calculate size
+        # self._alloc_groups_update_current_size(size_basis=size_basis)
         self.tdv_ag_size_bd[t] = np.array([ag.current_size for ag in self.alloc_groups])
         self.tdv_ag_wgt_pc_bd[t] = np.array([ag.current_size / total_size for ag in self.alloc_groups]) * 100
 
-        # --- step 2: cross-validate asset groups ---
-        for i, ag in enumerate(self.alloc_groups):
-            if ag.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and exist_asset_count[i] == 0:
-                raise ValueError(f"'{self.name}' - '{ag.name}': "
-                                 f"purchase method=SCALE_UP_EXISTING but not found in exsiting assets.")
-            if ag.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and profile_asset_count[i] == 0:
-                raise ValueError(f"'{self.name}' - '{ag.name}': "
-                                 f"purchase method=PURCHASE_PROFILE but not found in profile.")
-            if ag.buysell_approach not in [AssetBuySellApproach.NO_TRADE, AssetBuySellApproach.RESIDUAL] and \
-                    ag.name not in target_weights:
-                raise ValueError(f"'{self.name}' - '{ag.name}': "
-                                 f"buy/sell appraoch={ag.buysell_approach} but not found in target allocation.")
-            if ag.name in target_weights:
-                ag.target_weight = target_weights[ag.name]
+        # --- step 2: cross-validate allocation groups ---
+        self._alloc_groups_precheck(target_weights=target_weights)
 
         # --- step 3: process non-residual groups in sequence ---
         for ag in self.alloc_groups:
@@ -301,23 +304,20 @@ class AssetAllocator:
                 ag.trade_decision = TradeDecision(action=BuySellAction.NO_ACTION)
 
         for ag in self.alloc_groups:
-            free_proceeds += self._execute_trade(alloc_group=ag, profile_assets=profile_assets)
+            free_proceeds += self._execute_trade(alloc_group=ag,)
 
         # --- step 4: process residual groups ---
-        current_asset_size, _ = self._groupby_sum_asset_size(self.connector.assets, size_basis)
-        total_current_size = 0.0
-        for i, ag in enumerate(self.alloc_groups):
-            ag.current_size = current_asset_size[i]
-            total_current_size += ag.current_size
-        size_gap = total_size - total_current_size
+        self._alloc_groups_update_current_size(size_basis=size_basis)
+        size_gap = total_size - sum(ag.current_size for ag in self.alloc_groups)
         free_proceeds += self._process_residual_groups(
-            size_gap=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01), profile_assets=profile_assets)
+            size_gap=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
 
         # step 5: validate if target allocations met
-        current_asset_size, _ = self._groupby_sum_asset_size(self.connector.assets, size_basis)
-        for i, ag in enumerate(self.alloc_groups):
-            ag.current_size = current_asset_size[i]
-            ag.validate_allocation(total_size=total_size, strictness=CHECK_LEVEL)
+        self._alloc_groups_update_current_size(size_basis=size_basis)
+        for ag in self.alloc_groups:
+            ag.validate_allocation(total_size=total_size)
+            ag.current_conn = None
+            ag.profile_conn = None  # destroy the references to asset instances, otherwise gc can't work
 
         # step 6: add free proceeds to free estate
         self.connector.accumulate_free_estate(free_proceeds)
@@ -325,12 +325,11 @@ class AssetAllocator:
         self.tdv_ag_size_ad[t] = np.array([ag.current_size for ag in self.alloc_groups])
         self.tdv_ag_wgt_pc_ad[t] = np.array([ag.current_size / total_size for ag in self.alloc_groups]) * 100
 
-    def _execute_trade(self, *, alloc_group: AssetAllocationGroup, profile_assets: list[Asset] | None) -> float:
+    def _execute_trade(self, *, alloc_group: AssetAllocationGroup) -> float:
         """Execute a trade for a given allocation group.
 
         Args:
             alloc_group (AssetAllocationGroup): Allocation group.
-            profile_assets (list[Asset] | None): Profile assets for rebalance.
 
         Returns:
             float: net proceeds.
@@ -344,58 +343,73 @@ class AssetAllocator:
         if action == BuySellAction.NO_ACTION:
             pass
         elif action == BuySellAction.SELL:
-            for asset in self.connector.assets:
-                if getattr(asset, self.alloc_group_attr) == alloc_group.name:
-                    mv_bd = asset.market_value
-                    asset.sell_propn(propn)
-                    mv_ad = asset.market_value
-                    net_proceeds += mv_bd - mv_ad
+            for asset in alloc_group.current_conn.assets:
+                mv_bd = asset.market_value
+                asset.sell_propn(propn)
+                mv_ad = asset.market_value
+                net_proceeds += mv_bd - mv_ad
         elif action == BuySellAction.BUY_SCALE_EXIST:
-            for asset in self.connector.assets:
-                if getattr(asset, self.alloc_group_attr) == alloc_group.name:
-                    mv_bd = asset.market_value
-                    asset.buy_propn(propn)
-                    mv_ad = asset.market_value
-                    net_proceeds += mv_bd - mv_ad
+            for asset in alloc_group.current_conn.assets:
+                mv_bd = asset.market_value
+                asset.buy_propn(propn)
+                mv_ad = asset.market_value
+                net_proceeds += mv_bd - mv_ad
         elif action == BuySellAction.BUY_PROFILE:
-            if not profile_assets:
+            if alloc_group.profile_conn is None:
                 raise ValueError("Can't buy assets from empty profile.")
-            for asset in profile_assets:
-                if getattr(asset, self.alloc_group_attr) == alloc_group.name:
-                    new_asset = asset.scale_profile(scale=propn)
-                    self.connector.assets.append(new_asset)  # append to list
-                    net_proceeds -= new_asset.market_value
+            for profile_asset in alloc_group.profile_conn.assets:
+                new_asset = profile_asset.scale_profile(scale=propn)
+                self.connector.assets.append(new_asset)  # append to asset list of the fund
+                alloc_group.current_conn.assets.append(new_asset) # append to asset list of the allocation group
+                net_proceeds -= new_asset.market_value
 
         return net_proceeds
 
-    def _groupby_sum_asset_size(self, assets: list[Asset], size_basis: str,
-                                ) -> tuple[list[float], list[int]]:
-        """Aggregate asset reported values by allocation group.
+    def _alloc_groups_create_connect(self, profile_assets: list[Asset] | None, size_basis: str) -> None:
+        name_to_current_conn: dict[str, AssetLiabConnector] = {}
+        name_to_profile_conn: dict[str, AssetLiabConnector] = {}
+        for ag in self.alloc_groups:
+            ag.current_conn = AssetLiabConnector()
+            ag.profile_conn = AssetLiabConnector()
+            name_to_current_conn[ag.name] = ag.current_conn
+            name_to_profile_conn[ag.name] = ag.profile_conn
 
-        Args:
-            assets (list[Asset]): Assets to aggregate.
-            size_basis (str): Asset reporting basis for sizing.
+        for asset in self.connector.assets:
+            name = getattr(asset, self.alloc_group_attr, None)
+            if name in name_to_current_conn:
+                name_to_current_conn[name].assets.append(asset)
 
-        Returns:
-            list[float]]: Asset size of each allocation group.
-            list[int]: Asset count of each allocation group.
-        """
-        asset_size: list[float] = [0.0 for ag in self.alloc_groups]
-        asset_count: list[int] = [0 for ag in self.alloc_groups]
-        key_to_index: dict[str, int] = {item.name: index for index, item in enumerate(self.alloc_groups)}
+        profile_assets = profile_assets or []
+        for asset in profile_assets:
+            name = getattr(asset, self.alloc_group_attr, None)
+            if name in name_to_profile_conn:
+                name_to_profile_conn[name].assets.append(asset)
 
-        for asset in assets:
-            key = getattr(asset, self.alloc_group_attr)
-            idx = key_to_index.get(key)
-            if idx is None:
-                raise ValueError(f'Asset {asset.asset_id}: allocation group {key} not included '
-                                 f'the fund reblance policy.')
-            asset_size[idx] += getattr(asset, size_basis)
-            asset_count[idx] += 1
+        # also calculate size
+        for ag in self.alloc_groups:
+            ag.current_size = ag.current_conn.sum_asset(size_basis)
+            ag.profile_size = ag.profile_conn.sum_asset(size_basis)
 
-        return asset_size, asset_count
+    def _alloc_groups_update_current_size(self, size_basis: str) -> None:
+        for ag in self.alloc_groups:
+            ag.current_size = ag.current_conn.sum_asset(size_basis)
 
-    def _process_residual_groups(self, size_gap: float, profile_assets: list[Asset] | None, tolerance: float) -> float:
+    def _alloc_groups_precheck(self, target_weights: dict[str, TargetWeight]) -> None:
+        for ag in self.alloc_groups:
+            if ag.name in target_weights:
+                ag.target_weight = target_weights[ag.name]
+
+            if ag.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
+                if len(ag.current_conn.assets) == 0:
+                    raise ValueError(f"'{self.name}'|'{ag.name}': SCALE_UP_EXISTING; no exsiting asset found.")
+            if ag.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
+                if len(ag.profile_conn.assets) == 0:
+                    raise ValueError(f"'{self.name}'|'{ag.name}': PURCHASE_PROFILE;  no profile asset found.")
+            if ag.buysell_approach not in (AssetBuySellApproach.NO_TRADE, AssetBuySellApproach.RESIDUAL):
+                if ag.target_weight is None:
+                    raise ValueError(f"'{self.name}'|'{ag.name}': {ag.buysell_approach}; no target weight provided.")
+
+    def _process_residual_groups(self, size_gap: float, tolerance: float) -> float:
         if abs(size_gap) <= tolerance:
             return 0.0
 
@@ -439,7 +453,7 @@ class AssetAllocator:
             for ag in self.alloc_groups:
                 if ag.buysell_approach == AssetBuySellApproach.RESIDUAL:
                     ag.trade_decision = trade_decn
-                    net_proceeds += self._execute_trade(alloc_group=ag, profile_assets=profile_assets)
+                    net_proceeds += self._execute_trade(alloc_group=ag)
 
         return net_proceeds
 
