@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from vates._core._utils import RunConfiguration, parse_str_to_int_list
+from vates._core._utils import RunConfiguration, parse_int_list_from_str
 
 WORKSPACE = "C:\\work"
 
@@ -163,41 +163,41 @@ class TestValidatePath:
 
 class TestParseStrToIntList:
     def test_simple_list(self):
-        assert parse_str_to_int_list("1,2,3") == [1, 2, 3]
+        assert parse_int_list_from_str("1,2,3") == [1, 2, 3]
 
     def test_range(self):
-        assert parse_str_to_int_list("1-10") == list(range(1, 11))
+        assert parse_int_list_from_str("1-10") == list(range(1, 11))
 
     def test_mixed_list_and_range(self):
-        assert parse_str_to_int_list("1-10,13") == list(range(1, 11)) + [13]
+        assert parse_int_list_from_str("1-10,13") == list(range(1, 11)) + [13]
 
     def test_reversed_range_normalised(self):
-        assert parse_str_to_int_list("5-1") == [1, 2, 3, 4, 5]
+        assert parse_int_list_from_str("5-1") == [1, 2, 3, 4, 5]
 
     def test_sort_ascending(self):
-        assert parse_str_to_int_list("3,1-2", sort_list="asc") == [1, 2, 3]
+        assert parse_int_list_from_str("3,1-2", sort_list="asc") == [1, 2, 3]
 
     def test_sort_descending(self):
-        assert parse_str_to_int_list("1-3", sort_list="desc") == [3, 2, 1]
+        assert parse_int_list_from_str("1-3", sort_list="desc") == [3, 2, 1]
 
     def test_duplicates_raise_by_default(self):
         with pytest.raises(ValueError):
-            parse_str_to_int_list("1,1")
+            parse_int_list_from_str("1,1")
 
     def test_duplicates_keep(self):
-        assert parse_str_to_int_list("1,1", on_duplicate="keep") == [1, 1]
+        assert parse_int_list_from_str("1,1", on_duplicate="keep") == [1, 1]
 
     def test_duplicates_remove(self):
-        assert parse_str_to_int_list("1,1,2", on_duplicate="remove") == [1, 2]
+        assert parse_int_list_from_str("1,1,2", on_duplicate="remove") == [1, 2]
 
     def test_bad_token_raises(self):
         with pytest.raises(ValueError):
-            parse_str_to_int_list("abc")
+            parse_int_list_from_str("abc")
 
     def test_negative_disallowed(self):
         with pytest.raises(ValueError):
-            parse_str_to_int_list("-1")
+            parse_int_list_from_str("-1")
 
     def test_non_string_raises(self):
         with pytest.raises(TypeError):
-            parse_str_to_int_list(5)
+            parse_int_list_from_str(5)

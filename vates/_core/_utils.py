@@ -227,7 +227,7 @@ class RunConfiguration:
             max_t = (end_date - start_date).n
 
         if isinstance(simulations, str):
-            simulations = parse_str_to_int_list(simulations)
+            simulations = parse_int_list_from_str(simulations)
 
         # `workspace_directory`, `results_directory` and items of `input_directories` must be given as an absolute path;
         # reject relative input  before resolving so a caller mistake is not silently hidden.
@@ -378,9 +378,9 @@ class RunConfiguration:
                     raise ValueError(f"{name}: item '{item}' type '{type(item)}' is not allowed, expected in {item_type}.")
 
 
-def parse_str_to_int_list(str_in: str, /, *, separator: str = ',', joiner: str = '-',
-                          sort_list: Literal[None, 'ascending', 'asc', 'descending', 'desc'] = None,
-                          on_duplicate: Literal['keep', 'remove', 'error'] = 'error') -> list[int]:
+def parse_int_list_from_str(str_in: str, /, *, separator: str = ',', joiner: str = '-',
+                            sort_list: Literal[None, 'ascending', 'asc', 'descending', 'desc'] = None,
+                            on_duplicate: Literal['keep', 'remove', 'error'] = 'error') -> list[int]:
     """Parse string to a list of non-negative integers"""
     if not isinstance(str_in, str):
         raise TypeError(f"{str_in}: type {type(str_in)} is not allowed, expected 'str'.")

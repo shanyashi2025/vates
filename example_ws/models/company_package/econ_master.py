@@ -9,7 +9,7 @@ from vates import ProjModelEngine, KeyedArray
 from vates._core import add_projection_time_synchronizer
 from vates.alm import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 from vates.finmath import interpolate_interest_rates
-from vates.utils import parse_str_to_int_list
+from vates.utils import parse_int_list_from_str
 
 
 @dataclass(slots=True)
@@ -42,7 +42,7 @@ class EsgVariable:
 
     def __post_init__(self):
         if isinstance(self.term, str):
-            self.term = parse_str_to_int_list(self.term, separator=';', joiner='-', sort_list='asc')
+            self.term = parse_int_list_from_str(self.term, separator=';', joiner='-', sort_list='asc')
             if (entry := self.term[0]) <= 0:
                 raise ValueError(f"Esg term entry {entry} <= 0, expected positive integer.")
             if len(self.term) > 1200:
