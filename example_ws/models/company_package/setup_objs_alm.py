@@ -57,8 +57,8 @@ class FundMaster:
                 asset_allocation_groups=cls.build_asset_allocation_groups_from_df(asset_allocation_groups_df, fund_id=fund_id),
                 asset_categories=row["asset_categories"].split(';'),
                 asset_report_bases=row["asset_report_bases"].split(';'),
-                liab_report_attrs_bd=row["liab_report_vars_bd"].split(';') if row["liab_report_vars_bd"] != 'none' else None,
-                liab_report_attrs_ad=row["liab_report_vars_ad"].split(';') if row["liab_report_vars_ad"] != 'none' else None,
+                output_liab_attrs_bd=row["output_liab_vars_bd"].split(';') if row["output_liab_vars_bd"] != 'none' else None,
+                output_liab_attrs_ad=row["output_liab_vars_ad"].split(';') if row["output_liab_vars_ad"] != 'none' else None,
             )
             if "fund_type" in row:
                 if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
@@ -140,6 +140,8 @@ def build_liabs(model_engine: ProjModelEngine, df: pd.DataFrame, fund_id: str | 
                 surr_val_if=row["surr_val_if"],
                 asset_share_if_bd=row["asset_share_if"],
                 asset_share_if_ad=row["asset_share_if"],
+                output_attrs_bd=row["output_vars_bd"].split(';') if row["output_vars_bd"] != 'none' else None,
+                output_attrs_ad=row["output_vars_ad"].split(';') if row["output_vars_ad"] != 'none' else None,
             )
         else:
             raise ValueError(f"Invalid liab class {liab_class}.")

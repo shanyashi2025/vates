@@ -85,25 +85,9 @@ class Liab(ABC):
 
     @property
     @abstractmethod
-    def prem_inc(self) -> float:
-        """
-        Abstract method to get the premium income in period.
-        """
-        pass
-
-    @property
-    @abstractmethod
     def arr_cash_flow(self):
         """
         Abstract method to get the cash flow for the liability.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def arr_prem_inc(self):
-        """
-        Abstract method to get the premium income for the liability.
         """
         pass
 

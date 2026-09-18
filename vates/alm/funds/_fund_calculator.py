@@ -22,7 +22,7 @@ class FundCalculator:
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'name', 'connector',
                  'asset_categories', 'asset_category_attr', 'asset_report_bases',
-                 'liab_report_attrs_bd', 'liab_report_attrs_ad',)
+                 'output_liab_attrs_bd', 'output_liab_attrs_ad',)
 
     def __init__(
         self,
@@ -33,16 +33,16 @@ class FundCalculator:
         asset_categories: list[str],
         asset_category_attr: str,
         asset_report_bases: list[str],
-        liab_report_attrs_bd: list[str],
-        liab_report_attrs_ad: list[str],
+        output_liab_attrs_bd: list[str],
+        output_liab_attrs_ad: list[str],
     ):
         self.name: str = name
         self.connector: AssetLiabConnector = connector
         self.asset_categories: list[str] = asset_categories
         self.asset_category_attr: str = asset_category_attr
         self.asset_report_bases: list[str] = asset_report_bases
-        self.liab_report_attrs_bd: list[str] = liab_report_attrs_bd
-        self.liab_report_attrs_ad: list[str] = liab_report_attrs_ad
+        self.output_liab_attrs_bd: list[str] = output_liab_attrs_bd
+        self.output_liab_attrs_ad: list[str] = output_liab_attrs_ad
 
         # Initialize time-dimensioned variables for output
         # dims = None
@@ -50,9 +50,9 @@ class FundCalculator:
         self.tdv_totass_cash_flow: TDimVariable = create_tdv("totass_cash_flow")
         self.tdv_totliab_cash_flow: TDimVariable = create_tdv("totliab_cash_flow")
         self.tdv_totliab_attrs_bd: list[TDimVariable] = [
-            create_tdv(f"totliab_{name}") for name in self.liab_report_attrs_bd]
+            create_tdv(f"totliab_{name}") for name in self.output_liab_attrs_bd]
         self.tdv_totliab_attrs_ad: list[TDimVariable] = [
-            create_tdv(f"totliab_{name}") for name in self.liab_report_attrs_ad]
+            create_tdv(f"totliab_{name}") for name in self.output_liab_attrs_ad]
 
         self.tdv_free_estate_bd: TDimVariable = create_tdv("free_estate_bd")
         self.tdv_free_estate_ad: TDimVariable = create_tdv("free_estate_ad")
@@ -224,11 +224,11 @@ class FundCalculator:
         """
         t = self.time
         if timing == "bd":
-            for attr_name, tdv in zip(self.liab_report_attrs_bd, self.tdv_totliab_attrs_bd):
-                tdv[t] = self.connector.get_totliab_attr(attr_name)
+            for attr_name, tdv in zip(self.output_liab_attrs_bd, self.tdv_totliab_attrs_bd):
+                tdv[t] = self.connector.sum_liab(attr_name)
         elif timing == "ad":
-            for attr_name, tdv in zip(self.liab_report_attrs_ad, self.tdv_totliab_attrs_ad):
-                tdv[t] = self.connector.get_totliab_attr(attr_name)
+            for attr_name, tdv in zip(self.output_liab_attrs_ad, self.tdv_totliab_attrs_ad):
+                tdv[t] = self.connector.sum_liab(attr_name)
         else:
             raise ValueError(f"Invalid liab aggregation {timing=}.")
 

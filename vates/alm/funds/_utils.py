@@ -37,6 +37,18 @@ class AssetLiabConnector:
         self._free_estate = 0.0
         return amount
 
+    def sum_asset(self, name: str, /, *, treat_missing_as_0: bool = False) -> float:
+        return self._sum_all(self._assets, name, treat_missing_as_0=treat_missing_as_0)
+
+    def sum_liab(self, name: str, /, *, treat_missing_as_0: bool = False) -> float:
+        return self._sum_all(self._liabs, name, treat_missing_as_0=treat_missing_as_0)
+
+    @classmethod
+    def _sum_all(cls, obj_list: list, name: str, /, *, treat_missing_as_0: bool = False) -> float:
+        if treat_missing_as_0:
+            return sum(getattr(obj, name, 0.0) for obj in obj_list)
+        return sum(getattr(obj, name) for obj in obj_list)
+
     @overload
     def groupby_sum_asset_cash_flow(self, *, groupby: None = None, in_list: None = None,) -> float:
         ...
@@ -248,34 +260,6 @@ class AssetLiabConnector:
 
             raise ValueError(f"Calculation not defined: {groupby=}, {in_list=}")
 
-    @property
-    def totliab_surr_value(self) -> float:
-        return sum(x.surr_val_if for x in self._liabs)
-
-    @property
-    def totliab_math_res(self) -> float:
-        return sum(x.math_res_if for x in self._liabs)
-
-    @property
-    def totliab_acct_value(self) -> float:
-        return sum(x.acct_value_if for x in self._liabs)
-
-    @property
-    def totliab_asset_share(self) -> float:
-        return sum(x.asset_share_if_bd for x in self._liabs)
-
-    def get_totasset_attr(self, name: str, /, *, treat_missing_as_0: bool = False) -> float:
-        return self.get_total_value(self._assets, name, treat_missing_as_0=treat_missing_as_0)
-
-    def get_totliab_attr(self, name: str, /, *, treat_missing_as_0: bool = False) -> float:
-        return self.get_total_value(self._liabs, name, treat_missing_as_0=treat_missing_as_0)
-
-    @classmethod
-    def get_total_value(cls, obj_list: list, name: str, /, *, treat_missing_as_0: bool = False) -> float:
-        if treat_missing_as_0:
-            return sum(getattr(obj, name, 0.0) for obj in obj_list)
-        return sum(getattr(obj, name) for obj in obj_list)
-
     @overload
     def get_size(self, *, func: None = None, key: str) -> float:
         ...
@@ -304,18 +288,18 @@ class AssetLiabConnector:
             (func: Callable, key: dict[str, str])
         """
         if func is None:
-            return self.get_single_measure(key)
+            return self._get_size_measure(key)
         if isinstance(key, str):
-            return func(self.get_single_measure(key))
+            return func(self._get_size_measure(key))
         elif isinstance(key, tuple):
-            args = tuple([self.get_single_measure(x) for x in key])
+            args = tuple([self._get_size_measure(x) for x in key])
             return func(*args)
         elif isinstance(key, dict):
-            kwargs = {k: self.get_single_measure(v) for k, v in key.items()}
+            kwargs = {k: self._get_size_measure(v) for k, v in key.items()}
             return func(**kwargs)
         raise TypeError(f"Invalid {type(key)=}, expected 'str', 'tuple', 'dict'.")
 
-    def get_single_measure(self, key: str) -> float:
+    def _get_size_measure(self, key: str) -> float:
         if not isinstance(key, str):
             raise TypeError(f"Invalid {type(key)=}, expected 'str'.")
 
@@ -324,9 +308,9 @@ class AssetLiabConnector:
 
         owner, name, *_ = key.split(".")
         if owner == "asset":
-            return self.get_total_value(self._assets, name)
+            return self._sum_all(self._assets, name)
         elif owner in ("liab", "liability"):
-            return self.get_total_value(self._liabs, name)
+            return self._sum_all(self._liabs, name)
         else:
             raise ValueError(f"Invalid '{key}', expected 'asset.foo' or 'liab.foo'.")
 

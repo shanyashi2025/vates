@@ -1,2 +1,2 @@
-﻿ref_no,fund_id,fund_size_type,asset_size_basis,fund_rebalance_freq,asset_categories,asset_report_bases,liab_report_vars_bd,liab_report_vars_ad
-1,cd_fund,MATH_RES,FAV,1,CASH;EQUITY;BOND,MV;FAV;BSV,no_pols_if;surr_val_if;math_res_if;asset_share_if_bd,asset_share_if_ad
+﻿ref_no,fund_id,fund_size_type,asset_size_basis,fund_rebalance_freq,asset_categories,asset_report_bases,output_liab_vars_bd,output_liab_vars_ad
+1,cd_fund,MATH_RES,FAV,1,CASH;EQUITY;BOND,MV;FAV;BSV,prem_inc;no_pols_if;surr_val_if;math_res_if;asset_share_if_bd,asset_share_if_ad
