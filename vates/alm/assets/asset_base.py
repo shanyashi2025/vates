@@ -1,6 +1,9 @@
 import pandas as pd
 import uuid
+import warnings
+import weakref
 from abc import ABC, abstractmethod
+from typing import Self
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.alm.econs import Currency
@@ -11,6 +14,7 @@ class Asset(ABC):
     Abstract base class for all financial assets.
 
     Attributes:
+        _model_ref (weakref.ref[ProjModelEngine]): Model engine reference.
         _asset_id (str): Unique identifier for the asset.
         _is_profile (bool): Ture if profile asset, False if existing asset.
         _units (float): Number of assets
@@ -21,7 +25,7 @@ class Asset(ABC):
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state', '_asset_id', '_is_profile', '_units',
+    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', '_state', '_asset_id', '_is_profile', '_units',
                  '_purchase_date', '_currency', '_flex_attr_map',)
 
     def __init__(
@@ -47,10 +51,11 @@ class Asset(ABC):
             currency (Currency): Asset currency.
             flex_attr_map (dict[str, str]): Dict of string to named attribute, {"MV": "market_value"}
         """
+        self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else (lambda: None)
         self._asset_id: str = asset_id or str(uuid.uuid4())
         self._is_profile: bool = is_profile
         self._units: float = units
-        self._purchase_date: pd.Period = purchase_date or (self.period if self._is_profile else None)
+        self._purchase_date: pd.Period = purchase_date
         self._currency: Currency | None = currency
         self._flex_attr_map: dict[str, str] | None = flex_attr_map
         self._state: tuple[str, int] = ("initialized", self.time or 0)
@@ -135,11 +140,25 @@ class Asset(ABC):
         pass
 
     @abstractmethod
-    def buy_profile_scale(self, *args, **kwargs):
-        """
-        Abstract method to scale the asset profile by a factor.
-        """
+    def scale_profile(self, *args, **kwargs) -> Self:
+        """Return a new, non-profile asset scaled by `scale`; leave self unchanged."""
         pass
+
+    def _copy_flex_attrs_to(self, clone) -> None:
+        if clone is self:
+            warnings.warn("Ignore copying attributes to self.")
+            return
+
+        for key, val in self.__dict__.items():
+            if not isinstance(val, (type(None), bool, str, int, float, tuple, frozenset, bytes)):
+                warnings.warn(f"Shallow-copying non-immutable attribute '{key}'; profile and clone will share this object.")
+            setattr(clone, key, val)
+
+        #  Shallow copy aliases mutable values by design. The warning acknowledges it but does not prevent it: after clone, profile.__dict__[k] is
+        #  clone.__dict__[k] for a list/dict. Since there’s no immutability guarantee, a clone mutating that list would corrupt the reusable profile. Given the small
+        #  set of expected metadata, I’d rather copy selectively/deep rather than warn-and-share. Two options: copy.deepcopy(val) for non-immutable values (only if
+        #  those are guaranteed copyable), or better, move dynamic metadata into one explicit mapping (_flex_attrs) and deep-copy that. A whitelist based on
+        #  _flex_attr_map values + known metadata keys is the most predictable.
 
     @abstractmethod
     def close_dealing(self, *args, **kwargs):

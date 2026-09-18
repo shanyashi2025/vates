@@ -117,12 +117,11 @@ class Cash(Asset):
         """
         self._nominal -= self._nominal * propn
 
-    def buy_profile_scale(self, *args, **kwargs) -> None:
+    def scale_profile(self, *args, **kwargs) -> None:
         """
         Not applicable for cash assets.
         """
-        # should never get here
-        pass
+        raise ValueError(f"`scale_profile` is not applicable for cash.")
 
     @maybe_check_asset_state_close
     def close_dealing(self, **kwargs) -> None:

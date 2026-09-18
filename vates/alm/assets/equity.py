@@ -1,5 +1,6 @@
 import pandas as pd
 import warnings
+from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable
 from vates.alm.econs import Currency, EquityIndex
@@ -17,7 +18,7 @@ class Equity(Asset):
         _purchase_cost (float | None): Purchase cost of the equity asset.
         tdv_dividend (float): Dividend for the current period.
     """
-    __slots__ = ('_equity_index', '_mv', '_purchase_cost', '_cash_flow', '_disposal_proceeds',
+    __slots__ = ('_equity_index', '_mv', '_purchase_cost', '_cash_flow', '_disposal_proceeds', '_n_clone',
                  'tdv_cash_flow', 'tdv_dividend', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purch_cost_bd', 'tdv_purch_cost_ad',)
 
     def __init__(
@@ -51,6 +52,7 @@ class Equity(Asset):
         self._equity_index: EquityIndex = equity_index
         self._mv: float = market_value
         self._purchase_cost: float | None = purchase_cost
+        self._n_clone: int = 0
 
         if abs(self._mv) < 1e-8:
             self._mv = 1e-8  # to prevent crash when proportionally buy new asset
@@ -129,20 +131,36 @@ class Equity(Asset):
     def disposal_proceeds(self) -> float:
         return self._disposal_proceeds
 
-    def buy_profile_scale(self, scale: float) -> None:
+    def scale_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the equity profile by a factor.
 
         Args:
             scale (float): Scaling factor.
+            new_asset_id (str): Asset id for new asset.
         """
         if not self._is_profile:
             raise ValueError("This equity object is not a profile.")
         if scale < 0:
             warnings.warn(f"Scaling equity profile '{self._asset_id}' by a negative number ({scale:.4f}).")
-        self._mv = self._mv * scale
-        self._purchase_cost = self._mv  # purchased cost is determined as the initial carrying amount
-        self._is_profile = False
+
+        if new_asset_id is None:
+            new_asset_id = self.asset_id + ("" if self._n_clone == 0 else f"_{self._n_clone}")
+
+        clone = Equity(
+            market_value=self._mv * scale,
+            purchase_cost=self._mv * scale,
+            equity_index=self._equity_index,
+            flex_attr_map=self._flex_attr_map,
+            model_engine=self._model_ref(),
+            asset_id=new_asset_id,
+            is_profile=False,
+            currency=self._currency,
+            purchase_date=self.period,
+        )
+        self._copy_flex_attrs_to(clone)
+        self._n_clone += 1
+        return clone
 
     @maybe_check_asset_state_close
     def close_dealing(self, **kwargs) -> None:

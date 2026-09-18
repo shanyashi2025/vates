@@ -3,6 +3,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import warnings
+from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable
 from vates.alm.econs import Currency, YieldCurve, CreditBand
@@ -34,7 +35,7 @@ class BondFixed(Asset):
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
     __slots__ = ('_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
-                 '_credit_band', '_cash_flow', 'cash_flow_gen', 'pricer', 'risk_calc',
+                 '_credit_band', '_cash_flow', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
                  'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
                  'tdv_interest', 'tdv_principal', 'tdv_default_recovery', 'tdv_mv_price', 'tdv_abv_price',
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad',)
@@ -105,6 +106,7 @@ class BondFixed(Asset):
         self._rf_curve: YieldCurve = rf_curve
         self._credit_band: CreditBand | None = credit_band
         self._cash_flow: float = 0.0
+        self._n_clone: int = 0
 
         # Compose with specialized components
         if provided_cash_flow_dict is None:
@@ -315,20 +317,49 @@ class BondFixed(Asset):
         if propn > 1: raise ValueError(f"Can not sell >100% proportion of exsiting bonds.")
         self._units -= self._units * propn
 
-    def buy_profile_scale(self, scale: float) -> None:
+    def scale_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the bond profile by a factor.
 
         Args:
             scale (float): Scaling factor.
+            new_asset_id (str): Asset id for new asset.
 
         Raises:
             ValueError: If scale is negative.
         """
-        if not self._is_profile: raise ValueError("This bond object is not a profile.")
-        if scale < 0: raise ValueError("Can not scale bond profile by a negative number.")
-        self._units = self._units * scale
-        self._is_profile = False
+        if not self._is_profile:
+            raise ValueError("This bond object is not a profile.")
+        if scale < 0:
+            raise ValueError("Can not scale bond profile by a negative number.")
+
+        if new_asset_id is None:
+            new_asset_id = self.asset_id + ("" if self._n_clone == 0 else f"_{self._n_clone}")
+
+        clone = BondFixed(
+            units=self._units * scale,
+            issue_date=self._params.issue_date,
+            maturity_date=self._params.maturity_date,
+            coupon_rate=self._params.coupon_rate,
+            coupon_freq=self._params.coupon_freq,
+            face_value=self._params.face_value,
+            mv_price=self._mv_price_dirty,
+            market_spread=self._market_spread,
+            abv_price=self._abv_price_dirty,
+            amort_rate=self._amort_rate,
+            rf_curve=self._rf_curve,
+            flex_attr_map=self._flex_attr_map,
+            model_engine=self._model_ref(),
+            asset_id=new_asset_id,
+            is_profile=False,
+            currency=self._currency,
+            provided_cash_flow_dict=self.cash_flow_gen.to_dict() if isinstance(self.cash_flow_gen, BondFixedCashFlowProvider) else None,
+            credit_band=self._credit_band,
+            purchase_date=self.period,
+        )
+        self._copy_flex_attrs_to(clone)
+        self._n_clone += 1
+        return clone
 
     @maybe_check_asset_state_close
     def close_dealing(self) -> None:

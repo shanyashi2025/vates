@@ -1,6 +1,8 @@
 import math
 import pandas as pd
 import warnings
+from typing import Self
+
 
 from vates._core import ProjModelEngine, TDimVariable
 from vates.finmath import CallOrPut, BlackScholesCalculator
@@ -23,7 +25,7 @@ class EquityOption(Asset):
         _std_dev (float): Standard deviation, i.e. volatility.
         _is_pay_dividend (bool): True if paying dividend, otherwise False.
     """
-    __slots__ = ('_call_or_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index',
+    __slots__ = ('_call_or_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
                  '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', 'tdv_units_bd', 'tdv_units_ad',
                  'tdv_cash_flow', 'tdv_stock_price', 'tdv_price', 'tdv_mv_bd', 'tdv_mv_ad',)
 
@@ -80,6 +82,7 @@ class EquityOption(Asset):
         self._std_dev: float = std_dev
         self._is_pay_dividend: bool = is_pay_dividend
         self._cash_flow: float = 0.0
+        self._n_clone: int = 0
 
         if not _bypass_init_validation:
             if self.time is None:
@@ -207,17 +210,41 @@ class EquityOption(Asset):
                           f"normally expected: 0 < proportion <=1.")
         self._units -= self._units * propn
 
-    def buy_profile_scale(self, scale: float) -> None:
+    def scale_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the equity option profile by a factor, positive/negative scale represents long/short.
 
         Args:
             scale (float): Scaling factor.
+            new_asset_id (str): Asset id for new asset.
         """
         if not self._is_profile:
             raise ValueError("This equity option object is not a profile.")
-        self._units = self._units * scale
-        self._is_profile = False
+
+        if new_asset_id is None:
+            new_asset_id = self.asset_id + ("" if self._n_clone == 0 else f"_{self._n_clone}")
+
+        clone = EquityOption(
+            units=self._units * scale,
+            call_or_put=self._call_or_put,
+            exercise_date=self._exercise_date,
+            price=self._price,
+            stock_price=self._stock_price,
+            strike_price=self._strike_price,
+            equity_index=self._equity_index,
+            rf_curve=self._rf_curve,
+            std_dev=self._std_dev,
+            is_pay_dividend=self._is_pay_dividend,
+            model_engine=self._model_ref(),
+            asset_id=new_asset_id,
+            is_profile=False,
+            currency=self._currency,
+            flex_attr_map=self._flex_attr_map,
+            purchase_date=self.period,
+        )
+        self._copy_flex_attrs_to(clone)
+        self._n_clone += 1
+        return clone
 
     @maybe_check_asset_state_close
     def close_dealing(self, **kwargs) -> None:

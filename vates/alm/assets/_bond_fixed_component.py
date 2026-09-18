@@ -428,3 +428,9 @@ class BondFixedCashFlowProvider:
             return self._total_from_issue[age_in_month:]
         else:
             return None
+
+    def to_dict(self) -> dict[str, np.ndarray]:
+        return {
+            "interest": self._interest_from_issue,
+            "principal": self._principal_from_issue
+        }

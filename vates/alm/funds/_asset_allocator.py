@@ -362,9 +362,9 @@ class AssetAllocator:
                 raise ValueError("Can't buy assets from empty profile.")
             for asset in profile_assets:
                 if getattr(asset, self.alloc_group_attr) == alloc_group.name:
-                    asset.buy_profile_scale(scale=propn)
-                    self.connector.assets.append(asset)  # append to list
-                    net_proceeds -= asset.market_value
+                    new_asset = asset.scale_profile(scale=propn)
+                    self.connector.assets.append(new_asset)  # append to list
+                    net_proceeds -= new_asset.market_value
 
         return net_proceeds
 
