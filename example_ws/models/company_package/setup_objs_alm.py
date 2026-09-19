@@ -56,7 +56,7 @@ class FundMaster:
                 model_engine=model_engine,
                 asset_allocation_groups=cls.build_asset_allocation_groups_from_df(asset_allocation_groups_df, fund_id=fund_id),
                 asset_categories=row["asset_categories"].split(';'),
-                asset_report_bases=row["asset_report_bases"].split(';'),
+                asset_report_bases=row["asset_report_bases"].split(';') if row["asset_report_bases"] != 'none' else None,
                 output_liab_attrs_bd=row["output_liab_vars_bd"].split(';') if row["output_liab_vars_bd"] != 'none' else None,
                 output_liab_attrs_ad=row["output_liab_vars_ad"].split(';') if row["output_liab_vars_ad"] != 'none' else None,
             )

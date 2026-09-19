@@ -8,7 +8,7 @@ from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimV
 from vates.global_conf import CheckLevel
 from vates.alm.assets import Asset, Cash
 from vates.alm.enums import AssetBuySellApproach, AssetPurchaseMethod
-from vates.alm.funds._utils import AssetLiabConnector
+from vates.alm.funds._connector import AssetLiabConnector
 
 
 @dataclass(slots=True)

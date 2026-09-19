@@ -84,12 +84,11 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
 
                 # step 2: liabs roll forward
                 if not is_sh_fund:
-                    fund_liabs_roll_forward(
-                        fund=fund,
-                        epl=epl,
-                        as_inv_ret=fund.rate_of_return_bd[t, "FAV"],
-                        as_cf_ret=0  # specify the rate
-                    )
+                    kwargs = {}
+                    if fund.fund_id in ("cd1_fund", "cd2_fund"):  # hard coded
+                        kwargs["as_inv_ret"] = fund.rate_of_return_bd[t, "FAV"]
+                        kwargs["as_cf_ret"] = 0  # specify the rate]
+                    fund_liabs_roll_forward(fund=fund, epl=epl, **kwargs)
                 else:
                     fund_liabs_roll_forward(fund)
 
@@ -108,7 +107,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
 
                 # step 5: transfer accumulated free proceeds to shareholder fund
                 if not is_sh_fund:
-                    fund.transfer_free_proceeds_to_other(fund_master.sh_fund)
+                    fund.transfer_free_estate_to_other(fund_master.sh_fund)
 
         # --- output aging assets ---
         if aging_assets_output_config_df is not None and (

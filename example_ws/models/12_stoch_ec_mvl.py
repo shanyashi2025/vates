@@ -112,14 +112,14 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             liabs_close_dealing(fund=fund)
 
             # step 5: transfer accumulated free proceeds to shareholder fund
-            fund.transfer_free_proceeds_to_other(None)  # shareholder fund is None
+            fund.transfer_free_estate_to_other(None)  # shareholder fund is None
 
     if t == model.MAX_T:
         model.bel_dict = {}
         for fund in model.fund_master.funds:
             fund_id = fund.fund_id
             model.bel_dict[fund_id] = ConstVariable('BEL', model_engine=model, owner=fund_id, group='fund')
-            model.bel_dict[fund_id][...] = - np.dot(fund.calculator.tdv_totliab_cash_flow.result, model.deflators)
+            model.bel_dict[fund_id][...] = - np.dot(fund._recorder.tdv_totliab_cf.result, model.deflators)
 
 
 def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str, max_workers: int,

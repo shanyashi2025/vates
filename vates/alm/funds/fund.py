@@ -1,14 +1,15 @@
 import pandas as pd
 import warnings
-from typing import Callable, Optional, overload
+from typing import Callable, Optional
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.utils import maybe_raise_if_ne
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
-from vates.alm.funds._asset_allocator import AssetAllocator, AssetAllocationGroup, TargetWeight
-from vates.alm.funds._fund_calculator import FundCalculator
-from vates.alm.funds._utils import AssetLiabConnector, _RateOfReturnIndexer
+from vates.alm.funds._allocator import AssetAllocator, AssetAllocationGroup, TargetWeight
+from vates.alm.funds._connector import AssetLiabConnector
+from vates.alm.funds._recorder import FundRecorder
+from vates.alm.funds._utils import _RateOfReturnIndexer
 
 
 @add_projection_time_synchronizer
@@ -21,15 +22,15 @@ class Fund:
         fund_id (str): Fund identifier.
         _connector (AssetLiabConnector): Assets and liabilities held by the fund.
         _primary_cash_asset (Cash | None): Primary cash asset used for residual cash flows.
-        calculator (FundCalculator): Aggregation/returns calculator.
+        _recorder (FundRecorder): Aggregation/returns calculator.
         _allocator (AssetAllocator): Asset allocator for rebalancing.
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
     __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
-                 'fund_id', '_connector', '_primary_cash_asset', '_asset_report_bases', 'calculator', '_allocator',
-                 'rate_of_return_bd', 'rate_of_return_AD', )
+                 'fund_id', '_connector', '_primary_cash_asset', '_asset_report_bases', '_recorder', '_allocator',
+                 'rate_of_return_bd', 'rate_of_return_ad', )
 
     def __init__(
         self,
@@ -61,9 +62,9 @@ class Fund:
         # Asset and liab collections
         self._connector: AssetLiabConnector = AssetLiabConnector()
         self._primary_cash_asset: Cash | None = None
-        self._asset_report_bases: list[str] = asset_report_bases or ["MV"]
+        self._asset_report_bases: list[str] = asset_report_bases or []
 
-        self.calculator: FundCalculator = FundCalculator(
+        self._recorder: FundRecorder = FundRecorder(
             name=fund_id, model_engine=model_engine, connector=self._connector,
             asset_report_bases=self._asset_report_bases,
             asset_categories=asset_categories, asset_category_attr=asset_category_attr,
@@ -77,9 +78,9 @@ class Fund:
 
         # rate of return indexers
         self.rate_of_return_bd: _RateOfReturnIndexer = _RateOfReturnIndexer(
-            self.calculator.tdv_totass_ror_pc_bd, divby=100)
+            self._recorder.tdv_totass_ror_pc_bd, divby=100)
         self.rate_of_return_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
-            self.calculator.tdv_totass_ror_pc_ad, divby=100)
+            self._recorder.tdv_totass_ror_pc_ad, divby=100)
 
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
@@ -136,9 +137,9 @@ class Fund:
                 warnings.warn(f"Unexpected profile asset '{asset}'")
 
         # Aggregate asset value
-        self.calculator.aggregate_assets_value("ad")
-        self.calculator.aggregate_liabs_value("bd")
-        self.calculator.aggregate_liabs_value("ad")
+        self._recorder.sum_asset_report_values("ad")
+        self._recorder.sum_liab_attrs("bd")
+        self._recorder.sum_liab_attrs("ad")
 
         self._state = ("assembled", self.time)
 
@@ -157,28 +158,28 @@ class Fund:
         """Process asset cash flows and reported values before dealing (bd)."""
         if self._state != ("assembled", self.time - 1):
             maybe_raise_if_ne(self._state, ("closed", self.time - 1))
-        self.calculator.process_assets_before_dealing()
-        self._connector.accumulate_free_estate(self.calculator.tdv_totass_cash_flow[self.time])
+        self._recorder.record_asset_before_dealing()
+        self._connector.accumulate_free_estate(self._recorder.tdv_totass_cf[self.time])
         self._state = ("proc_assets_bd", self.time)
 
     def process_liabs_before_dealing(self) -> None:
         """Process liability cash flows and balance sheet variables before dealing (bd)."""
         maybe_raise_if_ne(self._state, ("proc_assets_bd", self.time))
-        self.calculator.process_liabs_before_dealing()
-        self._connector.accumulate_free_estate(self.calculator.tdv_totliab_cash_flow[self.time])
+        self._recorder.record_liab_before_dealing()
+        self._connector.accumulate_free_estate(self._recorder.tdv_totliab_cf[self.time])
         self._state = ("proc_liabs_bd", self.time)
 
     def no_action_on_rebalance(self) -> None:
         """Skip asset rebalance, invest free proceeds into primary cash."""
         maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
         t = self.time
-        self.calculator.tdv_free_estate_bd[t] = self._connector.free_estate
+        self._recorder.record_free_estate("bd")
         # just invest free_estate into primary cash, no other action, free_estate is reset to zero
         self.primary_cash_asset.invest_new_money(self._connector.dispose_free_estate())
         for asset in self.assets:
             asset.close_dealing()
-        self.calculator.tdv_free_estate_ad[t] = self._connector.free_estate # should be zero
-        self.calculator.process_assets_after_dealing()
+        self._recorder.record_free_estate("ad")  # free_estate should be zero
+        self._recorder.record_asset_after_dealing()
         self._state = ("closed", self.time)
 
     def rebalance_assets(self, *, total_size: float, asset_size_basis: str,
@@ -195,7 +196,7 @@ class Fund:
         maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
         t, p = self.time, self.period
 
-        self.calculator.tdv_free_estate_bd[t] = self._connector.free_estate
+        self._recorder.record_free_estate("bd")
         # process rebalance
         self._allocator.rebalance(
             total_size=total_size,
@@ -206,8 +207,8 @@ class Fund:
         )
         for asset in self.assets:
             asset.close_dealing()
-        self.calculator.tdv_free_estate_ad[t] = self._connector.free_estate
-        self.calculator.process_assets_after_dealing()
+        self._recorder.record_free_estate("ad")  # free_estate should be zero
+        self._recorder.record_asset_after_dealing()
         self._state = ("closed", self.time)
 
     def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
@@ -231,26 +232,24 @@ class Fund:
 
     def process_liabs_after_dealing(self) -> None:
         """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""
-        self.calculator.process_liabs_after_dealing()
+        self._recorder.record_liab_after_dealing()
 
-    def transfer_free_proceeds_to_other(self, other: Optional['Fund']) -> None:
-        """Transfer free proceeds to the other fund.
+    def transfer_free_estate_to_other(self, other: Optional['Fund']) -> None:
+        """Transfer free estate to the other fund.
 
         Args:
             other (Optional[Fund]): Fund to receive proceeds (usually shareholder fund), or None.
         """
-        t = self.time
+        if other is self:
+            raise ValueError(f"Cann\'t transfer to self.")
 
         amount = self._connector.dispose_free_estate()
-        if other is None:
-            pass
-        elif isinstance(other, Fund):
+        self._recorder.record_free_proceeds_transfer(- amount)
+
+        if isinstance(other, Fund):
             other.receive_free_proceeds(amount)
         else:
-            warnings.warn(f"Invalid {type(other)}, expected <class 'Fund'> ")
-
-        self.calculator.tdv_proceeds_transferred_out[t] = max(amount, 0.0)
-        self.calculator.tdv_proceeds_transferred_in[t] = max(- amount, 0.0)
+            pass
 
     def receive_free_proceeds(self, amount: float) -> None:
         """Receive free proceeds.
@@ -258,15 +257,8 @@ class Fund:
         Args:
             amount (float): Amount to receive (can be either positive ornegative).
         """
-        t = self.time
-        if self.calculator.tdv_proceeds_transferred_in[t] is None:
-            self.calculator.tdv_proceeds_transferred_in[t] = max(amount, 0.0)
-            self.calculator.tdv_proceeds_transferred_out[t] = max(- amount, 0.0)
-        else:
-            self.calculator.tdv_proceeds_transferred_in[t] += max(amount, 0.0)
-            self.calculator.tdv_proceeds_transferred_out[t] += max(- amount, 0.0)
-
         self._connector.accumulate_free_estate(amount)
+        self._recorder.record_free_proceeds_transfer(amount)
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.fund_id}'"

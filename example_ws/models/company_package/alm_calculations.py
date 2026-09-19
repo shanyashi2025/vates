@@ -32,8 +32,7 @@ def fund_assets_roll_forward(fund: Fund, **kwargs) -> None:
     fund.process_assets_before_dealing()
 
 
-def fund_liabs_roll_forward(fund: Fund, epl: KeyedArray | None = None, as_inv_ret: float | None = None,
-                            as_cf_ret: float | None = None) -> None:
+def fund_liabs_roll_forward(fund: Fund, epl: KeyedArray | None = None, **kwargs) -> None:
     if fund.liabs is None or len(fund.liabs) == 0:
         fund.process_liabs_before_dealing()
         return
@@ -60,6 +59,9 @@ def fund_liabs_roll_forward(fund: Fund, epl: KeyedArray | None = None, as_inv_re
 
         liab_type = getattr(liab, 'liab_type', "")
         if liab_type == 'Par_CD':
+            as_inv_ret = kwargs["as_inv_ret"]
+            as_cf_ret = kwargs.get("as_cf_ret", None)
+            as_cf_ret = as_cf_ret if as_cf_ret is not None else as_inv_ret
             cash_flow = prem_inc - comm_out - exp_out - death_out - crben_out - ann_out - surr_out - mat_out \
                         - div_out - invexp_out
             asset_share_prev = liab.asset_share_if_ad
@@ -74,6 +76,9 @@ def fund_liabs_roll_forward(fund: Fund, epl: KeyedArray | None = None, as_inv_re
                 asset_share_if_bd=asset_share_if_bd,
             )
         elif liab_type == 'Par_CD_Flex':
+            as_inv_ret = kwargs["as_inv_ret"]
+            as_cf_ret = kwargs.get("as_cf_ret", None)
+            as_cf_ret = as_cf_ret if as_cf_ret is not None else as_inv_ret
             cash_flow = prem_inc - comm_out - exp_out - death_out - ann_out - surr_out - mat_out - invexp_out
             math_res_prev = liab.math_res_if
             div_out = max(cash_flow * (1 + as_cf_ret) + math_res_prev * as_inv_ret - (math_res_if - math_res_prev),

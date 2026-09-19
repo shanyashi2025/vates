@@ -1,5 +1,5 @@
 import numpy as np
-from vates import ProjModelEngine, KeyedArray, alm
+from vates import ProjModelEngine, KeyedArray
 from vates.finmath import convert_interest_rates, interpolate_interest_rates
 from vates.solvency import cn_cross2
 from company_package import (
