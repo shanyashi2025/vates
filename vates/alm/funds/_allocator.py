@@ -370,7 +370,7 @@ class AssetAllocator:
         return sorted_list
 
     def rebalance(self, *, total_size: float, asset_size_basis: str | None = None,
-                  target_weights: dict[str, TargetWeight] | None = None, profile_assets: list[Asset] | None = None,
+                  profile_assets: list[Asset] | None = None, target_weights: dict[str, TargetWeight] | None = None,
                   check_level: CheckLevel | None = None, **kwargs) -> None:
         """Rebalance assets in the fund to match the target allocation.
 
@@ -378,7 +378,7 @@ class AssetAllocator:
             total_size (float): Total size for allocation.
             asset_size_basis (str): Asset reporting basis for sizing (e.g. FAV or BSV).
             target_weights (dict[str, TargetWeight]): Target weight by allocation group.
-            profile_assets (list[Asset] | None): Profile assets for reference.
+            profile_assets (list[Asset]): Profile assets for reference.
             check_level (CheckLevel): Check level for validation against allocation, defaults to None.
 
         """

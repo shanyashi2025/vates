@@ -181,17 +181,18 @@ class Fund:
         self._recorder.record_asset_after_dealing()
         self._state = ("closed", self.time)
 
-    def rebalance_assets(self, *, total_size: float, **kwargs) -> None:
+    def rebalance_assets(self, *, total_size: float, profile_assets: list[Asset] | None = None, **kwargs) -> None:
         """Rebalance assets per target allocation and optional profile.
 
         Args:
             total_size (float): Total size for allocation.
+            profile_assets (list[Asset]): Profile assets for reference.
         """
         maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
 
         self._recorder.record_free_estate("bd")
         # process rebalance
-        self._allocator.rebalance(total_size=total_size, **kwargs)
+        self._allocator.rebalance(total_size=total_size, profile_assets=profile_assets, **kwargs)
         for asset in self.assets:
             asset.close_dealing()
         self._recorder.record_free_estate("ad")  # free_estate should be zero
@@ -199,14 +200,14 @@ class Fund:
         self._state = ("closed", self.time)
 
     def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
-                 treat_missing_as_0: bool = False) -> float:
+                 treat_missing_as_zero: bool = False) -> float:
         """ Get the fund size of the requested key
 
         Args:
             func (Callable | None): Function, defaults to None.
             key (str | tuple[str, ...] | dict[str, str]): Requested key, use `asset.<attr_name>` and/or `liab.<attr_name>`
                 to indicate an attribute of assets or liabilities.
-            treat_missing_as_0 (bool): True if treat value of missing attribute as 0.0, defaults to False.
+            treat_missing_as_zero (bool): True if treat value of missing attribute as 0.0, defaults to False.
 
         Examples:
             1. get_size(key="liab.math_res_if")
@@ -215,7 +216,7 @@ class Fund:
             4. get_size(func=lambda x, y: x + y, key=(f"asset.FAV", "free_estate"))
 
         """
-        return self._connector.get_size(func=func, key=key, treat_missing_as_0=treat_missing_as_0)
+        return self._connector.get_size(func=func, key=key, treat_missing_as_zero=treat_missing_as_zero)
 
     def process_liabs_after_dealing(self) -> None:
         """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""

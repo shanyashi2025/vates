@@ -36,30 +36,30 @@ class AssetLiabConnector:
         return amount
 
     @overload
-    def sum_asset(self, key: str, /, *, treat_missing_as_0: bool = False) -> float:
+    def sum_asset(self, key: str, /, *, treat_missing_as_zero: bool = False) -> float:
         ...
 
     @overload
-    def sum_asset(self, name: list[str], /, *, treat_missing_as_0: bool = False) -> np.ndarray:
+    def sum_asset(self, name: list[str], /, *, treat_missing_as_zero: bool = False) -> np.ndarray:
         ...
 
-    def sum_asset(self, name: str | list[str], /, *, treat_missing_as_0: bool = False) -> float | np.ndarray:
-        return self._sum(self._assets, name=name, treat_missing_as_0=treat_missing_as_0)
+    def sum_asset(self, name: str | list[str], /, *, treat_missing_as_zero: bool = False) -> float | np.ndarray:
+        return self._sum(self._assets, name=name, treat_missing_as_zero=treat_missing_as_zero)
 
     @overload
-    def sum_liab(self, name: str, /, *, treat_missing_as_0: bool = False) -> float:
+    def sum_liab(self, name: str, /, *, treat_missing_as_zero: bool = False) -> float:
         ...
 
     @overload
-    def sum_liab(self, name: list[str], /, *, treat_missing_as_0: bool = False) -> np.ndarray:
+    def sum_liab(self, name: list[str], /, *, treat_missing_as_zero: bool = False) -> np.ndarray:
         ...
 
-    def sum_liab(self, name: str | list[str], /, *, treat_missing_as_0: bool = False) -> float | np.ndarray:
-        return self._sum(self._liabs, name=name, treat_missing_as_0=treat_missing_as_0)
+    def sum_liab(self, name: str | list[str], /, *, treat_missing_as_zero: bool = False) -> float | np.ndarray:
+        return self._sum(self._liabs, name=name, treat_missing_as_zero=treat_missing_as_zero)
 
     @classmethod
-    def _sum(cls, obj_list: list, /, *, name: str | list[str], treat_missing_as_0: bool = False) -> float | np.ndarray:
-        default = 0.0 if treat_missing_as_0 else None
+    def _sum(cls, obj_list: list, /, *, name: str | list[str], treat_missing_as_zero: bool = False) -> float | np.ndarray:
+        default = 0.0 if treat_missing_as_zero else None
         if isinstance(name, str):
             return sum(getattr(obj, name, default) for obj in obj_list)
         elif isinstance(name, list):
@@ -72,31 +72,31 @@ class AssetLiabConnector:
             raise TypeError(f"Invalid {type(name)=}, expected 'str' or 'list[str]'.")
 
     @overload
-    def groupby_sum_asset(self, name: str, /, *, groupby: str, in_list: str, treat_missing_as_0: bool = False) -> float:
+    def groupby_sum_asset(self, name: str, /, *, groupby: str, in_list: str, treat_missing_as_zero: bool = False) -> float:
         ...
 
     @overload
-    def groupby_sum_asset(self, name: str, /, *, groupby: str, in_list: list[str], treat_missing_as_0: bool = False
+    def groupby_sum_asset(self, name: str, /, *, groupby: str, in_list: list[str], treat_missing_as_zero: bool = False
                           ) -> list[float]:
         ...
 
     @overload
-    def groupby_sum_asset(self, name: str, /, *, groupby: str, in_list: None = None, treat_missing_as_0: bool = False
+    def groupby_sum_asset(self, name: str, /, *, groupby: str, in_list: None = None, treat_missing_as_zero: bool = False
                           ) -> dict[str, float]:
         ...
 
     @overload
-    def groupby_sum_asset(self, name: list[str], /, *, groupby: str, in_list: str, treat_missing_as_0: bool = False
+    def groupby_sum_asset(self, name: list[str], /, *, groupby: str, in_list: str, treat_missing_as_zero: bool = False
                           ) -> np.ndarray:
         ...
 
     @overload
-    def groupby_sum_asset(self, name: list[str], /, *, groupby: str, in_list: list[str], treat_missing_as_0: bool = False
+    def groupby_sum_asset(self, name: list[str], /, *, groupby: str, in_list: list[str], treat_missing_as_zero: bool = False
                           ) -> list[np.ndarray]:
         ...
 
     @overload
-    def groupby_sum_asset(self, name: list[str], /, *, groupby: str, in_list: None = None, treat_missing_as_0: bool = False
+    def groupby_sum_asset(self, name: list[str], /, *, groupby: str, in_list: None = None, treat_missing_as_zero: bool = False
                           ) -> dict[str, np.ndarray]:
         ...
 
@@ -107,37 +107,37 @@ class AssetLiabConnector:
         *,
         groupby: str,
         in_list: str | list[str] | None = None,
-        treat_missing_as_0: bool = False,
+        treat_missing_as_zero: bool = False,
     ) -> float | np.ndarray | list[float | np.ndarray] | dict[str, float | np.ndarray]:
         return self._groupby_sum(self._assets, name=name, groupby=groupby, in_list=in_list,
-                                 treat_missing_as_0=treat_missing_as_0)
+                                 treat_missing_as_zero=treat_missing_as_zero)
 
     @overload
-    def groupby_sum_liab(self, name: str, /, *, groupby: str, in_list: str, treat_missing_as_0: bool = False) -> float:
+    def groupby_sum_liab(self, name: str, /, *, groupby: str, in_list: str, treat_missing_as_zero: bool = False) -> float:
         ...
 
     @overload
-    def groupby_sum_liab(self, name: str, /, *, groupby: str, in_list: list[str], treat_missing_as_0: bool = False
+    def groupby_sum_liab(self, name: str, /, *, groupby: str, in_list: list[str], treat_missing_as_zero: bool = False
                          ) -> list[float]:
         ...
 
     @overload
-    def groupby_sum_liab(self, name: str, /, *, groupby: str, in_list: None = None, treat_missing_as_0: bool = False
+    def groupby_sum_liab(self, name: str, /, *, groupby: str, in_list: None = None, treat_missing_as_zero: bool = False
                          ) -> dict[str, float]:
         ...
 
     @overload
-    def groupby_sum_liab(self, name: list[str], /, *, groupby: str, in_list: str, treat_missing_as_0: bool = False
+    def groupby_sum_liab(self, name: list[str], /, *, groupby: str, in_list: str, treat_missing_as_zero: bool = False
                          ) -> np.ndarray:
         ...
 
     @overload
-    def groupby_sum_liab(self, name: list[str], /, *, groupby: str, in_list: list[str], treat_missing_as_0: bool = False
+    def groupby_sum_liab(self, name: list[str], /, *, groupby: str, in_list: list[str], treat_missing_as_zero: bool = False
                          ) -> list[np.ndarray]:
         ...
 
     @overload
-    def groupby_sum_liab(self, name: list[str], /, *, groupby: str, in_list: None = None, treat_missing_as_0: bool = False
+    def groupby_sum_liab(self, name: list[str], /, *, groupby: str, in_list: None = None, treat_missing_as_zero: bool = False
                          ) -> dict[str, np.ndarray]:
         ...
 
@@ -148,10 +148,10 @@ class AssetLiabConnector:
         *,
         groupby: str,
         in_list: str | list[str] | None = None,
-        treat_missing_as_0: bool = False,
+        treat_missing_as_zero: bool = False,
     ) -> float | np.ndarray | list[float | np.ndarray] | dict[str, float | np.ndarray]:
         return self._groupby_sum(self._liabs, name=name, groupby=groupby, in_list=in_list,
-                                 treat_missing_as_0=treat_missing_as_0)
+                                 treat_missing_as_zero=treat_missing_as_zero)
 
     @classmethod
     def _groupby_sum(
@@ -162,7 +162,7 @@ class AssetLiabConnector:
             name: str | list[str],
             groupby: str,
             in_list: str | list[str] | None = None,
-            treat_missing_as_0: bool = False,
+            treat_missing_as_zero: bool = False,
     ) -> float | np.ndarray | list[float | np.ndarray] | dict[str, float | np.ndarray]:
         """
         path 1:
@@ -184,7 +184,7 @@ class AssetLiabConnector:
             raise TypeError(f"Invalid type of name {type(name)}, expected 'str' or 'list[str]'.")
         if in_list is not None and not isinstance(in_list, (str, list)):
             raise TypeError(f"Invalid type of 'in_list': {type(in_list)}, expected 'str' or 'list[str]'.")
-        default = 0.0 if treat_missing_as_0 else None
+        default = 0.0 if treat_missing_as_zero else None
 
         if isinstance(name, str):
             # --- path 1 ---
@@ -254,7 +254,7 @@ class AssetLiabConnector:
             raise ValueError(f"Calculation not defined: {groupby=}, {in_list=}")
 
     def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
-                 treat_missing_as_0: bool = False) -> float:
+                 treat_missing_as_zero: bool = False) -> float:
         """
         path 1:
             (func: None, key: str)
@@ -266,28 +266,28 @@ class AssetLiabConnector:
             (func: Callable, key: dict[str, str])
         """
         if func is None:
-            return self._get_size_measure(key, treat_missing_as_0)
+            return self._get_size_measure(key, treat_missing_as_zero)
         if isinstance(key, str):
-            return func(self._get_size_measure(key, treat_missing_as_0))
+            return func(self._get_size_measure(key, treat_missing_as_zero))
         elif isinstance(key, tuple):
-            args = tuple([self._get_size_measure(x, treat_missing_as_0) for x in key])
+            args = tuple([self._get_size_measure(x, treat_missing_as_zero) for x in key])
             return func(*args)
         elif isinstance(key, dict):
-            kwargs = {k: self._get_size_measure(v, treat_missing_as_0) for k, v in key.items()}
+            kwargs = {k: self._get_size_measure(v, treat_missing_as_zero) for k, v in key.items()}
             return func(**kwargs)
         raise TypeError(f"Invalid {type(key)=}, expected 'str', 'tuple', 'dict'.")
 
-    def _get_size_measure(self, key: str, treat_missing_as_0: bool = False) -> float:
+    def _get_size_measure(self, key: str, treat_missing_as_zero: bool = False) -> float:
         if not isinstance(key, str):
             raise TypeError(f"Invalid {type(key)=}, expected 'str'.")
 
         if "." not in key:
-            return getattr(self, key, 0.0 if treat_missing_as_0 else None)
+            return getattr(self, key, 0.0 if treat_missing_as_zero else None)
 
         owner, name, *_ = key.split(".")
         if owner == "asset":
-            return self._sum(self._assets, name=name, treat_missing_as_0=treat_missing_as_0)
+            return self._sum(self._assets, name=name, treat_missing_as_zero=treat_missing_as_zero)
         elif owner in ("liab", "liability"):
-            return self._sum(self._liabs, name=name, treat_missing_as_0=treat_missing_as_0)
+            return self._sum(self._liabs, name=name, treat_missing_as_zero=treat_missing_as_zero)
         else:
             raise ValueError(f"Invalid '{key}', expected 'asset.foo' or 'liab.foo'.")

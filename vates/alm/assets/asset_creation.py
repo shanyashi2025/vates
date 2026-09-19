@@ -1,26 +1,20 @@
 from vates.alm.assets.cash import Cash
 from vates.alm.assets.equity import Equity
-from vates.alm.assets.bond_fixed import BondFixed
-from vates.alm.assets.derivatives import EquityOption
 from vates.alm.assets.builders.bond_fixed_builder import BondFixedBuilder
 from vates.alm.assets.builders.equity_option_builder import EquityOptionBuilder
 
-_ASSET_CLS_MAP = {
+_DEFAULT_CREATOR_CLASS_DICT = {
     "cash": Cash,
     "equity": Equity,
-    "bond": BondFixed,
-    "bond_fixed": BondFixed,
-    "fixed_bond": BondFixed,
-    "equity_option": EquityOption
-}
-
-_BUILDER_MAP = {
-    BondFixed: BondFixedBuilder,
-    EquityOption: EquityOptionBuilder,
+    "bond": BondFixedBuilder,
+    "bond_fixed": BondFixedBuilder,
+    "fixed_bond": BondFixedBuilder,
+    "equity_option": EquityOptionBuilder,
 }
 
 
-def create_asset(asset_cls, *, build_pipeline: str | list[str] | None = None, pipe_operator: str = "|>", **kwargs):
+def create_asset(asset_cls, *, build_pipeline: str | list[str] | None = None, pipe_operator: str = "|>",
+                 creator_class_dict: dict[str, ...] = None, **kwargs):
     """
     Factory function to create an asset.
 
@@ -28,6 +22,7 @@ def create_asset(asset_cls, *, build_pipeline: str | list[str] | None = None, pi
         asset_cls: Asset class, 'cash', 'equity', 'bond' ('bond_fixed', 'fixed_bond' equivalently), 'equity_option'
         build_pipeline (str | list[str] | None): Build pipeline.
         pipe_operator (str): Pipe operator, used when `build_pipeline` is str, defaults to '|>'.
+        creator_class_dict (dict[str, ...]): Dict of asset creator class, defaults to `_DEFAULT_CREATOR_CLASS_DICT`
         **kwargs: Parameters.
 
     Returns:
@@ -36,13 +31,16 @@ def create_asset(asset_cls, *, build_pipeline: str | list[str] | None = None, pi
     Raises:
         ValueError: If `asset_cls` is not a valid asset class name.
     """
-    if isinstance(asset_cls, str):
-        if asset_cls.lower() in _ASSET_CLS_MAP:
-            asset_cls = _ASSET_CLS_MAP[asset_cls.lower()]
-        else:
-            raise ValueError(f"'{asset_cls}' is not a valid asset class name.")
+    if creator_class_dict is None:
+        creator_class_dict = _DEFAULT_CREATOR_CLASS_DICT
 
-    if asset_cls in _BUILDER_MAP:
-        return _BUILDER_MAP[asset_cls](**kwargs).build(build_pipeline, pipe_operator)
-    else:
-        return asset_cls(**kwargs)
+    creator_class = creator_class_dict.get(asset_cls) or asset_cls
+
+    if hasattr(creator_class, "build"):
+        return creator_class(**kwargs).build(build_pipeline, pipe_operator)
+
+    if build_pipeline:
+        raise ValueError(f"{asset_cls}: build_pipeline is provided ({build_pipeline}), "
+                         f"but creator class {creator_class} doesn't have 'build' method.")
+
+    return creator_class(**kwargs)  # directly construct

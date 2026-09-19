@@ -14,6 +14,7 @@ from typing import Callable, Self, get_type_hints
 
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core._utils import RunConfiguration, apply_default_if_none
+from vates.global_conf import CheckLevel, CHECK_LEVEL
 
 
 class StochExecutor:
@@ -184,8 +185,10 @@ class StochExecutor:
         ))
 
         if len(none_items) > 0:
-            msg = f"Following configuration items use default settings: {', '.join(none_items)}."
-            warnings.warn(msg); self.include_traced_message(f"INFO: {msg}")
+            msg = f"Default configuration items: {', '.join(none_items)}."
+            self.include_traced_message(f"INFO: {msg}")
+            if CHECK_LEVEL != CheckLevel.BYPASS:
+                warnings.warn(msg)
 
         return self
 
