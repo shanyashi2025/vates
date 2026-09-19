@@ -6,7 +6,7 @@ from vates._core import ProjModelEngine, add_projection_time_synchronizer
 from vates.utils import maybe_raise_if_ne
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
-from vates.alm.funds._allocator import AssetAllocator, AssetAllocationGroup, TargetWeight
+from vates.alm.funds._allocator import AssetAllocator, AssetAllocationGroup
 from vates.alm.funds._connector import AssetLiabConnector
 from vates.alm.funds._recorder import FundRecorder
 from vates.alm.funds._utils import _RateOfReturnIndexer
@@ -172,7 +172,6 @@ class Fund:
     def no_action_on_rebalance(self) -> None:
         """Skip asset rebalance, invest free proceeds into primary cash."""
         maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
-        t = self.time
         self._recorder.record_free_estate("bd")
         # just invest free_estate into primary cash, no other action, free_estate is reset to zero
         self.primary_cash_asset.invest_new_money(self._connector.dispose_free_estate())
@@ -182,29 +181,17 @@ class Fund:
         self._recorder.record_asset_after_dealing()
         self._state = ("closed", self.time)
 
-    def rebalance_assets(self, *, total_size: float, asset_size_basis: str,
-                         target_weights: dict[str, TargetWeight] | None, profile_assets: list[Asset] | None = None,
-                         **kwargs) -> None:
+    def rebalance_assets(self, *, total_size: float, **kwargs) -> None:
         """Rebalance assets per target allocation and optional profile.
 
         Args:
             total_size (float): Total size for allocation.
-            asset_size_basis (str): Basis for sizing against fund (usually FAV or BSV).
-            target_weights (dict[str, TargetWeight]): Target weight by allocation group.
-            profile_assets (list[Asset] | None=None): Profile assets for purchases (e.g., bonds).
         """
         maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
-        t, p = self.time, self.period
 
         self._recorder.record_free_estate("bd")
         # process rebalance
-        self._allocator.rebalance(
-            total_size=total_size,
-            size_basis=asset_size_basis,
-            target_weights=target_weights,
-            profile_assets=profile_assets,
-            **kwargs
-        )
+        self._allocator.rebalance(total_size=total_size, **kwargs)
         for asset in self.assets:
             asset.close_dealing()
         self._recorder.record_free_estate("ad")  # free_estate should be zero
