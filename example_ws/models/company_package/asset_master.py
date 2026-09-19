@@ -48,15 +48,7 @@ class AssetMaster:
         if key in cls._unique_report_basis_to_attr:
             return cls._unique_report_basis_to_attr[key]
 
-        report_bases: dict[str, str] = {
-            "MV": "market_value",
-            # "IFRS_PL": None,
-            # "IFRS_BS": None,
-            # "LOCAL_PL": None,
-            # "LOCAL_BS": None,
-            # "BSV": None,
-            # "FAV": None,
-        }
+        report_bases: dict[str, str] = {"MV": "market_value", }
 
         classification = ifrs_classification.upper()
         if classification == "FVTPL":
@@ -277,32 +269,32 @@ class AssetMaster:
             ifrs_classification = "FVTPL"
             local_classification = "FVTPL"
             stat_classification = "FVTPL"
-            report_basis_to_attr = cls.get_report_basis_to_attr(
-                asset_cls="cash",
-                ifrs_classification=ifrs_classification,
-                local_classification=local_classification,
-                stat_classification=stat_classification,
-            )
 
             # create instance
             cash = create_asset(
                 asset_cls="cash",
                 model_engine=model_engine,
                 asset_id=asset_id,
-                flex_attr_map=report_basis_to_attr,
+                flex_attr_map=cls.get_report_basis_to_attr(
+                    asset_cls="cash",
+                    ifrs_classification=ifrs_classification,
+                    local_classification=local_classification,
+                    stat_classification=stat_classification,
+                ),
                 currency=currency,
                 nominal=row["nominal"],
                 market_info=market_info,
                 ret_id=row["positive_cash_balance_ret_id"],
-                ret_id_short_pos=row["negative_cash_balance_ret_id"]
+                ret_id_short_pos=row["negative_cash_balance_ret_id"],
+                dyn_attrs={
+                    'ifrs_classification': ifrs_classification,
+                    'local_classification': local_classification,
+                    'stat_classification': stat_classification,
+                    "category": ASSET_CATEGORY_MAPPING["cash"],
+                    "allocation_group": row["allocation_group"],
+                    "fund_id": row["fund_id"],
+                },
             )
-            # dynamically create attribute(s)
-            setattr(cash, 'ifrs_classification', ifrs_classification)
-            setattr(cash, 'local_classification', local_classification)
-            setattr(cash, 'stat_classification', stat_classification)
-            setattr(cash, "category", ASSET_CATEGORY_MAPPING["cash"])
-            setattr(cash, "allocation_group", row["allocation_group"])
-            setattr(cash, "fund_id", row["fund_id"])
             # append to list
             cash_list.append(cash)
 
@@ -362,12 +354,6 @@ class AssetMaster:
             ifrs_classification = row["ifrs_classification"]
             local_classification = row["local_classification"]
             stat_classification = row["stat_classification"]
-            report_basis_to_attr = cls.get_report_basis_to_attr(
-                asset_cls="fixed_bond",
-                ifrs_classification=ifrs_classification,
-                local_classification=local_classification,
-                stat_classification=stat_classification,
-            )
 
             # create instance
             fixed_bond = create_asset(
@@ -383,23 +369,28 @@ class AssetMaster:
                 face_value=row["face_value"],
                 provided_cash_flow_dict=provided_cash_flow_dict,
                 units=row["units"],
-                flex_attr_map=report_basis_to_attr,
+                flex_attr_map=cls.get_report_basis_to_attr(
+                    asset_cls="fixed_bond",
+                    ifrs_classification=ifrs_classification,
+                    local_classification=local_classification,
+                    stat_classification=stat_classification,
+                ),
                 rf_curve=rf_curve,
                 credit_band=credit_band,
                 abv_price=row["abv_price_dirty"],
                 mv_price=row["mv_price_dirty"],
                 market_spread=row["market_spread"],
-                is_profile=False
+                is_profile=False,
+                dyn_attrs={
+                    'ifrs_classification': ifrs_classification,
+                    'local_classification': local_classification,
+                    'stat_classification': stat_classification,
+                    "category": ASSET_CATEGORY_MAPPING["fixed_bond"],
+                    "allocation_group": row["allocation_group"],
+                    "fund_id": row["fund_id"],
+                    'provided_cash_flow_id': provided_cash_flow_id,
+                },
             )
-            # dynamically create attribute(s)
-            setattr(fixed_bond, 'ifrs_classification', ifrs_classification)
-            setattr(fixed_bond, 'local_classification', local_classification)
-            setattr(fixed_bond, 'stat_classification', stat_classification)
-            setattr(fixed_bond, "category", ASSET_CATEGORY_MAPPING["fixed_bond"])
-            setattr(fixed_bond, "allocation_group", row["allocation_group"])
-            setattr(fixed_bond, "fund_id", row["fund_id"])
-            if is_cash_flow_provided:
-                setattr(fixed_bond, 'provided_cash_flow_id', provided_cash_flow_id)
             # append to list
             fixed_bond_list.append(fixed_bond)
 
@@ -472,12 +463,6 @@ class AssetMaster:
             ifrs_classification = row["ifrs_classification"]
             local_classification = row["local_classification"]
             stat_classification = row["stat_classification"]
-            report_basis_to_attr = cls.get_report_basis_to_attr(
-                asset_cls="fixed_bond",
-                ifrs_classification=ifrs_classification,
-                local_classification=local_classification,
-                stat_classification=stat_classification,
-            )
 
             fixed_bond = create_asset(
                 model_engine=model_engine,
@@ -491,21 +476,27 @@ class AssetMaster:
                 face_value=row["face_value"],
                 redemp_sched=None,
                 units=row["units"],
-                flex_attr_map=report_basis_to_attr,
+                flex_attr_map=cls.get_report_basis_to_attr(
+                    asset_cls="fixed_bond",
+                    ifrs_classification=ifrs_classification,
+                    local_classification=local_classification,
+                    stat_classification=stat_classification,
+                ),
                 rf_curve=rf_curve,
                 credit_band=credit_band,
                 abv_price=row["face_value"],
                 mv_price=row["face_value"],
                 market_spread=row["market_spread"],
-                is_profile=True
+                is_profile=True,
+                dyn_attrs={
+                    'ifrs_classification': ifrs_classification,
+                    'local_classification': local_classification,
+                    'stat_classification': stat_classification,
+                    "category": ASSET_CATEGORY_MAPPING["fixed_bond"],
+                    "allocation_group": row["allocation_group"],
+                    "fund_id": row["fund_id"],
+                },
             )
-            # dynamically create attribute(s)
-            setattr(fixed_bond, 'ifrs_classification', ifrs_classification)
-            setattr(fixed_bond, 'local_classification', local_classification)
-            setattr(fixed_bond, 'stat_classification', stat_classification)
-            setattr(fixed_bond, "category", ASSET_CATEGORY_MAPPING["fixed_bond"])
-            setattr(fixed_bond, "allocation_group", row["allocation_group"])
-            setattr(fixed_bond, "fund_id", row["fund_id"])
             # append to list
             fixed_bond_list.append(fixed_bond)
 
@@ -547,32 +538,32 @@ class AssetMaster:
             ifrs_classification = row["ifrs_classification"]
             local_classification = row["local_classification"]
             stat_classification = row["stat_classification"]
-            report_basis_to_attr = cls.get_report_basis_to_attr(
-                asset_cls="equity",
-                ifrs_classification=ifrs_classification,
-                local_classification=local_classification,
-                stat_classification=stat_classification,
-            )
 
             # create instance
             equity = create_asset(
                 asset_cls="equity",
                 model_engine=model_engine,
                 asset_id=asset_id,
-                flex_attr_map=report_basis_to_attr,
+                flex_attr_map=cls.get_report_basis_to_attr(
+                    asset_cls="equity",
+                    ifrs_classification=ifrs_classification,
+                    local_classification=local_classification,
+                    stat_classification=stat_classification,
+                ),
                 currency=currency,
                 market_value=row["market_value"],
                 purchase_cost=row["purchase_cost"],
                 equity_index=equity_index,
-                is_profile=False
+                is_profile=False,
+                dyn_attrs={
+                    'ifrs_classification': ifrs_classification,
+                    'local_classification': local_classification,
+                    'stat_classification': stat_classification,
+                    "category": ASSET_CATEGORY_MAPPING["equity"],
+                    "allocation_group": row["allocation_group"],
+                    "fund_id": row["fund_id"],
+                },
             )
-            # dynamically create attribute(s)
-            setattr(equity, 'ifrs_classification', ifrs_classification)
-            setattr(equity, 'local_classification', local_classification)
-            setattr(equity, 'stat_classification', stat_classification)
-            setattr(equity, "category", ASSET_CATEGORY_MAPPING["equity"])
-            setattr(equity, "allocation_group", row["allocation_group"])
-            setattr(equity, "fund_id", row["fund_id"])
             # append to list
             equity_list.append(equity)
 
@@ -616,30 +607,31 @@ class AssetMaster:
             ifrs_classification = row["ifrs_classification"]
             local_classification = row["local_classification"]
             stat_classification = row["stat_classification"]
-            report_basis_to_attr = cls.get_report_basis_to_attr(
-                asset_cls="equity",
-                ifrs_classification=ifrs_classification,
-                local_classification=local_classification,
-                stat_classification=stat_classification,
-            )
+
             # create instance
             equity = create_asset(
                 asset_cls="equity",
                 model_engine=model_engine,
                 asset_id=f"{str_cal_ym}{_asset_id}",
-                flex_attr_map=report_basis_to_attr,
+                flex_attr_map=cls.get_report_basis_to_attr(
+                    asset_cls="equity",
+                    ifrs_classification=ifrs_classification,
+                    local_classification=local_classification,
+                    stat_classification=stat_classification,
+                ),
                 currency=currency,
                 market_value=row["amount"],
                 equity_index=equity_index,
-                is_profile=True
+                is_profile=True,
+                dyn_attrs={
+                    'ifrs_classification': ifrs_classification,
+                    'local_classification': local_classification,
+                    'stat_classification': stat_classification,
+                    "category": ASSET_CATEGORY_MAPPING["equity"],
+                    "allocation_group": row["allocation_group"],
+                    "fund_id": row["fund_id"],
+                },
             )
-            # dynamically create attribute(s)
-            setattr(equity, 'ifrs_classification', ifrs_classification)
-            setattr(equity, 'local_classification', local_classification)
-            setattr(equity, 'stat_classification', stat_classification)
-            setattr(equity, "category", ASSET_CATEGORY_MAPPING["equity"])
-            setattr(equity, "allocation_group", row["allocation_group"])
-            setattr(equity, "fund_id", row["fund_id"])
             # append to list
             equity_list.append(equity)
 
@@ -685,12 +677,6 @@ class AssetMaster:
             ifrs_classification = row["ifrs_classification"]
             local_classification = row["local_classification"]
             stat_classification = row["stat_classification"]
-            report_basis_to_attr = cls.get_report_basis_to_attr(
-                asset_cls="equity_option",
-                ifrs_classification=ifrs_classification,
-                local_classification=local_classification,
-                stat_classification=stat_classification,
-            )
 
             # create instance
             equity_option = create_asset(
@@ -698,7 +684,12 @@ class AssetMaster:
                 model_engine=model_engine,
                 build_pipeline=row["build_pipeline"] if "build_pipeline" in df.columns else None,
                 asset_id=asset_id,
-                flex_attr_map=report_basis_to_attr,
+                flex_attr_map=cls.get_report_basis_to_attr(
+                    asset_cls="equity_option",
+                    ifrs_classification=ifrs_classification,
+                    local_classification=local_classification,
+                    stat_classification=stat_classification,
+                ),
                 currency=currency,
                 call_or_put=row["call_or_put"],
                 exercise_date=pd.Period(row["exercise_date"], freq='M'),
@@ -710,15 +701,16 @@ class AssetMaster:
                 rf_curve=rf_curve,
                 std_dev=row["std_dev"],
                 is_pay_dividend=(row["is_pay_dividend"].lower() in ('y', 'yes')),
-                is_profile=False
+                is_profile=False,
+                dyn_attrs={
+                    'ifrs_classification': ifrs_classification,
+                    'local_classification': local_classification,
+                    'stat_classification': stat_classification,
+                    "category": ASSET_CATEGORY_MAPPING["equity_option"],
+                    "allocation_group": row["allocation_group"],
+                    "fund_id": row["fund_id"],
+                },
             )
-            # dynamically create attribute(s)
-            setattr(equity_option, 'ifrs_classification', ifrs_classification)
-            setattr(equity_option, 'local_classification', local_classification)
-            setattr(equity_option, 'stat_classification', stat_classification)
-            setattr(equity_option, "category", ASSET_CATEGORY_MAPPING["equity_option"])
-            setattr(equity_option, "allocation_group", row["allocation_group"])
-            setattr(equity_option, "fund_id", row["fund_id"])
             # append to list
             equity_option_list.append(equity_option)
 

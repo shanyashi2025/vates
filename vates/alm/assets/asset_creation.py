@@ -14,7 +14,7 @@ _DEFAULT_CREATOR_CLASS_DICT = {
 
 
 def create_asset(asset_cls, *, build_pipeline: str | list[str] | None = None, pipe_operator: str = "|>",
-                 creator_class_dict: dict[str, ...] = None, **kwargs):
+                 creator_class_dict: dict[str, ...] = None, dyn_attrs: dict[str, ...] | None = None, **kwargs):
     """
     Factory function to create an asset.
 
@@ -23,6 +23,7 @@ def create_asset(asset_cls, *, build_pipeline: str | list[str] | None = None, pi
         build_pipeline (str | list[str] | None): Build pipeline.
         pipe_operator (str): Pipe operator, used when `build_pipeline` is str, defaults to '|>'.
         creator_class_dict (dict[str, ...]): Dict of asset creator class, defaults to `_DEFAULT_CREATOR_CLASS_DICT`
+        dyn_attrs (dict[str, ...]): Dict of attributes to be dynamically created, defaults to None.
         **kwargs: Parameters.
 
     Returns:
@@ -37,10 +38,15 @@ def create_asset(asset_cls, *, build_pipeline: str | list[str] | None = None, pi
     creator_class = creator_class_dict.get(asset_cls) or asset_cls
 
     if hasattr(creator_class, "build"):
-        return creator_class(**kwargs).build(build_pipeline, pipe_operator)
+        obj = creator_class(**kwargs).build(build_pipeline, pipe_operator)
+    else:
+        if build_pipeline:
+            raise ValueError(f"{asset_cls}: build_pipeline is provided ({build_pipeline}), "
+                             f"but creator class {creator_class} doesn't have 'build' method.")
+        obj = creator_class(**kwargs)  # directly construct
 
-    if build_pipeline:
-        raise ValueError(f"{asset_cls}: build_pipeline is provided ({build_pipeline}), "
-                         f"but creator class {creator_class} doesn't have 'build' method.")
+    if dyn_attrs:
+        for key, val in dyn_attrs.items():
+            setattr(obj, key, val)
 
-    return creator_class(**kwargs)  # directly construct
+    return obj
