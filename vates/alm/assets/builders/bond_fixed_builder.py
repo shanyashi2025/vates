@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import warnings
+from collections.abc import Mapping
 from typing import Self
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
@@ -35,7 +36,7 @@ class BondFixedBuilder:
         rf_curve: YieldCurve | None,
         credit_band: CreditBand | None,
         is_profile: bool,
-        flex_attr_map: dict[str, str] | None = None,
+        attr_aliases: Mapping[str, str] | None = None,
         provided_cash_flow_dict: dict[str, np.ndarray] | None = None,
         coupon_rate: float | None = None,
         abv_price: float | None = None,
@@ -52,7 +53,7 @@ class BondFixedBuilder:
             model_engine: Model engine object.
             is_profile (bool): Ture if profile asset, False if existing asset.
             asset_id (str): Asset identifier.
-            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
+            attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             currency (Currency): Currency.
             units (float): Number of units.
             rf_curve (YieldCurve): Risk-free yield curve
@@ -70,7 +71,7 @@ class BondFixedBuilder:
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
-        self.flex_attr_map: dict[str, str] = flex_attr_map
+        self.attr_aliases: Mapping[str, str] = attr_aliases
         self.currency: Currency = currency
         self.units: float = units
         self.issue_date: pd.Period = issue_date
@@ -309,7 +310,7 @@ class BondFixedBuilder:
         return BondFixed(
             model_engine=self.model_engine,
             asset_id=self.asset_id,
-            flex_attr_map=self.flex_attr_map,
+            attr_aliases=self.attr_aliases,
             currency=self.currency,
             units=self.units,
             issue_date=self.issue_date,

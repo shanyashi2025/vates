@@ -1,9 +1,9 @@
 ﻿#,asset_id,allocation_group,currency_id,equity_index_id,fund_id,market_value,purchase_cost,ifrs_classification,local_classification,stat_classification
-1,trad_equity,equity,cny,cny_equity,trad_fund,632635801.2,632635801.2,FVTPL,FVTPL,TRADING
-2,cd1_equity,equity,cny,cny_equity,cd1_fund,181147175.6,181147175.6,FVTPL,FVTPL,TRADING
-3,cd2_equity,equity,cny,cny_equity,cd2_fund,2065456.364,2065456.364,FVTPL,FVTPL,HFT
-4,sh_equity,equity,cny,cny_equity,sh_fund,0.01,0.01,FVTPL,FVTPL,HFT
-5,trad_private_equity,private_equity,cny,cny_private_equity,trad_fund,4777115711,4777115711,FVTPL,FVTPL,TRADING
-6,cd1_private_equity,private_equity,cny,cny_private_equity,cd1_fund,81827036.73,81827036.73,FVTPL,FVTPL,TRADING
-7,cd2_private_equity,private_equity,cny,cny_private_equity,cd2_fund,200398419.9,200398419.9,FVTPL,FVTPL,HFT
-8,sh_private_equity,private_equity,cny,cny_private_equity,sh_fund,0.01,0.01,FVTPL,FVTPL,HFT
+1,trad_equity,equity,cny,cny_equity,trad_fund,632635801.2,632635801.2,FVTPL,FVTPL,FVTPL
+2,cd1_equity,equity,cny,cny_equity,cd1_fund,181147175.6,181147175.6,FVTPL,FVTPL,FVTPL
+3,cd2_equity,equity,cny,cny_equity,cd2_fund,2065456.364,2065456.364,FVTPL,FVTPL,FVTPL
+4,sh_equity,equity,cny,cny_equity,sh_fund,0.01,0.01,FVTPL,FVTPL,FVTPL
+5,trad_private_equity,private_equity,cny,cny_private_equity,trad_fund,4777115711,4777115711,FVTPL,FVTPL,FVTPL
+6,cd1_private_equity,private_equity,cny,cny_private_equity,cd1_fund,81827036.73,81827036.73,FVTPL,FVTPL,FVTPL
+7,cd2_private_equity,private_equity,cny,cny_private_equity,cd2_fund,200398419.9,200398419.9,FVTPL,FVTPL,FVTPL
+8,sh_private_equity,private_equity,cny,cny_private_equity,sh_fund,0.01,0.01,FVTPL,FVTPL,FVTPL

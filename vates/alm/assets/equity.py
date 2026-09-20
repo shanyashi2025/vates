@@ -1,5 +1,6 @@
 import pandas as pd
 import warnings
+from collections.abc import Mapping
 from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable
@@ -27,7 +28,7 @@ class Equity(Asset):
         market_value: float,
         equity_index: EquityIndex,
         purchase_cost: float | None = None,
-        flex_attr_map: dict[str, str] | None = None,
+        attr_aliases: Mapping[str, str] | None = None,
         model_engine: ProjModelEngine | None = None,
         asset_id: str | None = None,
         is_profile: bool = False,
@@ -44,11 +45,11 @@ class Equity(Asset):
             market_value (float): Market value.
             purchase_cost (float | None): Purchase cost.
             equity_index (EquityIndex): Associated equity index.
-            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
+            attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=1,
-                         purchase_date=purchase_date, currency=currency, flex_attr_map=flex_attr_map, )
+                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, )
         self._equity_index: EquityIndex = equity_index
         self._mv: float = market_value
         self._purchase_cost: float | None = purchase_cost
@@ -151,7 +152,7 @@ class Equity(Asset):
             market_value=self._mv * scale,
             purchase_cost=self._mv * scale,
             equity_index=self._equity_index,
-            flex_attr_map=self._flex_attr_map,
+            attr_aliases=self._attr_aliases,
             model_engine=self._model_ref(),
             asset_id=new_asset_id,
             is_profile=False,

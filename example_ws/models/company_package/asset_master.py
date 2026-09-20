@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from enum import Enum, unique
 from typing import Self, NamedTuple
 
 from vates import ProjModelEngine
@@ -13,15 +14,97 @@ ASSET_CATEGORY_MAPPING = {
     'equity_option': 'EQ_DERIV'
 }
 
-class AssetReportBasisKey(NamedTuple):
-    asset_cls: str
-    ifrs_classification: str
-    local_classification: str
-    stat_classification: str
+@unique
+class IFRSClassfication(Enum):
+    FVTPL = "FVTPL"
+    FVOCI = "FVOCI"
+    AC = "AC"
+
+class IFRSReportItem(NamedTuple):
+    IFRS_BS: str
+    IFRS_PL: str
+
+@unique
+class LocalClassfication(Enum):
+    FVTPL = "FVTPL"
+    FVOCI = "FVOCI"
+    AC = "AC"
+
+class LocalReportItem(NamedTuple):
+    LOCAL_BS: str
+    LOCAL_PL: str
+
+@unique
+class StatClassfication(Enum):
+    FVTPL = "FVTPL"
+    FVOCI = "FVOCI"
+    AC = "AC"
+
+class StatReportItem(NamedTuple):
+    BSV: str
+    FAV: str
+
+class AssetReportItems:
+
+    _ifrs_report_mapping: dict[tuple, IFRSReportItem] = {
+        ('cash', IFRSClassfication.FVTPL): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="market_value"),
+        ('equity', IFRSClassfication.FVTPL): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="market_value"),
+        ('equity', IFRSClassfication.FVOCI): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="purchase_cost"),
+        ('fixed_bond', IFRSClassfication.FVTPL): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="market_value"),
+        ('fixed_bond', IFRSClassfication.FVOCI): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="amortized_book_value"),
+        ('fixed_bond', IFRSClassfication.AC): IFRSReportItem(IFRS_BS="amortized_book_value", IFRS_PL="amortized_book_value"),
+        ('equity_option', IFRSClassfication.FVTPL): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="market_value"),
+    }
+
+    _local_report_mapping: dict[tuple, LocalReportItem] = {
+        ('cash', LocalClassfication.FVTPL): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="market_value"),
+        ('equity', LocalClassfication.FVTPL): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="market_value"),
+        ('equity', LocalClassfication.FVOCI): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="purchase_cost"),
+        ('fixed_bond', LocalClassfication.FVTPL): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="market_value"),
+        ('fixed_bond', LocalClassfication.FVOCI): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="amortized_book_value"),
+        ('fixed_bond', LocalClassfication.AC): LocalReportItem(LOCAL_BS="amortized_book_value", LOCAL_PL="amortized_book_value"),
+        ('equity_option', LocalClassfication.FVTPL): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="market_value"),
+    }
+
+    _stat_report_mapping: dict[tuple, StatReportItem] = {
+        ('cash', StatClassfication.FVTPL): StatReportItem(BSV="market_value", FAV="market_value"),
+        ('equity', StatClassfication.FVTPL): StatReportItem(BSV="market_value", FAV="market_value"),
+        ('equity', StatClassfication.FVOCI): StatReportItem(BSV="market_value", FAV="purchase_cost"),
+        ('fixed_bond', StatClassfication.FVTPL): StatReportItem(BSV="market_value", FAV="market_value"),
+        ('fixed_bond', StatClassfication.FVOCI): StatReportItem(BSV="market_value", FAV="amortized_book_value"),
+        ('fixed_bond', StatClassfication.AC): StatReportItem(BSV="amortized_book_value", FAV="amortized_book_value"),
+        ('equity_option', StatClassfication.FVTPL): StatReportItem(BSV="market_value", FAV="market_value"),
+    }
+
+    _unique_report_items: dict[tuple, dict[str, str]] = {}
+
+    @classmethod
+    def get_report_items(cls, asset_cls: str, ifrs_classification: str, local_classification: str,
+                         stat_classification: str) -> dict[str, str]:
+        key = (asset_cls, ifrs_classification, local_classification, stat_classification)
+        if key in cls._unique_report_items:
+            return cls._unique_report_items[key]
+
+        _ifrs_classification = IFRSClassfication[ifrs_classification.upper()]
+        _local_classification = LocalClassfication[local_classification.upper()]
+        _stat_classification = StatClassfication[stat_classification.upper()]
+
+        _ifrs_rep_item = cls._ifrs_report_mapping[(asset_cls, _ifrs_classification)]
+        _local_rep_item = cls._local_report_mapping[(asset_cls, _local_classification)]
+        _stat_rep_item = cls._stat_report_mapping[(asset_cls, _stat_classification)]
+
+        report_items: dict[str, str] = {
+            "MV": "market_value",
+            **_ifrs_rep_item._asdict(),
+            **_local_rep_item._asdict(),
+            **_stat_rep_item._asdict(),
+        }
+
+        cls._unique_report_items[key] = report_items
+        return report_items
+
 
 class AssetMaster:
-
-    _unique_report_basis_to_attr: dict[AssetReportBasisKey, dict[str, str]] = {}
 
     def __init__(
         self,
@@ -35,86 +118,6 @@ class AssetMaster:
         self.fixed_bond_ls: list[BondFixed] = fixed_bond_ls or []
         self.equity_ls: list[Equity] = equity_ls or []
         self.equity_option_ls: list[EquityOption] = equity_option_ls or []
-
-    @classmethod
-    def get_report_basis_to_attr(cls, asset_cls: str, ifrs_classification: str, local_classification: str,
-                                 stat_classification: str) -> dict[str, str]:
-        key = AssetReportBasisKey(
-            asset_cls=asset_cls,
-            ifrs_classification=ifrs_classification,
-            local_classification=local_classification,
-            stat_classification=stat_classification,
-        )
-        if key in cls._unique_report_basis_to_attr:
-            return cls._unique_report_basis_to_attr[key]
-
-        report_bases: dict[str, str] = {"MV": "market_value", }
-
-        classification = ifrs_classification.upper()
-        if classification == "FVTPL":
-            report_bases["IFRS_PL"] = "market_value"
-            report_bases["IFRS_BS"] = "market_value"
-        elif classification == "FVOCI":
-            if asset_cls == "fixed_bond":
-                report_bases["IFRS_PL"] = "amortized_book_value"
-            elif asset_cls == "equity":
-                report_bases["IFRS_PL"] = "purchase_cost"
-            else:
-                raise ValueError(f"'{asset_cls} can not be classified as 'FVOCI' under IFRS basis.")
-            report_bases["IFRS_BS"] = "market_value"
-        elif classification == "AC":
-            if asset_cls == "fixed_bond":
-                report_bases["IFRS_PL"] = "amortized_book_value"
-                report_bases["IFRS_BS"] = "amortized_book_value"
-            else:
-                raise ValueError(f"'{asset_cls} can not be classified as 'AC' under IFRS basis.")
-        else:
-            raise ValueError(f"Invalid IFRS basis {classification=}, expected: ('FVTPL', 'FVOCI', 'AC').")
-
-        classification = local_classification.upper()
-        if classification == "FVTPL":
-            report_bases["LOCAL_PL"] = "market_value"
-            report_bases["LOCAL_BS"] = "market_value"
-        elif classification == "FVOCI":
-            if asset_cls == "fixed_bond":
-                report_bases["LOCAL_PL"] = "amortized_book_value"
-            elif asset_cls == "equity":
-                report_bases["LOCAL_PL"] = "purchase_cost"
-            else:
-                raise ValueError(f"'{asset_cls} can not be classified as 'FVOCI' under Local basis.")
-            report_bases["LOCAL_BS"] = "market_value"
-        elif classification == "AC":
-            if asset_cls == "fixed_bond":
-                report_bases["LOCAL_PL"] = "amortized_book_value"
-                report_bases["LOCAL_BS"] = "amortized_book_value"
-            else:
-                raise ValueError(f"'{asset_cls} can not be classified as 'AC' under Local basis.")
-        else:
-            raise ValueError(f"Invalid Local basis {classification=}, expected: ('FVTPL', 'FVOCI', 'AC').")
-
-        classification = stat_classification.upper()
-        if classification in ("FVTPL", "TRADING", "HFT"):
-            report_bases["FAV"] = "market_value"
-            report_bases["BSV"] = "market_value"
-        elif classification in ("FVOCI", "AFS"):
-            if asset_cls == "fixed_bond":
-                report_bases["FAV"] = "amortized_book_value"
-            elif asset_cls == "equity":
-                report_bases["FAV"] = "purchase_cost"
-            else:
-                raise ValueError(f"'{asset_cls} can not be classified as 'FVOCI' under Allocation basis.")
-            report_bases["BSV"] = "market_value"
-        elif classification in ("AC", "HTM"):
-            if asset_cls == "fixed_bond":
-                report_bases["FAV"] = "amortized_book_value"
-                report_bases["BSV"] = "amortized_book_value"
-            else:
-                raise ValueError(f"'{asset_cls} can not be classified as 'AC' under Allocation basis.")
-        else:
-            raise ValueError(f"Invalid Allocation basis {classification=}, expected: ('FVTPL', 'FVOCI', 'AC').")
-
-        cls._unique_report_basis_to_attr[key] = report_bases
-        return report_bases
 
     @property
     def all(self) -> list[Asset]:
@@ -275,7 +278,7 @@ class AssetMaster:
                 asset_cls="cash",
                 model_engine=model_engine,
                 asset_id=asset_id,
-                flex_attr_map=cls.get_report_basis_to_attr(
+                attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="cash",
                     ifrs_classification=ifrs_classification,
                     local_classification=local_classification,
@@ -369,7 +372,7 @@ class AssetMaster:
                 face_value=row["face_value"],
                 provided_cash_flow_dict=provided_cash_flow_dict,
                 units=row["units"],
-                flex_attr_map=cls.get_report_basis_to_attr(
+                attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="fixed_bond",
                     ifrs_classification=ifrs_classification,
                     local_classification=local_classification,
@@ -476,7 +479,7 @@ class AssetMaster:
                 face_value=row["face_value"],
                 redemp_sched=None,
                 units=row["units"],
-                flex_attr_map=cls.get_report_basis_to_attr(
+                attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="fixed_bond",
                     ifrs_classification=ifrs_classification,
                     local_classification=local_classification,
@@ -544,7 +547,7 @@ class AssetMaster:
                 asset_cls="equity",
                 model_engine=model_engine,
                 asset_id=asset_id,
-                flex_attr_map=cls.get_report_basis_to_attr(
+                attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="equity",
                     ifrs_classification=ifrs_classification,
                     local_classification=local_classification,
@@ -613,7 +616,7 @@ class AssetMaster:
                 asset_cls="equity",
                 model_engine=model_engine,
                 asset_id=f"{str_cal_ym}{_asset_id}",
-                flex_attr_map=cls.get_report_basis_to_attr(
+                attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="equity",
                     ifrs_classification=ifrs_classification,
                     local_classification=local_classification,
@@ -684,7 +687,7 @@ class AssetMaster:
                 model_engine=model_engine,
                 build_pipeline=row["build_pipeline"] if "build_pipeline" in df.columns else None,
                 asset_id=asset_id,
-                flex_attr_map=cls.get_report_basis_to_attr(
+                attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="equity_option",
                     ifrs_classification=ifrs_classification,
                     local_classification=local_classification,

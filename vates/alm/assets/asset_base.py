@@ -3,6 +3,7 @@ import uuid
 import warnings
 import weakref
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Self
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
@@ -23,14 +24,14 @@ class Asset(ABC):
         _units (float): Number of assets
         _purchase_date (pd.Period): Purchase date.
         _currency (Currency): Currency of the asset.
-        _flex_attr_map (dict[str, str]): Dict of string to named attribute, {"MV": "market_value"}
+        _attr_aliases (dict[str, str]): Dict of alias to named attribute, {"MV": "market_value"}
     """
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     _mutable_attr_check: CheckLevel = CheckLevel.ERROR
 
     __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', '_state', '_asset_id', '_is_profile', '_units',
-                 '_purchase_date', '_currency', '_flex_attr_map',)
+                 '_purchase_date', '_currency', '_attr_aliases',)
 
     def __init__(
         self,
@@ -41,7 +42,7 @@ class Asset(ABC):
         units: float,
         purchase_date: pd.Period | None,
         currency: Currency | None,
-        flex_attr_map: dict[str, str] | None,
+        attr_aliases: Mapping[str, str] | None,
     ):
         """
         Initialize the Asset.
@@ -53,7 +54,7 @@ class Asset(ABC):
             units (float): Number of assets
             purchase_date (pd.Period): Purchase date. Set to initilization date if input is None.
             currency (Currency): Asset currency.
-            flex_attr_map (dict[str, str]): Dict of string to named attribute, {"MV": "market_value"}
+            attr_aliases (Mapping[str, str]): Mapping of alias to named attribute, {"MV": "market_value"}
         """
         self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else (lambda: None)
         self._asset_id: str = asset_id or str(uuid.uuid4())
@@ -61,7 +62,7 @@ class Asset(ABC):
         self._units: float = units
         self._purchase_date: pd.Period = purchase_date
         self._currency: Currency | None = currency
-        self._flex_attr_map: dict[str, str] | None = flex_attr_map
+        self._attr_aliases: Mapping[str, str] | None = attr_aliases
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
@@ -175,24 +176,21 @@ class Asset(ABC):
         """
         pass
 
-    def __getattr__(self, item):
+    def __getattr__(self, name):
         try:
-            flex_map = object.__getattribute__(self, "_flex_attr_map")
+            aliases = object.__getattribute__(self, "_attr_aliases")
         except AttributeError:
-            raise AttributeError(item) from None
+            raise AttributeError(name) from None
 
-        if flex_map is None or item not in flex_map:
-            raise AttributeError(item)
+        target = aliases.get(name)
 
-        target = flex_map[item]
-
-        if target == item:
-            raise AttributeError(item)
+        if target is None or target == name:
+            raise AttributeError(name)
 
         try:
             return object.__getattribute__(self, target)
         except AttributeError:
-            raise AttributeError(item) from None
+            raise AttributeError(name) from None
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.asset_id}'"

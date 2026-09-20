@@ -1,4 +1,5 @@
 import pandas as pd
+from collections.abc import Mapping
 from typing import Self
 
 from vates import ProjModelEngine
@@ -31,7 +32,7 @@ class Cash(Asset):
         market_info: MarketInfo | None = None,
         ret_id: str | None = "",
         ret_id_short_pos: str | None = None,
-        flex_attr_map: dict[str, str] | None = None,
+        attr_aliases: Mapping[str, str] | None = None,
         purchase_date: pd.Period | None = None
     ):
         """
@@ -44,11 +45,11 @@ class Cash(Asset):
             market_info (MarketInfo): Market information.
             ret_id (str): Identifier of cash return.
             ret_id_short_pos (str): Identifier of cash return on short cash positions.
-            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
+            attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False, units=1,
-                         purchase_date=purchase_date, currency=currency, flex_attr_map=flex_attr_map)
+                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
         self._nominal: float = nominal
         self._market_info: MarketInfo | None = market_info
         self._ret_id: str = ret_id

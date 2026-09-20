@@ -1,8 +1,6 @@
-"""
-Defines the abstract Liab class.
-"""
 import pandas as pd
 import uuid
+import weakref
 from abc import ABC, abstractmethod
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
@@ -21,8 +19,8 @@ class Liab(ABC):
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state', '_liab_id', '_currency',
-                 '_entry_date', '_flex_attr_map',)
+    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', '_state', '_liab_id', '_currency',
+                 '_entry_date', '_attr_aliases',)
 
     def __init__(
         self,
@@ -31,7 +29,7 @@ class Liab(ABC):
         liab_id: str,
         currency: Currency | None,
         entry_date: pd.Period | None,
-        flex_attr_map: dict[str, str] | None,
+        attr_aliases: dict[str, str] | None,
     ):
         """
         Initialize a liability object.
@@ -41,12 +39,13 @@ class Liab(ABC):
             liab_id (str): Liability identifier.
             currency (Currency): Currency of the liability.
             entry_date (pd.Period): Entry date of the liability.
-            flex_attr_map (dict[str, str]): Dict of string to named attribute, {"MATH_RES": "math_reserve"}
+            attr_aliases (dict[str, str]): Dict of alias to named attribute, {"MATH_RES": "math_reserve"}
         """
+        self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else (lambda: None)
         self._liab_id: str = liab_id or str(uuid.uuid4())
         self._currency: Currency = currency
         self._entry_date: pd.Period = entry_date
-        self._flex_attr_map: dict[str, str] | None = flex_attr_map
+        self._attr_aliases: dict[str, str] | None = attr_aliases
         self._state: tuple[str, int] = ("initialized", self.time or 0)
 
     @property
@@ -91,24 +90,21 @@ class Liab(ABC):
         """
         pass
 
-    def __getattr__(self, item):
+    def __getattr__(self, name):
         try:
-            flex_map = object.__getattribute__(self, "_flex_attr_map")
+            aliases = object.__getattribute__(self, "_attr_aliases")
         except AttributeError:
-            raise AttributeError(item) from None
+            raise AttributeError(name) from None
 
-        if flex_map is None or item not in flex_map:
-            raise AttributeError(item)
+        target = aliases.get(name)
 
-        target = flex_map[item]
-
-        if target == item:
-            raise AttributeError(item)
+        if target is None or target == name:
+            raise AttributeError(name)
 
         try:
             return object.__getattribute__(self, target)
         except AttributeError:
-            raise AttributeError(item) from None
+            raise AttributeError(name) from None
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self._liab_id}'"

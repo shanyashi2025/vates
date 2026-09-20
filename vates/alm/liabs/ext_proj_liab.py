@@ -21,7 +21,7 @@ class ExtProjLiab(Liab):
         liab_id: str | None = None,
         currency: Currency | None = None,
         entry_date: pd.Period | None = None,
-        flex_attr_map: dict[str, str] | None = None,
+        attr_aliases: dict[str, str] | None = None,
         output_attrs_bd: list[str] | None = None,
         output_attrs_ad: list[str] | None = None,
         **kwargs
@@ -34,12 +34,12 @@ class ExtProjLiab(Liab):
             fund_id (str): Fund identifier.
             currency (Currency): Currency of the liability.
             entry_date (pd.Period): Entry date of the liability.
-            flex_attr_map (dict[str, str]): Dict of string to named attribute.
+            attr_aliases (dict[str, str]): Dict of alias to named attribute.
             output_attrs_bd (list[str]): List of attributes to output.
             output_attrs_ad (list[str]): List of attributes to output.
         """
         super().__init__(model_engine=model_engine, liab_id=liab_id, currency=currency,
-                         entry_date=entry_date, flex_attr_map=flex_attr_map)
+                         entry_date=entry_date, attr_aliases=attr_aliases)
         for key, val in kwargs.items():
             setattr(self, key, val)
 

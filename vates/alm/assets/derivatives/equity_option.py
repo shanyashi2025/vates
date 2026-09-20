@@ -1,8 +1,8 @@
 import math
 import pandas as pd
 import warnings
+from collections.abc import Mapping
 from typing import Self
-
 
 from vates._core import ProjModelEngine, TDimVariable
 from vates.finmath import CallOrPut, BlackScholesCalculator
@@ -46,7 +46,7 @@ class EquityOption(Asset):
         is_profile: bool = False,
         units: float = 1.0,
         currency: Currency | None = None,
-        flex_attr_map: dict[str, str] | None = None,
+        attr_aliases: Mapping[str, str] | None = None,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
     ):
@@ -67,11 +67,11 @@ class EquityOption(Asset):
             rf_curve (YieldCurve): Risk-free curve.
             std_dev (float): Standard deviation, i.e. volatility.
             is_pay_dividend (bool): True if paying dividend, otherwise False.
-            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
+            attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
-                         purchase_date=purchase_date, currency=currency, flex_attr_map=flex_attr_map)
+                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
         self._call_or_put: CallOrPut = CallOrPut[call_or_put.upper()] if isinstance(call_or_put, str) else call_or_put
         self._exercise_date: pd.Period = exercise_date
         self._price: float = price
@@ -239,7 +239,7 @@ class EquityOption(Asset):
             asset_id=new_asset_id,
             is_profile=False,
             currency=self._currency,
-            flex_attr_map=self._flex_attr_map,
+            attr_aliases=self._attr_aliases,
             purchase_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)

@@ -3,6 +3,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import warnings
+from collections.abc import Mapping
 from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable
@@ -54,7 +55,7 @@ class BondFixed(Asset):
         abv_price: float,
         amort_rate: float,
         rf_curve: YieldCurve,
-        flex_attr_map: dict[str, str] | None = None,
+        attr_aliases: Mapping[str, str] | None = None,
         model_engine: ProjModelEngine | None = None,
         asset_id: str | None = None,
         is_profile: bool = False,
@@ -73,7 +74,7 @@ class BondFixed(Asset):
             is_profile (bool): Ture if profile asset, False if existing asset.
             units (float): Number of bond units.
             currency (Currency): Asset currency.
-            flex_attr_map (dict[str, str]): Dict of asset reporting basis to named attribute.
+            attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             issue_date (pd.Period): Issue date of the bond.
             maturity_date (pd.Period): Maturity date of the bond.
             coupon_rate (float): Coupon rate.
@@ -90,7 +91,7 @@ class BondFixed(Asset):
             _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
-                         purchase_date=purchase_date, currency=currency, flex_attr_map=flex_attr_map)
+                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
 
         self._params = BondFixedParameters(
             issue_date=issue_date,
@@ -348,7 +349,7 @@ class BondFixed(Asset):
             abv_price=self._abv_price_dirty,
             amort_rate=self._amort_rate,
             rf_curve=self._rf_curve,
-            flex_attr_map=self._flex_attr_map,
+            attr_aliases=self._attr_aliases,
             model_engine=self._model_ref(),
             asset_id=new_asset_id,
             is_profile=False,
