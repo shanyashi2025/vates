@@ -180,8 +180,8 @@ def build_target_weights(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[
     for _, row in df_flt.iterrows():
         allocation_group = row["allocation_group"]
         tgt_wgt = row[date_col] / 100
-        min_wgt = tgt_wgt + row["lower_allow_pc"] / 100
-        max_wgt = tgt_wgt + row["upper_allow_pc"] / 100
-        target_weights[allocation_group] = TargetWeight(tgt_weight=tgt_wgt, min_weight=min_wgt, max_weight=max_wgt)
+        flr_wgt = tgt_wgt + row["lower_allow_pc"] / 100
+        cap_wgt = tgt_wgt + row["upper_allow_pc"] / 100
+        target_weights[allocation_group] = TargetWeight(target=tgt_wgt, floor=flr_wgt, cap=cap_wgt)
 
     return target_weights

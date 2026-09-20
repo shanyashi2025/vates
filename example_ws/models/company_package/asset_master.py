@@ -289,7 +289,7 @@ class AssetMaster:
                 market_info=market_info,
                 ret_id=row["positive_cash_balance_ret_id"],
                 ret_id_short_pos=row["negative_cash_balance_ret_id"],
-                dyn_attrs={
+                dynamic_setattrs={
                     'ifrs_classification': ifrs_classification,
                     'local_classification': local_classification,
                     'stat_classification': stat_classification,
@@ -384,7 +384,7 @@ class AssetMaster:
                 mv_price=row["mv_price_dirty"],
                 market_spread=row["market_spread"],
                 is_profile=False,
-                dyn_attrs={
+                dynamic_setattrs={
                     'ifrs_classification': ifrs_classification,
                     'local_classification': local_classification,
                     'stat_classification': stat_classification,
@@ -491,7 +491,7 @@ class AssetMaster:
                 mv_price=row["face_value"],
                 market_spread=row["market_spread"],
                 is_profile=True,
-                dyn_attrs={
+                dynamic_setattrs={
                     'ifrs_classification': ifrs_classification,
                     'local_classification': local_classification,
                     'stat_classification': stat_classification,
@@ -558,7 +558,7 @@ class AssetMaster:
                 purchase_cost=row["purchase_cost"],
                 equity_index=equity_index,
                 is_profile=False,
-                dyn_attrs={
+                dynamic_setattrs={
                     'ifrs_classification': ifrs_classification,
                     'local_classification': local_classification,
                     'stat_classification': stat_classification,
@@ -626,7 +626,7 @@ class AssetMaster:
                 market_value=row["amount"],
                 equity_index=equity_index,
                 is_profile=True,
-                dyn_attrs={
+                dynamic_setattrs={
                     'ifrs_classification': ifrs_classification,
                     'local_classification': local_classification,
                     'stat_classification': stat_classification,
@@ -705,7 +705,7 @@ class AssetMaster:
                 std_dev=row["std_dev"],
                 is_pay_dividend=(row["is_pay_dividend"].lower() in ('y', 'yes')),
                 is_profile=False,
-                dyn_attrs={
+                dynamic_setattrs={
                     'ifrs_classification': ifrs_classification,
                     'local_classification': local_classification,
                     'stat_classification': stat_classification,

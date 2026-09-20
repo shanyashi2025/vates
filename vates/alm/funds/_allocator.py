@@ -3,6 +3,7 @@ import pandas as pd
 import warnings
 from dataclasses import dataclass
 from enum import Enum, auto, unique
+from typing import Self
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 from vates.global_conf import CheckLevel
@@ -16,26 +17,44 @@ class TargetWeight:
     """Target allocation weights for an allocation group.
 
     Attributes:
-        tgt_weight (float): Target weight for the allocation group.
-        min_weight (float): Minimum allowed weight.
-        max_weight (float): Maximum allowed weight.
+        target (float): Target weight for the allocation group.
+        floor (float): Floor of allowed weight.
+        cap (float): Cap of allowed weight.
     """
-    tgt_weight: float
-    min_weight: float | None = None
-    max_weight: float | None = None
+    target: float
+    floor: float | None = None
+    cap: float | None = None
 
     def __post_init__(self):
-        if self.min_weight is None:
-            self.min_weight = self.tgt_weight
-        if self.max_weight is None:
-            self.max_weight = self.tgt_weight
-        if self.min_weight > self.tgt_weight:
-            raise ValueError(f"min_weight ({self.min_weight:4f}) > tgt_weight ({self.tgt_weight:.4f}).")
-        if self.max_weight < self.tgt_weight:
-            raise ValueError(f"max_weight ({self.max_weight:4f}) < tgt_weight ({self.tgt_weight:.4f}).")
+        if self.floor is None:
+            self.floor = self.target
+        if self.cap is None:
+            self.cap = self.target
+        if self.floor > self.target:
+            raise ValueError(f"floor: {self.floor:4f} > target: {self.target:.4f}.")
+        if self.cap < self.target:
+            raise ValueError(f"cap: {self.cap:4f} < target: {self.target:.4f}.")
 
-    def to_size(self, size: float) -> tuple[float, float, float]:
-        return size * self.tgt_weight, size * self.min_weight, size * self.max_weight
+
+@dataclass(slots=True, frozen=True)
+class TargetSize:
+    target: float
+    floor: float
+    cap: float
+
+    def __post_init__(self):
+        if self.floor > self.target:
+            raise ValueError(f"floor: {self.floor:4f} > target: {self.target:.4f}.")
+        if self.cap < self.target:
+            raise ValueError(f"cap: {self.cap:4f} < target: {self.target:.4f}.")
+
+    @classmethod
+    def from_target_weight(cls, total_size: float, target_weight: TargetWeight) -> Self:
+        return TargetSize(
+            target=total_size * target_weight.target,
+            floor =total_size * target_weight.floor,
+            cap=total_size * target_weight.cap
+        )
 
 
 @unique
@@ -47,7 +66,7 @@ class BuySellAction(Enum):
     SELL = auto()
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class TradeOrder:
     action: BuySellAction
     propn: float = 0
@@ -64,8 +83,8 @@ class AssetAllocationGroup:
         _purchase_method (AssetPurchaseMethod): Purchase method for this allocation group.
     """
 
-    __slots__ = ("_name", "_sequence", "_buysell_approach", "_purchase_method", "_size_basis", "target_weight",
-                 "_exist_conn", "_profile_conn", "_staged_conn", "_profile_size", "trade_decision")
+    __slots__ = ("_name", "_sequence", "_buysell_approach", "_purchase_method", "_size_basis", "_target_weight",
+                 "_exist_conn", "_profile_conn", "_staged_conn", "_target_size", "_profile_size", "trade_decision")
 
     def __init__(self, *, name: str, sequence: int, buysell_approach: AssetBuySellApproach | str,
                  purchase_method: AssetPurchaseMethod | str,
@@ -77,11 +96,12 @@ class AssetAllocationGroup:
         self._purchase_method: AssetPurchaseMethod = AssetPurchaseMethod[purchase_method.upper()] \
             if isinstance(purchase_method, str) else purchase_method
         self._size_basis: str = size_basis
-        self.target_weight: TargetWeight | None = target_weight
+        self._target_weight: TargetWeight | None = target_weight
 
         self._exist_conn: AssetLiabConnector | None = None
         self._profile_conn: AssetLiabConnector | None = None
         self._staged_conn: AssetLiabConnector = AssetLiabConnector()
+        self._target_size: TargetSize | None = None
         self._profile_size: float | None = None
         self.trade_decision: TradeOrder | None = None
 
@@ -170,52 +190,60 @@ class AssetAllocationGroup:
         else:
             self._profile_size = self._profile_conn.sum_asset(self._size_basis)
 
-    def make_trade_decision(self, total_size: float) -> None:
-        """Make the trade decision for an allocation group.
+    @property
+    def target_weight(self) -> TargetWeight:
+        return self._target_weight
 
-        Args:
-            total_size (float): Total size.
+    @property
+    def target_size(self) -> TargetSize:
+        return self._target_size
+
+    def update_target_size(self, total_size: float, new_target_weight: TargetWeight | None = None) -> None:
+        if new_target_weight is not None:
+            self._target_weight = new_target_weight
+        if self._target_weight is not None:
+            self._target_size = TargetSize.from_target_weight(total_size=total_size, target_weight=self._target_weight)
+        else:
+            self._target_size = None
+
+    def make_trade_decision(self) -> None:
+        """Make the trade decision for an allocation group.
 
         Raises:
             ValueError: If an invalid asset buy/sell approach is provided.
         """
-        if self.target_weight is not None:
-            tgt_size, min_size, max_size = self.target_weight.to_size(total_size)
-        else:
-            tgt_size, min_size, max_size = None, None, None
-
         if self._buysell_approach == AssetBuySellApproach.NO_TRADE:
             self.trade_decision = TradeOrder(action=BuySellAction.NO_ACTION)
         elif self._buysell_approach == AssetBuySellApproach.BUY_HOLD:
-            if self.current_size < min_size:
+            if self.current_size < self._target_size.floor:
                 if self._purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
                     self.trade_decision = TradeOrder(
                         action=BuySellAction.BUY_SCALE_EXIST,
-                        propn=(tgt_size - self.current_size) / self.current_size)
+                        propn=(self._target_size.target - self.current_size) / self.current_size)
                 elif self._purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
                     self.trade_decision = TradeOrder(
                         action=BuySellAction.BUY_PROFILE,
-                        propn=(tgt_size - self.current_size) / self.profile_size)
+                        propn=(self._target_size.target - self.current_size) / self.profile_size)
                 else:
                     raise ValueError(f'Can not implement purchase method {self._purchase_method} for {self.name}.')
             else:
                 self.trade_decision = TradeOrder(action=BuySellAction.NO_ACTION)
         elif self._buysell_approach == AssetBuySellApproach.BUY_SELL:
-            if self.current_size < min_size:
+            if self.current_size < self._target_size.floor:
                 if self._purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
                     self.trade_decision = TradeOrder(
                         action=BuySellAction.BUY_SCALE_EXIST,
-                        propn=(tgt_size - self.current_size) / self.current_size)
+                        propn=(self._target_size.target - self.current_size) / self.current_size)
                 elif self._purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
                     self.trade_decision = TradeOrder(
                         action=BuySellAction.BUY_PROFILE,
-                        propn=(tgt_size - self.current_size) / self.profile_size)
+                        propn=(self._target_size.target - self.current_size) / self.profile_size)
                 else:
                     raise ValueError(f'Can not implement purchase method {self._purchase_method} for {self.name}.')
-            elif self.current_size > max_size:
+            elif self.current_size > self._target_size.cap:
                 self.trade_decision = TradeOrder(
                     action=BuySellAction.SELL,
-                    propn=(self.current_size - tgt_size) / self.current_size)
+                    propn=(self.current_size - self._target_size.target) / self.current_size)
             else:
                 self.trade_decision = TradeOrder(action=BuySellAction.NO_ACTION)
         else:
@@ -279,9 +307,9 @@ class AssetAllocationGroup:
         current_weight = self.current_size / total_size
 
         if self.buysell_approach == AssetBuySellApproach.BUY_HOLD:
-            return self.target_weight.min_weight <= current_weight + tolerance
+            return self.target_weight.floor <= current_weight + tolerance
         elif self.buysell_approach == AssetBuySellApproach.BUY_SELL:
-            return self.target_weight.min_weight - tolerance <= current_weight <= self.target_weight.max_weight + tolerance
+            return self.target_weight.floor - tolerance <= current_weight <= self.target_weight.cap + tolerance
         else:
             raise ValueError(f"{self.name}: invalid asset buy/sell appraoch {self.buysell_approach}.")
 
@@ -289,6 +317,7 @@ class AssetAllocationGroup:
         self._exist_conn = None
         self._profile_conn = None
         self._staged_conn = AssetLiabConnector()
+        self._target_size = None
         self._profile_size = None
         self.trade_decision = None
 
@@ -383,12 +412,14 @@ class AssetAllocator:
 
         """
         t, p = self.time, self.period
-        self._on_enter_rebalance(size_basis=asset_size_basis, profile_assets=profile_assets, target_weights=target_weights)
-
         if total_size < 0:
             warnings.warn(f'{p} {self.name}: negative fund size ({total_size:.2f}) will be treated as zero, and '
                           'all existing assets will be sold to reblance.')
         total_size = max(total_size, 0.0001)  # to prevent ZeroDivisionError
+
+        self._on_enter_rebalance(total_size=total_size, size_basis=asset_size_basis, profile_assets=profile_assets,
+                                 target_weights=target_weights)
+
         self.tdv_fund_size[t] = total_size
         self.tdv_ag_size_bd[t] = np.array([ag.current_size for ag in self.alloc_groups])
         self.tdv_ag_wgt_pc_bd[t] = np.array([ag.current_size / total_size for ag in self.alloc_groups]) * 100
@@ -396,7 +427,7 @@ class AssetAllocator:
         # --- step 1: process non-residual groups in sequence ---
         for ag in self.alloc_groups:
             if ag.buysell_approach != AssetBuySellApproach.RESIDUAL:
-                ag.make_trade_decision(total_size=total_size)
+                ag.make_trade_decision()
                 ag.execute_trade()
 
         # --- step 2: process residual groups ---
@@ -413,7 +444,7 @@ class AssetAllocator:
             if not is_satisfied:
                 msg = (
                     f"{p} | {self.name} | {ag.name}: allocation is not satisfied, {ag.current_size/total_size:.4f}; "
-                    f"min: {ag.target_weight.min_weight}, max: {ag.target_weight.max_weight}; "
+                    f"floor: {ag.target_weight.floor}, cap: {ag.target_weight.cap}; "
                     f"purchase method: {ag.purchase_method.name}; buysell approach: {ag.buysell_approach.name}.")
                 if check_level == CheckLevel.ERROR:
                     raise ValueError(msg)
@@ -429,7 +460,7 @@ class AssetAllocator:
 
         self._on_exit_reblance()
 
-    def _on_enter_rebalance(self, size_basis: str | None, profile_assets: list[Asset] | None,
+    def _on_enter_rebalance(self, total_size: float, size_basis: str | None, profile_assets: list[Asset] | None,
                             target_weights: dict[str, TargetWeight] | None) -> None:
         profile_assets = profile_assets or []
         target_weights = target_weights or {}
@@ -449,8 +480,8 @@ class AssetAllocator:
         for ag in self.alloc_groups:
             if size_basis is not None:
                 ag.size_basis = size_basis
-            if ag.name in target_weights:
-                ag.target_weight = target_weights[ag.name]
+            maybe_new_target_weight = target_weights.get(ag.name, None)
+            ag.update_target_size(total_size=total_size, new_target_weight=maybe_new_target_weight)
             ag.exist_conn = AssetLiabConnector(exist_assets_by_name[ag.name])  # auto refresh size
             ag.profile_conn = AssetLiabConnector(profile_assets_by_name[ag.name])  # auto refresh size
             # perform pre-checks
