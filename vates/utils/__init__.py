@@ -1,4 +1,5 @@
 from vates._core._utils import parse_int_list_from_str
+from vates.utils.lifecycle import Lifecycle, transition
 from vates.utils.num_var_group import NumVarGroup
 
 from vates.utils.risk_module import (
@@ -14,6 +15,11 @@ from vates.utils.uncategorized import (
 __all__ = [
     # _core.utils
     'parse_int_list_from_str',
+
+    # lifecycle
+    'Lifecycle',
+    'transition',
+
     # dataclasses
     'NumVarGroup',
 

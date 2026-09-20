@@ -63,6 +63,7 @@ class Lifecycle(Generic[T]):
         created_phase (T | None): Phase recorded as performed at ``created_at``,
             typically ``Phase.CREATED``. ``None`` records nothing.
     """
+    __slots__ = ("_last",)
 
     def __init__(self, *, created_at: int | None = None, created_phase: T | None = None) -> None:
         self._last: dict[T, int] = {}
