@@ -13,7 +13,7 @@ _DEFAULT_CREATOR_CLASS_DICT = {
 }
 
 
-def create_asset(asset_cls, *, build_pipeline: str | list[str] | None = None, pipe_operator: str = "|>",
+def create_asset(asset_cls, /, *, build_pipeline: str | list[str] | None = None, pipe_operator: str = "|>",
                  creator_class_dict: dict[str, ...] = None, dynamic_setattrs: dict[str, ...] | None = None, **kwargs):
     """
     Factory function to create an asset.

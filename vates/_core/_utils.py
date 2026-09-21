@@ -43,7 +43,7 @@ class ProjectionTimeSynchronizer:
             self.period += n
         self._notify_on_time_change()
 
-    def attach_eligible_time_observer(self, observer, /) -> None:
+    def attach_time_observer(self, observer, /) -> None:
         if isinstance(observer, weakref.ref):
             observer = observer()
         # WeakSet handles duplicate detection and dead-reference cleanup.
@@ -123,7 +123,7 @@ def add_projection_time_synchronizer(_cls=None, /):
             # (e.g. spawned assets) can already read `self.time`/`self.period`.
             self.time = time_synchronizer.time
             self.period = time_synchronizer.period
-            time_synchronizer.attach_eligible_time_observer(self)
+            time_synchronizer.attach_time_observer(self)
 
             if original_init and original_init is not object.__init__:
                 original_init(self, *args, **kwargs)

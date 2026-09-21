@@ -176,7 +176,7 @@ class TestProjectionTimeSynchronizer:
 
         s = ProjectionTimeSynchronizer()
         obs = Observer()
-        s.attach_eligible_time_observer(obs)
+        s.attach_time_observer(obs)
         s.set(time=1)
         s.set(time=2)
         assert calls == [1, 2]
@@ -184,7 +184,7 @@ class TestProjectionTimeSynchronizer:
     def test_detach_time_observer_removes(self):
         s = ProjectionTimeSynchronizer()
         observer = self._Observer()
-        s.attach_eligible_time_observer(observer)
+        s.attach_time_observer(observer)
         assert len(s._time_observers) == 1
         s.detach_time_observer(observer)
         assert len(s._time_observers) == 0
@@ -194,7 +194,7 @@ class TestProjectionTimeSynchronizer:
     def test_detach_time_observer_absent_noop(self):
         s = ProjectionTimeSynchronizer()
         observer = self._Observer()  # hold a strong reference so it stays alive
-        s.attach_eligible_time_observer(observer)
+        s.attach_time_observer(observer)
         s.detach_time_observer(self._Observer())  # different instance -> not found
         assert len(s._time_observers) == 1
         # detaching from an empty synchronizer is harmless
@@ -208,8 +208,8 @@ class TestProjectionTimeSynchronizer:
         # notifications.
         s = ProjectionTimeSynchronizer()
         observer = self._Observer()
-        s.attach_eligible_time_observer(observer)
-        s.attach_eligible_time_observer(observer)
+        s.attach_time_observer(observer)
+        s.attach_time_observer(observer)
         assert len(s._time_observers) == 1  # duplicate ignored
         s.set(time=1)
         assert observer.calls == 1
@@ -227,12 +227,12 @@ class TestProjectionTimeSynchronizer:
         s = ProjectionTimeSynchronizer()
 
         dead = self._Observer()
-        s.attach_eligible_time_observer(dead)
+        s.attach_time_observer(dead)
         assert len(s._time_observers) == 1
 
         live = [self._Observer() for _ in range(4)]
         for observer in live:
-            s.attach_eligible_time_observer(observer)
+            s.attach_time_observer(observer)
         assert len(s._time_observers) == 5
 
         del dead
@@ -243,7 +243,7 @@ class TestProjectionTimeSynchronizer:
         # An observer with no other reference is collected, so it is never
         # notified and no longer counted.
         s = ProjectionTimeSynchronizer()
-        s.attach_eligible_time_observer(self._Observer())
+        s.attach_time_observer(self._Observer())
         gc.collect()  # the observer has no other reference after the call returns
         s.set(time=1)
         assert len(s._time_observers) == 0

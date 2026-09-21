@@ -275,7 +275,7 @@ class AssetMaster:
 
             # create instance
             cash = create_asset(
-                asset_cls="cash",
+                "cash",
                 model_engine=model_engine,
                 asset_id=asset_id,
                 attr_aliases=AssetReportItems.get_report_items(
@@ -360,8 +360,8 @@ class AssetMaster:
 
             # create instance
             fixed_bond = create_asset(
+                "fixed_bond",
                 model_engine=model_engine,
-                asset_cls="fixed_bond",
                 build_pipeline=row["build_pipeline"] if "build_pipeline" in df.columns else None,
                 asset_id=asset_id,
                 currency=currency,
@@ -468,8 +468,8 @@ class AssetMaster:
             stat_classification = row["stat_classification"]
 
             fixed_bond = create_asset(
+                "fixed_bond",
                 model_engine=model_engine,
-                asset_cls="fixed_bond",
                 build_pipeline='coupon_rate',
                 asset_id=f"{str_cal_ym}{_asset_id}",
                 currency=currency,
@@ -544,7 +544,7 @@ class AssetMaster:
 
             # create instance
             equity = create_asset(
-                asset_cls="equity",
+                "equity",
                 model_engine=model_engine,
                 asset_id=asset_id,
                 attr_aliases=AssetReportItems.get_report_items(
@@ -613,7 +613,7 @@ class AssetMaster:
 
             # create instance
             equity = create_asset(
-                asset_cls="equity",
+                "equity",
                 model_engine=model_engine,
                 asset_id=f"{str_cal_ym}{_asset_id}",
                 attr_aliases=AssetReportItems.get_report_items(
@@ -683,7 +683,7 @@ class AssetMaster:
 
             # create instance
             equity_option = create_asset(
-                asset_cls="equity_option",
+                "equity_option",
                 model_engine=model_engine,
                 build_pipeline=row["build_pipeline"] if "build_pipeline" in df.columns else None,
                 asset_id=asset_id,

@@ -14,24 +14,20 @@ stochastic (Monte Carlo) solvency capital measurement. Depends on `numpy` and `p
   `.venv/` and `uv.lock` are present; the project uses setuptools + `pyproject.toml`,
   so `pip`/`uv` can also read it. There is no separate test suite or linter config.
 
-- **Run example models:** from the repo root, pass a JSON run-config as the first CLI arg:
+- **Run example models:** from `example_ws\`, pass a JSON run-config as the first CLI arg:
   ```
-  python .\examples\models\em01_asset_proj_inner.py .\examples\runs\em01_asset_proj_inner.json
+  python models\01_asset_proj.py runs\01_asset_proj.json
   ```
-  Each `examples/runs/*.json` is a flat key-value config (`model_name`, `start_year`/`start_month`,
+  Each `runs/*.json` is a flat key-value config (`slug`, `start_year`/`start_month`,
   `end_year`, `scenario`, `workspace_directory`, `input_directories`, `results_directory`)
-  consumed by `main()` via `json.load(sys.argv[1])`. Other example models: `em01_asset_proj_top`,
-  `em02_fund_proj`, `em03_cross_proj`, `em11_monte_carlo`, `em12_stoch_ec_mvl`.
-  `.run_all.bat` scripts in `examples/runs/` and `examples/simple_use_cases/` run every variant in
-  sequence (Windows only, they `cd` back to the repo root).
+  consumed by `main()` via `json.load(sys.argv[1])` (function `run_with_json_config`). 
+  Other example models: `01_asset_proj_top`, `02_fund_proj`, `03_cross_proj`, `11_monte_carlo`, `12_stoch_ec_mvl`.
 
-- **Simple use cases:** standalone scripts under `examples/simple_use_cases/`
+- **Other use cases:** standalone scripts under `example_ws/other_use_cases/`
   (`Black_Scholes_Option_Pricing_Model`, `efficient_frontier`, `interest_rate_term_structure`),
   each with its own `main.py`.
 
-- **GUI:** `python .\gui\main.py` (Tkinter; also invoked via `gui/start.bat`). Wraps the
-  `em01_asset_proj_*` asset models behind a form that writes a run config and shells out to the
-  model script.
+- **GUI:** `python gui\app.py` (`streamlit` app).
 
 ## Architecture
 
@@ -41,7 +37,7 @@ The heart of the library. The public surface (`vates/__init__.py`) re-exports th
 variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `utils`.
 
 - **`ProjModelEngine`** — the deterministic, monthly-step engine. Usage contract is always:
-  1. construct with `model_name`/`description`; 2. `configure_run(...)`; 3. `@model.bind_projection`
+  1. construct with `slug`/`description`; 2. `configure_run(...)`; 3. `@model.bind_projection`
   a function whose first parameter is the model (or a zero-arg function); 4. `model.run()`.
   During `run()` it iterates `t = 0 .. MAX_T`, advancing a `ProjectionTimeSynchronizer` that keeps
   `model.time` and `model.period` (a `pd.Period` with monthly freq) in lockstep. The bound function
@@ -50,7 +46,7 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
 
 - **`variables`** — bound functions write results into `ConstVariable` (scalar/array, constant) or
   `TDimVariable` (indexed by `t`/`pd.Period`) instances. Variables self-register with the engine via
-  `include_proj_variable`. On run, the engine serializes them to `{model_name}.proj.csv`. Each
+  `include_proj_variable`. On run, the engine serializes them to `{slug}.proj.csv`. Each
   variable carries `group`/`owner`/`name` and up to 3 labeled `dims` (lists or Enums), which become
   row labels like `name[a:b:c]`. Use `proj_result(...)` (`vates/_core/_utils.py`) to read `.proj.csv`
   back into a DataFrame or a single cell `(group, owner, variable [, date])` value.
@@ -61,8 +57,7 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
   fresh engine instance, appending rows to per-batch `.stoch.csv` files. A `.stoch.stat.csv` is
   produced only when inputs include a `__stoch_setting__.json` with a `statistic` dict
   (mean/std/median/max/min and `perc%`). Two caveats: the bound function is executed in worker
-  processes, so it must be top-level/picklable; and stochastic projection typically needs a shared
-  per-period sync — see `add_projection_time_synchronizer` below.
+  processes, so it must be top-level/picklable.
 
 - **`RunConfig`** (`vates/_core/_utils.py`) — frozen dataclass with exhaustive validation
   (`validate_number` / `validate_string` / `validate_period` / ...); created via `RunConfig.create`.
@@ -72,11 +67,10 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
 
 `ProjectionTimeSynchronizer` broadcasts `time`/`period` changes to registered observers via
 `attach_time_observer`, and `add_projection_time_synchronizer` is a class decorator that injects a
-`_time_synchronizer` into a class and (re)defines `time`/`period` properties bound to it. When a
-class receives a `model_engine` keyword argument, the decorator wires it to the engine's
-synchronizer so the object advances with the model. This is how economic/asset class objects stay in
-sync with the running projection. `vates/alm/assets/asset_base.py` is the canonical example
-(`@add_projection_time_synchronizer class Asset`).
+`_time_synchronizer` into a class. When a class receives a `model_engine` keyword argument, 
+the decorator wires it to the engine's synchronizer so the object advances with the model. 
+This is how economic/asset class objects stay in sync with the running projection. `vates/alm/assets/asset_base.py` 
+is the canonical example (`@add_projection_time_synchronizer class Asset`).
 
 ### ALM library (`vates/alm/`)
 
@@ -86,19 +80,17 @@ High-level Asset–Liability Management building blocks that plug into the proje
   `CreditBand`, `EquityIndex`, `Currency`, `MarketInfo`. These are updated each time-step by an ESG
   master before assets roll forward.
 - **`assets/`** — asset classes (`Cash`, `Equity`, `BondFixed`, derivatives `EquityOption`) built on
-  the `Asset` abstract base. Each asset implements `mv`/`fav`/`bsv` (market / fund-accounting /
-  balance-sheet value) plus a `roll_forward()` / `close_dealing()` lifecycle. Distinguishes *profile*
-  (to-be-purchased) vs *existing* assets. `create_asset(cls_or_name, build_pipeline, ...)` is the
-  factory: plain classes construct directly, while `BondFixed`/`EquityOption` route through a
-  **builder** (`vates/alm/assets/builders/`). A builder performs a named `build_pipeline` of
-  calibration steps (e.g. `derive_coupon_rate`, `calculate_amort_rate`, `calibrate_market_spread`,
-  `calculate_market_price`, `risk_neutralization`) then validates required prices/spreads before
-  constructing the asset.
-- **`funds/`** — fund accounting (`Fund`) with an asset allocator and fund calculator (fund value,
-  target weight / `RebalancePolicyParams`, `FundSizeType`, `TargetWeight`).
-- **`liabs/`** — liability base class (`Liab`) and `ExtProjLiab` for liabilities projected by an
-  external engine.
-- **`enums.py`** — shared Enums (`AssetRepBasis`, `AssetClassification`, ...).
+  the `Asset` abstract base. Each asset implements a `roll_forward()` / `close_dealing()` lifecycle. 
+  Distinguishes *profile* (to-be-purchased) vs *existing* assets. 
+  `create_asset(cls_or_name, build_pipeline, ...)` is the factory: plain classes construct directly, 
+  while `BondFixed`/`EquityOption` route through a **builder** (`vates/alm/assets/builders/`). 
+  A builder performs a named `build_pipeline` of calibration steps (e.g. `derive_coupon_rate`, 
+  `calculate_amort_rate`, `calibrate_market_spread`, `calculate_market_price`, `risk_neutralization`) 
+  then validates required prices/spreads before constructing the asset.
+- **`funds/`** — fund accounting (`Fund`) with an asset allocator and fund recorder (fund value,
+  target weight / `AssetAllocationGroup`, `TargetWeight`).
+- **`liabs/`** — liability base class (`Liab`) and `ExtProjLiab` for liabilities projected externally.
+- **`enums.py`** — shared Enums (`AssetBuySellApproach`, `AssetPurchaseMethod`, ...).
 
 ### Financial math (`vates/finmath/`)
 
@@ -117,17 +109,16 @@ Compute quantitative-risk minimum capital.
 
 - `vates/_experiment/` — experimental code parked out of the main public API, currently an
   `autograd.py` (there is a matching `docs/tutorials/tut_autograd.py`).
-- `vates/utils/` — helpers: `data_classes`, `json_share_code_tool/` (read/write JSON), `risk_module`,
-  `uncategorized`.
+- `vates/utils/` — helpers: `lifecycle`, `num_var_group`, `risk_module`, `uncategorized`.
 
 ### Example workflows
 
-`examples/models/` are the reference implementations. The asset models
-(`em01_*`) use a bespoke `company_package/` module (in `examples/models/`) with classes like
-`EsgMaster`, `AssetMaster`, and file-loading helpers; input tables live in `examples/inputs/<name>/`
+`example_ws/models/` are the reference implementations. The asset models
+(`01_*`) use a bespoke `company_package/` module (in `example_ws/models/`) with classes like
+`EsgMaster`, `AssetMaster`, and file-loading helpers; input tables live in `example_ws/inputs/<name>/`
 and are resolved by name through `_file_names.csv` + `_file_read_config.json` configs. The stochastic
-models (`em11_monte_carlo`, `em12_stoch_ec_mvl`) demonstrate `StochExecutor` and solvency
-calculation. Generated outputs (`examples/results/`, `examples/intermediate/`) are git-ignored.
+models (`11_monte_carlo`, `12_stoch_ec_mvl`) demonstrate `StochExecutor`. Generated 
+outputs (`example_ws/results/`, `example_ws/intermediate/`) are git-ignored.
 
 ## Conventions
 
