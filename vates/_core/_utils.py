@@ -1,5 +1,4 @@
 import pandas as pd
-import warnings
 import weakref
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -17,59 +16,51 @@ def apply_default_if_none(key: str, value, default, /, *, record: list[str] | No
 
 
 class ProjectionTimeSynchronizer:
+    """Publishes the current projection `time`/`period` to registered observers.
+
+    `time` and `period` are plain attributes (updated by `set`/`elapse`) so that
+    observers are kept in sync by direct assignment, avoiding a property lookup
+    on every access. Observers are stored in a `weakref.WeakSet`, which makes
+    attachment O(1) and drops dead observers automatically.
+    """
 
     def __init__(self, time: int | None = None, period: pd.Period | None = None):
-        self._time: int | None = time
-        self._period: pd.Period | None = period
-        self._time_observers: list[weakref.ref] = []
-
-    @property
-    def time(self) -> int | None:
-        return self._time
-
-    @property
-    def period(self) -> pd.Period | None:
-        return self._period
+        self.time: int | None = time
+        self.period: pd.Period | None = period
+        self._time_observers: weakref.WeakSet = weakref.WeakSet()
 
     def set(self, *, time: int | None = None, period: pd.Period | None = None) -> None:
         if time is not None:
-            self._time = time
+            self.time = time
         if period is not None:
-            self._period = period if isinstance(period, pd.Period) else pd.Period(period, freq="M")
+            self.period = period if isinstance(period, pd.Period) else pd.Period(period, freq="M")
         self._notify_on_time_change()
 
     def elapse(self, n: int = 1, /) -> None:
         if self.time is not None:
-            self._time += n
+            self.time += n
         if self.period is not None:
-            self._period += n
+            self.period += n
         self._notify_on_time_change()
 
     def attach_eligible_time_observer(self, observer, /) -> None:
-        ref = observer if isinstance(observer, weakref.ref) else weakref.ref(observer)
-        obs = ref()
-        if obs is None or ref in self._time_observers or not hasattr(obs, "update_on_time_change"):
-            pass  # 1. dead, 2. duplicate, 3. doesn't have method `update_on_time_change`
-        else:
-            self._time_observers.append(ref)
+        if isinstance(observer, weakref.ref):
+            observer = observer()
+        # WeakSet handles duplicate detection and dead-reference cleanup.
+        if observer is not None:
+            self._time_observers.add(observer)
 
     def detach_time_observer(self, observer, /) -> None:
-        ref = observer if isinstance(observer, weakref.ref) else weakref.ref(observer)
-        if ref in self._time_observers:
-            self._time_observers.remove(ref)
+        if isinstance(observer, weakref.ref):
+            observer = observer()
+        if observer is not None:
+            self._time_observers.discard(observer)
 
     def _notify_on_time_change(self) -> None:
-        alive_observers = []
-        for ref in self._time_observers:
-            obs = ref()
-            if obs is not None:
-                obs.update_on_time_change(synchronizer=self, time=self._time, period=self._period)
-                alive_observers.append(ref)
-
-        total_count = len(self._time_observers)
-        dead_count = total_count - len(alive_observers)
-        if dead_count > 0 and (dead_count > 50 or dead_count / total_count > 0.25):  # currently adopt a naive strategy
-            self._time_observers[:] = alive_observers
+        time, period = self.time, self.period
+        for observer in self._time_observers:
+            observer.time = time
+            observer.period = period
 
 
 FALLBACK_TIME_SYNCHRONIZER: ProjectionTimeSynchronizer | None = None
@@ -100,8 +91,8 @@ def add_projection_time_synchronizer(_cls=None, /):
             │ model_engine.time_synchronizer │         │ FALLBACK_TIME_SYNCHRONIZER │
             └────────────────────────────────┘         └────────────────────────────┘
 
-    - `time`: self._time_synchronizer.time
-    - `period`: self._time_synchronizer.period
+    - `time`, `period`: cached on the instance as plain attributes and refreshed
+      on every time change.
 
     Args:
         _cls: the class object to be decorated
@@ -126,22 +117,16 @@ def add_projection_time_synchronizer(_cls=None, /):
                     raise ValueError(f"Failed to add projection time synchronizer.")
 
             setattr(self, "_time_synchronizer", time_synchronizer)
-            time_synchronizer.attach_eligible_time_observer(self)  # `time_synchronizer` will refuse to attach the object if it doesn't have `update_on_time_change` method
+            # Seed the cache before `original_init` so objects created mid-period
+            # (e.g. spawned assets) can already read `self.time`/`self.period`.
+            self.time = time_synchronizer.time
+            self.period = time_synchronizer.period
+            time_synchronizer.attach_eligible_time_observer(self)
 
             if original_init and original_init is not object.__init__:
                 original_init(self, *args, **kwargs)
 
         cls.__init__ = new_init
-
-        if hasattr(cls, "time"):
-            warnings.warn(f"{cls} property 'time' is already defined.")
-        else:
-            setattr(cls, "time", property(fget=lambda self: getattr(self, "_time_synchronizer").time))
-        if hasattr(cls, "period"):
-            warnings.warn(f"{cls} property 'period' is already defined.")
-        else:
-            setattr(cls, "period", property(fget=lambda self: getattr(self, "_time_synchronizer").period))
-
         return cls
 
     if _cls is None:

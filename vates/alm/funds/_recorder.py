@@ -28,7 +28,7 @@ class FundRecorder:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_lc', 'name', 'connector',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'time', 'period', '_lc', 'name', 'connector',
                  'asset_categories', 'asset_category_attr', 'asset_report_bases', 'totass_cf', 'catass_cf'
                  'totass_mv_op', 'totass_mv_bd', 'totass_mv_ad', 'catass_mv_op', 'catass_mv_bd', 'catass_mv_ad',
                  'totass_rv_op', 'totass_rv_bd', 'totass_rv_ad', 'catass_rv_op', 'catass_rv_bd', 'catass_rv_ad',

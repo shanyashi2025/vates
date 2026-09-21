@@ -26,7 +26,7 @@ class Liab(ABC):
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', '_lc', '_liab_id', '_currency',
+    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', 'time', 'period', '_lc', '_liab_id', '_currency',
                  '_entry_date', '_attr_aliases',)
 
     def __init__(

@@ -20,10 +20,6 @@ from vates._core._utils import (
 )
 
 
-class _NoUpdate:
-    """An alive observer stub WITHOUT an `update_on_time_change` method
-    (weakref-able)."""
-
 
 class TestTimeSetter:
     def test_endpoint_zero_accepted(self, make_configured, tmp_path):
@@ -171,20 +167,6 @@ class TestProjectionTimeSynchronizer:
         assert s.time == 3
         assert s.period == pd.Period("2027-03", freq="M")
 
-    def test_observer_notified(self):
-        calls = []
-
-        class Observer:
-            def update_on_time_change(self, *, synchronizer, time, period):
-                calls.append(time)
-
-        s = ProjectionTimeSynchronizer()
-        obs = Observer()
-        s.attach_eligible_time_observer(obs)
-        s.set(time=1)
-        s.set(time=2)
-        assert calls == [1, 2]
-
     def test_detach_time_observer_removes(self):
         s = ProjectionTimeSynchronizer()
         observer = self._Observer()
@@ -197,10 +179,11 @@ class TestProjectionTimeSynchronizer:
 
     def test_detach_time_observer_absent_noop(self):
         s = ProjectionTimeSynchronizer()
-        s.attach_eligible_time_observer(self._Observer())
+        observer = self._Observer()  # hold a strong reference so it stays alive
+        s.attach_eligible_time_observer(observer)
         s.detach_time_observer(self._Observer())  # different instance -> not found
         assert len(s._time_observers) == 1
-        # detaching from an empty list is harmless
+        # detaching from an empty synchronizer is harmless
         s2 = ProjectionTimeSynchronizer()
         s2.detach_time_observer(self._Observer())
         assert len(s2._time_observers) == 0
@@ -215,55 +198,33 @@ class TestProjectionTimeSynchronizer:
         s.attach_eligible_time_observer(observer)
         assert len(s._time_observers) == 1  # duplicate ignored
         s.set(time=1)
-        assert observer.calls == 1
-
-    def test_observer_without_update_method_not_attached(self):
-        # `attach_time_observer` silently skips any observer lacking the
-        # `update_on_time_change` method; it is never registered, so it neither
-        # crashes at notify time nor needs pruning.
-        s = ProjectionTimeSynchronizer()
-        s.attach_eligible_time_observer(_NoUpdate())
-        assert len(s._time_observers) == 0
-        s.set(time=1)  # nothing to notify; no crash
-        assert len(s._time_observers) == 0
-
-    def test_skipped_un_notifiable_others_still_attached(self):
-        # Skipping an un-notifiable observer does not prevent valid observers
-        # from being registered or notified.
-        s = ProjectionTimeSynchronizer()
-        observer = self._Observer()
-        s.attach_eligible_time_observer(_NoUpdate())  # silently skipped at attach
-        s.attach_eligible_time_observer(observer)
-        assert len(s._time_observers) == 1
-        s.set(time=1)
-        assert observer.calls == 1
+        assert observer.time == 1
 
     class _Observer:
         def __init__(self):
             self.calls = 0
 
-        def update_on_time_change(self, *, synchronizer, time, period):
-            self.calls += 1
-
-    def test_dead_observer_retained_below_threshold(self):
-        # 1 dead of 5 total = 20%, below the 25% pruning threshold -> retained.
-        # Live observers must be strongly referenced from outside, otherwise the
-        # weakref does not keep them alive.
+    def test_dead_observer_dropped_automatically(self):
+        # `WeakSet` drops dead observers eagerly, with no threshold heuristic.
+        # Live observers must be strongly referenced from outside.
         s = ProjectionTimeSynchronizer()
 
         dead = self._Observer()
         s.attach_eligible_time_observer(dead)
-        del dead  # only the weakref remains -> dead
+        assert len(s._time_observers) == 1
 
         live = [self._Observer() for _ in range(4)]
         for observer in live:
             s.attach_eligible_time_observer(observer)
-        gc.collect()
-        s.set(time=1)
-        assert len(s._time_observers) == 5  # dead ref retained (20% < threshold)
+        assert len(s._time_observers) == 5
 
-    def test_dead_observer_pruned_when_over_threshold(self):
-        # 1 dead of 1 total = 100%, over the 25% threshold -> pruned after notify.
+        del dead
+        gc.collect()
+        assert len(s._time_observers) == 4  # dead one gone, live four remain
+
+    def test_dead_observer_not_notified(self):
+        # An observer with no other reference is collected, so it is never
+        # notified and no longer counted.
         s = ProjectionTimeSynchronizer()
         s.attach_eligible_time_observer(self._Observer())
         gc.collect()  # the observer has no other reference after the call returns
@@ -272,11 +233,12 @@ class TestProjectionTimeSynchronizer:
 
 
 class TestAddProjectionTimeSynchronizer:
-    """The class decorator injects `_time_synchronizer` + `time`/`period` properties.
+    """The class decorator injects `_time_synchronizer` and caches `time`/`period`.
 
     Mirrors `vates/alm/assets/asset_base.py` (the canonical user): a bare
     `@add_projection_time_synchronizer`, a keyword-only `model_engine` parameter,
-    and `time`/`period` read through the shared synchronizer.
+    and `time`/`period` cached as plain instance attributes refreshed through the
+    shared synchronizer.
     """
 
     def test_bare_decorator_wires_to_engine_synchronizer(self, make_configured, tmp_path):
@@ -367,79 +329,75 @@ class TestAddProjectionTimeSynchronizer:
         assert asset.time == 4
         assert asset.period == m.START_DATE + 4
 
-    def test_attach_attempted_but_required_method_missing(self, make_configured, tmp_path):
-        # The decorator always attempts to register the instance as an observer,
-        # but `attach_time_observer` requires `update_on_time_change`; a bare
-        # class without it stays unregistered (reads still work, no notification).
-        @add_projection_time_synchronizer
-        class Asset:
-            pass
-
-        m = make_configured(tmp_path)
-        Asset(model_engine=m)
-        assert len(m.time_synchronizer._time_observers) == 0  # never attached
-
     def test_observer_registered_and_notified(self, make_configured, tmp_path):
         # When the class defines `update_on_time_change`, the decorator registers
         # the instance and it is notified on every time change.
-        recorded = []
-
         @add_projection_time_synchronizer
         class Asset:
-            def update_on_time_change(self, *, synchronizer, time, period):
-                recorded.append(time)
+            pass
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
         assert len(m.time_synchronizer._time_observers) == 1
         m.time = 1
+        assert asset.time == 1
         m.time = 5
-        assert recorded == [1, 5]
         assert len(m.time_synchronizer._time_observers) == 1  # still attached
         # the engine and the decorated object share the notify path
         assert asset.time == 5
 
-    def test_observer_skipped_without_update_method(self, make_configured, tmp_path):
-        # A class WITHOUT `update_on_time_change` is NEVER attached (the attach
-        # call is a silent no-op). Reads still work through the shared
-        # synchronizer (no notification needed).
+    def test_time_period_cached_and_refreshed(self, make_configured, tmp_path):
+        # A bare decorated class caches `time`/`period` as plain instance
+        # attributes, refreshed on every time change.
         @add_projection_time_synchronizer
         class Asset:
             pass
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
-        assert len(m.time_synchronizer._time_observers) == 0  # never attached
+        assert len(m.time_synchronizer._time_observers) == 1
         m.time = 1
-        assert len(m.time_synchronizer._time_observers) == 0
         assert asset.time == 1
         assert asset.period == m.START_DATE + 1
+        assert "time" in asset.__dict__          # cached, not a class property
+        assert "time" not in Asset.__dict__
 
-    def test_existing_time_attribute_kept_with_warning(self, make_configured, tmp_path):
-        # An existing `time`/`period` class member is NOT overwritten: the
-        # decorator warns and leaves the class attribute in place, so reads
-        # never go through the synchronizer.
-        with pytest.warns(UserWarning, match="already defined"):
-            @add_projection_time_synchronizer
-            class Asset:
-                time = "class-attr"
-                period = "class-attr"
+    def test_mid_period_construction_seeds_cache(self, make_configured, tmp_path):
+        # An object created after time has advanced reads the current time during
+        # construction (spawned-asset case).
+        @add_projection_time_synchronizer
+        class Asset:
+            pass
+
+        m = make_configured(tmp_path)
+        m.time = 7
+        asset = Asset(model_engine=m)
+        assert asset.time == 7
+        assert asset.period == m.START_DATE + 7
+
+    def test_class_time_attribute_shadowed_by_instance_cache(self, make_configured, tmp_path):
+        # A class-level `time`/`period` is left untouched on the class, but the
+        # instance caches the synchronizer values as instance attributes.
+        @add_projection_time_synchronizer
+        class Asset:
+            time = "class-attr"
+            period = "class-attr"
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
-        assert asset.time == "class-attr"
-        assert asset.period == "class-attr"
+        assert asset.time is None       # seeded from the (unset) synchronizer
+        assert asset.period is None
         m.time = 3
-        assert asset.time == "class-attr"  # still the class attribute
-        assert asset.period == "class-attr"
+        assert asset.time == 3
+        assert asset.period == m.START_DATE + 3
+        assert Asset.time == "class-attr"    # class attribute untouched
+        assert Asset.period == "class-attr"
 
-    def test_missing_member_replaced_by_property(self):
-        # Only a class WITHOUT an existing `time`/`period` gets the
-        # synchronizer-backed properties; the existing one is kept as-is.
-        with pytest.warns(UserWarning, match="already defined"):
-            @add_projection_time_synchronizer
-            class Asset:
-                time = "class-attr"
+    def test_no_property_injected_on_class(self):
+        # The decorator no longer injects `time`/`period` properties.
+        @add_projection_time_synchronizer
+        class Asset:
+            pass
 
-        assert Asset.time == "class-attr"  # untouched
-        assert isinstance(Asset.__dict__["period"], property)  # added
+        assert "time" not in Asset.__dict__
+        assert "period" not in Asset.__dict__

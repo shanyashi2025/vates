@@ -47,6 +47,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             esg_df=esg_df,
             esg_step_map=_get_esg_step
         )
+        model.esg_master.update_econ_data(period=p)
 
         deflators_df = esg_df[(esg_df["CLASS"]=='VALN') & (esg_df["MEASURE"]=='DEF')].set_index(['ECONOMY', 'CLASS', 'MEASURE', 'TERM'])
         model.deflators_kr = KeyedArray.from_df(deflators_df)
@@ -72,6 +73,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             fund.assemble_on_start(existing_assets=existing_assets, existing_liabs=existing_liabs)
 
     else:  # t > 1
+        model.esg_master.update_econ_data(period=p)
         esg_step = _get_esg_step(p)
         if esg_step == 1:
             model.deflators[t] = model.deflators_kr.at[('CNY', 'VALN', 'DEF', 0), str_date]

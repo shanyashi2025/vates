@@ -22,7 +22,7 @@ class YieldCurve:
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     _curve: InterestRateTermStructure | None
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'time', 'period', '_last_update',
                  'curve_id', '_curve', 'tdv_spot_rates',)
 
     def __init__(

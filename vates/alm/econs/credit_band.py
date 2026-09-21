@@ -25,7 +25,7 @@ class CreditBand:
     _prob_of_default_ac: float
     _recovery_rate: float
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'time', 'period', '_last_update',
                  'band_id', '_spread', '_spotmult', '_prob_of_default_ac', '_recovery_rate',
                  'tdv_prob_of_default_ac', 'tdv_recovery_rate', 'tdv_spread', 'tdv_spotmult',)
 

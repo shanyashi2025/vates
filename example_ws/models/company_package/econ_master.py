@@ -101,9 +101,6 @@ class EsgMaster:
         self.market_info: EsgItem | None = market_info
         self.esg_step_map: dict | Callable | None = esg_step_map  # take one argument of `period`
 
-    def update_on_time_change(self, *, synchronizer, time, period):
-        self.update_econ_data(period)
-
     def update_econ_data(self, period: pd.Period) -> None:
         if self.esg_step_map is None:
             esg_step = 1  # defaults to 1

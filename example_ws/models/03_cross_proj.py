@@ -73,6 +73,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     @model.bind_projection
     def cross_min_cap_projection():
         t, p = model.time, model.period
+        esg_master.update_econ_data(period=p)
         date_index = p.year * 100 + p.month
 
         if date_index not in aging_assets_input_filelist_df.index:

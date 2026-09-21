@@ -18,7 +18,7 @@ class Currency:
     _fx_rate: float
     _fx_rate_prev: float
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', "_last_update",
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'time', 'period', "_last_update",
                  'currency_id', '_fx_rate', '_fx_rate_prev', 'tdv_fx_rate', )
 
     def __init__(

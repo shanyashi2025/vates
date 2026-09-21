@@ -60,6 +60,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     @model.bind_projection
     def fund_projection():
         t, p = model.time, model.period
+        esg_master.update_econ_data(period=p)
 
         if t == 0:
             for fund in fund_master.funds:
