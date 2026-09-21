@@ -45,6 +45,8 @@ def calculate_beta(mc_market_credit: float, la_upper_limit: float) -> float:
         warnings.warn(f'MC of market and credit={mc_market_credit:.4f}, expected > 0, '
                       f'beta is assgined as zero to prevent crash.')
         return 0
+    if mc_market_credit == 0:
+        return (1 + LA_K) * 0.5
     return (1 + LA_K) * min(0.5, 0.22 * la_upper_limit / mc_market_credit + 0.02)
 
 

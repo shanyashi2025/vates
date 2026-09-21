@@ -82,7 +82,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
         # --- (1) reset asset mc variables ---
         for _, inputer in mc_inputer_dict.items():
-            inputer.reset()
+            inputer.zero()
 
         # --- (2) process economic assumptions ---
         gby_60d_ma = np.array([gby_60d_ma_curve.spot_rates[i * 12] for i in range(41)])  # strip year data

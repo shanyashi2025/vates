@@ -1,9 +1,10 @@
-from dataclasses import dataclass
 import pandas as pd
 import warnings
+from dataclasses import dataclass
+from typing import NamedTuple
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
-from vates.utils import RiskModule, SubRisk, NumVarGroup
+from vates.utils import RiskModule, SubRisk, NumericDataclass
 from vates.solvency.cn_cross2.params import (
     AccountType,
     MC_CORR_MATRIX,
@@ -16,8 +17,8 @@ from vates.solvency.cn_cross2.params import (
 )
 
 
-@dataclass
-class MinCapInputer(NumVarGroup):
+@dataclass(slots=True)
+class MinCapInputer(NumericDataclass):
     pv_base: float = 0.0
     pv_mortality: float = 0.0
     pv_catastrophe: float = 0.0
@@ -45,6 +46,62 @@ class MinCapInputer(NumVarGroup):
     mc_exchange_rate: float = 0.0
     mc_spread: float = 0.0
     mc_counterparty_default: float = 0.0
+
+class MinCapTuple(NamedTuple):
+    min_cap: float
+    life: float
+    non_life: float
+    market: float
+    credit: float
+    diversification: float
+    loss_absorbency: float
+
+class OverallRiskTuple(NamedTuple):
+    min_cap: float
+    life: float
+    non_life: float
+    market: float
+    credit: float
+    diversification: float
+
+class LifeRiskTuple(NamedTuple):
+    min_cap: float
+    loss: float
+    expense: float
+    lapse: float
+    diversification: float
+
+class LossRiskTuple(NamedTuple):
+    min_cap: float
+    mortality: float
+    catastrophe: float
+    longevity: float
+    morbidity: float
+    health: float
+    other_loss: float
+    diversification: float
+
+class LossMorbTuple(NamedTuple):
+    min_cap: float
+    morbidity_incidence: float
+    morbidity_trend: float
+    diversification: float
+
+class MarketRiskTuple(NamedTuple):
+    min_cap: float
+    interest_rate: float
+    equity: float
+    real_estate: float
+    overseas_fixed_income: float
+    overseas_equity: float
+    exchange_rate: float
+    diversification: float
+
+class CreditRiskTuple(NamedTuple):
+    min_cap: float
+    spread: float
+    counterparty_default: float
+    diversification: float
 
 
 class MinCapCalculator:
@@ -139,69 +196,69 @@ class MinCapCalculator:
         return self._min_cap_calc_input
 
     @property
-    def overall_risk_module(self) -> dict[str, float]:
-        return {
-            'min_cap': self._overall.risk_charge,
-            'life': self._life.risk_charge,
-            'non_life': self._nolf.risk_charge,
-            'market': self._mrkt.risk_charge,
-            'credit': self._cred.risk_charge,
-            'diversification': self._overall.diversification
-        }
+    def overall_risk_module(self) -> OverallRiskTuple:
+        return OverallRiskTuple(
+            min_cap=self._overall.risk_charge,
+            life=self._life.risk_charge,
+            non_life=self._nolf.risk_charge,
+            market=self._mrkt.risk_charge,
+            credit=self._cred.risk_charge,
+            diversification=self._overall.diversification
+        )
 
     @property
-    def life_risk_module(self) -> dict[str, float]:
-        return {
-            'min_cap': self._life.risk_charge,
-            'loss': self._loss.risk_charge,
-            'expense': self._expn.risk_charge,
-            'lapse': self._laps.risk_charge,
-            'diversification': self._life.diversification
-        }
+    def life_risk_module(self) -> LifeRiskTuple:
+        return LifeRiskTuple(
+            min_cap=self._life.risk_charge,
+            loss=self._loss.risk_charge,
+            expense=self._expn.risk_charge,
+            lapse=self._laps.risk_charge,
+            diversification=self._life.diversification
+        )
 
     @property
-    def loss_risk_module(self) -> dict[str, float]:
-        return {
-            'min_cap': self._loss.risk_charge,
-            'mortality': self._mort.risk_charge,
-            'catastrophe': self._cata.risk_charge,
-            'longevity': self._lgvt.risk_charge,
-            'morbidity': self._morb.risk_charge,
-            'health': self._hlth.risk_charge,
-            'other_loss': self._othl.risk_charge,
-            'diversification': self._loss.diversification
-        }
+    def loss_risk_module(self) -> LossRiskTuple:
+        return LossRiskTuple(
+            min_cap=self._loss.risk_charge,
+            mortality=self._mort.risk_charge,
+            catastrophe=self._cata.risk_charge,
+            longevity=self._lgvt.risk_charge,
+            morbidity=self._morb.risk_charge,
+            health=self._hlth.risk_charge,
+            other_loss=self._othl.risk_charge,
+            diversification=self._loss.diversification
+        )
 
     @property
-    def loss_morb_module(self) -> dict[str, float]:
-        return {
-            'min_cap': self._morb.risk_charge,
-            'morbidity_incidence': self._morb_inc.risk_charge,
-            'morbidity_trend': self._morb_trd.risk_charge,
-            'diversification': self._morb.diversification
-        }
+    def loss_morb_module(self) -> LossMorbTuple:
+        return LossMorbTuple(
+            min_cap=self._morb.risk_charge,
+            morbidity_incidence=self._morb_inc.risk_charge,
+            morbidity_trend=self._morb_trd.risk_charge,
+            diversification=self._morb.diversification
+        )
 
     @property
-    def market_risk_module(self) -> dict[str, float]:
-        return {
-            'min_cap': self._mrkt.risk_charge,
-            'interest_rate': self._intr.risk_charge,
-            'equity': self._eqty.risk_charge,
-            'real_estate': self._rles.risk_charge,
-            'overseas_fixed_income': self._osfi.risk_charge,
-            'overseas_equity': self._oseq.risk_charge,
-            'exchange_rate': self._frex.risk_charge,
-            'diversification': self._mrkt.diversification
-        }
+    def market_risk_module(self) -> MarketRiskTuple:
+        return MarketRiskTuple(
+            min_cap=self._mrkt.risk_charge,
+            interest_rate=self._intr.risk_charge,
+            equity=self._eqty.risk_charge,
+            real_estate=self._rles.risk_charge,
+            overseas_fixed_income=self._osfi.risk_charge,
+            overseas_equity=self._oseq.risk_charge,
+            exchange_rate=self._frex.risk_charge,
+            diversification=self._mrkt.diversification
+        )
 
     @property
-    def credit_risk_module(self) -> dict[str, float]:
-        return {
-            'min_cap': self._cred.risk_charge,
-            'spread': self._sprd.risk_charge,
-            'counterparty_default': self._cpdf.risk_charge,
-            'diversification': self._cred.diversification
-        }
+    def credit_risk_module(self) -> CreditRiskTuple:
+        return CreditRiskTuple(
+            min_cap=self._cred.risk_charge,
+            spread=self._sprd.risk_charge,
+            counterparty_default=self._cpdf.risk_charge,
+            diversification=self._cred.diversification
+        )
 
     def __call__(self, *args, **kwargs):
         self.calculate_minimum_capital(*args, **kwargs)
@@ -240,19 +297,19 @@ class MinCapUnit:
         self._min_cap_calculator(mc_in)
         if self._account_type in (AccountType.PAR, AccountType.UNIV):
             self._loss_absorbency = calculate_loss_absorbency(
-                mc_market=self._min_cap_calculator.overall_risk_module['market'],
-                mc_credit=self._min_cap_calculator.overall_risk_module['credit'],
+                mc_market=self._min_cap_calculator.overall_risk_module.market,
+                mc_credit=self._min_cap_calculator.overall_risk_module.credit,
                 pv_base=mc_in.pv_base,
                 pv_lower_limit=mc_in.pv_la_lower_limit
             )
-        self._min_cap = self._min_cap_calculator.overall_risk_module['min_cap'] - self._loss_absorbency
+        self._min_cap = self._min_cap_calculator.overall_risk_module.min_cap - self._loss_absorbency
 
         self.tdv_min_cap[t] = self._min_cap
-        self.tdv_life_mc[t] = self._min_cap_calculator.overall_risk_module['life']
-        self.tdv_nonlife_mc[t] = self._min_cap_calculator.overall_risk_module['non_life']
-        self.tdv_market_mc[t] = self._min_cap_calculator.overall_risk_module['market']
-        self.tdv_credit_mc[t] = self._min_cap_calculator.overall_risk_module['credit']
-        self.tdv_divers[t] = self._min_cap_calculator.overall_risk_module['diversification']
+        self.tdv_life_mc[t] = self._min_cap_calculator.overall_risk_module.life
+        self.tdv_nonlife_mc[t] = self._min_cap_calculator.overall_risk_module.non_life
+        self.tdv_market_mc[t] = self._min_cap_calculator.overall_risk_module.market
+        self.tdv_credit_mc[t] = self._min_cap_calculator.overall_risk_module.credit
+        self.tdv_divers[t] = self._min_cap_calculator.overall_risk_module.diversification
         self.tdv_loss_absorb[t] = self._loss_absorbency
 
         self._last_mc_calc = self.period
@@ -274,16 +331,16 @@ class MinCapUnit:
         return self._min_cap_calculator
 
     @property
-    def min_cap_dict(self) -> dict[str, float]:
-        return {
-            'min_cap': self._min_cap,
-            'life': self._min_cap_calculator.overall_risk_module['life'],
-            'non_life': self._min_cap_calculator.overall_risk_module['non-life'],
-            'market': self._min_cap_calculator.overall_risk_module['market'],
-            'credit': self._min_cap_calculator.overall_risk_module['credit'],
-            'diversification': self._min_cap_calculator.overall_risk_module['diversification'],
-            'loss_absorbency': self._loss_absorbency,
-        }
+    def min_cap_tuple(self) -> MinCapTuple:
+        return MinCapTuple(
+            min_cap=self._min_cap,
+            life=self._min_cap_calculator.overall_risk_module.life,
+            non_life=self._min_cap_calculator.overall_risk_module.non_life,
+            market=self._min_cap_calculator.overall_risk_module.market,
+            credit=self._min_cap_calculator.overall_risk_module.credit,
+            diversification=self._min_cap_calculator.overall_risk_module.diversification,
+            loss_absorbency=self._loss_absorbency,
+        )
 
     @property
     def last_min_cap_calc(self) -> pd.Period | None:
@@ -336,20 +393,20 @@ class MinCapConsolidator:
         self._min_cap_calculator_la(mc_in_la)
 
         self._loss_absorbency = calculate_loss_absorbency(
-            mc_market=self._min_cap_calculator_la.overall_risk_module['market'],
-            mc_credit=self._min_cap_calculator_la.overall_risk_module['credit'],
+            mc_market=self._min_cap_calculator_la.overall_risk_module.market,
+            mc_credit=self._min_cap_calculator_la.overall_risk_module.credit,
             pv_base=mc_in_la.pv_base,
             pv_lower_limit=mc_in_la.pv_la_lower_limit
         )
 
-        self._min_cap = self._min_cap_calculator.overall_risk_module['min_cap'] - self._loss_absorbency
+        self._min_cap = self._min_cap_calculator.overall_risk_module.min_cap - self._loss_absorbency
 
         self.tdv_min_cap[t] = self._min_cap
-        self.tdv_life_mc[t] = self._min_cap_calculator.overall_risk_module['life']
-        self.tdv_nonlife_mc[t] = self._min_cap_calculator.overall_risk_module['non_life']
-        self.tdv_market_mc[t] = self._min_cap_calculator.overall_risk_module['market']
-        self.tdv_credit_mc[t] = self._min_cap_calculator.overall_risk_module['credit']
-        self.tdv_divers[t] = self._min_cap_calculator.overall_risk_module['diversification']
+        self.tdv_life_mc[t] = self._min_cap_calculator.overall_risk_module.life
+        self.tdv_nonlife_mc[t] = self._min_cap_calculator.overall_risk_module.non_life
+        self.tdv_market_mc[t] = self._min_cap_calculator.overall_risk_module.market
+        self.tdv_credit_mc[t] = self._min_cap_calculator.overall_risk_module.credit
+        self.tdv_divers[t] = self._min_cap_calculator.overall_risk_module.diversification
         self.tdv_loss_absorb[t] = self._loss_absorbency
 
         self._last_mc_calc = self.period
@@ -367,16 +424,16 @@ class MinCapConsolidator:
         return self._min_cap_calculator
 
     @property
-    def min_cap_dict(self) -> dict[str, float]:
-        return {
-            'min_cap': self._min_cap,
-            'life': self._min_cap_calculator.overall_risk_module['life'],
-            'non_life': self._min_cap_calculator.overall_risk_module['non-life'],
-            'market': self._min_cap_calculator.overall_risk_module['market'],
-            'credit': self._min_cap_calculator.overall_risk_module['credit'],
-            'diversification': self._min_cap_calculator.overall_risk_module['diversification'],
-            'loss_absorbency': self._loss_absorbency,
-        }
+    def min_cap_tuple(self) -> MinCapTuple:
+        return MinCapTuple(
+            min_cap=self._min_cap,
+            life=self._min_cap_calculator.overall_risk_module.life,
+            non_life=self._min_cap_calculator.overall_risk_module.non_life,
+            market=self._min_cap_calculator.overall_risk_module.market,
+            credit=self._min_cap_calculator.overall_risk_module.credit,
+            diversification=self._min_cap_calculator.overall_risk_module.diversification,
+            loss_absorbency=self._loss_absorbency,
+        )
 
     @property
     def last_min_cap_calc(self) -> pd.Period | None:
