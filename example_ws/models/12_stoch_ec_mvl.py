@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 from packaging import version
-from vates import StochExecutor, ProjModelEngine, KeyedArray, ConstVariable
+from vates import StochExecutor, ProjModelEngine, ConstVariable
+from vates.utils import KeyedArray
 from company_package import (
     run_with_json_config,
     load_file_df,

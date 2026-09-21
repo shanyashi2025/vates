@@ -5,11 +5,11 @@ import warnings
 from dataclasses import dataclass
 from typing import Callable, Self
 
-from vates import ProjModelEngine, KeyedArray
+from vates import ProjModelEngine
 from vates._core import add_projection_time_synchronizer
 from vates.alm import YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
 from vates.finmath import interpolate_interest_rates
-from vates.utils import parse_int_list_from_str
+from vates.utils import KeyedArray, parse_int_list_from_str
 
 
 @dataclass(slots=True)

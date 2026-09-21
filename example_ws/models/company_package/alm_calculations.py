@@ -1,7 +1,8 @@
 import pandas as pd
 
-from vates import ProjModelEngine, KeyedArray
+from vates import ProjModelEngine
 from vates.alm import Fund, TargetWeight
+from vates.utils import KeyedArray
 
 from .setup_objs_alm import FundRebalanceParams
 from .asset_master import AssetMaster

@@ -4,7 +4,6 @@ from vates._core import (
     StochExecutor,
     ConstVariable,
     TDimVariable,
-    KeyedArray,
     proj_result,
 )
 from vates import alm
@@ -23,7 +22,6 @@ __all__ = [
     'StochExecutor',
     'ConstVariable',
     'TDimVariable',
-    'KeyedArray',
     'proj_result',
     # utils
     'utils',

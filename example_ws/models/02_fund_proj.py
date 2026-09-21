@@ -1,4 +1,5 @@
-from vates import ProjModelEngine, KeyedArray
+from vates import ProjModelEngine
+from vates.utils import KeyedArray
 from company_package import (
     run_with_json_config,
     load_file_df,
