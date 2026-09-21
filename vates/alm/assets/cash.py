@@ -20,7 +20,8 @@ class Cash(Asset):
         _ret_id_short_pos (str): Identifier of cash return on short cash positions.
 
     """
-    __slots__ = ('_nominal', '_market_info', '_ret_id', '_ret_id_short_pos', 'tdv_cash_flow', 'tdv_mv_bd', 'tdv_mv_ad',)
+    __slots__ = ('_nominal', '_purchase_proceeds', '_disposal_proceeds', '_market_info', '_ret_id', '_ret_id_short_pos',
+                 'tdv_cash_flow', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
 
     def __init__(
         self,
@@ -55,10 +56,16 @@ class Cash(Asset):
         self._ret_id: str = ret_id
         self._ret_id_short_pos: str = ret_id_short_pos or ret_id
 
+        self._purchase_proceeds: float = 0.0
+        self._disposal_proceeds: float = 0.0
+
         create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='cash')
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
+        self.tdv_purch_proceeds: TDimVariable = create_tdv("purchase_proceeds")
+        self.tdv_disp_proceeds: TDimVariable = create_tdv("disposal_proceeds")
+
         self.tdv_mv_ad[self.time] = self._nominal
 
     @property
@@ -76,6 +83,10 @@ class Cash(Asset):
     @property
     def ret_id_short_pos(self) -> str:
         return self._ret_id_short_pos
+
+    def _update_on_time_change(self) -> None:
+        self._purchase_proceeds = 0.0
+        self._disposal_proceeds = 0.0
 
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, *, ret_rate: float | None = None, ret_rate_pos: float | None = None, **kwargs) -> None:
@@ -100,6 +111,7 @@ class Cash(Asset):
             amount (float): Amount to invest.
         """
         self._nominal += amount
+        self._purchase_proceeds += amount
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def buy_propn(self, propn: float) -> None:
@@ -109,7 +121,9 @@ class Cash(Asset):
         Args:
             propn (float): Proportion to buy.
         """
-        self._nominal += self._nominal * propn
+        amount = self._nominal * propn
+        self._nominal += amount
+        self._purchase_proceeds += amount
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
@@ -119,7 +133,9 @@ class Cash(Asset):
         Args:
             propn (float): Proportion to sell.
         """
-        self._nominal -= self._nominal * propn
+        amount = self._nominal * propn
+        self._nominal -= amount
+        self._disposal_proceeds += amount
 
     def scale_profile(self, *args, **kwargs) -> Self:
         """
@@ -127,12 +143,15 @@ class Cash(Asset):
         """
         raise ValueError(f"`scale_profile` is not applicable for cash.")
 
-    @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED, mark=AssetPhase.CLOSED)
+    @transition(require_all=AssetPhase.ROLLED, mark=AssetPhase.CLOSED)
     def close_dealing(self, **kwargs) -> None:
         """
         Update the cash asset after dealing.
         """
-        self.tdv_mv_ad[self.time] = self.market_value
+        t = self.time
+        self.tdv_mv_ad[t] = self.market_value
+        self.tdv_purch_proceeds[t] = self._purchase_proceeds
+        self.tdv_disp_proceeds[t] = self._disposal_proceeds
 
     @property
     def market_value(self) -> float:

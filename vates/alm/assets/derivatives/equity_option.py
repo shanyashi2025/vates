@@ -27,8 +27,9 @@ class EquityOption(Asset):
         _is_pay_dividend (bool): True if paying dividend, otherwise False.
     """
     __slots__ = ('_call_or_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
-                 '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', 'tdv_units_bd', 'tdv_units_ad',
-                 'tdv_cash_flow', 'tdv_stock_price', 'tdv_price', 'tdv_mv_bd', 'tdv_mv_ad',)
+                 '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds',
+                 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow', 'tdv_stock_price', 'tdv_price',
+                 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
 
     def __init__(
         self,
@@ -83,6 +84,8 @@ class EquityOption(Asset):
         self._std_dev: float = std_dev
         self._is_pay_dividend: bool = is_pay_dividend
         self._cash_flow: float = 0.0
+        self._purchase_proceeds: float = 0.0
+        self._disposal_proceeds: float = 0.0
         self._n_clone: int = 0
 
         if not _bypass_init_validation:
@@ -106,13 +109,14 @@ class EquityOption(Asset):
         self.tdv_price: TDimVariable = create_tdv("price")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
+        self.tdv_purch_proceeds: TDimVariable = create_tdv("purchase_proceeds")
+        self.tdv_disp_proceeds: TDimVariable = create_tdv("disposal_proceeds")
 
-        if not is_profile:
-            t = self.time
-            self.tdv_units_ad[t] = self._units
-            self.tdv_stock_price[t] = self._stock_price
-            self.tdv_price[t] = self._price
-            self.tdv_mv_ad[t] = self.market_value
+        t = self.time
+        self.tdv_units_ad[t] = self._units
+        self.tdv_stock_price[t] = self._stock_price
+        self.tdv_price[t] = self._price
+        self.tdv_mv_ad[t] = self.market_value
 
     @property
     def std_dev(self) -> float:
@@ -133,6 +137,11 @@ class EquityOption(Asset):
     @property
     def is_alive_beg(self) -> bool:
         return self.period <= self._exercise_date
+
+    def _update_on_time_change(self) -> None:
+        self._cash_flow = 0.0
+        self._purchase_proceeds = 0.0
+        self._disposal_proceeds = 0.0
 
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, **kwargs) -> None:
@@ -211,8 +220,11 @@ class EquityOption(Asset):
         if not (0 < propn <=1):
             warnings.warn(f"Buying proportion {propn:.4f} of an exsiting equity option '{self._asset_id}', "
                           f"normally expected: 0 < proportion <=1.")
-        self._units -= self._units * propn
+        units = self._units * propn
+        self._units -= units
+        self._disposal_proceeds += self._price * units
 
+    @transition(require_all=AssetPhase.PROFILE)
     def scale_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the equity option profile by a factor, positive/negative scale represents long/short.
@@ -227,8 +239,10 @@ class EquityOption(Asset):
         if new_asset_id is None:
             new_asset_id = self.asset_id + ("" if self._n_clone == 0 else f"_{self._n_clone}")
 
+        units = self._units * scale
+
         clone = EquityOption(
-            units=self._units * scale,
+            units=units,
             call_or_put=self._call_or_put,
             exercise_date=self._exercise_date,
             price=self._price,
@@ -246,6 +260,7 @@ class EquityOption(Asset):
             purchase_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)
+        clone._purchase_proceeds = clone._price * units
         self._n_clone += 1
         return clone
 
@@ -257,6 +272,8 @@ class EquityOption(Asset):
         t = self.time
         self.tdv_units_ad[t] = self._units
         self.tdv_mv_ad[t] = self.market_value
+        self.tdv_purch_proceeds[t] = self._purchase_proceeds
+        self.tdv_disp_proceeds[t] = self._disposal_proceeds
 
     @property
     def price(self) -> float:

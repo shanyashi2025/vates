@@ -37,10 +37,10 @@ class BondFixed(Asset):
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
     __slots__ = ('_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
-                 '_credit_band', '_cash_flow', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
+                 '_credit_band', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
                  'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
                  'tdv_interest', 'tdv_principal', 'tdv_default_recovery', 'tdv_mv_price', 'tdv_abv_price',
-                 'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad',)
+                 'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
 
     
     def __init__(
@@ -108,6 +108,8 @@ class BondFixed(Asset):
         self._rf_curve: YieldCurve = rf_curve
         self._credit_band: CreditBand | None = credit_band
         self._cash_flow: float = 0.0
+        self._purchase_proceeds: float = 0.0
+        self._disposal_proceeds: float = 0.0
         self._n_clone: int = 0
 
         # Compose with specialized components
@@ -149,14 +151,15 @@ class BondFixed(Asset):
         self.tdv_abv_bd: TDimVariable = create_tdv("abv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
         self.tdv_abv_ad: TDimVariable = create_tdv("abv_ad")
+        self.tdv_purch_proceeds: TDimVariable = create_tdv("purchase_proceeds")
+        self.tdv_disp_proceeds: TDimVariable = create_tdv("disposal_proceeds")
 
         t = self.time
         self.tdv_mv_price[t] = self._mv_price_dirty
         self.tdv_abv_price[t] = self._abv_price_dirty
-        if not is_profile:
-            self.tdv_units_ad[t] = self._units
-            self.tdv_mv_ad[t] = self.mv_price * self._units
-            self.tdv_abv_ad[t] = self.abv_price * self._units
+        self.tdv_units_ad[t] = self._units
+        self.tdv_mv_ad[t] = self.mv_price * self._units
+        self.tdv_abv_ad[t] = self.abv_price * self._units
 
     @property
     def mv_price(self) -> float:
@@ -230,6 +233,11 @@ class BondFixed(Asset):
             valn_date=self.period, market_price=self._mv_price_dirty, spots=self.ra_spots, eff_dur_delta=eff_dur_delta
         )
 
+    def _update_on_time_change(self) -> None:
+        self._cash_flow = 0.0
+        self._purchase_proceeds = 0.0
+        self._disposal_proceeds = 0.0
+
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, *, is_update_mv_price: bool = True, **kwargs) -> None:
         """
@@ -241,7 +249,6 @@ class BondFixed(Asset):
             self._units = 0
             self._mv_price_dirty = 0
             self._abv_price_dirty = 0
-            self._cash_flow = 0
             return
 
         if self._credit_band is None:
@@ -319,8 +326,11 @@ class BondFixed(Asset):
         """
         if propn < 0: raise ValueError(f"Can not sell negative proportion of exsiting bonds.")
         if propn > 1: raise ValueError(f"Can not sell >100% proportion of exsiting bonds.")
-        self._units -= self._units * propn
+        units = self._units * propn
+        self._units -= units
+        self._disposal_proceeds += self._mv_price_dirty * units
 
+    @transition(require_all=AssetPhase.PROFILE)
     def scale_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the bond profile by a factor.
@@ -340,8 +350,10 @@ class BondFixed(Asset):
         if new_asset_id is None:
             new_asset_id = self.asset_id + ("" if self._n_clone == 0 else f"_{self._n_clone}")
 
+        units = self._units * scale
+
         clone = BondFixed(
-            units=self._units * scale,
+            units=units,
             issue_date=self._params.issue_date,
             maturity_date=self._params.maturity_date,
             coupon_rate=self._params.coupon_rate,
@@ -362,6 +374,7 @@ class BondFixed(Asset):
             purchase_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)
+        clone._purchase_proceeds = clone._mv_price_dirty * units
         self._n_clone += 1
         return clone
 
@@ -374,3 +387,5 @@ class BondFixed(Asset):
         self.tdv_units_ad[t] = self._units
         self.tdv_mv_ad[t] = self.market_value
         self.tdv_abv_ad[t] = self.amortized_book_value
+        self.tdv_purch_proceeds[t] = self._purchase_proceeds
+        self.tdv_disp_proceeds[t] = self._disposal_proceeds

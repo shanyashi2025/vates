@@ -61,6 +61,8 @@ class ProjectionTimeSynchronizer:
         for observer in self._time_observers:
             observer.time = time
             observer.period = period
+            if hasattr(observer, "_update_on_time_change"):
+                observer._update_on_time_change()
 
 
 FALLBACK_TIME_SYNCHRONIZER: ProjectionTimeSynchronizer | None = None

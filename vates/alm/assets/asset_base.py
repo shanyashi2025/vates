@@ -15,7 +15,7 @@ from vates.alm.econs import Currency
 _IMMUTABLE = (type(None), bool, int, float, str, bytes, tuple, frozenset)
 
 class AssetPhase(Enum):
-    PROFILED = auto()
+    PROFILE = auto()
     ROLLED = auto()
     CLOSED = auto()
 
@@ -73,7 +73,7 @@ class Asset(ABC):
         self._attr_aliases: Mapping[str, str] | None = attr_aliases
         self._lc: Lifecycle[AssetPhase] = Lifecycle[AssetPhase]()
         if self._is_profile:
-            self._lc.mark(AssetPhase.PROFILED, self.time or 0)
+            self._lc.mark(AssetPhase.PROFILE, self.time or 0)
         else:
             self._lc.mark(AssetPhase.ROLLED, self.time or 0)
             self._lc.mark(AssetPhase.CLOSED, self.time or 0)

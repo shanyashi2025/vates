@@ -167,6 +167,20 @@ class TestProjectionTimeSynchronizer:
         assert s.time == 3
         assert s.period == pd.Period("2027-03", freq="M")
 
+    def test_observer_notified(self):
+        calls = []
+
+        class Observer:
+            def _update_on_time_change(self):
+                calls.append(self.time)
+
+        s = ProjectionTimeSynchronizer()
+        obs = Observer()
+        s.attach_eligible_time_observer(obs)
+        s.set(time=1)
+        s.set(time=2)
+        assert calls == [1, 2]
+
     def test_detach_time_observer_removes(self):
         s = ProjectionTimeSynchronizer()
         observer = self._Observer()
@@ -198,11 +212,14 @@ class TestProjectionTimeSynchronizer:
         s.attach_eligible_time_observer(observer)
         assert len(s._time_observers) == 1  # duplicate ignored
         s.set(time=1)
-        assert observer.time == 1
+        assert observer.calls == 1
 
     class _Observer:
         def __init__(self):
             self.calls = 0
+
+        def _update_on_time_change(self):
+            self.calls += 1
 
     def test_dead_observer_dropped_automatically(self):
         # `WeakSet` drops dead observers eagerly, with no threshold heuristic.
@@ -332,16 +349,19 @@ class TestAddProjectionTimeSynchronizer:
     def test_observer_registered_and_notified(self, make_configured, tmp_path):
         # When the class defines `update_on_time_change`, the decorator registers
         # the instance and it is notified on every time change.
+        recorded = []
+
         @add_projection_time_synchronizer
         class Asset:
-            pass
+            def _update_on_time_change(self):
+                recorded.append(self.time)
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
         assert len(m.time_synchronizer._time_observers) == 1
         m.time = 1
-        assert asset.time == 1
         m.time = 5
+        assert recorded == [1, 5]
         assert len(m.time_synchronizer._time_observers) == 1  # still attached
         # the engine and the decorated object share the notify path
         assert asset.time == 5
