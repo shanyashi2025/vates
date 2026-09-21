@@ -175,7 +175,6 @@ class Equity(Asset):
         self.tdv_purch_cost_ad[t] = self._purchase_cost
 
     @property
-    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def market_value(self) -> float:
         """float: Market value of the equity asset."""
         return self._mv

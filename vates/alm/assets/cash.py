@@ -66,7 +66,6 @@ class Cash(Asset):
         return True
 
     @property
-    @transition(require_all=AssetPhase.ROLLED)
     def nominal(self) -> float:
         return self._nominal
 
@@ -136,7 +135,6 @@ class Cash(Asset):
         self.tdv_mv_ad[self.time] = self.market_value
 
     @property
-    @transition(require_all=AssetPhase.ROLLED)
     def market_value(self) -> float:
         """float: Market value of the cash asset."""
         return self._nominal

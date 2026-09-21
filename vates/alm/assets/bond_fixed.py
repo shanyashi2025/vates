@@ -159,26 +159,22 @@ class BondFixed(Asset):
             self.tdv_abv_ad[t] = self.abv_price * self._units
 
     @property
-    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def mv_price(self) -> float:
         return self._mv_price_dirty
 
     @property
-    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def abv_price(self) -> float:
         return self._abv_price_dirty
 
     @property
-    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def market_value(self) -> float:
         """float: Market value of the bond asset."""
-        return self.mv_price * self._units
+        return self._mv_price_dirty * self._units
 
     @property
-    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def amortized_book_value(self) -> float:
         """float: Amortized book value of the bond asset."""
-        return self.abv_price * self._units
+        return self._abv_price_dirty * self._units
 
     @property
     def market_spread(self) -> float:

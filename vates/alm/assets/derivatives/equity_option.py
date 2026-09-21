@@ -259,15 +259,13 @@ class EquityOption(Asset):
         self.tdv_mv_ad[t] = self.market_value
 
     @property
-    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def price(self) -> float:
         return self._price
 
     @property
-    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def market_value(self) -> float:
         """float: Market value of the equity option asset."""
-        return self.price * self._units
+        return self._price * self._units
 
     @property
     @transition(require_all=AssetPhase.ROLLED)

@@ -7,7 +7,6 @@ from vates.global_conf import CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
 from vates.alm.funds._connector import AssetLiabConnector
 from vates.alm.assets.asset_base import AssetPhase
-from vates.alm.liabs.liab_base import LiabPhase
 
 class RecorderPhase(Enum):
     ASSET_REC_BD = auto()
@@ -125,9 +124,6 @@ class FundRecorder:
         """Record asset before dealing (bd).
         """
         t = self.time
-        if CHECK_LEVEL != CheckLevel.BYPASS:
-            for asset in self.connector.assets:
-                asset.require_lifecycle(AssetPhase.ROLLED)
 
         # Aggregate asset cash flow
         self.totass_cf = self.connector.sum_asset("cash_flow")
@@ -252,9 +248,6 @@ class FundRecorder:
         """Record liability before dealing (bd).
         """
         t = self.time
-        if CHECK_LEVEL != CheckLevel.BYPASS:
-            for liab in self.connector.liabs:
-                liab.require_lifecycle(LiabPhase.ROLLED)
 
         # Aggregate liability cash flow
         self.totliab_cf = sum(liab.cash_flow for liab in self.connector.liabs)

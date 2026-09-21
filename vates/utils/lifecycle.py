@@ -207,6 +207,28 @@ class Lifecycle(Generic[T]):
         return "{" + ", ".join(f"{phase.name}: {t}" for phase, t in self._last.items()) + "}"
 
 
+def _all_predicate(phases: tuple[T, ...]):
+    """Return a fast ``(last, t) -> bool`` for a pre-normalized 'all' requirement."""
+    if len(phases) == 1:
+        p0 = phases[0]
+        return lambda last, t: last.get(p0) == t
+    if len(phases) == 2:
+        p0, p1 = phases
+        return lambda last, t: last.get(p0) == t and last.get(p1) == t
+    return lambda last, t: all(last.get(p) == t for p in phases)
+
+
+def _any_predicate(phases: tuple[T, ...]):
+    """Return a fast ``(last, t) -> bool`` for a pre-normalized 'any' requirement."""
+    if len(phases) == 1:
+        p0 = phases[0]
+        return lambda last, t: last.get(p0) == t
+    if len(phases) == 2:
+        p0, p1 = phases
+        return lambda last, t: last.get(p0) == t or last.get(p1) == t
+    return lambda last, t: any(last.get(p) == t for p in phases)
+
+
 def transition(*, require_all: T | Iterable[T] | None = None,
                require_any: T | Iterable[T] | None = None,
                require_not: T | None = None, require_offset: int = 0,
@@ -219,8 +241,9 @@ def transition(*, require_all: T | Iterable[T] | None = None,
     ``obj._lc``).
 
     When the resolved check level is ``CheckLevel.BYPASS`` this returns the
-    function unchanged (no wrapper, no phase recording). The level is resolved
-    once, at decoration time.
+    function unchanged (no wrapper, no phase recording). Otherwise the phases
+    and the level are precomputed at decoration time, so the wrapper performs no
+    normalization or type checking on the hot path; bad phases fail at import.
 
     Args:
         require_all (T | Iterable[T] | None): Phase(s) that must all have happened
@@ -247,23 +270,41 @@ def transition(*, require_all: T | Iterable[T] | None = None,
             return func
         return identity
 
+    # Precompute at decoration time so the hot path does no normalization, type
+    # validation or level resolution. An invalid phase now fails at import.
+    req_all = Lifecycle._normalize(require_all) if require_all is not None else None
+    req_any = Lifecycle._normalize(require_any) if require_any is not None else None
+    pred_all = _all_predicate(req_all) if req_all is not None else None
+    pred_any = _any_predicate(req_any) if req_any is not None else None
+    if require_not is not None:
+        Lifecycle._validate_phase(require_not)
+    if mark is not None:
+        Lifecycle._validate_phase(mark)
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(obj, *args, **kwargs):
             lifecycle = getattr(obj, lifecycle_attr)
+            last = lifecycle._last
             t = obj.time
 
-            if require_all is not None:
-                lifecycle.require_all(require_all, t + require_offset, check_level=level)
-            if require_any is not None:
-                lifecycle.require_any(require_any, t + require_offset, check_level=level)
-            if require_not is not None:
+            # Inline the checks on the raw mapping; only build the message (by
+            # delegating to the public guards) on the rare failure path.
+            if pred_all is not None:
+                tt = t + require_offset
+                if not pred_all(last, tt):
+                    lifecycle.require_all(req_all, tt, check_level=level)
+            if pred_any is not None:
+                tt = t + require_offset
+                if not pred_any(last, tt):
+                    lifecycle.require_any(req_any, tt, check_level=level)
+            if require_not is not None and last.get(require_not) == t:
                 lifecycle.require_not_yet(require_not, t, check_level=level)
 
             result = func(obj, *args, **kwargs)
 
             if mark is not None:
-                lifecycle.mark(mark, t)
+                last[mark] = t
             return result
 
         return wrapper
