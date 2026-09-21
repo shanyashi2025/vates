@@ -5,10 +5,11 @@ from collections.abc import Mapping
 from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable
+from vates.utils import transition
 from vates.finmath import CallOrPut, BlackScholesCalculator
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
-from vates.alm.assets.asset_base import Asset
-from vates.alm.assets._utils import maybe_check_asset_state_roll, maybe_check_asset_state_close
+from vates.alm.assets.asset_base import Asset, AssetPhase
+
 
 class EquityOption(Asset):
     """
@@ -133,7 +134,7 @@ class EquityOption(Asset):
     def is_alive_beg(self) -> bool:
         return self.period <= self._exercise_date
 
-    @maybe_check_asset_state_roll
+    @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, **kwargs) -> None:
         """
         Roll the equity option asset forward one period.
@@ -169,7 +170,7 @@ class EquityOption(Asset):
         self.tdv_units_bd[t] = self._units
         self.tdv_stock_price[t] = self._stock_price
         self.tdv_price[t] = self._price
-        self.tdv_mv_bd[t] = self.market_value
+        self.tdv_mv_bd[t] = self._price * self._units
         self.tdv_cash_flow[t] = self._cash_flow
 
     def get_greeks(self) -> dict:
@@ -186,6 +187,7 @@ class EquityOption(Asset):
             sigma=self._std_dev, tau=self.os_term_m / 12
         )
 
+    @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def buy_propn(self, *args, **kwargs) -> None:
         """
         Buy a proportion of the equity option asset.
@@ -195,6 +197,7 @@ class EquityOption(Asset):
         """
         raise ValueError("Can not buy equity option by scaling exsiting segment.")
 
+    @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
         """
         Sell a proportion of the equity option asset.
@@ -246,7 +249,7 @@ class EquityOption(Asset):
         self._n_clone += 1
         return clone
 
-    @maybe_check_asset_state_close
+    @transition(require_all=AssetPhase.ROLLED, mark=AssetPhase.CLOSED)
     def close_dealing(self, **kwargs) -> None:
         """
         Update the equity option asset after dealing.
@@ -256,15 +259,18 @@ class EquityOption(Asset):
         self.tdv_mv_ad[t] = self.market_value
 
     @property
-    def mv_price(self) -> float:
+    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
+    def price(self) -> float:
         return self._price
 
     @property
+    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def market_value(self) -> float:
         """float: Market value of the equity option asset."""
-        return self.mv_price * self._units
+        return self.price * self._units
 
     @property
+    @transition(require_all=AssetPhase.ROLLED)
     def cash_flow(self) -> float:
         """float: Cash flow in period"""
         return self._cash_flow

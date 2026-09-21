@@ -4,9 +4,9 @@ from typing import Self
 
 from vates import ProjModelEngine
 from vates._core import TDimVariable
+from vates.utils import transition
 from vates.alm.econs import Currency, MarketInfo
-from vates.alm.assets.asset_base import Asset
-from vates.alm.assets._utils import maybe_check_asset_state_roll, maybe_check_asset_state_close
+from vates.alm.assets.asset_base import Asset, AssetPhase
 
 
 class Cash(Asset):
@@ -59,13 +59,14 @@ class Cash(Asset):
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
-        self.tdv_mv_ad[self.time] = self.market_value
+        self.tdv_mv_ad[self.time] = self._nominal
 
     @property
     def is_alive(self) -> bool:
         return True
 
     @property
+    @transition(require_all=AssetPhase.ROLLED)
     def nominal(self) -> float:
         return self._nominal
 
@@ -77,7 +78,7 @@ class Cash(Asset):
     def ret_id_short_pos(self) -> str:
         return self._ret_id_short_pos
 
-    @maybe_check_asset_state_roll
+    @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, *, ret_rate: float | None = None, ret_rate_pos: float | None = None, **kwargs) -> None:
         """
         Roll the cash asset forward one period.
@@ -90,7 +91,7 @@ class Cash(Asset):
         t = self.time
         self._nominal = self._nominal * (1 + ret) ** (1 / 12)
         self.tdv_cash_flow[t] = 0.0
-        self.tdv_mv_bd[t] = self.market_value
+        self.tdv_mv_bd[t] = self._nominal
 
     def invest_new_money(self, amount: float) -> None:
         """
@@ -101,6 +102,7 @@ class Cash(Asset):
         """
         self._nominal += amount
 
+    @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def buy_propn(self, propn: float) -> None:
         """
         Buy a proportion of the cash asset.
@@ -110,6 +112,7 @@ class Cash(Asset):
         """
         self._nominal += self._nominal * propn
 
+    @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
         """
         Sell a proportion of the cash asset.
@@ -125,7 +128,7 @@ class Cash(Asset):
         """
         raise ValueError(f"`scale_profile` is not applicable for cash.")
 
-    @maybe_check_asset_state_close
+    @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED, mark=AssetPhase.CLOSED)
     def close_dealing(self, **kwargs) -> None:
         """
         Update the cash asset after dealing.
@@ -133,6 +136,7 @@ class Cash(Asset):
         self.tdv_mv_ad[self.time] = self.market_value
 
     @property
+    @transition(require_all=AssetPhase.ROLLED)
     def market_value(self) -> float:
         """float: Market value of the cash asset."""
         return self._nominal

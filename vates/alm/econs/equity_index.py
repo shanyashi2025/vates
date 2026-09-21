@@ -20,7 +20,7 @@ class EquityIndex:
     _total_return_index: float
     _total_return_index_prev: float
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
                  'index_id', '_dividend_yield_ac', '_total_return_index', '_total_return_index_prev',
                  'tdv_tot_return_index', 'tdv_dividend_yield_ac', )
 
@@ -41,12 +41,12 @@ class EquityIndex:
         create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=index_id, group='equity_index')
         self.tdv_tot_return_index: TDimVariable = create_tdv("tot_return_index")
         self.tdv_dividend_yield_ac: TDimVariable = create_tdv("dividend_yield_ac")
-        self._state: tuple[str, int] = ("initialized", self.time or 0)
+        self._last_update: int = self.time or 0
 
     @property
     def total_return(self) -> float:
         """float: Total return in period."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         if self._total_return_index_prev == 0:
             raise ZeroDivisionError(f"{self.index_id}: previous total return index is zero.")
         return self._total_return_index / self._total_return_index_prev - 1
@@ -54,31 +54,31 @@ class EquityIndex:
     @property
     def capital_growth(self) -> float:
         """float: Capital growth in period."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self.total_return - self.dividend_yield
 
     @property
     def dividend_yield(self) -> float:
         """float: Dividend yield (monthly) in period."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return (1 + self.dividend_yield_ac) ** (1 / 12) - 1
 
     @property
     def dividend_yield_ac(self) -> float:
         """float: Dividend yield (annual compounding) in period."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._dividend_yield_ac
 
     @property
     def total_return_index(self) -> float:
         """float: Current total return index."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._total_return_index
 
     @property
     def total_return_index_prev(self) -> float:
         """float: Previous total return index."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._total_return_index_prev
 
     @property
@@ -117,7 +117,7 @@ class EquityIndex:
         t = self.time
         self.tdv_tot_return_index[t] = self._total_return_index
         self.tdv_dividend_yield_ac[t] = self._dividend_yield_ac
-        self._state = ("updated", t)
+        self._last_update = t
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.index_id}'"

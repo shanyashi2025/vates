@@ -84,6 +84,11 @@ class Lifecycle(Generic[T]):
         self._validate_phase(phase)
         return self._last.get(phase)
 
+    def __getitem__(self, phase: T) -> int | None:
+        """Return the last period ``phase`` was performed at, or None."""
+        self._validate_phase(phase)
+        return self._last.get(phase)
+
     @property
     def snapshot(self) -> dict[T, int]:
         """Return a copy of the current ``{phase: last_period}`` mapping."""

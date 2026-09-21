@@ -1,9 +1,10 @@
 import pandas as pd
 import warnings
+from enum import Enum, auto
 from typing import Callable, Optional
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
-from vates.utils import maybe_raise_if_ne
+from vates.utils import Lifecycle, transition
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
 from vates.alm.funds._allocator import AssetAllocator, AssetAllocationGroup
@@ -11,6 +12,13 @@ from vates.alm.funds._connector import AssetLiabConnector
 from vates.alm.funds._recorder import FundRecorder
 from vates.alm.funds._utils import _RateOfReturnIndexer
 
+class FundPhase(Enum):
+    PROC_ASSET_BD = auto()
+    PROC_LIAB_BD = auto()
+    REBALANCED = auto()
+    PROC_ASSET_AD = auto()
+    PROC_LIAB_AD = auto()
+    CLOSED = auto()
 
 @add_projection_time_synchronizer
 class Fund:
@@ -28,7 +36,7 @@ class Fund:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_lc',
                  'fund_id', '_connector', '_primary_cash_asset', '_asset_report_bases', '_recorder', '_allocator',
                  'rate_of_return_bd', 'rate_of_return_ad', )
 
@@ -82,7 +90,7 @@ class Fund:
         self.rate_of_return_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
             self._recorder.tdv_totass_ror_pc_ad, divby=100)
 
-        self._state: tuple[str, int] = ("initialized", self.time or 0)
+        self._lc: Lifecycle[FundPhase] = Lifecycle[FundPhase]()
 
     @property
     def assets(self) -> list[Asset]:
@@ -103,7 +111,8 @@ class Fund:
             existing_liabs (Liab | list[Liab] | None): Existing liabilities to be included.
 
         """
-        maybe_raise_if_ne(self._state, ("initialized", self.time))
+        if len(self._lc.snapshot) > 0:
+            raise ValueError(f"Fund should assemble before any action, actual: {self._lc._describe_actual()}")
 
         if existing_assets is None:
             pass
@@ -141,7 +150,7 @@ class Fund:
         self._recorder.sum_liab_attrs("bd")
         self._recorder.sum_liab_attrs("ad")
 
-        self._state = ("assembled", self.time)
+        self._lc.mark(FundPhase.CLOSED, self.time or 0)
 
     @property
     def primary_cash_asset(self) -> Cash | None:
@@ -154,24 +163,21 @@ class Fund:
                 warnings.warn(f"No cash assets available.")
         return self._primary_cash_asset
 
+    @transition(require_not=FundPhase.PROC_ASSET_BD, mark=FundPhase.PROC_ASSET_BD)
     def process_assets_before_dealing(self) -> None:
         """Process asset cash flows and reported values before dealing (bd)."""
-        if self._state != ("assembled", self.time - 1):
-            maybe_raise_if_ne(self._state, ("closed", self.time - 1))
         self._recorder.record_asset_before_dealing()
-        self._connector.accumulate_free_estate(self._recorder.tdv_totass_cf[self.time])
-        self._state = ("proc_assets_bd", self.time)
+        self._connector.accumulate_free_estate(self._recorder.total_asset_cash_flow)
 
+    @transition(require_not=FundPhase.PROC_LIAB_BD, mark=FundPhase.PROC_LIAB_BD)
     def process_liabs_before_dealing(self) -> None:
         """Process liability cash flows and balance sheet variables before dealing (bd)."""
-        maybe_raise_if_ne(self._state, ("proc_assets_bd", self.time))
         self._recorder.record_liab_before_dealing()
-        self._connector.accumulate_free_estate(self._recorder.tdv_totliab_cf[self.time])
-        self._state = ("proc_liabs_bd", self.time)
+        self._connector.accumulate_free_estate(self._recorder.total_liab_cash_flow)
 
+    @transition(require_not=FundPhase.REBALANCED, mark=FundPhase.REBALANCED)
     def no_action_on_rebalance(self) -> None:
         """Skip asset rebalance, invest free proceeds into primary cash."""
-        maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
         self._recorder.record_free_estate("bd")
         # just invest free_estate into primary cash, no other action, free_estate is reset to zero
         self.primary_cash_asset.invest_new_money(self._connector.dispose_free_estate())
@@ -179,8 +185,8 @@ class Fund:
             asset.close_dealing()
         self._recorder.record_free_estate("ad")  # free_estate should be zero
         self._recorder.record_asset_after_dealing()
-        self._state = ("closed", self.time)
 
+    @transition(require_not=FundPhase.REBALANCED, mark=FundPhase.REBALANCED)
     def rebalance_assets(self, *, total_size: float, profile_assets: list[Asset] | None = None, **kwargs) -> None:
         """Rebalance assets per target allocation and optional profile.
 
@@ -188,8 +194,6 @@ class Fund:
             total_size (float): Total size for allocation.
             profile_assets (list[Asset]): Profile assets for reference.
         """
-        maybe_raise_if_ne(self._state, ("proc_liabs_bd", self.time))
-
         self._recorder.record_free_estate("bd")
         # process rebalance
         self._allocator.rebalance(total_size=total_size, profile_assets=profile_assets, **kwargs)
@@ -197,7 +201,6 @@ class Fund:
             asset.close_dealing()
         self._recorder.record_free_estate("ad")  # free_estate should be zero
         self._recorder.record_asset_after_dealing()
-        self._state = ("closed", self.time)
 
     def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
                  treat_missing_as_zero: bool = False) -> float:
@@ -218,6 +221,7 @@ class Fund:
         """
         return self._connector.get_size(func=func, key=key, treat_missing_as_zero=treat_missing_as_zero)
 
+    @transition(require_all=FundPhase.REBALANCED, require_not=FundPhase.PROC_LIAB_AD, mark=FundPhase.PROC_LIAB_AD)
     def process_liabs_after_dealing(self) -> None:
         """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""
         self._recorder.record_liab_after_dealing()

@@ -7,8 +7,9 @@ from collections.abc import Mapping
 from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable
+from vates.utils import transition
 from vates.alm.econs import Currency, YieldCurve, CreditBand
-from vates.alm.assets.asset_base import Asset
+from vates.alm.assets.asset_base import Asset, AssetPhase
 from vates.alm.assets._bond_fixed_component import (
     BondFixedParameters,
     BondFixedCashFlowGenerator,
@@ -16,7 +17,7 @@ from vates.alm.assets._bond_fixed_component import (
     BondFixedPricer,
     BondFixedRiskCalculator,
 )
-from vates.alm.assets._utils import calculate_risk_adj_spot, maybe_check_asset_state_roll, maybe_check_asset_state_close
+from vates.alm.assets._utils import calculate_risk_adj_spot
 
 
 class BondFixed(Asset):
@@ -154,23 +155,27 @@ class BondFixed(Asset):
         self.tdv_abv_price[t] = self._abv_price_dirty
         if not is_profile:
             self.tdv_units_ad[t] = self._units
-            self.tdv_mv_ad[t] = self.market_value
-            self.tdv_abv_ad[t] = self.amortized_book_value
+            self.tdv_mv_ad[t] = self.mv_price * self._units
+            self.tdv_abv_ad[t] = self.abv_price * self._units
 
     @property
+    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def mv_price(self) -> float:
         return self._mv_price_dirty
 
     @property
+    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def abv_price(self) -> float:
         return self._abv_price_dirty
 
     @property
+    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def market_value(self) -> float:
         """float: Market value of the bond asset."""
         return self.mv_price * self._units
 
     @property
+    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def amortized_book_value(self) -> float:
         """float: Amortized book value of the bond asset."""
         return self.abv_price * self._units
@@ -229,7 +234,7 @@ class BondFixed(Asset):
             valn_date=self.period, market_price=self._mv_price_dirty, spots=self.ra_spots, eff_dur_delta=eff_dur_delta
         )
 
-    @maybe_check_asset_state_roll
+    @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, *, is_update_mv_price: bool = True, **kwargs) -> None:
         """
         Roll the bond forward one period, updating units, prices, and cash flows.
@@ -278,14 +283,15 @@ class BondFixed(Asset):
         self.tdv_units_bd[t] = self._units
         self.tdv_units_default[t] = units_default
         self.tdv_units_maturity[t] = units_maturity
-        self.tdv_mv_bd[t] = self.market_value
-        self.tdv_abv_bd[t] = self.amortized_book_value
+        self.tdv_mv_bd[t] = self._mv_price_dirty * self._units
+        self.tdv_abv_bd[t] = self._abv_price_dirty * self._units
         self.tdv_interest[t] = interest
         self.tdv_principal[t] = principal
         self.tdv_default_recovery[t] = default_recovery
         self.tdv_cash_flow[t] = self._cash_flow
 
     @property
+    @transition(require_all=AssetPhase.ROLLED)
     def cash_flow(self) -> float:
         """float: Cash flow in period"""
         return self._cash_flow
@@ -304,6 +310,7 @@ class BondFixed(Asset):
         """
         raise ValueError("It's not allowed to buy bonds by scaling exsiting segments.")
 
+    @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
         """
         Sell a proportion of existing bonds.
@@ -362,7 +369,7 @@ class BondFixed(Asset):
         self._n_clone += 1
         return clone
 
-    @maybe_check_asset_state_close
+    @transition(require_all=AssetPhase.ROLLED, mark=AssetPhase.CLOSED)
     def close_dealing(self) -> None:
         """
         Update the bond after dealing, storing units and values.

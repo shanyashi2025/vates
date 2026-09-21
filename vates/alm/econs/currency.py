@@ -18,7 +18,7 @@ class Currency:
     _fx_rate: float
     _fx_rate_prev: float
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', "_state",
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', "_last_update",
                  'currency_id', '_fx_rate', '_fx_rate_prev', 'tdv_fx_rate', )
 
     def __init__(
@@ -36,18 +36,18 @@ class Currency:
         self.currency_id: str = currency_id
         self._fx_rate = 1.0
         self.tdv_fx_rate: TDimVariable = TDimVariable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
-        self._state: tuple[str, int] = ("initialized", self.time or 0)
+        self._last_update: int = self.time or 0
 
     @property
     def fx_rate(self) -> float:
         """float: Current FX rate"""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._fx_rate
 
     @property
     def fx_rate_prev(self) -> float:
         """float: Previous FX rate"""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._fx_rate_prev
 
     @property
@@ -78,7 +78,7 @@ class Currency:
 
         t = self.time
         self.tdv_fx_rate[t] = fx_rate
-        self._state = ("updated", t)
+        self._last_update = ("updated", t)
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.currency_id}'"

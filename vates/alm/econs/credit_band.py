@@ -25,7 +25,7 @@ class CreditBand:
     _prob_of_default_ac: float
     _recovery_rate: float
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
                  'band_id', '_spread', '_spotmult', '_prob_of_default_ac', '_recovery_rate',
                  'tdv_prob_of_default_ac', 'tdv_recovery_rate', 'tdv_spread', 'tdv_spotmult',)
 
@@ -57,30 +57,30 @@ class CreditBand:
         else: # has term structure
             self.tdv_spotmult: TDimVariable = TDimVariable("credit_spotmult", dims=[tdv_spotmult_term_dim],
                                                            model_engine=model_engine, owner=band_id, group='credit')
-        self._state: tuple[str, int] = ("initialized", self.time or 0)
+        self._last_update: int = self.time or 0
 
     @property
     def credit_spread(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Credit spread(s) as at period end."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._spread
 
     @property
     def credit_spotmult(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Spot rate multipliers as at period end."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._spotmult
 
     @property
     def prob_of_default_ac(self) -> float:
         """float: Probability of default (annual compounding) in period."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._prob_of_default_ac
 
     @property
     def recovery_rate(self) -> float:
         """float: Recovery rate in period."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._recovery_rate
 
     def update(self, *, prop_of_default_ac: float = None, recovery_rate: float = None,
@@ -108,7 +108,7 @@ class CreditBand:
             self._spotmult = credit_spotmult
             self._spread = credit_spread
         self._on_exit_update()
-        self._state = ("updated", self.time)
+        self._last_update = self.time
 
     def _on_exit_update(self) -> None:
         t = self.time

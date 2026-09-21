@@ -22,7 +22,7 @@ class YieldCurve:
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     _curve: InterestRateTermStructure | None
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_state',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_last_update',
                  'curve_id', '_curve', 'tdv_spot_rates',)
 
     def __init__(
@@ -56,7 +56,7 @@ class YieldCurve:
 
         self.tdv_spot_rates: TDimVariable = TDimVariable("spot_rate", dims=[tdv_term_dim],
                                                          model_engine=model_engine, owner=curve_id, group='yield_curve')
-        self._state: tuple[str, int] = ("initialized", self.time or 0)
+        self._last_update: int = self.time or 0
 
     def update(self, *, from_what: Literal["spot_rates", "forward_rates", "discount_factors"] = None,
                value: npt.NDArray[np.float64] = None, is_unchange: bool = False) -> None:
@@ -83,30 +83,30 @@ class YieldCurve:
             raise ValueError(f"Invalid {from_what=}, expected: 'spot_rates', 'forward_rates' or 'discount_factors'.")
 
         self._on_exit_update()
-        self._state = ("updated", self.time)
+        self._last_update = self.time
 
     @property
     def spot_rates(self) -> npt.NDArray[np.float64]:
         """npt.NDArray[np.float64] | None: Spot rates, or None if the curve has not been initialized."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._curve.spotac
 
     @property
     def discount_factors(self) -> npt.NDArray[np.float64]:
         """npt.NDArray[np.float64] | None: Discount factors, or None if the curve has not been initialized."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._curve.discount
 
     @property
     def forward_rates(self) -> npt.NDArray[np.float64]:
         """npt.NDArray[np.float64] | None: Forward rates, or None if the curve has not been initialized."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._curve.forwardac
 
     @property
     def par_yields(self) -> dict[int, npt.NDArray[np.float64]]:
         """dict[int, npt.NDArray[np.float64]] | None: Par yields, or None if the curve has not been initialized."""
-        maybe_raise_if_ne(self._state, ("updated", self.time))
+        maybe_raise_if_ne(self._last_update, self.time)
         return self._curve.parac
 
     def _on_exit_update(self) -> None:

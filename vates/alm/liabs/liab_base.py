@@ -2,9 +2,16 @@ import pandas as pd
 import uuid
 import weakref
 from abc import ABC, abstractmethod
+from enum import Enum, auto
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
+from vates.utils import Lifecycle, maybe_raise_if_ne
 from vates.alm.econs import Currency
+
+class LiabPhase(Enum):
+    ROLLED = auto()
+    CLOSED = auto()
+
 
 @add_projection_time_synchronizer
 class Liab(ABC):
@@ -19,7 +26,7 @@ class Liab(ABC):
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', '_state', '_liab_id', '_currency',
+    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', '_lc', '_liab_id', '_currency',
                  '_entry_date', '_attr_aliases',)
 
     def __init__(
@@ -46,7 +53,7 @@ class Liab(ABC):
         self._currency: Currency = currency
         self._entry_date: pd.Period = entry_date
         self._attr_aliases: dict[str, str] | None = attr_aliases
-        self._state: tuple[str, int] = ("initialized", self.time or 0)
+        self._lc: Lifecycle[LiabPhase] = Lifecycle[LiabPhase](created_phase=LiabPhase.CLOSED, created_at=self.time or 0)
 
     @property
     def liab_id(self) -> str:
@@ -89,6 +96,10 @@ class Liab(ABC):
         Abstract method to get the cash flow for the liability.
         """
         pass
+
+    def require_lifecycle(self, phase: LiabPhase, t: int | None = None):
+        t = t if t is not None else self.time
+        maybe_raise_if_ne(self._lc[phase], t)
 
     def __getattr__(self, name):
         try:

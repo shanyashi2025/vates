@@ -1,10 +1,19 @@
 import numpy as np
 import pandas as pd
+from enum import Enum, auto
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
 from vates.global_conf import CHECK_LEVEL, CheckLevel
-from vates.utils import maybe_raise_if_ne
+from vates.utils import Lifecycle, transition
 from vates.alm.funds._connector import AssetLiabConnector
+from vates.alm.assets.asset_base import AssetPhase
+from vates.alm.liabs.liab_base import LiabPhase
+
+class RecorderPhase(Enum):
+    ASSET_REC_BD = auto()
+    LIAB_REC_BD = auto()
+    ASSET_REC_AD = auto()
+    LIAB_REC_AD = auto()
 
 
 @add_projection_time_synchronizer
@@ -20,7 +29,7 @@ class FundRecorder:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'name', 'connector',
+    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', '_lc', 'name', 'connector',
                  'asset_categories', 'asset_category_attr', 'asset_report_bases', 'totass_cf', 'catass_cf'
                  'totass_mv_op', 'totass_mv_bd', 'totass_mv_ad', 'catass_mv_op', 'catass_mv_bd', 'catass_mv_ad',
                  'totass_rv_op', 'totass_rv_bd', 'totass_rv_ad', 'catass_rv_op', 'catass_rv_bd', 'catass_rv_ad',
@@ -50,6 +59,7 @@ class FundRecorder:
         self.asset_report_bases: list[str] = asset_report_bases
         self.output_liab_attrs_bd: list[str] = output_liab_attrs_bd
         self.output_liab_attrs_ad: list[str] = output_liab_attrs_ad
+        self.totliab_cf: float | None = None
         self.totass_cf: float | None = None
         self.catass_cf: np.ndarray | None = None  # shape = (categories, )
         self.totass_mv_op: float | None = None
@@ -64,6 +74,7 @@ class FundRecorder:
         self.catass_rv_op: np.ndarray | None = None  # shape = (categories, report_bases)
         self.catass_rv_bd: np.ndarray | None = None  # shape = (categories, report_bases)
         self.catass_rv_ad: np.ndarray | None = None  # shape = (categories, report_bases)
+        self._lc: Lifecycle[RecorderPhase] = Lifecycle[RecorderPhase]()
 
         # Initialize time-dimensioned variables for output
         # dims = None
@@ -99,13 +110,24 @@ class FundRecorder:
         self.tdv_catass_ret_ad: TDimVariable = create_tdv("asset_inv_ret_ad")
         self.tdv_catass_ror_pc_ad: TDimVariable = create_tdv("asset_ror_pc_ad")
 
+    @property
+    @transition(require_all=RecorderPhase.ASSET_REC_BD)
+    def total_asset_cash_flow(self) -> float:
+        return self.totass_cf
+
+    @property
+    @transition(require_all=RecorderPhase.LIAB_REC_BD)
+    def total_liab_cash_flow(self) -> float:
+        return self.totliab_cf
+
+    @transition(mark=RecorderPhase.ASSET_REC_BD)
     def record_asset_before_dealing(self) -> None:
         """Record asset before dealing (bd).
         """
         t = self.time
         if CHECK_LEVEL != CheckLevel.BYPASS:
             for asset in self.connector.assets:
-                maybe_raise_if_ne(asset._state, ("rolled", t))
+                asset.require_lifecycle(AssetPhase.ROLLED)
 
         # Aggregate asset cash flow
         self.totass_cf = self.connector.sum_asset("cash_flow")
@@ -134,6 +156,7 @@ class FundRecorder:
             self.tdv_catass_ret_bd[t] = ret
             self.tdv_catass_ror_pc_bd[t] = ror * 100
 
+    @transition(mark=RecorderPhase.ASSET_REC_AD)
     def record_asset_after_dealing(self) -> None:
         """Record asset after dealing (ad).
         """
@@ -171,10 +194,10 @@ class FundRecorder:
         timing = self._validate_timing(timing)
 
         t = self.time
-        if t > 0 and CHECK_LEVEL != CheckLevel.BYPASS:
-            s = "rolled" if timing == "bd" else "closed"
+        if CHECK_LEVEL != CheckLevel.BYPASS:
+            phase = AssetPhase.ROLLED if timing == "bd" else AssetPhase.CLOSED
             for asset in self.connector.assets:
-                maybe_raise_if_ne(asset._state, (s, t))
+                asset.require_lifecycle(phase=phase)
 
         # 1. always calculate total asset market value
         tot_mv = self.connector.sum_asset("market_value")
@@ -224,20 +247,23 @@ class FundRecorder:
             self.tdv_totass_rv_ad[t] = self.totass_rv_ad
             self.tdv_catass_rv_ad[t] = self.catass_rv_ad
 
+    @transition(mark=RecorderPhase.LIAB_REC_BD)
     def record_liab_before_dealing(self) -> None:
         """Record liability before dealing (bd).
         """
         t = self.time
         if CHECK_LEVEL != CheckLevel.BYPASS:
             for liab in self.connector.liabs:
-                maybe_raise_if_ne(liab._state, ("rolled", t))
+                liab.require_lifecycle(LiabPhase.ROLLED)
 
         # Aggregate liability cash flow
-        self.tdv_totliab_cf[t] = sum(liab.cash_flow for liab in self.connector.liabs)
+        self.totliab_cf = sum(liab.cash_flow for liab in self.connector.liabs)
+        self.tdv_totliab_cf[t] = self.totliab_cf
 
         # Aggregate liability value
         self.sum_liab_attrs("bd")
 
+    @transition(mark=RecorderPhase.LIAB_REC_AD)
     def record_liab_after_dealing(self):
         """Process liability values and cash flows after dealing (ad).
         """

@@ -4,13 +4,21 @@ import warnings
 import weakref
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from enum import Enum, auto
 from typing import Self
 
 from vates._core import ProjModelEngine, add_projection_time_synchronizer
+from vates.utils import Lifecycle, maybe_raise_if_ne
 from vates.global_conf import CheckLevel
 from vates.alm.econs import Currency
 
 _IMMUTABLE = (type(None), bool, int, float, str, bytes, tuple, frozenset)
+
+class AssetPhase(Enum):
+    PROFILED = auto()
+    ROLLED = auto()
+    CLOSED = auto()
+
 
 @add_projection_time_synchronizer
 class Asset(ABC):
@@ -30,7 +38,7 @@ class Asset(ABC):
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     _mutable_attr_check: CheckLevel = CheckLevel.ERROR
 
-    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', '_state', '_asset_id', '_is_profile', '_units',
+    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', '_lc', '_asset_id', '_is_profile', '_units',
                  '_purchase_date', '_currency', '_attr_aliases',)
 
     def __init__(
@@ -63,7 +71,12 @@ class Asset(ABC):
         self._purchase_date: pd.Period = purchase_date
         self._currency: Currency | None = currency
         self._attr_aliases: Mapping[str, str] | None = attr_aliases
-        self._state: tuple[str, int] = ("initialized", self.time or 0)
+        self._lc: Lifecycle[AssetPhase] = Lifecycle[AssetPhase]()
+        if self._is_profile:
+            self._lc.mark(AssetPhase.PROFILED, self.time or 0)
+        else:
+            self._lc.mark(AssetPhase.ROLLED, self.time or 0)
+            self._lc.mark(AssetPhase.CLOSED, self.time or 0)
 
     @property
     def asset_id(self) -> str:
@@ -175,6 +188,10 @@ class Asset(ABC):
         Abstract method to update the asset after dealing.
         """
         pass
+
+    def require_lifecycle(self, phase: AssetPhase, t: int | None = None):
+        t = t if t is not None else self.time
+        maybe_raise_if_ne(self._lc[phase], t)
 
     def __getattr__(self, name):
         try:

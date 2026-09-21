@@ -4,9 +4,9 @@ from collections.abc import Mapping
 from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable
+from vates.utils import transition
 from vates.alm.econs import Currency, EquityIndex
-from vates.alm.assets.asset_base import Asset
-from vates.alm.assets._utils import maybe_check_asset_state_roll, maybe_check_asset_state_close
+from vates.alm.assets.asset_base import Asset, AssetPhase
 
 
 class Equity(Asset):
@@ -80,7 +80,7 @@ class Equity(Asset):
     def is_alive(self) -> bool:
         return True
 
-    @maybe_check_asset_state_roll
+    @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, **kwargs) -> None:
         """
         Roll the equity asset forward one period, updating value and dividend.
@@ -96,8 +96,8 @@ class Equity(Asset):
         self.tdv_cash_flow[t] = self._cash_flow
         self.tdv_mv_bd[t] = self._mv
         self.tdv_purch_cost_bd[t] = self._purchase_cost
-        self._state = ("rolled", t)
 
+    @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def buy_propn(self, propn: float) -> None:
         """
         Buy a proportion of the equity asset.
@@ -112,6 +112,7 @@ class Equity(Asset):
         if self._purchase_cost is not None:
             self._purchase_cost += amount  # the difference between market value and purchase cost doesn't change (in dollar amount)
 
+    @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
         """
         Sell a proportion of the equity asset.
@@ -129,6 +130,7 @@ class Equity(Asset):
         self._disposal_proceeds += amount  # record the amount of money received when selling (proportion of) the equity
 
     @property
+    @transition(require_all=AssetPhase.CLOSED)
     def disposal_proceeds(self) -> float:
         return self._disposal_proceeds
 
@@ -163,7 +165,7 @@ class Equity(Asset):
         self._n_clone += 1
         return clone
 
-    @maybe_check_asset_state_close
+    @transition(require_all=AssetPhase.ROLLED, mark=AssetPhase.CLOSED)
     def close_dealing(self, **kwargs) -> None:
         """
         Update the equity asset after dealing.
@@ -173,6 +175,7 @@ class Equity(Asset):
         self.tdv_purch_cost_ad[t] = self._purchase_cost
 
     @property
+    @transition(require_any=(AssetPhase.ROLLED, AssetPhase.PROFILED))
     def market_value(self) -> float:
         """float: Market value of the equity asset."""
         return self._mv
@@ -183,6 +186,7 @@ class Equity(Asset):
         return self._purchase_cost
 
     @property
+    @transition(require_all=AssetPhase.ROLLED)
     def cash_flow(self) -> float:
         """float: Cash flow in period"""
         return self._cash_flow

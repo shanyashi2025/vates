@@ -1,9 +1,9 @@
 import pandas as pd
 
 from vates._core import ProjModelEngine, TDimVariable
+from vates.utils import transition
 from vates.alm.econs import Currency
-from vates.alm.liabs.liab_base import Liab
-from vates.alm.liabs._utils import maybe_check_liab_state_roll, maybe_check_liab_state_close
+from vates.alm.liabs.liab_base import Liab, LiabPhase
 
 
 class ExtProjLiab(Liab):
@@ -12,7 +12,6 @@ class ExtProjLiab(Liab):
     """
 
     __slots__ = ('_cash_flow', 'tdv_cash_flow', 'output_attrs_bd', 'output_attrs_ad')
-
 
     def __init__(
         self,
@@ -66,7 +65,7 @@ class ExtProjLiab(Liab):
                 setattr(self, item.name, 0.0)
             item[t] = getattr(self, item.name)
 
-    @maybe_check_liab_state_roll
+    @transition(require_all=LiabPhase.CLOSED, require_offset=-1, require_not=LiabPhase.ROLLED, mark=LiabPhase.ROLLED)
     def roll_forward(self, cash_flow: float, **kwargs):
         """
         Roll the liability forward one period, updating variables and calculating cash flow.
@@ -77,7 +76,7 @@ class ExtProjLiab(Liab):
         self.tdv_cash_flow[self.time] = self._cash_flow
         self._set_output_attrs_bd()
 
-    @maybe_check_liab_state_close
+    @transition(require_all=LiabPhase.ROLLED, require_not=LiabPhase.CLOSED, mark=LiabPhase.CLOSED)
     def close_dealing(self, **kwargs) -> None:
         """
         Update the liability after dealing, adjusting asset share.
@@ -87,6 +86,7 @@ class ExtProjLiab(Liab):
         self._set_output_attrs_ad()
 
     @property
+    @transition(require_all=LiabPhase.ROLLED)
     def cash_flow(self) -> float:
         return self._cash_flow
 
