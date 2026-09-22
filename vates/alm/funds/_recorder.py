@@ -28,11 +28,12 @@ class FundRecorder:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'time', 'period', '_lc', 'name', 'connector',
-                 'asset_categories', 'asset_category_attr', 'asset_report_bases', 'totass_cf', 'catass_cf'
+    __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name', 'connector',
+                 'asset_categories', 'asset_category_attr', 'asset_report_bases', 'totass_cf', 'catass_cf', 'totliab_cf',
                  'totass_mv_op', 'totass_mv_bd', 'totass_mv_ad', 'catass_mv_op', 'catass_mv_bd', 'catass_mv_ad',
                  'totass_rv_op', 'totass_rv_bd', 'totass_rv_ad', 'catass_rv_op', 'catass_rv_bd', 'catass_rv_ad',
                  'output_liab_attrs_bd', 'output_liab_attrs_ad',
+                 'tdv_totass_cf', 'tdv_totliab_cf', 'tdv_totliab_attrs_bd', 'tdv_totliab_attrs_ad',
                  'tdv_free_estate_bd', 'tdv_free_estate_ad', 'tdv_proceeds_tran_in', 'tdv_proceeds_tran_out',
                  'tdv_totass_rv_bd', 'tdv_totass_rv_ad', 'tdv_totass_ret_bd', 'tdv_totass_ror_pc_bd',
                  'tdv_totass_ret_ad', 'tdv_totass_ror_pc_ad', 'tdv_catass_cf', 'tdv_catass_rv_bd',

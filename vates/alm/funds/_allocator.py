@@ -336,8 +336,8 @@ class AssetAllocator:
     period: pd.Period  # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     _default_alloc_check_level: CheckLevel = CheckLevel.WARN
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'time', 'period',
-                 'name', 'connector', 'alloc_groups', 'alloc_group_attr', 'asset_report_bases', 'alloc_group_names',
+    __slots__ = ('__weakref__', 'time', 'period', 'name', 'connector', 'alloc_groups', 'alloc_group_attr',
+                 'asset_report_bases', 'alloc_group_names',
                  'tdv_fund_size', 'tdv_ag_size_bd', 'tdv_ag_size_ad', 'tdv_ag_wgt_pc_bd', 'tdv_ag_wgt_pc_ad',)
 
     def __init__(

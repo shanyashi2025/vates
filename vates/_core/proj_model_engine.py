@@ -14,7 +14,8 @@ from types import MethodType
 from typing import Callable, Literal, Self, get_type_hints
 
 from vates._core.proj_variables import ProjVariable
-from vates._core._utils import RunConfiguration, ProjectionTimeSynchronizer, proj_result, apply_default_if_none
+from vates._core._time_synchronizer import ProjectionTimeSynchronizer
+from vates._core._utils import RunConfiguration, proj_result, apply_default_if_none
 from vates.global_conf import CheckLevel, CHECK_LEVEL
 
 class ProjModelEngine:

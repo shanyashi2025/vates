@@ -36,7 +36,7 @@ class Fund:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'time', 'period', '_lc',
+    __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_lc',
                  'fund_id', '_connector', '_primary_cash_asset', '_asset_report_bases', '_recorder', '_allocator',
                  'rate_of_return_bd', 'rate_of_return_ad', )
 

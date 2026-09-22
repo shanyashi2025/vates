@@ -38,7 +38,7 @@ class Asset(ABC):
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     _mutable_attr_check: CheckLevel = CheckLevel.ERROR
 
-    __slots__ = ('__dict__', '__weakref__', '_model_ref', '_time_synchronizer', 'time', 'period', '_lc', '_asset_id', '_is_profile', '_units',
+    __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', '_lc', '_asset_id', '_is_profile', '_units',
                  '_purchase_date', '_currency', '_attr_aliases',)
 
     def __init__(

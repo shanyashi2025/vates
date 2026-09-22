@@ -11,7 +11,7 @@ class MarketInfo:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'time', 'period', 'info_id', '_data', )
+    __slots__ = ('__dict__', '__weakref__', 'time', 'period', 'info_id', '_data', )
 
     def __init__(
         self,

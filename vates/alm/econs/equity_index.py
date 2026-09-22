@@ -20,7 +20,7 @@ class EquityIndex:
     _total_return_index: float
     _total_return_index_prev: float
 
-    __slots__ = ('__dict__', '__weakref__', '_time_synchronizer', 'time', 'period', '_last_update',
+    __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_last_update',
                  'index_id', '_dividend_yield_ac', '_total_return_index', '_total_return_index_prev',
                  'tdv_tot_return_index', 'tdv_dividend_yield_ac', )
 

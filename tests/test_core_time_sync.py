@@ -13,8 +13,8 @@ import pandas as pd
 import pytest
 from pandas._libs.tslibs.parsing import DateParseError
 
-import vates._core._utils as _utils
-from vates._core._utils import (
+import vates._core._time_synchronizer as _time_synchronizer
+from vates._core._time_synchronizer import (
     ProjectionTimeSynchronizer,
     add_projection_time_synchronizer,
 )
@@ -286,7 +286,7 @@ class TestAddProjectionTimeSynchronizer:
         assert asset.time == 6
 
     def test_no_engine_raises(self, monkeypatch):
-        monkeypatch.setattr(_utils, "FALLBACK_TIME_SYNCHRONIZER", None)
+        monkeypatch.setattr(_time_synchronizer, "FALLBACK_TIME_SYNCHRONIZER", None)
 
         @add_projection_time_synchronizer
         class Asset:
@@ -300,7 +300,7 @@ class TestAddProjectionTimeSynchronizer:
     def test_model_engine_without_synchronizer_raises(self, monkeypatch):
         # `model_engine` must expose a `time_synchronizer` attribute; a plain
         # object does not, so the fallback/error branch is reached.
-        monkeypatch.setattr(_utils, "FALLBACK_TIME_SYNCHRONIZER", None)
+        monkeypatch.setattr(_time_synchronizer, "FALLBACK_TIME_SYNCHRONIZER", None)
 
         @add_projection_time_synchronizer
         class Asset:
@@ -311,7 +311,7 @@ class TestAddProjectionTimeSynchronizer:
 
     def test_fallback_synchronizer_used(self, monkeypatch):
         sync = ProjectionTimeSynchronizer(time=2, period=pd.Period("2026-12", freq="M"))
-        monkeypatch.setattr(_utils, "FALLBACK_TIME_SYNCHRONIZER", sync)
+        monkeypatch.setattr(_time_synchronizer, "FALLBACK_TIME_SYNCHRONIZER", sync)
 
         @add_projection_time_synchronizer
         class Asset:
