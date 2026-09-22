@@ -48,8 +48,9 @@ class ProjectionTimeSynchronizer:
         for observer in self._time_observers:
             observer.time = time
             observer.period = period
-            if hasattr(observer, "_update_on_time_change"):
-                observer._update_on_time_change()
+            hook = getattr(observer, "_update_on_time_change", None)
+            if hook is not None:
+                hook()
 
 
 FALLBACK_TIME_SYNCHRONIZER: ProjectionTimeSynchronizer | None = None
@@ -107,10 +108,11 @@ def add_projection_time_synchronizer(_cls=None, /):
 
             self.time = time_synchronizer.time
             self.period = time_synchronizer.period
-            time_synchronizer.attach_time_observer(self)
 
             if original_init and original_init is not object.__init__:
                 original_init(self, *args, **kwargs)
+
+            time_synchronizer.attach_time_observer(self)
 
         cls.__init__ = new_init
         return cls

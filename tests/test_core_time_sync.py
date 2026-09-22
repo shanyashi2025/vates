@@ -150,6 +150,33 @@ class TestProjectionTimeSynchronizer:
         assert s.time is None
         assert s.period is None
 
+    def test_observer_without_hook_still_synced(self):
+        # The hook is optional: a plain observer is still kept in sync, the
+        # `getattr(..., None)` branch is what makes this non-fatal.
+        class Plain:
+            pass
+
+        s = ProjectionTimeSynchronizer()
+        obs = Plain()
+        s.attach_time_observer(obs)
+        s.set(time=4, period="2027-04")
+        assert obs.time == 4
+        assert obs.period == pd.Period("2027-04", freq="M")
+
+    def test_hook_sees_updated_time_and_period(self):
+        # The hook runs *after* `time`/`period` are assigned on the observer.
+        seen = []
+
+        class Observer:
+            def _update_on_time_change(self):
+                seen.append((self.time, self.period))
+
+        s = ProjectionTimeSynchronizer()
+        obs = Observer()
+        s.attach_time_observer(obs)
+        s.set(time=2, period="2027-02")
+        assert seen == [(2, pd.Period("2027-02", freq="M"))]
+
     def test_set_time_only(self):
         s = ProjectionTimeSynchronizer()
         s.set(time=7)
@@ -250,12 +277,14 @@ class TestProjectionTimeSynchronizer:
 
 
 class TestAddProjectionTimeSynchronizer:
-    """The class decorator injects `_time_synchronizer` and caches `time`/`period`.
+    """The class decorator registers the instance with the synchronizer and
+    caches `time`/`period` as plain instance attributes.
 
     Mirrors `vates/alm/assets/asset_base.py` (the canonical user): a bare
     `@add_projection_time_synchronizer`, a keyword-only `model_engine` parameter,
     and `time`/`period` cached as plain instance attributes refreshed through the
-    shared synchronizer.
+    shared synchronizer. The decorator does not store the synchronizer on the
+    instance; wiring is observed through the synchronizer's observer set.
     """
 
     def test_bare_decorator_wires_to_engine_synchronizer(self, make_configured, tmp_path):
@@ -265,14 +294,68 @@ class TestAddProjectionTimeSynchronizer:
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
-        # same synchronizer object, so a read reflects the engine's state
-        assert asset._time_synchronizer is m.time_synchronizer
+        # registered with the engine's synchronizer, so reads reflect its state
+        assert asset in m.time_synchronizer._time_observers
         assert asset.time is None
         assert asset.period is None
 
         m.time = 3
         assert asset.time == 3
         assert asset.period == m.START_DATE + 3
+
+    def test_inherited_hook_notified_on_subclass(self, make_configured, tmp_path):
+        # Only the base class is decorated; a hook defined on a subclass must
+        # still be found by dynamic lookup at notify time. This is the reason the
+        # decorator must not capture the hook when the class is decorated.
+        recorded = []
+
+        @add_projection_time_synchronizer
+        class Asset:
+            pass
+
+        class Equity(Asset):
+            def _update_on_time_change(self):
+                recorded.append(self.time)
+
+        m = make_configured(tmp_path)
+        eq = Equity(model_engine=m)  # keep a strong ref; observers are weakly held
+        m.time = 1
+        m.time = 2
+        assert recorded == [1, 2]
+        assert eq.time == 2
+
+    def test_hook_not_called_during_construction(self, make_configured, tmp_path):
+        # Seeding `time`/`period` during construction does not fire the hook; it
+        # only runs on a later `set`/`elapse` notification.
+        recorded = []
+
+        @add_projection_time_synchronizer
+        class Asset:
+            def __init__(self, *, model_engine=None):
+                recorded.append("init")
+
+            def _update_on_time_change(self):
+                recorded.append("hook")
+
+        m = make_configured(tmp_path)
+        asset = Asset(model_engine=m)  # keep a strong ref; observers are weakly held
+        assert recorded == ["init"]
+        m.time = 1
+        assert recorded == ["init", "hook"]
+        assert asset.time == 1
+
+    def test_observer_not_attached_when_init_raises(self, make_configured, tmp_path):
+        # The observer is attached only after `__init__` completes, so a failed
+        # construction leaves no half-built observer in the synchronizer.
+        @add_projection_time_synchronizer
+        class Asset:
+            def __init__(self, *, model_engine=None):
+                raise RuntimeError("boom")
+
+        m = make_configured(tmp_path)
+        with pytest.raises(RuntimeError, match="boom"):
+            Asset(model_engine=m)
+        assert len(m.time_synchronizer._time_observers) == 0
 
     def test_engine_period_setter_propagates_to_asset(self, make_configured, tmp_path):
         @add_projection_time_synchronizer
