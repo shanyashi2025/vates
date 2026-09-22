@@ -16,7 +16,7 @@ from pandas._libs.tslibs.parsing import DateParseError
 import vates._core._time_synchronizer as _time_synchronizer
 from vates._core._time_synchronizer import (
     ProjectionTimeSynchronizer,
-    add_projection_time_synchronizer,
+    time_synchronized,
 )
 
 
@@ -288,7 +288,7 @@ class TestAddProjectionTimeSynchronizer:
     """
 
     def test_bare_decorator_wires_to_engine_synchronizer(self, make_configured, tmp_path):
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             pass
 
@@ -309,7 +309,7 @@ class TestAddProjectionTimeSynchronizer:
         # decorator must not capture the hook when the class is decorated.
         recorded = []
 
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             pass
 
@@ -329,7 +329,7 @@ class TestAddProjectionTimeSynchronizer:
         # only runs on a later `set`/`elapse` notification.
         recorded = []
 
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             def __init__(self, *, model_engine=None):
                 recorded.append("init")
@@ -347,7 +347,7 @@ class TestAddProjectionTimeSynchronizer:
     def test_observer_not_attached_when_init_raises(self, make_configured, tmp_path):
         # The observer is attached only after `__init__` completes, so a failed
         # construction leaves no half-built observer in the synchronizer.
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             def __init__(self, *, model_engine=None):
                 raise RuntimeError("boom")
@@ -358,7 +358,7 @@ class TestAddProjectionTimeSynchronizer:
         assert len(m.time_synchronizer._time_observers) == 0
 
     def test_engine_period_setter_propagates_to_asset(self, make_configured, tmp_path):
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             pass
 
@@ -371,13 +371,13 @@ class TestAddProjectionTimeSynchronizer:
     def test_no_engine_raises(self, monkeypatch):
         monkeypatch.setattr(_time_synchronizer, "FALLBACK_TIME_SYNCHRONIZER", None)
 
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             pass
 
-        with pytest.raises(ValueError, match="Failed to add projection time synchronizer"):
+        with pytest.raises(ValueError, match="Failed to detect projection time synchronizer"):
             Asset()
-        with pytest.raises(ValueError, match="Failed to add projection time synchronizer"):
+        with pytest.raises(ValueError, match="Failed to detect projection time synchronizer"):
             Asset(model_engine=None)
 
     def test_model_engine_without_synchronizer_raises(self, monkeypatch):
@@ -385,18 +385,18 @@ class TestAddProjectionTimeSynchronizer:
         # object does not, so the fallback/error branch is reached.
         monkeypatch.setattr(_time_synchronizer, "FALLBACK_TIME_SYNCHRONIZER", None)
 
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             pass
 
-        with pytest.raises(ValueError, match="Failed to add projection time synchronizer"):
+        with pytest.raises(ValueError, match="Failed to detect projection time synchronizer"):
             Asset(model_engine=object())
 
     def test_fallback_synchronizer_used(self, monkeypatch):
         sync = ProjectionTimeSynchronizer(time=2, period=pd.Period("2026-12", freq="M"))
         monkeypatch.setattr(_time_synchronizer, "FALLBACK_TIME_SYNCHRONIZER", sync)
 
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             pass
 
@@ -407,7 +407,7 @@ class TestAddProjectionTimeSynchronizer:
     def test_original_init_still_runs(self, make_configured, tmp_path):
         # The class's own __init__ is preserved and re-invoked with the same
         # kwargs (asset_base pattern: keyword-only model_engine parameter).
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             def __init__(self, *, model_engine=None, label=None):
                 self.label = label
@@ -421,7 +421,7 @@ class TestAddProjectionTimeSynchronizer:
     def test_parentheses_form_equivalent(self, make_configured, tmp_path):
         # `add_projection_time_synchronizer()` (no args) returns the decorator
         # factory; applying it yields the same behavior as the bare form.
-        Asset = add_projection_time_synchronizer()(type("Asset", (), {}))
+        Asset = time_synchronized()(type("Asset", (), {}))
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
@@ -434,7 +434,7 @@ class TestAddProjectionTimeSynchronizer:
         # the instance and it is notified on every time change.
         recorded = []
 
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             def _update_on_time_change(self):
                 recorded.append(self.time)
@@ -452,7 +452,7 @@ class TestAddProjectionTimeSynchronizer:
     def test_time_period_cached_and_refreshed(self, make_configured, tmp_path):
         # A bare decorated class caches `time`/`period` as plain instance
         # attributes, refreshed on every time change.
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             pass
 
@@ -468,7 +468,7 @@ class TestAddProjectionTimeSynchronizer:
     def test_mid_period_construction_seeds_cache(self, make_configured, tmp_path):
         # An object created after time has advanced reads the current time during
         # construction (spawned-asset case).
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             pass
 
@@ -481,7 +481,7 @@ class TestAddProjectionTimeSynchronizer:
     def test_class_time_attribute_shadowed_by_instance_cache(self, make_configured, tmp_path):
         # A class-level `time`/`period` is left untouched on the class, but the
         # instance caches the synchronizer values as instance attributes.
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             time = "class-attr"
             period = "class-attr"
@@ -498,7 +498,7 @@ class TestAddProjectionTimeSynchronizer:
 
     def test_no_property_injected_on_class(self):
         # The decorator no longer injects `time`/`period` properties.
-        @add_projection_time_synchronizer
+        @time_synchronized
         class Asset:
             pass
 

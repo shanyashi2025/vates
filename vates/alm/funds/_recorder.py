@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from enum import Enum, auto
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.global_conf import CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
 from vates.alm.funds._connector import AssetLiabConnector
@@ -15,7 +15,7 @@ class RecorderPhase(Enum):
     LIAB_REC_AD = auto()
 
 
-@add_projection_time_synchronizer
+@time_synchronized
 class FundRecorder:
     """Performs aggregation and performance calculations for a fund.
 

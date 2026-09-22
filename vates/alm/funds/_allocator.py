@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto, unique
 from typing import Self
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.global_conf import CheckLevel
 from vates.alm.assets import Asset, Cash
 from vates.alm.enums import AssetBuySellApproach, AssetPurchaseMethod
@@ -322,7 +322,7 @@ class AssetAllocationGroup:
         self.trade_decision = None
 
 
-@add_projection_time_synchronizer
+@time_synchronized
 class AssetAllocator:
     """Manages asset allocation and rebalancing for a fund.
 

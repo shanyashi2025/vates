@@ -55,7 +55,7 @@ class ProjectionTimeSynchronizer:
 
 FALLBACK_TIME_SYNCHRONIZER: ProjectionTimeSynchronizer | None = None
 
-def add_projection_time_synchronizer(_cls=None, /):
+def time_synchronized(_cls=None, /):
     """Attach the instance as an observer of `time_synchronizer`, and add two attributes `time` and `period`.
 
     - `time_synchronizer` (a ProjectionTimeSynchronizer instance object):
@@ -95,16 +95,15 @@ def add_projection_time_synchronizer(_cls=None, /):
         original_init = getattr(cls, "__init__", None)
 
         def new_init(self, *args, **kwargs):
-            model_engine = kwargs.get("model_engine")
             time_synchronizer = None
+            model_engine = kwargs.get("model_engine", None)
             if model_engine is not None:
-                if hasattr(model_engine, "time_synchronizer"):
-                    time_synchronizer = getattr(model_engine, "time_synchronizer")
+                time_synchronizer = getattr(model_engine, "time_synchronizer", None)
             if time_synchronizer is None:
                 if FALLBACK_TIME_SYNCHRONIZER is not None:
                     time_synchronizer = FALLBACK_TIME_SYNCHRONIZER
                 else:
-                    raise ValueError(f"Failed to add projection time synchronizer.")
+                    raise ValueError(f"Failed to detect projection time synchronizer.")
 
             self.time = time_synchronizer.time
             self.period = time_synchronizer.period

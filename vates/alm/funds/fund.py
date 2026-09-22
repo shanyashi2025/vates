@@ -3,7 +3,7 @@ import warnings
 from enum import Enum, auto
 from typing import Callable, Optional
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer
+from vates._core import ProjModelEngine, time_synchronized
 from vates.utils import Lifecycle, transition
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
@@ -20,7 +20,7 @@ class FundPhase(Enum):
     PROC_LIAB_AD = auto()
     CLOSED = auto()
 
-@add_projection_time_synchronizer
+@time_synchronized
 class Fund:
     """Investment fund with assets and liabilities.
 

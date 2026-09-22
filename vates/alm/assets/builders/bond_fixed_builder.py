@@ -4,7 +4,7 @@ import warnings
 from collections.abc import Mapping
 from typing import Self
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer
+from vates._core import ProjModelEngine, time_synchronized
 from vates.finmath import convert_interest_rates, solve_ytm, solve_z_spread
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.assets.bond_fixed import BondFixed
@@ -14,7 +14,7 @@ from vates.alm.assets._bond_fixed_component import (
 from vates.alm.assets._utils import calculate_risk_adj_spot
 
 
-@add_projection_time_synchronizer
+@time_synchronized
 class BondFixedBuilder:
     """
     Builder for creating and initializing BondFixed objects.

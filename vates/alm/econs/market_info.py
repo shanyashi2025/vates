@@ -1,9 +1,9 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer
+from vates._core import ProjModelEngine, time_synchronized
 
 
-@add_projection_time_synchronizer
+@time_synchronized
 class MarketInfo:
     """
     Represents the market infomration.

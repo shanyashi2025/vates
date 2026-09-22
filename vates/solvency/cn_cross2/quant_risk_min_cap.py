@@ -3,7 +3,7 @@ import warnings
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.utils import RiskModule, SubRisk, NumericDataclass
 from vates.solvency.cn_cross2.params import (
     AccountType,
@@ -263,7 +263,7 @@ class MinCapCalculator:
     def __call__(self, *args, **kwargs):
         self.calculate_minimum_capital(*args, **kwargs)
 
-@add_projection_time_synchronizer
+@time_synchronized
 class MinCapUnit:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
@@ -347,7 +347,7 @@ class MinCapUnit:
         return self._last_mc_calc
 
 
-@add_projection_time_synchronizer
+@time_synchronized
 class MinCapConsolidator:
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
     period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`

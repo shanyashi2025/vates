@@ -4,13 +4,13 @@ import warnings
 from collections.abc import Mapping
 from typing import Self
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer
+from vates._core import ProjModelEngine, time_synchronized
 from vates.finmath import CallOrPut, BlackScholesCalculator
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.derivatives import EquityOption
 
 
-@add_projection_time_synchronizer()
+@time_synchronized()
 class EquityOptionBuilder:
     """
     Builder for creating and initializing EquityOption objects.

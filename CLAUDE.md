@@ -66,11 +66,10 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
 ### Time synchronization pattern
 
 `ProjectionTimeSynchronizer` broadcasts `time`/`period` changes to registered observers via
-`attach_time_observer`, and `add_projection_time_synchronizer` is a class decorator that injects a
-`_time_synchronizer` into a class. When a class receives a `model_engine` keyword argument, 
-the decorator wires it to the engine's synchronizer so the object advances with the model. 
-This is how economic/asset class objects stay in sync with the running projection. `vates/alm/assets/asset_base.py` 
-is the canonical example (`@add_projection_time_synchronizer class Asset`).
+`attach_time_observer`, and `time_synchronized` is a class decorator. When a class receives 
+a `model_engine` keyword argument, the decorator wires it to the engine's synchronizer so 
+the object advances with the model. This is how economic/asset class objects stay in sync 
+with the running projection. `vates/alm/assets/asset_base.py` is the canonical example (`@time_synchronized class Asset`).
 
 ### ALM library (`vates/alm/`)
 

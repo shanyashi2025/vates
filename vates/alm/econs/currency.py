@@ -1,10 +1,10 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.utils import maybe_raise_if_ne
 
 
-@add_projection_time_synchronizer
+@time_synchronized
 class Currency:
     """
     Represents a currency and its FX rate time series.

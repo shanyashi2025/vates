@@ -4,7 +4,7 @@ import weakref
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer
+from vates._core import ProjModelEngine, time_synchronized
 from vates.utils import Lifecycle, maybe_raise_if_ne
 from vates.alm.econs import Currency
 
@@ -13,7 +13,7 @@ class LiabPhase(Enum):
     CLOSED = auto()
 
 
-@add_projection_time_synchronizer
+@time_synchronized
 class Liab(ABC):
     """
     Abstract base class for all liability types.

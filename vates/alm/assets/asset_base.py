@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from enum import Enum, auto
 from typing import Self
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer
+from vates._core import ProjModelEngine, time_synchronized
 from vates.utils import Lifecycle, maybe_raise_if_ne
 from vates.global_conf import CheckLevel
 from vates.alm.econs import Currency
@@ -20,7 +20,7 @@ class AssetPhase(Enum):
     CLOSED = auto()
 
 
-@add_projection_time_synchronizer
+@time_synchronized
 class Asset(ABC):
     """
     Abstract base class for all financial assets.

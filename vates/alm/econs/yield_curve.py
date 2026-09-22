@@ -4,12 +4,12 @@ import pandas as pd
 import warnings
 from typing import Literal
 
-from vates._core import ProjModelEngine, add_projection_time_synchronizer, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.finmath import InterestRateTermStructure
 from vates.utils import maybe_raise_if_ne
 
 
-@add_projection_time_synchronizer
+@time_synchronized
 class YieldCurve:
     """
     Represents a yield curve and its derived rates.
