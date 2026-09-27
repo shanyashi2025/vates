@@ -13,8 +13,8 @@ class Currency:
         currency_id (str): Currency identifier.
         tdv_fx_rate (TDimVariable): Current FX rate.
     """
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     _fx_rate: float
     _fx_rate_prev: float
 

@@ -332,8 +332,8 @@ class AssetAllocator:
     Attributes:
         alloc_groups (list[AssetAllocationGroup]): List of allocation group.
     """
-    time: int  # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period  # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int          # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period  # for type hint only, will be injected by decorator `time_synchronized`
     _default_alloc_check_level: CheckLevel = CheckLevel.WARN
 
     __slots__ = ('__weakref__', 'time', 'period', 'name', 'connector', 'alloc_groups', 'alloc_group_attr',

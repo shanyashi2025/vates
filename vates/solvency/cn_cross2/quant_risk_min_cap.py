@@ -265,8 +265,8 @@ class MinCapCalculator:
 
 @time_synchronized
 class MinCapUnit:
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     
     def __init__(
         self,
@@ -349,8 +349,8 @@ class MinCapUnit:
 
 @time_synchronized
 class MinCapConsolidator:
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     
     def __init__(
         self,

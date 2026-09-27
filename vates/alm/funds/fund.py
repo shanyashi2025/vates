@@ -33,8 +33,8 @@ class Fund:
         _recorder (FundRecorder): Aggregation/returns calculator.
         _allocator (AssetAllocator): Asset allocator for rebalancing.
     """
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_lc',
                  'fund_id', '_connector', '_primary_cash_asset', '_asset_report_bases', '_recorder', '_allocator',

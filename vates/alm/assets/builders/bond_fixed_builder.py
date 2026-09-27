@@ -20,8 +20,8 @@ class BondFixedBuilder:
     Builder for creating and initializing BondFixed objects.
     """
 
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
     def __init__(
         self,

@@ -18,8 +18,8 @@ class YieldCurve:
         curve_id (str): Yield curve identifier.
         _curve (InterestRateTermStructure): Yield curve (interest rate term structure)
     """
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     _curve: InterestRateTermStructure | None
 
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_last_update',

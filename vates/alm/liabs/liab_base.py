@@ -23,8 +23,8 @@ class Liab(ABC):
         _currency (Currency): Currency of the liability.
         _entry_date (pd.Period): Entry date of the liability.
     """
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
     __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', '_lc', '_liab_id', '_currency',
                  '_entry_date', '_attr_aliases',)
@@ -32,7 +32,7 @@ class Liab(ABC):
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `add_projection_time_synchronizer`
+        model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `time_synchronized`
         liab_id: str,
         currency: Currency | None,
         entry_date: pd.Period | None,

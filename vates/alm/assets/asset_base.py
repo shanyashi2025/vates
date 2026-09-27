@@ -34,8 +34,8 @@ class Asset(ABC):
         _currency (Currency): Currency of the asset.
         _attr_aliases (dict[str, str]): Dict of alias to named attribute, {"MV": "market_value"}
     """
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     _mutable_attr_check: CheckLevel = CheckLevel.ERROR
 
     __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', '_lc', '_asset_id', '_is_profile', '_units',
@@ -44,7 +44,7 @@ class Asset(ABC):
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine = None,  # will be referenced by decorator `add_projection_time_synchronizer`
+        model_engine: ProjModelEngine = None,  # will be referenced by decorator `time_synchronized`
         asset_id: str,
         is_profile: bool,
         units: float,

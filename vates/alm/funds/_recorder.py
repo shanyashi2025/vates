@@ -25,8 +25,8 @@ class FundRecorder:
     Attributes:
 
     """
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
     __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name', 'connector',
                  'asset_categories', 'asset_category_attr', 'asset_report_bases', 'totass_cf', 'catass_cf', 'totliab_cf',

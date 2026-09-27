@@ -8,8 +8,8 @@ class MarketInfo:
     """
     Represents the market infomration.
     """
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', 'info_id', '_data', )
 
@@ -17,7 +17,7 @@ class MarketInfo:
         self,
         info_id: str = 'untitled',
         *,
-        model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `add_projection_time_synchronizer`
+        model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `time_synchronized`
     ) -> None:
         """
         Initialize a MarketInfo object.

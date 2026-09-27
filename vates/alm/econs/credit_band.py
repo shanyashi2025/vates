@@ -18,8 +18,8 @@ class CreditBand:
         tdv_prob_of_default_ac (float): Probability of default (annual compounding).
         tdv_recovery_rate (float): Recovery rate.
     """
-    time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
-    period: pd.Period   # for type hint only, will be injected by decorator `add_projection_time_synchronizer`
+    time: int           # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     _spread: float | npt.NDArray[np.float64]
     _spotmult: float | npt.NDArray[np.float64]
     _prob_of_default_ac: float
