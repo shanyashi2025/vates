@@ -30,24 +30,14 @@ LA_K = 0  # Note: K is published by regulator
 
 
 def calculate_loss_absorbency(mc_market: float, mc_credit: float, pv_base: float, pv_lower_limit: float) -> float:
-    la_upper_limit = max(pv_base - pv_lower_limit, 0)
-    mc_market_credit = aggregate_market_credit_risk(mc_market, mc_credit)
-    beta = calculate_beta(mc_market_credit, la_upper_limit)
+    if mc_market + mc_credit < 0.0:
+        raise ValueError(f'Market and Credit MC: {mc_market + mc_credit:.4f}, expected > 0.')
+    if mc_market + mc_credit == 0.0:
+        return 0.0
+    la_upper_limit = max(pv_base - pv_lower_limit, 0.0)
+    mc_market_credit = math.sqrt(mc_market ** 2 + 2 * LA_RHO * mc_market * mc_credit + mc_credit ** 2)
+    beta = (1 + LA_K) * min(0.5, 0.22 * la_upper_limit / mc_market_credit + 0.02)
     return min(mc_market_credit * beta, la_upper_limit)
-
-
-def aggregate_market_credit_risk(mc_market: float, mc_credit: float) -> float:
-    return math.sqrt(mc_market ** 2 + 2 * LA_RHO * mc_market * mc_credit + mc_credit ** 2)
-
-
-def calculate_beta(mc_market_credit: float, la_upper_limit: float) -> float:
-    if mc_market_credit < 0:
-        warnings.warn(f'MC of market and credit={mc_market_credit:.4f}, expected > 0, '
-                      f'beta is assgined as zero to prevent crash.')
-        return 0
-    if mc_market_credit == 0:
-        return (1 + LA_K) * 0.5
-    return (1 + LA_K) * min(0.5, 0.22 * la_upper_limit / mc_market_credit + 0.02)
 
 
 # --- Article 12, Rule No.5 ---

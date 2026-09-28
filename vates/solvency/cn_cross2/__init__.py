@@ -6,10 +6,10 @@ from vates.solvency.cn_cross2.params import (
 )
 
 from vates.solvency.cn_cross2.quant_risk_min_cap import (
-    MinCapInputer,
-    MinCapCalculator,
+    make_cross2_risk_module,
     MinCapUnit,
     MinCapConsolidator,
+    AdditiveRiskCharge,
 )
 
 
@@ -19,9 +19,9 @@ __all__ = [
     'base_curve_quadratic_interpolation',
     'spread_interpolation',
 
-    'MinCapInputer',
-    'MinCapCalculator',
+    'make_cross2_risk_module',
     'MinCapUnit',
     'MinCapConsolidator',
+    'AdditiveRiskCharge',
 
 ]
