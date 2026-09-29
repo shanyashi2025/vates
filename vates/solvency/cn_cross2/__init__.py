@@ -1,4 +1,4 @@
-from vates.solvency.cn_cross2.params import (
+from vates.solvency.cn_cross2.rules import (
     interest_risk_discount_curve,
     base_curve_quadratic_interpolation,
     spread_interpolation,

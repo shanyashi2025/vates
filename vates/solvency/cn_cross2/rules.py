@@ -9,11 +9,12 @@ import numpy as np
 #   (2) non-life
 #   (3) market
 #   (4) credit
-MC_CORR_MATRIX = np.array([[1.00, 0.20, 0.30, 0.15],
-                           [0.20, 1.00, 0.10, 0.10],
-                           [0.30, 0.10, 1.00, 0.35],
-                           [0.15, 0.10, 0.35, 1.00]
-                           ])
+MC_CORR_MATRIX = np.array([
+    [1.00, 0.20, 0.30, 0.15],
+    [0.20, 1.00, 0.10, 0.10],
+    [0.30, 0.10, 1.00, 0.35],
+    [0.15, 0.10, 0.35, 1.00]
+])
 
 # --- Article 19, Rule No.2 ---
 LA_RHO = 0.35  # Correlation coefficient between market risk and credit risk
@@ -35,9 +36,10 @@ def calculate_loss_absorbency(mc_market: float, mc_credit: float, pv_base: float
 # Correlation matrix (2 x 2) for minimum morbidity risk capital aggregation, indexed by:
 #   (1) morbidity incidence
 #   (2) morbidity trend
-MORB_MC_CORR_MATRIX = np.array([[1.00, 0.25],
-                                [0.25, 1.00]
-                                ])
+MORB_MC_CORR_MATRIX = np.array([
+    [1.00, 0.25],
+    [0.25, 1.00]
+])
 
 # --- Article 16, Rule No.5 ---
 # Correlation matrix (6 x 6) for minimum loss rate risk capital aggregation, indexed by:
@@ -47,23 +49,25 @@ MORB_MC_CORR_MATRIX = np.array([[1.00, 0.25],
 #   (4) morbidity
 #   (5) medical and health indemnity loss rate
 #   (6) others
-LOSS_MC_CORR_MATRIX = np.array([[1.00, 0.25, -.25, 0.25, 0.25, 0.25],
-                                [0.25, 1.00, 0.00, 0.25, 0.25, 0.25],
-                                [-.25, 0.00, 1.00, 0.00, 0.00, 0.00],
-                                [0.25, 0.25, 0.00, 1.00, 0.25, 0.25],
-                                [0.25, 0.25, 0.00, 0.25, 1.00, 0.25],
-                                [0.25, 0.25, 0.00, 0.25, 0.25, 1.00]
-                                ])
+LOSS_MC_CORR_MATRIX = np.array([
+    [1.00, 0.25, -.25, 0.25, 0.25, 0.25],
+    [0.25, 1.00, 0.00, 0.25, 0.25, 0.25],
+    [-.25, 0.00, 1.00, 0.00, 0.00, 0.00],
+    [0.25, 0.25, 0.00, 1.00, 0.25, 0.25],
+    [0.25, 0.25, 0.00, 0.25, 1.00, 0.25],
+    [0.25, 0.25, 0.00, 0.25, 0.25, 1.00]
+])
 
 # --- Article 25, Rule No.5 ---
 # Correlation matrix (3 x 3) for minimum life insurance risk capital aggregation, indexed by:
 #   (1) loss rate
 #   (2) cost / expense
 #   (3) surrender
-LIFE_MC_CORR_MATRIX = np.array([[1.00, 0.40, 0.00],
-                                [0.40, 1.00, 0.50],
-                                [0.00, 0.50, 1.00]
-                                ])
+LIFE_MC_CORR_MATRIX = np.array([
+    [1.00, 0.40, 0.00],
+    [0.40, 1.00, 0.50],
+    [0.00, 0.50, 1.00]
+])
 
 # --- Article 70, Rule No.8 ---
 # Correlation matrix (6 x6) for minimum market risk capital aggregation, indexed by:
@@ -73,21 +77,23 @@ LIFE_MC_CORR_MATRIX = np.array([[1.00, 0.40, 0.00],
 #   (4) overseas fixed-income
 #   (5) overseas equity
 #   (6) exchange rate
-MARKET_MC_CORR_MATRIX = np.array([[1.00, -.14, -.18, 0.00, -.16, 0.07],
-                                  [-.14, 1.00, 0.22, 0.06, 0.50, 0.04],
-                                  [-.18, 0.22, 1.00, 0.18, 0.19, -.14],
-                                  [0.00, 0.06, 0.18, 1.00, 0.04, -.01],
-                                  [-.16, 0.50, 0.19, 0.04, 1.00, -.19],
-                                  [0.07, 0.04, -.14, -.01, -.19, 1.00]
-                                  ])
+MARKET_MC_CORR_MATRIX = np.array([
+    [1.00, -.14, -.18, 0.00, -.16, 0.07],
+    [-.14, 1.00, 0.22, 0.06, 0.50, 0.04],
+    [-.18, 0.22, 1.00, 0.18, 0.19, -.14],
+    [0.00, 0.06, 0.18, 1.00, 0.04, -.01],
+    [-.16, 0.50, 0.19, 0.04, 1.00, -.19],
+    [0.07, 0.04, -.14, -.01, -.19, 1.00]
+])
 
 # --- Article 43, Rule No.9 ---
 # Correlation matrix (2 x 2) for minimum credit risk capital aggregation, indexed by:
 #   (1) spread
 #   (2) counterparty default
-CREDIT_MC_CORR_MATRIX = np.array([[1.00, 0.25],
-                                  [0.25, 1.00]
-                                  ])
+CREDIT_MC_CORR_MATRIX = np.array([
+    [1.00, 0.25],
+    [0.25, 1.00]
+])
 
 # --- Article 121, Rule No.12 ---
 # Risk factor to be applied on minimum control risk capital.

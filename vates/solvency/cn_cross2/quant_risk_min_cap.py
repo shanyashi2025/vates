@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.utils import maybe_raise_if_ne
 from vates.solvency.risk_node import RiskNode, risk_aggregation
-from vates.solvency.cn_cross2.params import (
+from vates.solvency.cn_cross2.rules import (
     MC_CORR_MATRIX,
     MORB_MC_CORR_MATRIX,
     LOSS_MC_CORR_MATRIX,
@@ -39,49 +39,49 @@ def _credit_risk_agg(spread: float, counterparty_default: float) -> float:
 
 def make_cross2_risk_module(name: str, /) -> RiskNode:
     root = RiskNode(name)
-    # root
+    # (root)
     root.attach_sub_risk(RiskNode("Life"), RiskNode("Non-life"), RiskNode("Market"), RiskNode("Credit"))
     root.set_agg_func(_overall_risk_agg)
 
-    # ./Life
+    # Life
     node = root.select("Life")
     node.attach_sub_risk(RiskNode("Loss"), RiskNode("Expense"), RiskNode("Lapse"))
     node.set_agg_func(_life_risk_agg)
 
-    # ./Life/Loss
+    # Life/Loss
     node = root.select("Life/Loss")
     node.attach_sub_risk(RiskNode("Mortality"), RiskNode("Catastrophe"), RiskNode("Longevity"),
                          RiskNode("Morbidity"), RiskNode("Health & Medical", slug="health"),
                          RiskNode("Other", slug="other_loss"))
     node.set_agg_func(_loss_risk_agg)
 
-    # ./Life/Loss/Morbidity
+    # Life/Loss/Morbidity
     node = root.select("Life/Loss/Morbidity")
     node.attach_sub_risk(RiskNode("Incidence", slug="morb_incidence"), RiskNode("Trend", slug="morb_trend"))
     node.set_agg_func(_morb_risk_agg)
 
-    # ./Life/Lapse
+    # Life/Lapse
     node = root.select("Life/Lapse")
     node.attach_sub_risk(RiskNode("Lapse Rate"), RiskNode("Mass Lapse"))
     node.set_agg_func(lambda lapse_rate, mass_lapse: max(lapse_rate, mass_lapse, 0))
 
-    # ./Life/Lapse/Lapse Rate
+    # Life/Lapse/Lapse Rate
     node = root.select("Life/Lapse/Lapse Rate")
     node.attach_sub_risk(RiskNode("Lapse_Up"), RiskNode("Lapse_Down"))
     node.set_agg_func(lambda lapse_up, lapse_down: max(lapse_up, lapse_down, 0))
 
-    # ./Market
+    # Market
     node = root.select("Market")
     node.attach_sub_risk(RiskNode("Interest Rate"), RiskNode("Equity"), RiskNode("Real Estate"),
                          RiskNode("Overseas Fixed-income"), RiskNode("Overseas Equity"), RiskNode("Exchange Rate"))
     node.set_agg_func(_market_risk_agg)
 
-    # ./Market/Interest Rate
+    # Market/Interest Rate
     node = root.select("Market/Interest Rate")
     node.attach_sub_risk(RiskNode("Interest Rate Up"), RiskNode("Interest Rate Down"))
     node.set_agg_func(lambda interest_rate_up, interest_rate_down: max(interest_rate_up, interest_rate_down, 0))
 
-    # ./Credit
+    # Credit
     node = root.select("Credit")
     node.attach_sub_risk(RiskNode("Spread"), RiskNode("Counterparty Default"))
     node.set_agg_func(_credit_risk_agg)

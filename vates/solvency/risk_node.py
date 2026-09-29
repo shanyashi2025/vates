@@ -204,7 +204,7 @@ class RiskNode:
         except ValueError:
             return f"{title}"
 
-    def print_tree(self, *, to_file: str | None = None, width: int = 80, dp: int = 2) -> None:
+    def print_tree(self, *, to_file: str | None = None, padding: str = "", width: int = 80, dp: int = 2) -> None:
         lines = []
         lines_tuple = []
 
@@ -214,7 +214,7 @@ class RiskNode:
             try:
                 val = node.risk_capital
                 num_width = width - len(name)
-                lines.append(f"{name} {val:·>{num_width},.{dp}f}")
+                lines.append(f"{name} {val:{padding}>{num_width},.{dp}f}")
                 lines_tuple.append((name, f"{val:.{dp}f}"))
             except ValueError:
                 lines.append(name)
