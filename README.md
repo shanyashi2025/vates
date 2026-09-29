@@ -8,7 +8,7 @@ Open-source Python packages and example implementations for actuarial models.
 ./
 ├── vates/                  # The core package
 ├── docs/                   # Project documentation
-└── example_ws/             # Example workspace
+├── example_ws/             # Example workspace
 │   ├── models/             # Source code of example models and bespoke package(s)
 │   ├── inputs/             # Example input data (tables) associated with the models
 │   ├── runs/               # Example run configurations (json file)

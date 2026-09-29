@@ -4,7 +4,7 @@ import time
 import random
 random.seed(42)
 
-from vates import KeyedArray
+from vates.utils import KeyedArray
 
 def create_test_df(n_idx1: int, n_idx2: int, n_cols: int) -> pd.DataFrame:
     np.random.seed(42)

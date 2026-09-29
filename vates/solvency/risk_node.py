@@ -1,6 +1,9 @@
-import numpy as np
+import csv
 import math
+import numpy as np
 import warnings
+from datetime import datetime
+from pathlib import Path
 from typing import Callable, Self
 
 
@@ -143,12 +146,14 @@ class RiskNode:
         self._agg_func = func
 
     def set_risk_capital(self, value: float | None = None, /) -> None:
-        if not self.is_leaf:
-            self._risk_capital = None  # reset only, lazy evaluation will be executed when calling property `risk_capital`
-            return
-        if not isinstance(value, float):
-            raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
-        self._risk_capital = value
+        if self.is_leaf:
+            if not isinstance(value, float):
+                raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
+            self._risk_capital = value
+        else:
+            if value is not None:
+                raise ValueError(f"Not allowed to set risk capital for a non-leaf node.")
+            self._risk_capital = None  # lazy evaluation: reset only, will calculate when property `risk_capital` is called
         if self._parent is not None:
             self._parent.set_risk_capital()  # cascade
 
@@ -191,3 +196,38 @@ class RiskNode:
 
     def __truediv__(self, other: str, /) -> Self:
         return self.select(other)
+
+    def __str__(self) -> str:
+        title = "/".join(self._parts)
+        try:
+            return f"{title}: {self.risk_capital:,.2f}"
+        except ValueError:
+            return f"{title}"
+
+    def print_tree(self, *, to_file: str | None = None, width: int = 80, dp: int = 2) -> None:
+        lines = []
+        lines_tuple = []
+
+        for node in self.root.preorder_traversal():
+            prefix = "    " * node.depth
+            name = f"{prefix}{node._name}"
+            try:
+                val = node.risk_capital
+                num_width = width - len(name)
+                lines.append(f"{name} {val:·>{num_width},.{dp}f}")
+                lines_tuple.append((name, f"{val:.{dp}f}"))
+            except ValueError:
+                lines.append(name)
+                lines_tuple.append((name, ))
+
+        for line in lines:
+            print(line)
+
+        if to_file is not None:
+            file_path = Path(to_file)
+            mode = 'a' if file_path.is_file() else 'w'
+            with open(file_path, mode=mode, newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow([f"==== {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - RiskNode.print_tree - started ===="])
+                writer.writerows(lines_tuple)
+                writer.writerow([f"==== {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - RiskNode.print_tree - ended ===="])
