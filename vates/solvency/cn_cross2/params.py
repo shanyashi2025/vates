@@ -1,16 +1,7 @@
 import math
 import warnings
 import numpy as np
-from enum import Enum, unique
 
-@unique
-class AccountType(Enum):
-    """Enum for C-ROSS Account Type."""
-    TRAD = "TRAD"  # Traditional
-    PAR = "PAR"  # Participating
-    UNIV = "UNIV"  # Universal
-    ILNK = "ILNK"  # Investment_Linked
-    SH = "SH"  # Shareholder
 
 # --- Article 18, Rule No.2 ---
 # Correlation matrix (4 x 4) for minimum capital aggregation, indexed by:

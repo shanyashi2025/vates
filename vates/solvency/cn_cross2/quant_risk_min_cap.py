@@ -89,7 +89,7 @@ def make_cross2_risk_module(name: str, /) -> RiskNode:
     return root
 
 @dataclass(slots=True)
-class AdditiveRiskCharge:
+class LeafNodeRiskCapital:
     # Life
     mortality: float
     catastrophe: float
@@ -146,21 +146,21 @@ class MinCapUnit:
         self.tdv_divers: TDimVariable = create_tdv("diversification")
         self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
 
-    def calculate(self, *, additive_risk_charge: AdditiveRiskCharge | None = None,
+    def calculate(self, *, risk_capital: LeafNodeRiskCapital | None = None,
                   la_pv_base: float = 0.0, la_pv_lower_limit = 0.0, **kwargs) -> None:
         for node in self._risk_module.list_leaves():
             key = node.slug
-            if additive_risk_charge is not None:
-                node.update_risk_charge(getattr(additive_risk_charge, key))
+            if risk_capital is not None:
+                node.set_risk_capital(getattr(risk_capital, key))
             elif key in kwargs:
-                node.update_risk_charge(kwargs[key])
+                node.set_risk_capital(kwargs[key])
 
         if self.require_loss_absorbency:
             self._la_pv_base = la_pv_base
             self._la_pv_lower_limit = la_pv_lower_limit
             self._loss_absorbency = calculate_loss_absorbency(
-                mc_market=self._risk_module.select("Market").risk_charge,
-                mc_credit=self._risk_module.select("Credit").risk_charge,
+                mc_market=self._risk_module.get_risk_capital("Market"),
+                mc_credit=self._risk_module.get_risk_capital("Credit"),
                 pv_base=self._la_pv_base,
                 pv_lower_limit=self._la_pv_lower_limit
             )
@@ -168,13 +168,13 @@ class MinCapUnit:
             self._loss_absorbency = 0.0
 
         t = self.time
-        self.tdv_life_mc[t] = self._risk_module.select("Life").risk_charge
-        self.tdv_nonlife_mc[t] = self._risk_module.select("Non-life").risk_charge
-        self.tdv_market_mc[t] = self._risk_module.select("Market").risk_charge
-        self.tdv_credit_mc[t] = self._risk_module.select("Credit").risk_charge
+        self.tdv_life_mc[t] = self._risk_module.get_risk_capital("Life")
+        self.tdv_nonlife_mc[t] = self._risk_module.get_risk_capital("Non-life")
+        self.tdv_market_mc[t] = self._risk_module.get_risk_capital("Market")
+        self.tdv_credit_mc[t] = self._risk_module.get_risk_capital("Credit")
         self.tdv_divers[t] = self._risk_module.risk_diversification
         self.tdv_loss_absorb[t] = self._loss_absorbency
-        self.tdv_min_cap[t] = self._risk_module.risk_charge - self._loss_absorbency
+        self.tdv_min_cap[t] = self._risk_module.get_risk_capital() - self._loss_absorbency
         self._last_calculate = t
 
     @property
@@ -202,6 +202,9 @@ class MinCapUnit:
             return 0.0
         maybe_raise_if_ne(self._last_calculate, self.time)
         return self._la_pv_lower_limit
+
+    def get_risk_capital(self, path: str | None = None, /) -> float:
+        return self._risk_module.get_risk_capital(path)
 
 
 @time_synchronized
@@ -239,52 +242,49 @@ class MinCapConsolidator:
             raise ValueError(f"Nothing to consolidate.")
         ref_path_set: set[str] | None = None
         for obj in args:
-            path_set = set([node.path for node in obj.preorder_traversal()])
+            path_set = set([node.path_from_root for node in obj.preorder_traversal()])
             if ref_path_set is None:
                 ref_path_set = path_set
             elif len(path_set - ref_path_set) > 0:
                 raise ValueError(f"Can't consolidate '{obj.name}' and '{args[0].name}': structures are differenct.")
-        return args[0].copy_structure(new_name=name, new_slug=slug)
+        return args[0].copy_tree_structure(new_name=name, new_slug=slug)
 
     def consolidate(self) -> None:
         for node in self._risk_module.list_leaves():
-            path = node.path
-            risk_charge = sum(unit.risk_module.select(path).risk_charge for unit in self._units)
-            node.update_risk_charge(risk_charge)
+            path = node.path_from_root
+            risk_capital = sum(unit.risk_module.get_risk_capital(path) for unit in self._units)
+            node.set_risk_capital(risk_capital)
 
         self._loss_absorbency = self._calculate_loss_absorbency()
 
         t = self.time
-        self.tdv_life_mc[t] = self._risk_module.select("Life").risk_charge
-        self.tdv_nonlife_mc[t] = self._risk_module.select("Non-life").risk_charge
-        self.tdv_market_mc[t] = self._risk_module.select("Market").risk_charge
-        self.tdv_credit_mc[t] = self._risk_module.select("Credit").risk_charge
+        self.tdv_life_mc[t] = self._risk_module.get_risk_capital("Life")
+        self.tdv_nonlife_mc[t] = self._risk_module.get_risk_capital("Non-life")
+        self.tdv_market_mc[t] = self._risk_module.get_risk_capital("Market")
+        self.tdv_credit_mc[t] = self._risk_module.get_risk_capital("Credit")
         self.tdv_divers[t] = self._risk_module.risk_diversification
         self.tdv_loss_absorb[t] = self._loss_absorbency
-        self.tdv_min_cap[t] = self._risk_module.risk_charge -  self._loss_absorbency
+        self.tdv_min_cap[t] = self._risk_module.get_risk_capital() - self._loss_absorbency
         self._last_calculate = t
 
     def _calculate_loss_absorbency(self) -> float:
         la_risk_module = make_cross2_risk_module("loss_absorbency")
         la_leaves = la_risk_module.select("Market").list_leaves() + la_risk_module.select("Credit").list_leaves()
+        for leaf in la_leaves:
+            leaf.set_risk_capital(0.0)
         la_pv_base = 0.0
         la_pv_lower_limit = 0.0
 
         for unit in self._units:
             if unit.require_loss_absorbency:
-                unit_risk_module = unit.risk_module
-                for node in la_leaves:
-                    unit_risk_charge = unit_risk_module.select(node.path).risk_charge
-                    if node._risk_charge is None:
-                        node.update_risk_charge(unit_risk_charge)
-                    else:
-                        node.update_risk_charge(node._risk_charge + unit_risk_charge)
+                for leaf in la_leaves:
+                    leaf.set_risk_capital(leaf.get_risk_capital() + unit.get_risk_capital(leaf.path_from_root))
                 la_pv_base += unit.la_pv_base
                 la_pv_lower_limit += unit.la_pv_lower_limit
 
         return calculate_loss_absorbency(
-            mc_market=la_risk_module.select("Market").risk_charge,
-            mc_credit=la_risk_module.select("Credit").risk_charge,
+            mc_market=la_risk_module.get_risk_capital("Market"),
+            mc_credit=la_risk_module.get_risk_capital("Credit"),
             pv_base=la_pv_base,
             pv_lower_limit=la_pv_lower_limit
         )
@@ -292,9 +292,12 @@ class MinCapConsolidator:
     @property
     def minimum_capital(self) -> float:
         maybe_raise_if_ne(self._last_calculate, self.time)
-        return self._risk_module.risk_charge -  self._loss_absorbency
+        return self._risk_module.get_risk_capital() -  self._loss_absorbency
 
     @property
     def loss_absorbency(self) -> float:
         maybe_raise_if_ne(self._last_calculate, self.time)
         return self._loss_absorbency
+
+    def get_risk_capital(self, path: str | None = None, /) -> float:
+        return self._risk_module.get_risk_capital(path)

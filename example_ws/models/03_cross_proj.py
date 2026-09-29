@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from vates import ProjModelEngine
 from vates.utils import KeyedArray
 from vates.finmath import convert_interest_rates, interpolate_interest_rates
-from vates.solvency.cn_cross2 import MinCapUnit, MinCapConsolidator, AccountType, interest_risk_discount_curve, AdditiveRiskCharge
+from vates.solvency.cn_cross2 import MinCapUnit, MinCapConsolidator, interest_risk_discount_curve, LeafNodeRiskCapital
 
 from company_package import (
     run_with_json_config,
@@ -91,8 +91,8 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     mc_units: list[MinCapUnit] = []
     df = file_df_dict['funds']
     for index in df.index:
-        req_la = AccountType(df.loc[index, 'cross_account_type'].upper()) in (AccountType.PAR, AccountType.UNIV)
-        mc_units.append(MinCapUnit(name=index, model_engine=model, require_loss_absorbency=AccountType(df.loc[index, 'cross_account_type'].upper()) in (AccountType.PAR, AccountType.UNIV)))
+        cross_account_type = df.loc[index, 'cross_account_type']
+        mc_units.append(MinCapUnit(name=index, model_engine=model, require_loss_absorbency=cross_account_type.upper() in ("PAR", "UNIV")))
 
     # initialize the company result
     company_mc = MinCapConsolidator(name='company', model_engine=model, min_cap_units=mc_units)
@@ -181,7 +181,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
                 mc_underlying_input.pv_la_lower_limit += epl.at[item, 'pv_la_lower_limit', date_col]
 
             # --- (3.3) calculate minimum capital ---
-            additive_risk_charge = AdditiveRiskCharge(
+            risk_capital = LeafNodeRiskCapital(
                 mortality=max(mc_underlying_input.pv_mortality - mc_underlying_input.pv_base, 0),
                 catastrophe=max(mc_underlying_input.pv_catastrophe - mc_underlying_input.pv_base, 0),
                 longevity=max(mc_underlying_input.pv_longevity - mc_underlying_input.pv_base, 0),
@@ -207,7 +207,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
                 counterparty_default=mc_underlying_input.mc_counterparty_default,
             )
             mc_unit.calculate(
-                additive_risk_charge=additive_risk_charge,
+                risk_capital=risk_capital,
                 la_pv_base=mc_underlying_input.pv_base if mc_unit.require_loss_absorbency else 0.0,
                 la_pv_lower_limit=mc_underlying_input.pv_la_lower_limit if mc_unit.require_loss_absorbency else 0.0,
             )

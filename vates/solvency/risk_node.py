@@ -17,12 +17,12 @@ def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
 
 class RiskNode:
 
-    __slots__ = ("_name", "_slug", "_risk_charge", "_parent", "_children", "_agg_func",)
+    __slots__ = ("_name", "_slug", "_risk_capital", "_parent", "_children", "_agg_func",)
 
     def __init__(self, name: str, /, *, slug: str | None = None):
         self._name: str = name
         self._slug: str = self._normalize_identifier(slug or name)
-        self._risk_charge: float | None = None
+        self._risk_capital: float | None = None
         self._parent: RiskNode | None = None
         self._children: list[RiskNode] = []
         self._agg_func: Callable[[float, ...], float] | None = None
@@ -36,25 +36,25 @@ class RiskNode:
         return self._slug
 
     @property
-    def risk_charge(self) -> float:
-        if self._risk_charge is None:
+    def risk_capital(self) -> float:
+        if self._risk_capital is None:
             self.aggregate()
-        if self._risk_charge is None:
-            raise ValueError(f"{self._name}: risk charge hasn't been {'provided' if self.is_leaf else 'aggregated'}.")
-        return self._risk_charge
+        if self._risk_capital is None:
+            raise ValueError(f"{self._name}: risk capital hasn't been {'provided' if self.is_leaf else 'aggregated'}.")
+        return self._risk_capital
 
     @property
     def risk_diversification(self) -> float:
         if self.is_leaf:
             return 0.0
-        return sum([c.risk_charge for c in self._children]) - self.risk_charge
+        return sum([c.risk_capital for c in self._children]) - self.risk_capital
 
     @property
     def root(self) -> Self:
-        obj = self
-        while obj._parent is not None:
-            obj = obj._parent
-        return obj
+        node = self
+        while (parent:= node._parent) is not None:
+            node = parent
+        return node
 
     @property
     def parent(self) -> Self | None:
@@ -79,37 +79,37 @@ class RiskNode:
         return len(self._children) == 0
 
     @property
-    def parts(self) -> tuple[str, ...]:
-        names = [self._name]
-        obj = self
-        while obj._parent is not None:
-            obj = obj._parent
-            names.append(obj._name)
+    def _parts(self) -> tuple[str, ...]:
+        names = []
+        node = self
+        while node is not None:
+            names.append(node._name)
+            node = node._parent
         names.reverse()
-        return tuple(names)
+        return tuple(names)  # include root
 
     @property
     def depth(self) -> int:
-        return len(self.parts) - 1
+        return len(self._parts) - 1
 
     @property
-    def path(self) -> str:
-        return "./" + "/".join(self.parts[1:])  # `.` represents root
+    def path_from_root(self) -> str:
+        return "/".join(self._parts[1:])
 
     def select(self, path: str, /) -> Self:
         if not isinstance(path, str):
             raise TypeError(f"Invalid type of path: '{type(path)}', expected 'str'.")
-        obj = self
+        node = self
         for p in path.split("/"):
             if p == "." or p == "":
                 pass
             elif p == "..":
-                obj = obj._parent
+                node = node._parent
             else:
-                obj = next((c for c in obj._children if c._name == p), None)
-            if obj is None:
+                node = next((c for c in node._children if c._name == p), None)
+            if node is None:
                 raise ValueError(f"{self._name}: can't select: '{path}'; failed at '{p}'.")
-        return obj
+        return node
 
     def list_leaves(self) -> list[Self]:
         leaves = []
@@ -120,10 +120,9 @@ class RiskNode:
                 leaves.extend(c.list_leaves())
         return leaves
 
-    def attach_sub_risk(self, *args: Self) -> Self | list[Self]:
+    def attach_sub_risk(self, *args: Self) -> None:
         if len(args) == 0:
             raise ValueError(f"Nothing to attach.")
-        attached: list[Self] = []
         for node in args:
             if node._parent is not None:
                 raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: sub of '{node._parent._name}'.")
@@ -137,32 +136,30 @@ class RiskNode:
                 raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: duplicate slug.")
             self._children.append(node)
             node._parent = self
-            attached.append(node)
-        return attached[0] if len(attached) == 0 else attached
 
     def set_agg_func(self, func) -> None:
         if self._agg_func is not None:
             warnings.warn(f"{self._name}: aggregation function will be reset.")
         self._agg_func = func
 
-    def update_risk_charge(self, value: float | None = None, /) -> None:
+    def set_risk_capital(self, value: float | None = None, /) -> None:
         if not self.is_leaf:
-            self._risk_charge = None  # reset only, lazy evaluation will be executed when calling property `risk_charge`
+            self._risk_capital = None  # reset only, lazy evaluation will be executed when calling property `risk_capital`
             return
         if not isinstance(value, float):
-            raise TypeError(f"Invalid type of risk charge '{type(value)}', expected 'float'.")
-        self._risk_charge = value
+            raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
+        self._risk_capital = value
         if self._parent is not None:
-            self._parent.update_risk_charge()  # cascade
+            self._parent.set_risk_capital()  # cascade
 
     def aggregate(self) -> float:
         if self.is_leaf:
-            return self._risk_charge
+            return self._risk_capital
         if self._agg_func is None:
             raise ValueError(f"{self._name}: aggregation function is None; use `set_agg_func(..)` to set.")
-        kwargs = {c._slug: c.risk_charge for c in self._children}
-        self._risk_charge = self._agg_func(**kwargs)
-        return self._risk_charge
+        kwargs = {c._slug: c.risk_capital for c in self._children}
+        self._risk_capital = self._agg_func(**kwargs)
+        return self._risk_capital
 
     @classmethod
     def _normalize_identifier(cls, /, chars: str) -> str:
@@ -176,17 +173,21 @@ class RiskNode:
             nodes.extend(c.preorder_traversal())
         return nodes
 
-    def copy_structure(self, *, new_name: str = None, new_slug: str = None) -> Self:
-        if not self.is_root:
-            raise ValueError(f"Can't copy structure from a non-root node; use `foo.root.copy_structure(..)`.")
-        copied_root = RiskNode(new_name or self._name, slug=new_slug)
-        copied_root.set_agg_func(self._agg_func)
-        if not self.is_leaf:
-            for node in self.preorder_traversal()[1:]:  # the first one is self
+    def copy_tree_structure(self, *, new_name: str = None, new_slug: str = None) -> Self:
+        root = self.root
+        copied_root = RiskNode(new_name or root._name, slug=new_slug)
+        copied_root.set_agg_func(root._agg_func)
+        if not root.is_leaf:
+            for node in root.preorder_traversal()[1:]:  # the first one is root
                 copied_node = RiskNode(node._name, slug=node._slug)
                 copied_node.set_agg_func(node._agg_func)
-                copied_root.select(node._parent.path).attach_sub_risk(copied_node)
+                copied_root.select(node._parent.path_from_root).attach_sub_risk(copied_node)
         return copied_root
+
+    def get_risk_capital(self, path: str | None = None, /) -> float:
+        if path is None:
+            return self.risk_capital
+        return self.select(path).risk_capital
 
     def __truediv__(self, other: str, /) -> Self:
         return self.select(other)
