@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.utils import maybe_raise_if_ne
-from vates.solvency.risk_node import RiskNode, RiskTree, risk_aggregation
+from vates.solvency.risk_tree import RiskNode, RiskTree, risk_aggregation
 from vates.solvency.cn_cross2.rules import (
     MC_CORR_MATRIX,
     MORB_MC_CORR_MATRIX,
@@ -37,8 +37,8 @@ def _market_risk_agg(interest_rate: float, equity: float, real_estate: float, ov
 def _credit_risk_agg(spread: float, counterparty_default: float) -> float:
     return risk_aggregation(spread, counterparty_default, corr_matrix=CREDIT_MC_CORR_MATRIX)
 
-def make_cross2_risk_module(name: str, /) -> RiskTree:
-    tree = RiskTree(any_node=RiskNode("CROSS"), name=name)
+def make_cross2_risk_module(name: str = "C-ROSS", /, is_zeroize: bool = True) -> RiskTree:
+    tree = RiskTree(name=name)
 
     # (root)
     node = tree.root
@@ -46,47 +46,50 @@ def make_cross2_risk_module(name: str, /) -> RiskTree:
     node.set_agg_func(_overall_risk_agg)
 
     # Life
-    node = tree.select("Life")
+    node = tree.select_node("Life")
     node.attach_sub_risk(RiskNode("Loss"), RiskNode("Expense"), RiskNode("Lapse"))
     node.set_agg_func(_life_risk_agg)
 
     # Life/Loss
-    node = tree.select("Life/Loss")
+    node = tree.select_node("Life/Loss")
     node.attach_sub_risk(RiskNode("Mortality"), RiskNode("Catastrophe"), RiskNode("Longevity"),
-                         RiskNode("Morbidity"), RiskNode("Health & Medical", slug="health"),
-                         RiskNode("Other", slug="other_loss"))
+                         RiskNode("Morbidity"), RiskNode("Health & Medical", identifier="health"),
+                         RiskNode("Other", identifier="other_loss"))
     node.set_agg_func(_loss_risk_agg)
 
     # Life/Loss/Morbidity
-    node = tree.select("Life/Loss/Morbidity")
-    node.attach_sub_risk(RiskNode("Incidence", slug="morb_incidence"), RiskNode("Trend", slug="morb_trend"))
+    node = tree.select_node("Life/Loss/Morbidity")
+    node.attach_sub_risk(RiskNode("Incidence", identifier="morb_incidence"), RiskNode("Trend", identifier="morb_trend"))
     node.set_agg_func(_morb_risk_agg)
 
     # Life/Lapse
-    node = tree.select("Life/Lapse")
+    node = tree.select_node("Life/Lapse")
     node.attach_sub_risk(RiskNode("Lapse Rate"), RiskNode("Mass Lapse"))
     node.set_agg_func(lambda lapse_rate, mass_lapse: max(lapse_rate, mass_lapse, 0))
 
     # Life/Lapse/Lapse Rate
-    node = tree.select("Life/Lapse/Lapse Rate")
+    node = tree.select_node("Life/Lapse/Lapse Rate")
     node.attach_sub_risk(RiskNode("Lapse_Up"), RiskNode("Lapse_Down"))
     node.set_agg_func(lambda lapse_up, lapse_down: max(lapse_up, lapse_down, 0))
 
     # Market
-    node = tree.select("Market")
+    node = tree.select_node("Market")
     node.attach_sub_risk(RiskNode("Interest Rate"), RiskNode("Equity"), RiskNode("Real Estate"),
                          RiskNode("Overseas Fixed-income"), RiskNode("Overseas Equity"), RiskNode("Exchange Rate"))
     node.set_agg_func(_market_risk_agg)
 
     # Market/Interest Rate
-    node = tree.select("Market/Interest Rate")
+    node = tree.select_node("Market/Interest Rate")
     node.attach_sub_risk(RiskNode("Interest Rate Up"), RiskNode("Interest Rate Down"))
     node.set_agg_func(lambda interest_rate_up, interest_rate_down: max(interest_rate_up, interest_rate_down, 0))
 
     # Credit
-    node = tree.select("Credit")
+    node = tree.select_node("Credit")
     node.attach_sub_risk(RiskNode("Spread"), RiskNode("Counterparty Default"))
     node.set_agg_func(_credit_risk_agg)
+
+    if is_zeroize:
+        tree.zeroize()
 
     return tree
 
@@ -152,7 +155,7 @@ class MinCapUnit:
     def calculate(self, *, risk_capital: LeafNodeRiskCapital | None = None,
                   la_pv_base: float = 0.0, la_pv_lower_limit = 0.0, **kwargs) -> None:
         for node in self._risk_module.list_leaf_nodes():
-            key = node.slug
+            key = node.identifier
             if risk_capital is not None:
                 node.set_risk_capital(getattr(risk_capital, key))
             elif key in kwargs:
@@ -271,9 +274,9 @@ class MinCapConsolidator:
         self._last_calculate = t
 
     def _calculate_loss_absorbency(self) -> float:
-        la_risk_module = make_cross2_risk_module("_")
-        la_risk_module.zeroize(["Market", "Credit"])
-        market_credit_leaf_nodes = la_risk_module.list_leaf_nodes(["Market", "Credit"])
+        la_risk_module = make_cross2_risk_module()
+        market_credit_leaf_nodes = (la_risk_module.select_subtree("Market").list_leaf_nodes() +
+                                    la_risk_module.select_subtree("Credit").list_leaf_nodes())
 
         la_pv_base = 0.0
         la_pv_lower_limit = 0.0

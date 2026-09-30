@@ -19,11 +19,11 @@ def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
 
 class RiskNode:
 
-    __slots__ = ("_name", "_slug", "_risk_capital", "_parent", "_children", "_agg_func",)
+    __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func",)
 
-    def __init__(self, name: str, /, *, slug: str | None = None):
+    def __init__(self, name: str, /, *, identifier: str | None = None):
         self._name: str = name
-        self._slug: str = self._normalize_identifier(slug or name)
+        self._identifier: str = self._normalize_identifier(identifier or name)
         self._risk_capital: float | None = None
         self._parent: RiskNode | None = None
         self._children: list[RiskNode] = []
@@ -34,8 +34,8 @@ class RiskNode:
         return self._name
 
     @property
-    def slug(self) -> str:
-        return self._slug
+    def identifier(self) -> str:
+        return self._identifier
 
     @property
     def risk_capital(self) -> float:
@@ -134,8 +134,8 @@ class RiskNode:
                 raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: duplicate.")
             if node._name in [c._name for c in self._children]:
                 raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: duplicate name.")
-            if node._slug in [c._slug for c in self._children]:
-                raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: duplicate slug.")
+            if node._identifier in [c._identifier for c in self._children]:
+                raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: duplicate identifier.")
             self._children.append(node)
             node._parent = self
 
@@ -161,7 +161,7 @@ class RiskNode:
             return
         if self._agg_func is None:
             raise ValueError(f"{self._name}: aggregation function is None; use `set_agg_func(..)` to set.")
-        kwargs = {c._slug: c.risk_capital for c in self._children}
+        kwargs = {c._identifier: c.risk_capital for c in self._children}
         self._risk_capital = self._agg_func(**kwargs)
 
     def select(self, path: str, /) -> Self:
@@ -206,12 +206,12 @@ class RiskNode:
         return nodes
 
     def deepcopy(self, *, with_value: bool = True) -> Self:
-        copied_node = RiskNode(self._name, slug=self._slug)
+        copied_node = RiskNode(self._name, identifier=self._identifier)
         copied_node.set_agg_func(self._agg_func)
         _path_slice_start = len(self.path)
         for desc in self.descendants:
             # copy descendants
-            copied_desc = RiskNode(desc._name, slug=desc._slug)
+            copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             copied_desc.set_agg_func(desc._agg_func)
             copied_node.select(desc._parent.path[_path_slice_start:]).attach_sub_risk(copied_desc)
         if with_value:
@@ -224,54 +224,63 @@ class RiskTree:
 
     __slots__ = ("_root", "name",)
 
-    def __init__(self, any_node: RiskNode, name: str | None = None):
-        self._root: RiskNode = any_node.root
+    def __init__(self, /, root: RiskNode | None = None, name: str | None = None):
+        if root is None and name is None:
+            raise ValueError(f"Must provide at least one of ('root', 'name').")
+        self._root: RiskNode = root or RiskNode(name)
         self.name: str = name or self._root.name
 
     @property
     def root(self) -> RiskNode:
         return self._root
 
+    @property
+    def is_subtree(self) -> bool:
+        return not self._root.is_root
+
+    @property
+    def n_nodes(self) -> int:
+        return len(self.preorder_traversal())
+
+    @property
+    def n_leaf_nodes(self) -> int:
+        return len(self.list_leaf_nodes())
+
     def get_risk_capital(self, path: str | None = None, /) -> float:
         return self._root.get_risk_capital(path)
+
+    def set_risk_capital(self, path: str, /, value: float) -> None:
+        self._root.select(path).set_risk_capital(value)
 
     def get_risk_diversification(self, path: str | None = None, /) -> float:
         return self._root.get_risk_diversification(path)
 
-    def select(self, path: str, /) -> RiskNode:
+    def select_node(self, path: str, /) -> RiskNode:
         return self._root.select(path)
 
-    def list_leaf_nodes(self, subtree_path: str | list[str] | None = None, /) -> list[RiskNode]:
-        if subtree_path is None:
-            return self._root.leaves
-        elif isinstance(subtree_path, str):
-            return self.select(subtree_path).leaves
-        elif isinstance(subtree_path, list):
-            leaves = []
-            for p in subtree_path:
-                leaves.extend(self.select(p).leaves)
-            return leaves
-        else:
-            raise TypeError(f"Invalid type of subtree_path ({type(subtree_path)}), expected 'str' or 'list[str]'.")
+    def select_subtree(self, path: str, /) -> Self:
+        return RiskTree(self._root.select(path))
 
-    def zeroize(self, subtree_path: str | list[str] | None = None, /) -> None:
-        for node in self.list_leaf_nodes(subtree_path):
-            node.set_risk_capital(0.0)
+    def list_nodes(self) -> list[RiskNode]:
+        return self.preorder_traversal()
 
-    def preorder_traversal(self, subtree_path: str | None = None, /) -> list[RiskNode]:
-        node = self._root if subtree_path is None else self.select(subtree_path)
-        return node.preorder_traversal()
+    def list_leaf_nodes(self) -> list[RiskNode]:
+        return self._root.leaves
+
+    def zeroize(self) -> None:
+        self._root.zeroize()
+
+    def preorder_traversal(self) -> list[RiskNode]:
+        return self._root.preorder_traversal()
 
     def deepcopy(self, *, with_value: bool = True) -> Self:
-        return RiskTree(any_node=self._root.deepcopy(with_value=with_value), name=self.name)
+        return RiskTree(root=self._root.deepcopy(with_value=with_value), name=self.name)
 
-    def view(self, subtree_path: str | None = None, /, *, print_to_file: str | None = None,
-             padding: str = "", width: int = 80, dp: int = 2) -> None:
-        root = self._root if subtree_path is None else self.select(subtree_path)
-        root_depth = root.depth
+    def display(self, *, print_to_file: str | None = None, padding: str = "", width: int = 80, dp: int = 2) -> None:
+        root_depth = self._root.depth
         rows = []
 
-        for node in root.preorder_traversal():
+        for node in self._root.preorder_traversal():
             prefixed_name = f"{'    ' * (node.depth - root_depth)}{node.name}"
             try:
                 val = node.risk_capital
