@@ -1,4 +1,4 @@
-from vates.solvency.risk_node import RiskNode, risk_aggregation
+from vates.solvency.risk_node import RiskNode, RiskTree, risk_aggregation
 from vates.solvency.hk_rbc.rules import (
     CORR_MATRIX_PCA,
     CORR_MATRIX_MARKET_IR_UP,
@@ -45,53 +45,55 @@ def _gi_mi_risk_agg(onshore_mi: float, offshore_mi) -> float:
     return risk_aggregation(onshore_mi, offshore_mi, corr_matrix=CORR_MATRIX_GI_MI)
 
 
-def make_hkrbc_pcr_module(name: str, /, simplify_gi: bool = True) -> RiskNode:
-    root = RiskNode(name)
+def make_hkrbc_pcr_module(name: str, /, simplify_gi: bool = True) -> RiskTree:
+    tree = RiskTree(any_node=RiskNode("HKRBC"), name=name)
+
     # (root)
-    root.attach_sub_risk(RiskNode("Market"), RiskNode("Life Insurance"), RiskNode("General Insurance"),
+    node = tree.root
+    node.attach_sub_risk(RiskNode("Market"), RiskNode("Life Insurance"), RiskNode("General Insurance"),
                          RiskNode("Counterparty Default"), RiskNode("Operational"))
-    root.set_agg_func(_pcr_agg)
+    node.set_agg_func(_pcr_agg)
 
     # Market
-    node = root.select("Market")
+    node = tree.select("Market")
     node.attach_sub_risk(RiskNode("Interest Rate Up"), RiskNode("Interest Rate Down"), RiskNode("Credit Spread"),
                          RiskNode("Equity"), RiskNode("Property", slug="property_"), RiskNode("Currency"))
     node.set_agg_func(_market_risk_agg)
 
     # Life Insurance
-    node = root.select("Life Insurance")
+    node = tree.select("Life Insurance")
     node.attach_sub_risk(RiskNode("Mortality"), RiskNode("Longevity"), RiskNode("Life Catastrophe"),
                          RiskNode("Morbidity"), RiskNode("Expense"), RiskNode("Lapse"))
     node.set_agg_func(_life_risk_agg)
 
     # Life Insurance/Lapse
-    node = root.select("Life Insurance/Lapse")
+    node = tree.select("Life Insurance/Lapse")
     node.attach_sub_risk(RiskNode("Level & Trend", slug="lapse_level"), RiskNode("Mass Lapse"))
     node.set_agg_func(lambda lapse_level, mass_lapse: max(lapse_level, mass_lapse, 0.0))
 
     if not simplify_gi:
         # General Insurance
-        node = root.select("General Insurance")
+        node = tree.select("General Insurance")
         node.attach_sub_risk(RiskNode("Other than mortgage insurance", slug="gi_ex_mi"),
                              RiskNode("Mortgage Insurance"))
         node.set_agg_func(_gi_risk_agg)
 
         # General Insurance/Other than mortgage insurance
-        node = root.select("General Insurance/Other than mortgage insurance")
+        node = tree.select("General Insurance/Other than mortgage insurance")
         node.attach_sub_risk(RiskNode("Reserve & Premium", slug="gi_reserve_premium"),
                              RiskNode("Catastrophe", slug="gi_catastrophe"))
         node.set_agg_func(_gi_ex_mi_risk_agg)
 
         # General Insurance/Other than mortgage insurance/Catastrophe
-        node = root.select("General Insurance/Other than mortgage insurance/Catastrophe")
+        node = tree.select("General Insurance/Other than mortgage insurance/Catastrophe")
         node.attach_sub_risk(RiskNode("nature", slug="gi_cat_nature"),
                              RiskNode("man-made non-systemic", slug="gi_cat_man_nonsys"),
                              RiskNode("man-made systemic", slug="gi_cat_man_sys"))
         node.set_agg_func(_gi_cat_risk_agg)
 
         # General Insurance/Mortgage Insurance
-        node = root.select("General Insurance/Mortgage Insurance")
+        node = tree.select("General Insurance/Mortgage Insurance")
         node.attach_sub_risk(RiskNode("onshore", slug="onshore_mi"), RiskNode("offshore", slug="offshore_mi"))
         node.set_agg_func(_gi_mi_risk_agg)
 
-    return root
+    return tree
