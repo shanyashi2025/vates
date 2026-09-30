@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from vates import ProjModelEngine
 from vates.utils import KeyedArray
 from vates.finmath import convert_interest_rates, interpolate_interest_rates
-from vates.solvency.cn_cross2 import MinCapUnit, MinCapConsolidator, interest_risk_discount_curve, LeafNodeRiskCapital
+from vates.solvency.cn_cross2 import MinCapUnit, MinCapConsolidator, interest_risk_discount_curve
 
 from company_package import (
     run_with_json_config,
@@ -44,6 +44,51 @@ class MinCapUnderlyingInput:
     mc_spread: float = 0.0
     mc_counterparty_default: float = 0.0
 
+    def calculate_risk_capital(self) -> dict[str, float]:
+        return {
+            "Life/Loss/Mortality": max(self.pv_mortality - self.pv_base, 0),
+            "Life/Loss/Catastrophe": max(self.pv_catastrophe - self.pv_base, 0),
+            "Life/Loss/Longevity": max(self.pv_longevity - self.pv_base, 0),
+            "Life/Loss/Morbidity/Incidence": max(self.pv_morb_incidence - self.pv_base, 0),
+            "Life/Loss/Morbidity/Trend": max(self.pv_morb_trend - self.pv_base, 0),
+            "Life/Loss/Health & Medical": max(self.pv_health - self.pv_base, 0),
+            "Life/Loss/Other": max(self.pv_other_loss - self.pv_base, 0),
+            "Life/Expense": max(self.pv_expense - self.pv_base, 0),
+            "Life/Lapse/Lapse Rate/Lapse_Up": self.pv_lapse_up - self.pv_base,
+            "Life/Lapse/Lapse Rate/Lapse_Down": self.pv_lapse_dn - self.pv_base,
+            "Life/Lapse/Mass Lapse": self.pv_lapse_mass - self.pv_base,
+            "Non-life": self.mc_non_life,
+            "Market/Interest Rate/Interest Rate Up": (self.pv_int_up - self.aa_int_up) - (
+                    self.pv_int_base - self.aa_int_base),
+            "Market/Interest Rate/Interest Rate Down": (self.pv_int_dn - self.aa_int_dn) - (
+                    self.pv_int_base - self.aa_int_base),
+            "Market/Equity": self.mc_equity,
+            "Market/Real Estate": self.mc_real_estate,
+            "Market/Overseas Fixed-income": self.mc_overseas_fixed_income,
+            "Market/Overseas Equity": self.mc_overseas_equity,
+            "Market/Exchange Rate": self.mc_exchange_rate,
+            "Credit/Spread": self.mc_spread,
+            "Credit/Counterparty Default": self.mc_counterparty_default,
+        }
+
+    def add_from_epl(self, epl: KeyedArray, liab_ls: list, date_col: str) -> None:
+        for item in liab_ls:
+            self.pv_base += epl.at[item, 'pv_base', date_col]
+            self.pv_mortality += epl.at[item, 'pv_mortality', date_col]
+            self.pv_catastrophe += epl.at[item, 'pv_catastrophe', date_col]
+            self.pv_longevity += epl.at[item, 'pv_longevity', date_col]
+            self.pv_morb_incidence += epl.at[item, 'pv_morb_incidence', date_col]
+            self.pv_morb_trend += epl.at[item, 'pv_morb_trend', date_col]
+            self.pv_health += epl.at[item, 'pv_health', date_col]
+            self.pv_other_loss += epl.at[item, 'pv_other_loss', date_col]
+            self.pv_expense += epl.at[item, 'pv_expense', date_col]
+            self.pv_lapse_up += epl.at[item, 'pv_lapse_up', date_col]
+            self.pv_lapse_dn += epl.at[item, 'pv_lapse_dn', date_col]
+            self.pv_lapse_mass += epl.at[item, 'pv_lapse_mass', date_col]
+            self.pv_int_base += epl.at[item, 'pv_int_base', date_col]
+            self.pv_int_up += epl.at[item, 'pv_int_up', date_col]
+            self.pv_int_dn += epl.at[item, 'pv_int_dn', date_col]
+            self.pv_la_lower_limit += epl.at[item, 'pv_la_lower_limit', date_col]
 
 def cross_model(start_year: int, start_month: int, end_year: int, scenario: str, input_directories: list[str],
                 workspace_directory: str | None = None, results_directory: str | None = None,
@@ -160,54 +205,11 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
                 mc_underlying_input.mc_spread += asset.market_value * mc_factor_spread
 
             # --- (3.2) collect liability mc input ---
-            liab_ls = liabs_dict.get(name, None) or []
-            date_col = str(date_index)
-            for item in liab_ls:
-                mc_underlying_input.pv_base += epl.at[item, 'pv_base', date_col]
-                mc_underlying_input.pv_mortality += epl.at[item, 'pv_mortality', date_col]
-                mc_underlying_input.pv_catastrophe += epl.at[item, 'pv_catastrophe', date_col]
-                mc_underlying_input.pv_longevity += epl.at[item, 'pv_longevity', date_col]
-                mc_underlying_input.pv_morb_incidence += epl.at[item, 'pv_morb_incidence', date_col]
-                mc_underlying_input.pv_morb_trend += epl.at[item, 'pv_morb_trend', date_col]
-                mc_underlying_input.pv_health += epl.at[item, 'pv_health', date_col]
-                mc_underlying_input.pv_other_loss += epl.at[item, 'pv_other_loss', date_col]
-                mc_underlying_input.pv_expense += epl.at[item, 'pv_expense', date_col]
-                mc_underlying_input.pv_lapse_up += epl.at[item, 'pv_lapse_up', date_col]
-                mc_underlying_input.pv_lapse_dn += epl.at[item, 'pv_lapse_dn', date_col]
-                mc_underlying_input.pv_lapse_mass += epl.at[item, 'pv_lapse_mass', date_col]
-                mc_underlying_input.pv_int_base += epl.at[item, 'pv_int_base', date_col]
-                mc_underlying_input.pv_int_up += epl.at[item, 'pv_int_up', date_col]
-                mc_underlying_input.pv_int_dn += epl.at[item, 'pv_int_dn', date_col]
-                mc_underlying_input.pv_la_lower_limit += epl.at[item, 'pv_la_lower_limit', date_col]
+            mc_underlying_input.add_from_epl(epl=epl, liab_ls=liabs_dict.get(name, None) or [], date_col=str(date_index))
 
             # --- (3.3) calculate minimum capital ---
-            risk_capital = LeafNodeRiskCapital(
-                mortality=max(mc_underlying_input.pv_mortality - mc_underlying_input.pv_base, 0),
-                catastrophe=max(mc_underlying_input.pv_catastrophe - mc_underlying_input.pv_base, 0),
-                longevity=max(mc_underlying_input.pv_longevity - mc_underlying_input.pv_base, 0),
-                morb_incidence=max(mc_underlying_input.pv_morb_incidence - mc_underlying_input.pv_base, 0),
-                morb_trend=max(mc_underlying_input.pv_morb_trend - mc_underlying_input.pv_base, 0),
-                health=max(mc_underlying_input.pv_health - mc_underlying_input.pv_base, 0),
-                other_loss=max(mc_underlying_input.pv_other_loss - mc_underlying_input.pv_base, 0),
-                expense=max(mc_underlying_input.pv_expense - mc_underlying_input.pv_base, 0),
-                lapse_up=mc_underlying_input.pv_lapse_up - mc_underlying_input.pv_base,
-                lapse_down=mc_underlying_input.pv_lapse_dn - mc_underlying_input.pv_base,
-                mass_lapse=mc_underlying_input.pv_lapse_mass - mc_underlying_input.pv_base,
-                non_life=mc_underlying_input.mc_non_life,
-                interest_rate_up=(mc_underlying_input.pv_int_up - mc_underlying_input.aa_int_up) - (
-                        mc_underlying_input.pv_int_base - mc_underlying_input.aa_int_base),
-                interest_rate_down=(mc_underlying_input.pv_int_dn - mc_underlying_input.aa_int_dn) - (
-                        mc_underlying_input.pv_int_base - mc_underlying_input.aa_int_base),
-                equity=mc_underlying_input.mc_equity,
-                real_estate=mc_underlying_input.mc_real_estate,
-                overseas_fixed_income=mc_underlying_input.mc_overseas_fixed_income,
-                overseas_equity=mc_underlying_input.mc_overseas_equity,
-                exchange_rate=mc_underlying_input.mc_exchange_rate,
-                spread=mc_underlying_input.mc_spread,
-                counterparty_default=mc_underlying_input.mc_counterparty_default,
-            )
             mc_unit.calculate(
-                risk_capital=risk_capital,
+                risk_capital_dict=mc_underlying_input.calculate_risk_capital(),
                 la_pv_base=mc_underlying_input.pv_base if mc_unit.require_loss_absorbency else 0.0,
                 la_pv_lower_limit=mc_underlying_input.pv_la_lower_limit if mc_unit.require_loss_absorbency else 0.0,
             )

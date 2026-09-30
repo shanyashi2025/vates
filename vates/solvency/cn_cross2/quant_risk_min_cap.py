@@ -1,5 +1,4 @@
 import pandas as pd
-from dataclasses import dataclass
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.utils import maybe_raise_if_ne
@@ -93,34 +92,6 @@ def make_cross2_risk_module(name: str = "C-ROSS", /, is_zeroize: bool = True) ->
 
     return tree
 
-@dataclass(slots=True)
-class LeafNodeRiskCapital:
-    # Life
-    mortality: float
-    catastrophe: float
-    longevity: float
-    morb_incidence: float
-    morb_trend: float
-    health: float
-    other_loss: float
-    expense: float
-    lapse_up: float
-    lapse_down: float
-    mass_lapse: float
-    # Non-life
-    non_life: float
-    # Market
-    interest_rate_up: float
-    interest_rate_down: float
-    equity: float
-    real_estate: float
-    overseas_fixed_income: float
-    overseas_equity: float
-    exchange_rate: float
-    # Credit
-    spread: float
-    counterparty_default: float
-
 
 @time_synchronized
 class MinCapUnit:
@@ -152,14 +123,9 @@ class MinCapUnit:
         self.tdv_divers: TDimVariable = create_tdv("diversification")
         self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
 
-    def calculate(self, *, risk_capital: LeafNodeRiskCapital | None = None,
-                  la_pv_base: float = 0.0, la_pv_lower_limit = 0.0, **kwargs) -> None:
-        for node in self._risk_module.list_leaf_nodes():
-            key = node.identifier
-            if risk_capital is not None:
-                node.set_risk_capital(getattr(risk_capital, key))
-            elif key in kwargs:
-                node.set_risk_capital(kwargs[key])
+    def calculate(self, *, risk_capital_dict: dict[str, float], la_pv_base: float = 0.0, la_pv_lower_limit = 0.0) -> None:
+        for key, val in risk_capital_dict.items():
+            self._risk_module.set_risk_capital(key, val)
 
         if self.require_loss_absorbency:
             self._la_pv_base = la_pv_base

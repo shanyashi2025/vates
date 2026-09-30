@@ -8,7 +8,6 @@ from vates.solvency.cn_cross2.quant_risk_min_cap import (
     make_cross2_risk_module,
     MinCapUnit,
     MinCapConsolidator,
-    LeafNodeRiskCapital,
 )
 
 
@@ -20,6 +19,5 @@ __all__ = [
     'make_cross2_risk_module',
     'MinCapUnit',
     'MinCapConsolidator',
-    'LeafNodeRiskCapital',
 
 ]

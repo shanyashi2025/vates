@@ -51,16 +51,6 @@ class RiskNode:
             return 0.0
         return sum([c.risk_capital for c in self._children]) - self.risk_capital
 
-    def get_risk_capital(self, path: str | None = None, /) -> float:
-        if path is None:
-            return self.risk_capital
-        return self.select(path).risk_capital
-
-    def get_risk_diversification(self, path: str | None = None, /) -> float:
-        if path is None:
-            return self.risk_diversification
-        return self.select(path).risk_diversification
-
     @property
     def root(self) -> Self:
         node = self
@@ -165,6 +155,8 @@ class RiskNode:
         self._risk_capital = self._agg_func(**kwargs)
 
     def select(self, path: str, /) -> Self:
+        if path is None:
+            return self
         if not isinstance(path, str):
             raise TypeError(f"Invalid type of path: '{type(path)}', expected 'str'.")
         node = self
@@ -247,13 +239,13 @@ class RiskTree:
         return len(self.list_leaf_nodes())
 
     def get_risk_capital(self, path: str | None = None, /) -> float:
-        return self._root.get_risk_capital(path)
+        return self._root.select(path).risk_capital
 
     def set_risk_capital(self, path: str, /, value: float) -> None:
         self._root.select(path).set_risk_capital(value)
 
     def get_risk_diversification(self, path: str | None = None, /) -> float:
-        return self._root.get_risk_diversification(path)
+        return self._root.select(path).risk_diversification
 
     def select_node(self, path: str, /) -> RiskNode:
         return self._root.select(path)
