@@ -46,29 +46,39 @@ class MinCapUnderlyingInput:
 
     def calculate_risk_capital(self) -> dict[str, float]:
         return {
-            "Life/Loss/Mortality": max(self.pv_mortality - self.pv_base, 0),
-            "Life/Loss/Catastrophe": max(self.pv_catastrophe - self.pv_base, 0),
-            "Life/Loss/Longevity": max(self.pv_longevity - self.pv_base, 0),
-            "Life/Loss/Morbidity/Incidence": max(self.pv_morb_incidence - self.pv_base, 0),
-            "Life/Loss/Morbidity/Trend": max(self.pv_morb_trend - self.pv_base, 0),
-            "Life/Loss/Health & Medical": max(self.pv_health - self.pv_base, 0),
-            "Life/Loss/Other": max(self.pv_other_loss - self.pv_base, 0),
-            "Life/Expense": max(self.pv_expense - self.pv_base, 0),
-            "Life/Lapse/Lapse Rate/Lapse_Up": self.pv_lapse_up - self.pv_base,
-            "Life/Lapse/Lapse Rate/Lapse_Down": self.pv_lapse_dn - self.pv_base,
-            "Life/Lapse/Mass Lapse": self.pv_lapse_mass - self.pv_base,
+            "Life": {
+                "Loss": {
+                    "Mortality": max(self.pv_mortality - self.pv_base, 0),
+                    "Catastrophe": max(self.pv_catastrophe - self.pv_base, 0),
+                    "Longevity": max(self.pv_longevity - self.pv_base, 0),
+                    "Morbidity/Incidence": max(self.pv_morb_incidence - self.pv_base, 0),
+                    "Morbidity/Trend": max(self.pv_morb_trend - self.pv_base, 0),
+                    "Health & Medical": max(self.pv_health - self.pv_base, 0),
+                    "Other": max(self.pv_other_loss - self.pv_base, 0),
+                },
+                "Expense": max(self.pv_expense - self.pv_base, 0),
+                "Lapse": {
+                    "Lapse Rate/Lapse_Up": self.pv_lapse_up - self.pv_base,
+                    "Lapse Rate/Lapse_Down": self.pv_lapse_dn - self.pv_base,
+                    "Mass Lapse": self.pv_lapse_mass - self.pv_base,
+                },
+            },
             "Non-life": self.mc_non_life,
-            "Market/Interest Rate/Interest Rate Up": (self.pv_int_up - self.aa_int_up) - (
-                    self.pv_int_base - self.aa_int_base),
-            "Market/Interest Rate/Interest Rate Down": (self.pv_int_dn - self.aa_int_dn) - (
-                    self.pv_int_base - self.aa_int_base),
-            "Market/Equity": self.mc_equity,
-            "Market/Real Estate": self.mc_real_estate,
-            "Market/Overseas Fixed-income": self.mc_overseas_fixed_income,
-            "Market/Overseas Equity": self.mc_overseas_equity,
-            "Market/Exchange Rate": self.mc_exchange_rate,
-            "Credit/Spread": self.mc_spread,
-            "Credit/Counterparty Default": self.mc_counterparty_default,
+            "Market": {
+                "Interest Rate/Interest Rate Up": (self.pv_int_up - self.aa_int_up) - (
+                        self.pv_int_base - self.aa_int_base),
+                "Interest Rate/Interest Rate Down": (self.pv_int_dn - self.aa_int_dn) - (
+                        self.pv_int_base - self.aa_int_base),
+                "Equity": self.mc_equity,
+                "Real Estate": self.mc_real_estate,
+                "Overseas Fixed-income": self.mc_overseas_fixed_income,
+                "Overseas Equity": self.mc_overseas_equity,
+                "Exchange Rate": self.mc_exchange_rate,
+            },
+            "Credit": {
+                "Spread": self.mc_spread,
+                "Counterparty Default": self.mc_counterparty_default,
+            }
         }
 
     def add_from_epl(self, epl: KeyedArray, liab_ls: list, date_col: str) -> None:

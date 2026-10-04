@@ -36,8 +36,8 @@ def _market_risk_agg(interest_rate: float, equity: float, real_estate: float, ov
 def _credit_risk_agg(spread: float, counterparty_default: float) -> float:
     return risk_aggregation(spread, counterparty_default, corr_matrix=CREDIT_MC_CORR_MATRIX)
 
-def make_cross2_risk_module(name: str = "C-ROSS", /, is_zeroize: bool = True) -> RiskTree:
-    tree = RiskTree(name=name)
+def make_cross2_risk_module(name: str = "C-ROSS", /, subtree: str | None = None, is_zeroize: bool = True) -> RiskTree:
+    tree = RiskTree(name=name, root=RiskNode("C-ROSS"))
 
     # (root)
     node = tree.root
@@ -45,52 +45,55 @@ def make_cross2_risk_module(name: str = "C-ROSS", /, is_zeroize: bool = True) ->
     node.set_agg_func(_overall_risk_agg)
 
     # Life
-    node = tree.select_node("Life")
+    node = tree.get_node("Life")
     node.attach_sub_risk(RiskNode("Loss"), RiskNode("Expense"), RiskNode("Lapse"))
     node.set_agg_func(_life_risk_agg)
 
     # Life/Loss
-    node = tree.select_node("Life/Loss")
+    node = tree.get_node("Life/Loss")
     node.attach_sub_risk(RiskNode("Mortality"), RiskNode("Catastrophe"), RiskNode("Longevity"),
                          RiskNode("Morbidity"), RiskNode("Health & Medical", identifier="health"),
                          RiskNode("Other", identifier="other_loss"))
     node.set_agg_func(_loss_risk_agg)
 
     # Life/Loss/Morbidity
-    node = tree.select_node("Life/Loss/Morbidity")
+    node = tree.get_node("Life/Loss/Morbidity")
     node.attach_sub_risk(RiskNode("Incidence", identifier="morb_incidence"), RiskNode("Trend", identifier="morb_trend"))
     node.set_agg_func(_morb_risk_agg)
 
     # Life/Lapse
-    node = tree.select_node("Life/Lapse")
+    node = tree.get_node("Life/Lapse")
     node.attach_sub_risk(RiskNode("Lapse Rate"), RiskNode("Mass Lapse"))
     node.set_agg_func(lambda lapse_rate, mass_lapse: max(lapse_rate, mass_lapse, 0))
 
     # Life/Lapse/Lapse Rate
-    node = tree.select_node("Life/Lapse/Lapse Rate")
+    node = tree.get_node("Life/Lapse/Lapse Rate")
     node.attach_sub_risk(RiskNode("Lapse_Up"), RiskNode("Lapse_Down"))
     node.set_agg_func(lambda lapse_up, lapse_down: max(lapse_up, lapse_down, 0))
 
     # Market
-    node = tree.select_node("Market")
+    node = tree.get_node("Market")
     node.attach_sub_risk(RiskNode("Interest Rate"), RiskNode("Equity"), RiskNode("Real Estate"),
                          RiskNode("Overseas Fixed-income"), RiskNode("Overseas Equity"), RiskNode("Exchange Rate"))
     node.set_agg_func(_market_risk_agg)
 
     # Market/Interest Rate
-    node = tree.select_node("Market/Interest Rate")
+    node = tree.get_node("Market/Interest Rate")
     node.attach_sub_risk(RiskNode("Interest Rate Up"), RiskNode("Interest Rate Down"))
     node.set_agg_func(lambda interest_rate_up, interest_rate_down: max(interest_rate_up, interest_rate_down, 0))
 
     # Credit
-    node = tree.select_node("Credit")
+    node = tree.get_node("Credit")
     node.attach_sub_risk(RiskNode("Spread"), RiskNode("Counterparty Default"))
     node.set_agg_func(_credit_risk_agg)
 
     if is_zeroize:
         tree.zeroize()
 
-    return tree
+    if subtree is None:
+        return tree
+    else:
+        return tree.get_subtree(subtree, name=name).deepcopy()
 
 
 @time_synchronized
@@ -124,8 +127,7 @@ class MinCapUnit:
         self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
 
     def calculate(self, *, risk_capital_dict: dict[str, float], la_pv_base: float = 0.0, la_pv_lower_limit = 0.0) -> None:
-        for key, val in risk_capital_dict.items():
-            self._risk_module.set_risk_capital(key, val)
+        self._risk_module.batch_set_risk_capital(risk_capital_dict)
 
         if self.require_loss_absorbency:
             self._la_pv_base = la_pv_base
@@ -223,9 +225,7 @@ class MinCapConsolidator:
 
     def consolidate(self) -> None:
         for node in self._risk_module.list_leaf_nodes():
-            path = node.path
-            risk_capital = sum(unit.get_risk_capital(path) for unit in self._units)
-            node.set_risk_capital(risk_capital)
+            node.set_risk_capital(sum(unit.get_risk_capital(node.path) for unit in self._units))
 
         self._loss_absorbency = self._calculate_loss_absorbency()
 
@@ -240,25 +240,20 @@ class MinCapConsolidator:
         self._last_calculate = t
 
     def _calculate_loss_absorbency(self) -> float:
+        units = [unit for unit in self._units if unit.require_loss_absorbency]
+        if len(units) == 0:
+            return 0.0
+
         la_risk_module = make_cross2_risk_module()
-        market_credit_leaf_nodes = (la_risk_module.select_subtree("Market").list_leaf_nodes() +
-                                    la_risk_module.select_subtree("Credit").list_leaf_nodes())
-
-        la_pv_base = 0.0
-        la_pv_lower_limit = 0.0
-
-        for unit in self._units:
-            if unit.require_loss_absorbency:
-                for node in market_credit_leaf_nodes:
-                    node.set_risk_capital(node.risk_capital + unit.get_risk_capital(node.path))
-                la_pv_base += unit.la_pv_base
-                la_pv_lower_limit += unit.la_pv_lower_limit
+        for node in (la_risk_module.get_subtree("Market").list_leaf_nodes() +
+                     la_risk_module.get_subtree("Credit").list_leaf_nodes()):
+            node.set_risk_capital(sum(unit.get_risk_capital(node.path) for unit in units))
 
         return calculate_loss_absorbency(
             mc_market=la_risk_module.get_risk_capital("Market"),
             mc_credit=la_risk_module.get_risk_capital("Credit"),
-            pv_base=la_pv_base,
-            pv_lower_limit=la_pv_lower_limit
+            pv_base=sum(unit.la_pv_base for unit in units),
+            pv_lower_limit=sum(unit.la_pv_lower_limit for unit in units)
         )
 
     @property

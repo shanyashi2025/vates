@@ -1,8 +1,6 @@
-import csv
 import math
 import numpy as np
 import warnings
-from pathlib import Path
 from typing import Callable, Self
 
 
@@ -73,6 +71,20 @@ class RiskNode:
         return [x for x in self._parent._children if x is not self]
 
     @property
+    def _parts(self) -> tuple[str, ...]:
+        names = []
+        node = self
+        while node is not None:
+            names.append(node._name)
+            node = node._parent
+        names.reverse()
+        return tuple(names)  # root, .., self
+
+    @property
+    def ancestors(self) -> tuple[str, ...]:
+        return self._parts[:-1]
+
+    @property
     def descendants(self) -> list[Self]:
         return self.preorder_traversal()[1:]  # slicing [1:] can handle when len(ls) == 1
 
@@ -95,22 +107,12 @@ class RiskNode:
         return len(self._children) == 0
 
     @property
-    def ancestors(self) -> tuple[str, ...]:
-        names = []
-        node = self
-        while node is not None:
-            names.append(node._name)
-            node = node._parent
-        names.reverse()
-        return tuple(names)  # include root
-
-    @property
     def depth(self) -> int:
-        return len(self.ancestors) - 1
+        return len(self._parts) - 1
 
     @property
     def path(self) -> str:
-        return "/".join(self.ancestors[1:])
+        return "/".join(self._parts[1:])
 
     def attach_sub_risk(self, *args: Self) -> None:
         if len(args) == 0:
@@ -154,7 +156,7 @@ class RiskNode:
         kwargs = {c._identifier: c.risk_capital for c in self._children}
         self._risk_capital = self._agg_func(**kwargs)
 
-    def select(self, path: str, /) -> Self:
+    def get_node(self, path: str, /) -> Self:
         if path is None:
             return self
         if not isinstance(path, str):
@@ -168,14 +170,14 @@ class RiskNode:
             else:
                 node = next((c for c in node._children if c._name == p), None)
             if node is None:
-                raise ValueError(f"{self._name}: can't select: '{path}'; failed at '{p}'.")
+                raise ValueError(f"{self._name}: can't get node: '{path}'; failed at '{p}'.")
         return node
 
     def __truediv__(self, other: str, /) -> Self:
-        return self.select(other)
+        return self.get_node(other)
 
     def __str__(self) -> str:
-        title = "/".join(self.ancestors)
+        title = "/".join(self._parts)
         try:
             return f"RiskNode '{title}' (risk_capital={self.risk_capital:,.2f})"
         except ValueError:
@@ -202,13 +204,12 @@ class RiskNode:
         copied_node.set_agg_func(self._agg_func)
         _path_slice_start = len(self.path)
         for desc in self.descendants:
-            # copy descendants
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             copied_desc.set_agg_func(desc._agg_func)
-            copied_node.select(desc._parent.path[_path_slice_start:]).attach_sub_risk(copied_desc)
+            copied_node.get_node(desc._parent.path[_path_slice_start:]).attach_sub_risk(copied_desc)
         if with_value:
             for node in copied_node.leaves:
-                node.set_risk_capital(self.select(node.path)._risk_capital)
+                node.set_risk_capital(self.get_node(node.path)._risk_capital)
         return copied_node
 
 
@@ -227,6 +228,10 @@ class RiskTree:
         return self._root
 
     @property
+    def is_toptree(self) -> bool:
+        return self._root.is_root
+
+    @property
     def is_subtree(self) -> bool:
         return not self._root.is_root
 
@@ -239,25 +244,47 @@ class RiskTree:
         return len(self.list_leaf_nodes())
 
     def get_risk_capital(self, path: str | None = None, /) -> float:
-        return self._root.select(path).risk_capital
-
-    def set_risk_capital(self, path: str, /, value: float) -> None:
-        self._root.select(path).set_risk_capital(value)
+        return self._root.get_node(path).risk_capital
 
     def get_risk_diversification(self, path: str | None = None, /) -> float:
-        return self._root.select(path).risk_diversification
+        return self._root.get_node(path).risk_diversification
 
-    def select_node(self, path: str, /) -> RiskNode:
-        return self._root.select(path)
+    def get_node(self, path: str, /) -> RiskNode:
+        return self._root.get_node(path)
 
-    def select_subtree(self, path: str, /) -> Self:
-        return RiskTree(self._root.select(path))
+    def get_toptree(self, *, name: str | None = None) -> Self:
+        return RiskTree(self._root.root, name)
+
+    def get_subtree(self, path: str, /, *, name: str | None = None) -> Self:
+        return RiskTree(self._root.get_node(path), name)
 
     def list_nodes(self) -> list[RiskNode]:
         return self.preorder_traversal()
 
     def list_leaf_nodes(self) -> list[RiskNode]:
         return self._root.leaves
+
+    def set_risk_capital(self, path: str, /, value: float) -> None:
+        self._root.get_node(path).set_risk_capital(value)
+
+    def batch_set_risk_capital(self, value_dict: dict[str, float | dict], /) -> None:
+        for path, value in self._flatten_dict(value_dict).items():
+            self.set_risk_capital(path, value)
+
+    @classmethod
+    def _flatten_dict(cls, nested: dict[str, float | dict], /, joiner: str = "/") -> dict[str, float]:
+        flattened: dict[str, float] = {}
+        for k, v in nested.items():
+            if not isinstance(k, str):
+                raise TypeError(f"Invalid {type(k)=}, expected 'str'.")
+            if isinstance(v, float):
+                flattened[k] = v
+            elif isinstance(v, dict):
+                for nk, nv in cls._flatten_dict(v).items():
+                    flattened[k + joiner + nk] = nv
+            else:
+                raise TypeError(f"Invalid {type(v)=}, expected 'float' or 'dict'.")
+        return flattened
 
     def zeroize(self) -> None:
         self._root.zeroize()
@@ -268,26 +295,16 @@ class RiskTree:
     def deepcopy(self, *, with_value: bool = True) -> Self:
         return RiskTree(root=self._root.deepcopy(with_value=with_value), name=self.name)
 
-    def display(self, *, print_to_file: str | None = None, padding: str = "", width: int = 80, dp: int = 2) -> None:
+    def display(self, *, width: int = 80, precision: int = 2) -> None:
         root_depth = self._root.depth
-        rows = []
-
         for node in self._root.preorder_traversal():
             prefixed_name = f"{'    ' * (node.depth - root_depth)}{node.name}"
             try:
                 val = node.risk_capital
                 val_width = width - len(prefixed_name)
-                print(f"{prefixed_name} {val:{padding}>{val_width},.{dp}f}")
-                rows.append((prefixed_name, f"{val:.{dp}f}"))
+                print(f"{prefixed_name} {val:>{val_width},.{precision}f}")
             except ValueError:
                 print(prefixed_name)
-                rows.append((prefixed_name, ))
-
-        if print_to_file is not None:
-            file_path = Path(print_to_file)
-            mode = 'a' if file_path.is_file() else 'w'
-            with open(file_path, mode=mode, newline='', encoding='utf-8-sig') as csvfile:
-                csv.writer(csvfile).writerows(rows)
 
     def __str__(self) -> str:
         try:

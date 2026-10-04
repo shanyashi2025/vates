@@ -45,8 +45,9 @@ def _gi_mi_risk_agg(onshore_mi: float, offshore_mi) -> float:
     return risk_aggregation(onshore_mi, offshore_mi, corr_matrix=CORR_MATRIX_GI_MI)
 
 
-def make_hkrbc_pcr_module(name: str = "HKRBC", /, is_zeroize: bool = True, simplify_gi: bool = True) -> RiskTree:
-    tree = RiskTree(name=name)
+def make_hkrbc_pcr_module(name: str = "HKRBC", /, subtree: str | None = None, is_zeroize: bool = True,
+                          simplify_gi: bool = True) -> RiskTree:
+    tree = RiskTree(name=name, root=RiskNode("HKRBC"))
 
     # (root)
     node = tree.root
@@ -55,48 +56,51 @@ def make_hkrbc_pcr_module(name: str = "HKRBC", /, is_zeroize: bool = True, simpl
     node.set_agg_func(_pcr_agg)
 
     # Market
-    node = tree.select_node("Market")
+    node = tree.get_node("Market")
     node.attach_sub_risk(RiskNode("Interest Rate Up"), RiskNode("Interest Rate Down"), RiskNode("Credit Spread"),
                          RiskNode("Equity"), RiskNode("Property", identifier="property_"), RiskNode("Currency"))
     node.set_agg_func(_market_risk_agg)
 
     # Life Insurance
-    node = tree.select_node("Life Insurance")
+    node = tree.get_node("Life Insurance")
     node.attach_sub_risk(RiskNode("Mortality"), RiskNode("Longevity"), RiskNode("Life Catastrophe"),
                          RiskNode("Morbidity"), RiskNode("Expense"), RiskNode("Lapse"))
     node.set_agg_func(_life_risk_agg)
 
     # Life Insurance/Lapse
-    node = tree.select_node("Life Insurance/Lapse")
+    node = tree.get_node("Life Insurance/Lapse")
     node.attach_sub_risk(RiskNode("Level & Trend", identifier="lapse_level"), RiskNode("Mass Lapse"))
     node.set_agg_func(lambda lapse_level, mass_lapse: max(lapse_level, mass_lapse, 0.0))
 
     if not simplify_gi:
         # General Insurance
-        node = tree.select_node("General Insurance")
+        node = tree.get_node("General Insurance")
         node.attach_sub_risk(RiskNode("Other than mortgage insurance", identifier="gi_ex_mi"),
                              RiskNode("Mortgage Insurance"))
         node.set_agg_func(_gi_risk_agg)
 
         # General Insurance/Other than mortgage insurance
-        node = tree.select_node("General Insurance/Other than mortgage insurance")
+        node = tree.get_node("General Insurance/Other than mortgage insurance")
         node.attach_sub_risk(RiskNode("Reserve & Premium", identifier="gi_reserve_premium"),
                              RiskNode("Catastrophe", identifier="gi_catastrophe"))
         node.set_agg_func(_gi_ex_mi_risk_agg)
 
         # General Insurance/Other than mortgage insurance/Catastrophe
-        node = tree.select_node("General Insurance/Other than mortgage insurance/Catastrophe")
+        node = tree.get_node("General Insurance/Other than mortgage insurance/Catastrophe")
         node.attach_sub_risk(RiskNode("nature", identifier="gi_cat_nature"),
                              RiskNode("man-made non-systemic", identifier="gi_cat_man_nonsys"),
                              RiskNode("man-made systemic", identifier="gi_cat_man_sys"))
         node.set_agg_func(_gi_cat_risk_agg)
 
         # General Insurance/Mortgage Insurance
-        node = tree.select_node("General Insurance/Mortgage Insurance")
+        node = tree.get_node("General Insurance/Mortgage Insurance")
         node.attach_sub_risk(RiskNode("onshore", identifier="onshore_mi"), RiskNode("offshore", identifier="offshore_mi"))
         node.set_agg_func(_gi_mi_risk_agg)
 
     if is_zeroize:
         tree.zeroize()
 
-    return tree
+    if subtree is None:
+        return tree
+    else:
+        return tree.get_subtree(subtree, name=name).deepcopy()
