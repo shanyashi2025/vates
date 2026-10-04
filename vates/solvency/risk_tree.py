@@ -138,7 +138,7 @@ class RiskNode:
 
     def set_risk_capital(self, value: float | None = None, /) -> None:
         if self.is_leaf:
-            if not isinstance(value, float):
+            if not isinstance(value, (float, int)):
                 raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
             self._risk_capital = value
         else:
@@ -277,7 +277,7 @@ class RiskTree:
         for k, v in nested.items():
             if not isinstance(k, str):
                 raise TypeError(f"Invalid {type(k)=}, expected 'str'.")
-            if isinstance(v, float):
+            if isinstance(v, (float, int)):
                 flattened[k] = v
             elif isinstance(v, dict):
                 for nk, nv in cls._flatten_dict(v).items():
