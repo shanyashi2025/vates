@@ -1,6 +1,5 @@
 import math
 import numpy as np
-import warnings
 from typing import Callable, Self
 
 
@@ -20,6 +19,9 @@ class RiskNode:
     __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func",)
 
     def __init__(self, name: str, /, *, identifier: str | None = None):
+        name = str(name)
+        if "/" in name:
+            raise ValueError(f"Invalid {name=}: contains '/'.")
         self._name: str = name
         self._identifier: str = self._normalize_identifier(identifier or name)
         self._risk_capital: float | None = None
@@ -78,7 +80,7 @@ class RiskNode:
             names.append(node._name)
             node = node._parent
         names.reverse()
-        return tuple(names)  # root, .., self
+        return tuple(names)  # (root, .., self)
 
     @property
     def ancestors(self) -> tuple[str, ...]:
@@ -108,27 +110,32 @@ class RiskNode:
     def path(self) -> str:
         return "/".join(self._parts[1:])
 
-    def attach_sub_risk(self, *args: Self) -> None:
-        if len(args) == 0:
-            raise ValueError(f"Nothing to attach.")
-        for node in args:
-            if node._parent is not None:
-                raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: sub of '{node._parent._name}'.")
-            if node is self.root:
-                raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: root.")
-            if node in self._children:
-                raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: duplicate.")
-            if node._name in [c._name for c in self._children]:
-                raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: duplicate name.")
-            if node._identifier in [c._identifier for c in self._children]:
-                raise ValueError(f"{self._name}: can't attach '{node._name}' as sub-risk: duplicate identifier.")
-            self._children.append(node)
-            node._parent = self
+    def add_sub_risk(self, *args: Self | str, agg_func = None) -> None:
+        for arg in args:
+            if isinstance(arg, RiskNode):
+                self._add_child(arg)
+            elif isinstance(arg, str):
+                self._add_child(RiskNode(arg))
+            else:
+                raise TypeError(f"Invalid {type(arg)=}, expected ('RiskNode', 'str').")
+        if agg_func is not None:
+            if self._agg_func is not None:
+                raise ValueError(f"{self._name}: aggregation function has already been set.")
+            self._agg_func = agg_func
 
-    def set_agg_func(self, func) -> None:
-        if self._agg_func is not None:
-            warnings.warn(f"{self._name}: aggregation function will be reset.")
-        self._agg_func = func
+    def _add_child(self, node: Self) -> None:
+        if node._parent is not None:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: has parent '{node._parent._name}'.")
+        if node is self.root:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: is root.")
+        if node in self._children:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate object.")
+        if node._name in [c._name for c in self._children]:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate name.")
+        if node._identifier in [c._identifier for c in self._children]:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate identifier.")
+        self._children.append(node)
+        node._parent = self
 
     def set_risk_capital(self, value: float | None = None, /) -> None:
         if not self.is_leaf:
@@ -166,18 +173,11 @@ class RiskNode:
             else:
                 node = next((c for c in node._children if c._name == p), None)
             if node is None:
-                raise ValueError(f"{self._name}: can't find node: '{path}'; failed at '{p}'.")
+                raise ValueError(f"{self._name}: can't goto node: '{path}'; failed at '{p}'.")
         return node
 
     def __truediv__(self, other: str, /) -> Self:
         return self.goto(other)
-
-    def __str__(self) -> str:
-        title = "/".join(self._parts)
-        try:
-            return f"<RiskNode '{title}'> (risk_capital={self.risk_capital:,.2f})"
-        except ValueError:
-            return f"<RiskNode '{title}'>"
 
     @classmethod
     def _normalize_identifier(cls, /, chars: str) -> str:
@@ -192,28 +192,30 @@ class RiskNode:
 
     def deepcopy(self, *, with_value: bool = True) -> Self:
         copied_node = RiskNode(self._name, identifier=self._identifier)
-        copied_node.set_agg_func(self._agg_func)
+        copied_node._agg_func = self._agg_func
         _path_slice_start = len(self.path)
         for desc in self.descendants:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
-            copied_desc.set_agg_func(desc._agg_func)
-            copied_node.goto(desc._parent.path[_path_slice_start:]).attach_sub_risk(copied_desc)
+            copied_desc._agg_func = desc._agg_func
+            copied_node.goto(desc._parent.path[_path_slice_start:]).add_sub_risk(copied_desc)
         if with_value:
             for node in copied_node.descendants:
                 if node.is_leaf:
                     node.set_risk_capital(self.goto(node.path)._risk_capital)
         return copied_node
 
+    def __str__(self) -> str:
+        return f"<RiskNode '{self._name}'> ({'/'.join(self._parts)})"
+
 
 class RiskTree:
 
-    __slots__ = ("_root", "name",)
+    __slots__ = ("_root",)
 
-    def __init__(self, /, root: RiskNode | None = None, name: str | None = None):
-        if root is None and name is None:
-            raise ValueError(f"Must provide at least one of ('root', 'name').")
-        self._root: RiskNode = root or RiskNode(name)
-        self.name: str = name or self._root.name
+    def __init__(self, /, root: RiskNode | str):
+        if not isinstance(root, (RiskNode, str)):
+            raise TypeError(f"Invalid {type(root)=}, expected ('RiskNode', 'str').")
+        self._root: RiskNode = root if isinstance(root, RiskNode) else RiskNode(root)
 
     @property
     def root(self) -> RiskNode:
@@ -244,11 +246,11 @@ class RiskTree:
     def get_node(self, path: str, /) -> RiskNode:
         return self._root.goto(path)
 
-    def get_toptree(self, *, name: str | None = None) -> Self:
-        return RiskTree(self._root.root, name)
+    def get_toptree(self) -> Self:
+        return RiskTree(self._root.root)
 
-    def get_subtree(self, path: str, /, *, name: str | None = None) -> Self:
-        return RiskTree(self._root.goto(path), name)
+    def get_subtree(self, path: str, /) -> Self:
+        return RiskTree(self._root.goto(path))
 
     def list_nodes(self) -> list[RiskNode]:
         return self._preorder(self._root)
@@ -292,10 +294,9 @@ class RiskTree:
         return self._preorder(self._root)
 
     def deepcopy(self, *, with_value: bool = True) -> Self:
-        return RiskTree(root=self._root.deepcopy(with_value=with_value), name=self.name)
+        return RiskTree(root=self._root.deepcopy(with_value=with_value))
 
     def display(self, *, width: int = 80, precision: int = 2) -> None:
-        print(f"<RiskTree '{self.name}'>:")
         root_depth = self._root.depth
         for node in self._preorder(self._root):
             prefixed_name = f"{'    ' * (node.depth - root_depth)}{node.name}"
@@ -305,9 +306,3 @@ class RiskTree:
                 print(f"{prefixed_name} {val:>{val_width},.{precision}f}")
             except ValueError:
                 print(prefixed_name)
-
-    def __str__(self) -> str:
-        try:
-            return f"<RiskTree '{self.name}'> (risk_capital={self._root.risk_capital:,.2f})"
-        except ValueError:
-            return f"<RiskTree '{self.name}'>"

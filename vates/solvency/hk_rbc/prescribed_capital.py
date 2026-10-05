@@ -34,37 +34,29 @@ def _gi_risk_agg(reserve_premium: float, catastrophe: float, mortgage_insurance:
     return risk_aggregation(gi_ex_mi, mortgage_insurance, corr_matrix=CORR_MATRIX_GI)
 
 
-def make_hkrbc_pcr_module(name: str = "HKRBC", /, submodule: str | None = None, is_zeroize: bool = True) -> RiskTree:
-    tree = RiskTree(name=name, root=RiskNode("HKRBC"))
+def make_hkrbc_pcr_module(*, submodule: str | None = None, is_zeroize: bool = True) -> RiskTree:
+    tree = RiskTree(root="HKRBC PCR")
 
     # (root)
-    node = tree.root
-    node.attach_sub_risk(RiskNode("Market"), RiskNode("Life Insurance"), RiskNode("General Insurance"),
-                         RiskNode("Counterparty Default"), RiskNode("Operational"))
-    node.set_agg_func(_pcr_agg)
+    tree.root.add_sub_risk(
+        "Market", "Life Insurance", "General Insurance", "Counterparty Default", "Operational", agg_func=_pcr_agg)
 
     # Market
-    node = tree.get_node("Market")
-    node.attach_sub_risk(RiskNode("Interest Rate Upward"), RiskNode("Interest Rate Downward"), RiskNode("Credit Spread"),
-                         RiskNode("Equity"), RiskNode("Property", identifier="property_"), RiskNode("Currency"))
-    node.set_agg_func(_market_risk_agg)
+    tree.get_node("Market").add_sub_risk(
+        "Interest Rate Upward", "Interest Rate Downward", "Credit Spread", "Equity",
+        RiskNode("Property", identifier="property_"), "Currency", agg_func=_market_risk_agg)
 
     # Life Insurance
-    node = tree.get_node("Life Insurance")
-    node.attach_sub_risk(RiskNode("Mortality"), RiskNode("Longevity"), RiskNode("Catastrophe"),
-                         RiskNode("Morbidity"), RiskNode("Expense"), RiskNode("Lapse"))
-    node.set_agg_func(_life_risk_agg)
+    tree.get_node("Life Insurance").add_sub_risk(
+        "Mortality", "Longevity", "Catastrophe", "Morbidity", "Expense", "Lapse", agg_func=_life_risk_agg)
 
     # Life Insurance/Lapse
-    node = tree.get_node("Life Insurance/Lapse")
-    node.attach_sub_risk(RiskNode("Level & Trend", identifier="lapse_level"), RiskNode("Mass Lapse"))
-    node.set_agg_func(lambda lapse_level, mass_lapse: max(lapse_level, mass_lapse, 0.0))
+    tree.get_node("Life Insurance/Lapse").add_sub_risk(
+        "Level", "Mass", agg_func=lambda level, mass: max(level, mass, 0.0))
 
     # General Insurance
-    node = tree.get_node("General Insurance")
-    node.attach_sub_risk(RiskNode("Reserve & Premium", identifier="reserve_premium"),
-                         RiskNode("Catastrophe"), RiskNode("Mortgage Insurance"))
-    node.set_agg_func(_gi_risk_agg)
+    tree.get_node("General Insurance").add_sub_risk(
+        "Reserve Premium", "Catastrophe", "Mortgage Insurance", agg_func=_gi_risk_agg)
 
     if is_zeroize:
         tree.zeroize()
@@ -72,4 +64,4 @@ def make_hkrbc_pcr_module(name: str = "HKRBC", /, submodule: str | None = None, 
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule, name=name).deepcopy()
+        return tree.get_subtree(submodule).deepcopy()

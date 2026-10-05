@@ -54,18 +54,18 @@ class MinCapUnderlyingInput:
                     "Longevity": max(self.pv_longevity - self.pv_base, 0),
                     "Morbidity/Incidence": max(self.pv_morb_incidence - self.pv_base, 0),
                     "Morbidity/Trend": max(self.pv_morb_trend - self.pv_base, 0),
-                    "Health & Medical": max(self.pv_health - self.pv_base, 0),
+                    "Health": max(self.pv_health - self.pv_base, 0),
                     "Other": max(self.pv_other_loss - self.pv_base, 0),
                 },
                 "Expense": max(self.pv_expense - self.pv_base, 0),
                 "Lapse": {
-                    "Lapse Rate/Lapse_Up": self.pv_lapse_up - self.pv_base,
-                    "Lapse Rate/Lapse_Down": self.pv_lapse_dn - self.pv_base,
+                    "Lapse Up": self.pv_lapse_up - self.pv_base,
+                    "Lapse Down": self.pv_lapse_dn - self.pv_base,
                     "Mass Lapse": self.pv_lapse_mass - self.pv_base,
                 },
             },
             "Non-life": {
-                "Premium & Reserve": self.mc_non_life_prem_reserve,
+                "Premium Reserve": self.mc_non_life_prem_reserve,
                 "Catastrophe": self.mc_non_life_catastrophe,
             },
             "Market": {
@@ -147,14 +147,16 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     asset_filename_list = ['assets_cash', 'assets_equity', 'assets_bond',]
 
     # initialize dictionary of mc unit for each fund
-    mc_units: list[MinCapUnit] = []
+    mc_units: dict[str, MinCapUnit] = {}
     df = file_df_dict['funds']
     for index in df.index:
         cross_account_type = df.loc[index, 'cross_account_type']
-        mc_units.append(MinCapUnit(name=index, model_engine=model, require_loss_absorbency=cross_account_type.upper() in ("PAR", "UNIV")))
+        mc_units[index] = MinCapUnit(model_engine=model,
+                                     require_loss_absorbency=cross_account_type.upper() in ("PAR", "UNIV"),
+                                     tdv_owner=index)
 
     # initialize the company result
-    company_mc = MinCapConsolidator(name='company', model_engine=model, min_cap_units=mc_units)
+    company_mc = MinCapConsolidator(model_engine=model, min_cap_units=list(mc_units.values()), tdv_owner='company',)
 
     df = file_df_dict['liabs']
     liabs_dict: dict[str, list[str]] = {}
@@ -193,21 +195,20 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
             for item in asset_filename_list
         }
         aging_assets_master_dict = {
-            item.name: AssetMaster.existing_from_df(
-                aging_assets_df_dict, model_engine=model, econs=esg_master, fund_id=item.name)
-            for item in mc_units
+            key: AssetMaster.existing_from_df(
+                aging_assets_df_dict, model_engine=model, econs=esg_master, fund_id=key)
+            for key in mc_units.keys()
         }
 
         # --- (3) calculate minimum capital for each fund ---
         mc_factor_equity = cross_mc_factor_df.at[date_index, 'mc_factor_equity']
         mc_factor_spread = cross_mc_factor_df.at[date_index, 'mc_factor_spread']
-        for mc_unit in mc_units:
-            name = mc_unit.name
+        for key, mc_unit in mc_units.items():
             # --- (3.0) initialize an MinCapUnderlyingInput instance ---
             mc_underlying_input = MinCapUnderlyingInput()
 
             # --- (3.1) calculate asset mc ---
-            aging_assets_master = aging_assets_master_dict[name]
+            aging_assets_master = aging_assets_master_dict[key]
             # --- (3.1.1) equity risk mc ---
             for asset in aging_assets_master.equity_ls:
                 mc_underlying_input.mc_equity += asset.market_value * mc_factor_equity
@@ -219,7 +220,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
                 mc_underlying_input.mc_spread += asset.market_value * mc_factor_spread
 
             # --- (3.2) collect liability mc input ---
-            mc_underlying_input.add_from_epl(epl=epl, liab_ls=liabs_dict.get(name, None) or [], date_col=str(date_index))
+            mc_underlying_input.add_from_epl(epl=epl, liab_ls=liabs_dict.get(key, None) or [], date_col=str(date_index))
 
             # --- (3.3) calculate minimum capital ---
             mc_unit.calculate(

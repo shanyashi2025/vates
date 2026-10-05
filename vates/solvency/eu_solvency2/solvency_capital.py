@@ -46,55 +46,51 @@ def _counterparty_default_risk_agg(type_1: float, type_2: float) -> float:
     return math.sqrt(type_1 ** 2 + 1.5 * type_1 * type_2 + type_2 ** 2)
 
 
-def make_solvency2_scr_module(name: str = "Solvency II", /, submodule: str | None = None, is_zeroize: bool = True
+def make_solvency2_scr_module(*, submodule: str | None = None, is_zeroize: bool = True
                               ) -> RiskTree:
-    tree = RiskTree(name=name, root=RiskNode("Solvency II"))
+    tree = RiskTree(root="Solvency II SCR")
 
     # (root)
-    node = tree.root
-    node.attach_sub_risk(RiskNode("Market"), RiskNode("Counterparty Default"), RiskNode("Life"),
-                         RiskNode("Health"), RiskNode("Non-life"), RiskNode("Intangibles"))
-    node.set_agg_func(_scr_agg)
+    tree.root.add_sub_risk(
+        "Market", "Counterparty Default", "Life", "Health", "Non-life", "Intangibles", agg_func=_scr_agg)
 
     # Non-life
-    node = tree.get_node("Non-life")
-    node.attach_sub_risk(RiskNode("Premium & Reserve", identifier="premium_reserve"),
-                         RiskNode("Catastrophe"), RiskNode("Lapse"))
-    node.set_agg_func(_nonlife_risk_agg)
+    tree.get_node("Non-life").add_sub_risk("Premium Reserve", "Catastrophe", "Lapse", agg_func=_nonlife_risk_agg)
 
     # Life
-    node = tree.get_node("Life")
-    node.attach_sub_risk(RiskNode("Mortality"), RiskNode("Longevity"), RiskNode("Disability"), RiskNode("Expense"),
-                         RiskNode("Revision"), RiskNode("Lapse"), RiskNode("Catastrophe"))
-    node.set_agg_func(_life_risk_agg)
+    tree.get_node("Life").add_sub_risk(
+        "Mortality", "Longevity", "Disability", "Expense", "Revision", "Lapse", "Catastrophe",
+        agg_func=_life_risk_agg)
 
     # Life/Lapse
-    node = tree.get_node("Life/Lapse")
-    node.attach_sub_risk(RiskNode("Increase"), RiskNode("Decrease"), RiskNode("Mass"))
-    node.set_agg_func(lambda increase, decrease, mass: max(increase, decrease, mass, 0.0))
+    tree.get_node("Life/Lapse").add_sub_risk(
+        "Increase", "Decrease", "Mass", agg_func=lambda increase, decrease, mass: max(increase, decrease, mass, 0.0))
 
     # Health
-    node = tree.get_node("Health")
-    node.attach_sub_risk(RiskNode("NSLT"), RiskNode("SLT"), RiskNode("Catastrophe"))
-    node.set_agg_func(_health_risk_agg)
+    tree.get_node("Health").add_sub_risk("NSLT", "SLT", "Catastrophe", agg_func=_health_risk_agg)
 
     # Health/SLT
-    node = tree.get_node("Health/SLT")
-    node.attach_sub_risk(RiskNode("Mortality"), RiskNode("Longevity"), RiskNode("Disability-Morbidity"),
-                         RiskNode("Expense"), RiskNode("Revision"), RiskNode("Lapse"))
-    node.set_agg_func(_slth_risk_agg)
+    tree.get_node("Health/SLT").add_sub_risk(
+        "Mortality", "Longevity", "Disability-Morbidity", "Expense", "Revision", "Lapse", agg_func=_slth_risk_agg)
+
+    # Health/SLT/Disability-Morbidity
+    tree.get_node("Health/SLT/Disability-Morbidity").add_sub_risk(
+        "Medical Payment Increase", "Medical Payment Decrease", "Income Protection",
+        agg_func=lambda medical_payment_increase, medical_payment_decrease, income_protection: max(
+            medical_payment_increase, medical_payment_decrease) + income_protection)
+
+    # Health/SLT/Lapse
+    tree.get_node("Health/SLT/Lapse").add_sub_risk(
+        "Increase", "Decrease", "Mass", agg_func=lambda increase, decrease, mass: max(increase, decrease, mass, 0.0))
 
     # Market
-    node = tree.get_node("Market")
-    node.attach_sub_risk(RiskNode("Interest Rate Increase"), RiskNode("Interest Rate Decrease"), RiskNode("Equity"),
-                         RiskNode("Property", identifier="property_"), RiskNode("Spread"),
-                         RiskNode("Concentration"), RiskNode("Currency"))
-    node.set_agg_func(_market_risk_agg)
+    tree.get_node("Market").add_sub_risk(
+        "Interest Rate Increase", "Interest Rate Decrease", "Equity",
+        RiskNode("Property", identifier="property_"), "Spread", "Concentration", "Currency",
+        agg_func=_market_risk_agg)
 
     # Counterparty Default
-    node = tree.get_node("Counterparty Default")
-    node.attach_sub_risk(RiskNode("Type 1"), RiskNode("Type 2"))
-    node.set_agg_func(_counterparty_default_risk_agg)
+    tree.get_node("Counterparty Default").add_sub_risk("Type 1", "Type 2", agg_func=_counterparty_default_risk_agg)
 
     if is_zeroize:
         tree.zeroize()
@@ -102,4 +98,4 @@ def make_solvency2_scr_module(name: str = "Solvency II", /, submodule: str | Non
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule, name=name).deepcopy()
+        return tree.get_subtree(submodule).deepcopy()

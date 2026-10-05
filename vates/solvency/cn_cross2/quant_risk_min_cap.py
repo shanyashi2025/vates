@@ -4,7 +4,7 @@ from functools import partial
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.utils import maybe_raise_if_ne
-from vates.solvency.risk_tree import RiskNode, RiskTree, risk_aggregation
+from vates.solvency.risk_tree import  RiskTree, risk_aggregation
 from vates.solvency.cn_cross2.rules import (
     MC_CORR_MATRIX,
     MORB_MC_CORR_MATRIX,
@@ -22,16 +22,16 @@ def _overall_risk_agg(life: float, non_life: float, market: float, credit: float
 def _life_risk_agg(loss: float, expense: float, lapse: float) -> float:
     return risk_aggregation(loss, expense, lapse, corr_matrix=LIFE_MC_CORR_MATRIX)
 
-def _loss_risk_agg(mortality: float, catastrophe: float, longevity: float, morbidity: float, health: float,
-                   other_loss: float) -> float:
-    return risk_aggregation(mortality, catastrophe, longevity, morbidity, health, other_loss,
+def _loss_risk_agg(mortality: float, catastrophe: float, longevity: float, morbidity: float, health: float, other: float
+                   ) -> float:
+    return risk_aggregation(mortality, catastrophe, longevity, morbidity, health, other,
                             corr_matrix=LOSS_MC_CORR_MATRIX)
 
 def _nonlife_risk_agg(premium_reserve: float, catastrophe: float, k: float):
     return math.sqrt(premium_reserve ** 2 + 2 * 0.25 * premium_reserve * catastrophe + catastrophe ** 2) * k
 
-def _morb_risk_agg(morb_incidence: float, morb_trend: float) -> float:
-    return risk_aggregation(morb_incidence, morb_trend, corr_matrix=MORB_MC_CORR_MATRIX)
+def _morb_risk_agg(incidence: float, trend: float) -> float:
+    return risk_aggregation(incidence, trend, corr_matrix=MORB_MC_CORR_MATRIX)
 
 def _market_risk_agg(interest_rate: float, equity: float, real_estate: float, overseas_fixed_income: float,
                      overseas_equity: float, exchange_rate: float) -> float:
@@ -41,62 +41,44 @@ def _market_risk_agg(interest_rate: float, equity: float, real_estate: float, ov
 def _credit_risk_agg(spread: float, counterparty_default: float) -> float:
     return risk_aggregation(spread, counterparty_default, corr_matrix=CREDIT_MC_CORR_MATRIX)
 
-def make_cross2_risk_module(name: str = "C-ROSS", /, submodule: str | None = None, is_zeroize: bool = True,
-                            nonlife_mc_k: float = 1.0) -> RiskTree:
-    tree = RiskTree(name=name, root=RiskNode("C-ROSS"))
+def make_cross2_mc_module(*, submodule: str | None = None, is_zeroize: bool = True,
+                          nonlife_mc_k: float = 1.0) -> RiskTree:
+    tree = RiskTree(root="C-ROSS MC")
 
     # (root)
-    node = tree.root
-    node.attach_sub_risk(RiskNode("Life"), RiskNode("Non-life"), RiskNode("Market"), RiskNode("Credit"))
-    node.set_agg_func(_overall_risk_agg)
+    tree.root.add_sub_risk("Life", "Non-life", "Market", "Credit", agg_func=_overall_risk_agg)
 
     # Life
-    node = tree.get_node("Life")
-    node.attach_sub_risk(RiskNode("Loss"), RiskNode("Expense"), RiskNode("Lapse"))
-    node.set_agg_func(_life_risk_agg)
+    tree.get_node("Life").add_sub_risk("Loss", "Expense", "Lapse", agg_func=_life_risk_agg)
 
     # Life/Loss
-    node = tree.get_node("Life/Loss")
-    node.attach_sub_risk(RiskNode("Mortality"), RiskNode("Catastrophe"), RiskNode("Longevity"),
-                         RiskNode("Morbidity"), RiskNode("Health & Medical", identifier="health"),
-                         RiskNode("Other", identifier="other_loss"))
-    node.set_agg_func(_loss_risk_agg)
+    tree.get_node("Life/Loss").add_sub_risk(
+        "Mortality", "Catastrophe", "Longevity", "Morbidity", "Health", "Other", agg_func=_loss_risk_agg)
 
     # Life/Loss/Morbidity
-    node = tree.get_node("Life/Loss/Morbidity")
-    node.attach_sub_risk(RiskNode("Incidence", identifier="morb_incidence"), RiskNode("Trend", identifier="morb_trend"))
-    node.set_agg_func(_morb_risk_agg)
+    tree.get_node("Life/Loss/Morbidity").add_sub_risk("Incidence", "Trend", agg_func=_morb_risk_agg)
 
     # Life/Lapse
-    node = tree.get_node("Life/Lapse")
-    node.attach_sub_risk(RiskNode("Lapse Rate"), RiskNode("Mass Lapse"))
-    node.set_agg_func(lambda lapse_rate, mass_lapse: max(lapse_rate, mass_lapse, 0))
-
-    # Life/Lapse/Lapse Rate
-    node = tree.get_node("Life/Lapse/Lapse Rate")
-    node.attach_sub_risk(RiskNode("Lapse_Up"), RiskNode("Lapse_Down"))
-    node.set_agg_func(lambda lapse_up, lapse_down: max(lapse_up, lapse_down, 0))
+    tree.get_node("Life/Lapse").add_sub_risk(
+        "Lapse Up", "Lapse Down", "Mass Lapse",
+        agg_func=lambda lapse_up, lapse_down, mass_lapse: max(lapse_up, lapse_down, mass_lapse, 0.0))
 
     # Non-Life
-    node = tree.get_node("Non-life")
-    node.attach_sub_risk(RiskNode("Premium & Reserve", identifier="premium_reserve"), RiskNode("Catastrophe"))
-    node.set_agg_func(partial(_nonlife_risk_agg, k=nonlife_mc_k))
+    tree.get_node("Non-life").add_sub_risk(
+        "Premium Reserve", "Catastrophe", agg_func=partial(_nonlife_risk_agg, k=nonlife_mc_k))
 
     # Market
-    node = tree.get_node("Market")
-    node.attach_sub_risk(RiskNode("Interest Rate"), RiskNode("Equity"), RiskNode("Real Estate"),
-                         RiskNode("Overseas Fixed-income"), RiskNode("Overseas Equity"), RiskNode("Exchange Rate"))
-    node.set_agg_func(_market_risk_agg)
+    tree.get_node("Market").add_sub_risk(
+        "Interest Rate", "Equity", "Real Estate", "Overseas Fixed-income", "Overseas Equity", "Exchange Rate",
+        agg_func=_market_risk_agg)
 
     # Market/Interest Rate
-    node = tree.get_node("Market/Interest Rate")
-    node.attach_sub_risk(RiskNode("Interest Rate Up"), RiskNode("Interest Rate Down"))
-    node.set_agg_func(lambda interest_rate_up, interest_rate_down: max(interest_rate_up, interest_rate_down, 0))
+    tree.get_node("Market/Interest Rate").add_sub_risk(
+        "Interest Rate Up", "Interest Rate Down",
+        agg_func=lambda interest_rate_up, interest_rate_down: max(interest_rate_up, interest_rate_down, 0.0))
 
     # Credit
-    node = tree.get_node("Credit")
-    node.attach_sub_risk(RiskNode("Spread"), RiskNode("Counterparty Default"))
-    node.set_agg_func(_credit_risk_agg)
+    tree.get_node("Credit").add_sub_risk("Spread", "Counterparty Default", agg_func=_credit_risk_agg)
 
     if is_zeroize:
         tree.zeroize()
@@ -104,7 +86,7 @@ def make_cross2_risk_module(name: str = "C-ROSS", /, submodule: str | None = Non
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule, name=name).deepcopy()
+        return tree.get_subtree(submodule).deepcopy()
 
 
 @time_synchronized
@@ -114,21 +96,20 @@ class MinCapUnit:
     
     def __init__(
         self,
-        name: str,
         *,
         model_engine: ProjModelEngine = None,
         risk_module: RiskTree | None = None,
         require_loss_absorbency: bool,
+        tdv_owner: str,
     ):
-        self.name: str = name
         self.require_loss_absorbency: bool = require_loss_absorbency
-        self._risk_module: RiskTree = risk_module or make_cross2_risk_module(name)
+        self._risk_module: RiskTree = risk_module or make_cross2_mc_module()
         self._la_pv_base: float = 0.0
         self._la_pv_lower_limit = 0.0
         self._loss_absorbency: float = 0.0
         self._last_calculate: int | None = None
 
-        create_tdv = lambda varname: TDimVariable(varname, model_engine=model_engine, owner=name, group='CROSS_MC')
+        create_tdv = lambda varname: TDimVariable(varname, model_engine=model_engine, owner=tdv_owner, group='CROSS_MC')
         self.tdv_min_cap: TDimVariable = create_tdv("minimum_capital")
         self.tdv_life_mc: TDimVariable = create_tdv("life_mc")
         self.tdv_nonlife_mc: TDimVariable = create_tdv("nonlife_mc")
@@ -202,21 +183,19 @@ class MinCapConsolidator:
     
     def __init__(
         self,
-        name: str,
         *,
         model_engine: ProjModelEngine = None,
         min_cap_units: list[MinCapUnit] | tuple[MinCapUnit],
         consolidated_risk_module: RiskTree | None = None,
+        tdv_owner: str,
     ):
-        self.name: str = name
         self._units: tuple[MinCapUnit] = tuple(min_cap_units)
-        self._risk_module: RiskTree = consolidated_risk_module or make_cross2_risk_module(self.name)
-        self._validate_risk_module_structure()
+        self._risk_module: RiskTree = consolidated_risk_module or make_cross2_mc_module()
         self._loss_absorbency: float = 0.0
         self._min_cap: float = 0.0
         self._last_calculate: int | None = None
 
-        create_tdv = lambda varname: TDimVariable(varname, model_engine=model_engine, owner=name, group='CROSS_MC')
+        create_tdv = lambda varname: TDimVariable(varname, model_engine=model_engine, owner=tdv_owner, group='CROSS_MC')
         self.tdv_min_cap: TDimVariable = create_tdv("minimum_capital")
         self.tdv_life_mc: TDimVariable = create_tdv("life_mc")
         self.tdv_nonlife_mc: TDimVariable = create_tdv("nonlife_mc")
@@ -224,15 +203,6 @@ class MinCapConsolidator:
         self.tdv_credit_mc: TDimVariable = create_tdv("credit_mc")
         self.tdv_divers: TDimVariable = create_tdv("diversification")
         self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
-
-    def _validate_risk_module_structure(self) -> None:
-        if len(self._units) == 0:
-            raise ValueError(f"Nothing to consolidate.")
-        ref_path_set: set[str] = set([node.path for node in self._risk_module.list_nodes()])
-        for item in self._units:
-            path_set = set([node.path for node in item.risk_module.list_nodes()])
-            if len(path_set - ref_path_set) > 0:
-                raise ValueError(f"Can't consolidate '{item.risk_module.name}': structures are differenct.")
 
     def consolidate(self) -> None:
         for node in self._risk_module.list_leaf_nodes():
@@ -255,7 +225,7 @@ class MinCapConsolidator:
         if len(units) == 0:
             return 0.0
 
-        la_risk_module = make_cross2_risk_module()
+        la_risk_module = make_cross2_mc_module()
         for node in (la_risk_module.get_subtree("Market").list_leaf_nodes() +
                      la_risk_module.get_subtree("Credit").list_leaf_nodes()):
             node.set_risk_capital(sum(unit.get_risk_capital(node.path) for unit in units))
