@@ -86,16 +86,10 @@ class RiskNode:
 
     @property
     def descendants(self) -> list[Self]:
-        return self.preorder_traversal()[1:]  # slicing [1:] can handle when len(ls) == 1
-
-    @property
-    def leaves(self) -> list[Self]:
         nodes = []
         for c in self._children:
-            if c.is_leaf:
-                nodes.append(c)
-            else:
-                nodes.extend(c.leaves)
+            nodes.append(c)
+            nodes.extend(c.descendants)
         return nodes
 
     @property
@@ -137,16 +131,18 @@ class RiskNode:
         self._agg_func = func
 
     def set_risk_capital(self, value: float | None = None, /) -> None:
-        if self.is_leaf:
-            if not isinstance(value, (float, int)):
-                raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
-            self._risk_capital = value
-        else:
-            if value is not None:
-                warnings.warn(f"{self._name}: non-leaf node rejects set value for risk capital; reset to 'None' only.")
-            self._risk_capital = None  # lazy evaluation: reset only, will calculate when property `risk_capital` is called
+        if not self.is_leaf:
+            raise ValueError(f"{self._name}: non-leaf node rejects set value for risk capital.")
+        if not isinstance(value, (float, int)):
+            raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
+        self._risk_capital = value
         if self._parent is not None:
-            self._parent.set_risk_capital()  # cascade
+            self._parent.clr_risk_capital()  # cascade
+
+    def clr_risk_capital(self) -> None:
+        self._risk_capital = None
+        if self._parent is not None:
+            self._parent.clr_risk_capital()  # cascade
 
     def aggregate(self) -> None:
         if self.is_leaf:
@@ -190,14 +186,9 @@ class RiskNode:
         return "".join([(c if c in allowed else "_") for c in chars])
 
     def zeroize(self) -> None:
-        for node in self.leaves:
-            node.set_risk_capital(0.0)
-
-    def preorder_traversal(self) -> list[Self]:
-        nodes = [self]
-        for c in self._children:
-            nodes.extend(c.preorder_traversal())
-        return nodes
+        for node in self.descendants:
+            if node.is_leaf:
+                node.set_risk_capital(0.0)
 
     def deepcopy(self, *, with_value: bool = True) -> Self:
         copied_node = RiskNode(self._name, identifier=self._identifier)
@@ -208,8 +199,9 @@ class RiskNode:
             copied_desc.set_agg_func(desc._agg_func)
             copied_node.get_node(desc._parent.path[_path_slice_start:]).attach_sub_risk(copied_desc)
         if with_value:
-            for node in copied_node.leaves:
-                node.set_risk_capital(self.get_node(node.path)._risk_capital)
+            for node in copied_node.descendants:
+                if node.is_leaf:
+                    node.set_risk_capital(self.get_node(node.path)._risk_capital)
         return copied_node
 
 
@@ -237,7 +229,7 @@ class RiskTree:
 
     @property
     def n_nodes(self) -> int:
-        return len(self.preorder_traversal())
+        return len(self.list_nodes())
 
     @property
     def n_leaf_nodes(self) -> int:
@@ -259,10 +251,10 @@ class RiskTree:
         return RiskTree(self._root.get_node(path), name)
 
     def list_nodes(self) -> list[RiskNode]:
-        return self.preorder_traversal()
+        return self._preorder(self._root)
 
     def list_leaf_nodes(self) -> list[RiskNode]:
-        return self._root.leaves
+        return [node for node in self.list_nodes() if node.is_leaf]
 
     def set_risk_capital(self, path: str, /, value: float) -> None:
         self._root.get_node(path).set_risk_capital(value)
@@ -289,15 +281,22 @@ class RiskTree:
     def zeroize(self) -> None:
         self._root.zeroize()
 
+    @classmethod
+    def _preorder(cls, node: RiskNode) -> list[RiskNode]:
+        nodes = [node]
+        for c in node.children:
+            nodes.extend(cls._preorder(c))
+        return nodes
+
     def preorder_traversal(self) -> list[RiskNode]:
-        return self._root.preorder_traversal()
+        return self._preorder(self._root)
 
     def deepcopy(self, *, with_value: bool = True) -> Self:
         return RiskTree(root=self._root.deepcopy(with_value=with_value), name=self.name)
 
     def display(self, *, width: int = 80, precision: int = 2) -> None:
         root_depth = self._root.depth
-        for node in self._root.preorder_traversal():
+        for node in self._preorder(self._root):
             prefixed_name = f"{'    ' * (node.depth - root_depth)}{node.name}"
             try:
                 val = node.risk_capital

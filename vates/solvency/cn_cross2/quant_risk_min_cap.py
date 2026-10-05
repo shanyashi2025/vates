@@ -217,9 +217,9 @@ class MinCapConsolidator:
     def _validate_risk_module_structure(self) -> None:
         if len(self._units) == 0:
             raise ValueError(f"Nothing to consolidate.")
-        ref_path_set: set[str] = set([node.path for node in self._risk_module.preorder_traversal()])
+        ref_path_set: set[str] = set([node.path for node in self._risk_module.list_nodes()])
         for item in self._units:
-            path_set = set([node.path for node in item.risk_module.preorder_traversal()])
+            path_set = set([node.path for node in item.risk_module.list_nodes()])
             if len(path_set - ref_path_set) > 0:
                 raise ValueError(f"Can't consolidate '{item.risk_module.name}': structures are differenct.")
 
