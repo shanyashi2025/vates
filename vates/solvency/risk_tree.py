@@ -46,12 +46,6 @@ class RiskNode:
         return self._risk_capital
 
     @property
-    def risk_diversification(self) -> float:
-        if self.is_leaf:
-            return 0.0
-        return sum([c.risk_capital for c in self._children]) - self.risk_capital
-
-    @property
     def root(self) -> Self:
         node = self
         while (parent:= node._parent) is not None:
@@ -73,18 +67,14 @@ class RiskNode:
         return [x for x in self._parent._children if x is not self]
 
     @property
-    def _parts(self) -> tuple[str, ...]:
-        names = []
-        node = self
+    def ancestors(self) -> list[Self]:
+        nodes = []
+        node = self._parent
         while node is not None:
-            names.append(node._name)
+            nodes.append(node)
             node = node._parent
-        names.reverse()
-        return tuple(names)  # (root, .., self)
-
-    @property
-    def ancestors(self) -> tuple[str, ...]:
-        return self._parts[:-1]
+        nodes.reverse()
+        return nodes  # (root, .., parent)
 
     @property
     def descendants(self) -> list[Self]:
@@ -104,11 +94,17 @@ class RiskNode:
 
     @property
     def depth(self) -> int:
-        return len(self._parts) - 1
+        return len(self.ancestors)
 
     @property
     def path(self) -> str:
-        return "/".join(self._parts[1:])
+        names = []
+        node = self
+        while node is not None:
+            names.append(node._name)
+            node = node._parent
+        names.reverse()
+        return "/".join(names[1:])
 
     def add_sub_risk(self, *args: Self | str, agg_func = None) -> None:
         for arg in args:
@@ -204,9 +200,6 @@ class RiskNode:
                     node.set_risk_capital(self.goto(node.path)._risk_capital)
         return copied_node
 
-    def __str__(self) -> str:
-        return f"<RiskNode '{self._name}'> ({'/'.join(self._parts)})"
-
 
 class RiskTree:
 
@@ -241,7 +234,10 @@ class RiskTree:
         return self._root.goto(path).risk_capital
 
     def get_risk_diversification(self, path: str | None = None, /) -> float:
-        return self._root.goto(path).risk_diversification
+        node = self._root.goto(path)
+        if node.is_leaf:
+            return 0.0
+        return sum([c.risk_capital for c in node.children]) - node.risk_capital
 
     def get_node(self, path: str, /) -> RiskNode:
         return self._root.goto(path)
