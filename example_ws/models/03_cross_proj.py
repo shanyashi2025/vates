@@ -35,7 +35,8 @@ class MinCapUnderlyingInput:
     aa_int_base: float = 0.0
     aa_int_up: float = 0.0
     aa_int_dn: float = 0.0
-    mc_non_life: float = 0.0
+    mc_non_life_prem_reserve: float = 0.0
+    mc_non_life_catastrophe: float = 0.0
     mc_equity: float = 0.0
     mc_real_estate: float = 0.0
     mc_overseas_fixed_income: float = 0.0
@@ -44,7 +45,7 @@ class MinCapUnderlyingInput:
     mc_spread: float = 0.0
     mc_counterparty_default: float = 0.0
 
-    def calculate_risk_capital(self) -> dict[str, float]:
+    def calculate_risk_capital(self) -> dict[str, float | dict]:
         return {
             "Life": {
                 "Loss": {
@@ -63,7 +64,10 @@ class MinCapUnderlyingInput:
                     "Mass Lapse": self.pv_lapse_mass - self.pv_base,
                 },
             },
-            "Non-life": self.mc_non_life,
+            "Non-life": {
+                "Premium & Reserve": self.mc_non_life_prem_reserve,
+                "Catastrophe": self.mc_non_life_catastrophe,
+            },
             "Market": {
                 "Interest Rate/Interest Rate Up": (self.pv_int_up - self.aa_int_up) - (
                         self.pv_int_base - self.aa_int_base),

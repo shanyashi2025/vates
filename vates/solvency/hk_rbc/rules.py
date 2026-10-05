@@ -1,7 +1,6 @@
-import math
-import warnings
 import numpy as np
 
+# Insurance (Valuation and Capital) Rules (Cap. 41 sub. leg. R)
 
 # --- Schedule 7 ---
 
@@ -29,40 +28,38 @@ CORR_MATRIX_MOCE = np.array([
 # (2) life insurance
 # (3) general insurance
 # (4) counterparty default and other
-CORR_MATRIX_PCA = np.array([
+CORR_MATRIX_PCR = np.array([
     [1.00, 0.25, 0.25, 0.25],
     [0.25, 1.00, 0.00, 0.25],
     [0.25, 0.00, 1.00, 0.25],
     [0.25, 0.25, 0.25, 1.00]
 ])
 
-# Table 3A - Correlation Matrix for Market Risk—Interest Rate Upward
+# Table 3A/3B - Correlation Matrix for Market Risk—Interest Rate
 # (1) interest rate
 # (2) credit spread
 # (3) equity
 # (4) property
 # (5) currency
-CORR_MATRIX_MARKET_IR_UP = np.array([
-    [1.00, 0.00, 0.00, 0.00, 0.25],
-    [0.00, 1.00, 0.75, 0.50, 0.25],
-    [0.00, 0.75, 1.00, 0.50, 0.25],
-    [0.00, 0.50, 0.50, 1.00, 0.25],
-    [0.25, 0.25, 0.25, 0.25, 1.00]
-])
-
-# Table 3B - Correlation Matrix for Market Risk—Interest Rate Downward
-# (1) interest rate
-# (2) credit spread
-# (3) equity
-# (4) property
-# (5) currency
-CORR_MATRIX_MARKET_IR_DOWN = np.array([
-    [1.00, 0.50, 0.50, 0.25, 0.25],
-    [0.50, 1.00, 0.75, 0.50, 0.25],
-    [0.50, 0.75, 1.00, 0.50, 0.25],
-    [0.25, 0.50, 0.50, 1.00, 0.25],
-    [0.25, 0.25, 0.25, 0.25, 1.00]
-])
+def CORR_MATRIX_MARKET(which_interest_rate_risk_bites: str) -> np.ndarray:
+    if which_interest_rate_risk_bites.lower() in ("increase", "upward", "up"):
+        return np.array([
+            [1.00, 0.00, 0.00, 0.00, 0.25],
+            [0.00, 1.00, 0.75, 0.50, 0.25],
+            [0.00, 0.75, 1.00, 0.50, 0.25],
+            [0.00, 0.50, 0.50, 1.00, 0.25],
+            [0.25, 0.25, 0.25, 0.25, 1.00]
+        ])
+    elif which_interest_rate_risk_bites.lower() in ("decrease", "downward", "down"):
+        return np.array([
+            [1.00, 0.50, 0.50, 0.25, 0.25],
+            [0.50, 1.00, 0.75, 0.50, 0.25],
+            [0.50, 0.75, 1.00, 0.50, 0.25],
+            [0.25, 0.50, 0.50, 1.00, 0.25],
+            [0.25, 0.25, 0.25, 0.25, 1.00]
+        ])
+    else:
+        raise ValueError(f"Undefined {which_interest_rate_risk_bites=}.")
 
 # Table 4 - Correlation Matrix for Life Insurance Risk
 # (1) mortality
@@ -104,42 +101,3 @@ CORR_MATRIX_GI_RESPREM = np.array([
     [1.00, 0.50],
     [0.50, 1.00]
 ])
-
-# Table 8 - Correlation Matrix for Reserve and Premium Risk—General Insurance Lines of Business
-# pass
-
-# Table 9 - Correlation Matrix for Catastrophe Risk
-# (1) natural catastrophe
-# (2) man-made non-systemic catastrophe
-# (3) man-made systemic catastrophe
-CORR_MATRIX_GI_CAT = np.array([
-    [1.00, 0.00, 0.00],
-    [0.00, 1.00, 0.00],
-    [0.00, 0.00, 1.00],
-])
-
-
-# Table 10 - Correlation Matrix for Net Loss for Windstorm for Natural Catastrophe Risk
-# pass
-
-# Table 11 - Correlation Matrix for Net Loss for Earthquake for Natural Catastrophe Risk
-# pass
-
-# Table 12 - Correlation Matrix for Mortgage Insurance Risk
-# (1) onshore mortgage insurance
-# (2) offshore mortgage insurance
-CORR_MATRIX_GI_MI = np.array([
-    [1.00, 0.75],
-    [0.75, 1.00]
-])
-
-
-# Table 13 - Correlation Matrix for Onshore Standard Mortgage Insurance
-# pass
-
-# Table 14 - Correlation Matrix for Offshore Mortgage Insurance
-# pass
-
-# Table 15 - Correlation Matrix for Reserve and Premium Risk for Offshore Mortgage Insurance
-# pass
-

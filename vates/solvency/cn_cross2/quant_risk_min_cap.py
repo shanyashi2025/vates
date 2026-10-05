@@ -1,4 +1,6 @@
+import math
 import pandas as pd
+from functools import partial
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.utils import maybe_raise_if_ne
@@ -25,6 +27,9 @@ def _loss_risk_agg(mortality: float, catastrophe: float, longevity: float, morbi
     return risk_aggregation(mortality, catastrophe, longevity, morbidity, health, other_loss,
                             corr_matrix=LOSS_MC_CORR_MATRIX)
 
+def _nonlife_risk_agg(premium_reserve: float, catastrophe: float, k: float):
+    return math.sqrt(premium_reserve ** 2 + 2 * 0.25 * premium_reserve * catastrophe + catastrophe ** 2) * k
+
 def _morb_risk_agg(morb_incidence: float, morb_trend: float) -> float:
     return risk_aggregation(morb_incidence, morb_trend, corr_matrix=MORB_MC_CORR_MATRIX)
 
@@ -36,7 +41,8 @@ def _market_risk_agg(interest_rate: float, equity: float, real_estate: float, ov
 def _credit_risk_agg(spread: float, counterparty_default: float) -> float:
     return risk_aggregation(spread, counterparty_default, corr_matrix=CREDIT_MC_CORR_MATRIX)
 
-def make_cross2_risk_module(name: str = "C-ROSS", /, subtree: str | None = None, is_zeroize: bool = True) -> RiskTree:
+def make_cross2_risk_module(name: str = "C-ROSS", /, submodule: str | None = None, is_zeroize: bool = True,
+                            nonlife_mc_k: float = 1.0) -> RiskTree:
     tree = RiskTree(name=name, root=RiskNode("C-ROSS"))
 
     # (root)
@@ -71,6 +77,11 @@ def make_cross2_risk_module(name: str = "C-ROSS", /, subtree: str | None = None,
     node.attach_sub_risk(RiskNode("Lapse_Up"), RiskNode("Lapse_Down"))
     node.set_agg_func(lambda lapse_up, lapse_down: max(lapse_up, lapse_down, 0))
 
+    # Non-Life
+    node = tree.get_node("Non-life")
+    node.attach_sub_risk(RiskNode("Premium & Reserve", identifier="premium_reserve"), RiskNode("Catastrophe"))
+    node.set_agg_func(partial(_nonlife_risk_agg, k=nonlife_mc_k))
+
     # Market
     node = tree.get_node("Market")
     node.attach_sub_risk(RiskNode("Interest Rate"), RiskNode("Equity"), RiskNode("Real Estate"),
@@ -90,10 +101,10 @@ def make_cross2_risk_module(name: str = "C-ROSS", /, subtree: str | None = None,
     if is_zeroize:
         tree.zeroize()
 
-    if subtree is None:
+    if submodule is None:
         return tree
     else:
-        return tree.get_subtree(subtree, name=name).deepcopy()
+        return tree.get_subtree(submodule, name=name).deepcopy()
 
 
 @time_synchronized

@@ -181,7 +181,7 @@ class RiskNode:
 
     @classmethod
     def _normalize_identifier(cls, /, chars: str) -> str:
-        chars = chars.lower().replace(" ", "_").replace("-", "_")
+        chars = chars.lower()
         allowed = [chr(c) for c in range(97, 123)] + [chr(c) for c in range(48, 58)] + ["_"]
         return "".join([(c if c in allowed else "_") for c in chars])
 
@@ -295,6 +295,7 @@ class RiskTree:
         return RiskTree(root=self._root.deepcopy(with_value=with_value), name=self.name)
 
     def display(self, *, width: int = 80, precision: int = 2) -> None:
+        print(f"<RiskTree> '{self.name}':")
         root_depth = self._root.depth
         for node in self._preorder(self._root):
             prefixed_name = f"{'    ' * (node.depth - root_depth)}{node.name}"
@@ -307,6 +308,6 @@ class RiskTree:
 
     def __str__(self) -> str:
         try:
-            return f"RiskTree '{self.name}' (risk_capital={self._root.risk_capital:,.2f})"
+            return f"<RiskTree> '{self.name}' (risk_capital={self._root.risk_capital:,.2f})"
         except ValueError:
-            return f"RiskTree '{self.name}'"
+            return f"<RiskTree> '{self.name}'"
