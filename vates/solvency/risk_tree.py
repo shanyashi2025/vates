@@ -152,7 +152,7 @@ class RiskNode:
         kwargs = {c._identifier: c.risk_capital for c in self._children}
         self._risk_capital = self._agg_func(**kwargs)
 
-    def get_node(self, path: str, /) -> Self:
+    def goto(self, path: str, /) -> Self:
         if path is None:
             return self
         if not isinstance(path, str):
@@ -166,18 +166,18 @@ class RiskNode:
             else:
                 node = next((c for c in node._children if c._name == p), None)
             if node is None:
-                raise ValueError(f"{self._name}: can't get node: '{path}'; failed at '{p}'.")
+                raise ValueError(f"{self._name}: can't find node: '{path}'; failed at '{p}'.")
         return node
 
     def __truediv__(self, other: str, /) -> Self:
-        return self.get_node(other)
+        return self.goto(other)
 
     def __str__(self) -> str:
         title = "/".join(self._parts)
         try:
-            return f"RiskNode '{title}' (risk_capital={self.risk_capital:,.2f})"
+            return f"<RiskNode '{title}'> (risk_capital={self.risk_capital:,.2f})"
         except ValueError:
-            return f"RiskNode '{title}'"
+            return f"<RiskNode '{title}'>"
 
     @classmethod
     def _normalize_identifier(cls, /, chars: str) -> str:
@@ -197,11 +197,11 @@ class RiskNode:
         for desc in self.descendants:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             copied_desc.set_agg_func(desc._agg_func)
-            copied_node.get_node(desc._parent.path[_path_slice_start:]).attach_sub_risk(copied_desc)
+            copied_node.goto(desc._parent.path[_path_slice_start:]).attach_sub_risk(copied_desc)
         if with_value:
             for node in copied_node.descendants:
                 if node.is_leaf:
-                    node.set_risk_capital(self.get_node(node.path)._risk_capital)
+                    node.set_risk_capital(self.goto(node.path)._risk_capital)
         return copied_node
 
 
@@ -236,19 +236,19 @@ class RiskTree:
         return len(self.list_leaf_nodes())
 
     def get_risk_capital(self, path: str | None = None, /) -> float:
-        return self._root.get_node(path).risk_capital
+        return self._root.goto(path).risk_capital
 
     def get_risk_diversification(self, path: str | None = None, /) -> float:
-        return self._root.get_node(path).risk_diversification
+        return self._root.goto(path).risk_diversification
 
     def get_node(self, path: str, /) -> RiskNode:
-        return self._root.get_node(path)
+        return self._root.goto(path)
 
     def get_toptree(self, *, name: str | None = None) -> Self:
         return RiskTree(self._root.root, name)
 
     def get_subtree(self, path: str, /, *, name: str | None = None) -> Self:
-        return RiskTree(self._root.get_node(path), name)
+        return RiskTree(self._root.goto(path), name)
 
     def list_nodes(self) -> list[RiskNode]:
         return self._preorder(self._root)
@@ -257,7 +257,7 @@ class RiskTree:
         return [node for node in self.list_nodes() if node.is_leaf]
 
     def set_risk_capital(self, path: str, /, value: float) -> None:
-        self._root.get_node(path).set_risk_capital(value)
+        self._root.goto(path).set_risk_capital(value)
 
     def batch_set_risk_capital(self, value_dict: dict[str, float | dict], /) -> None:
         for path, value in self._flatten_dict(value_dict).items():
@@ -295,7 +295,7 @@ class RiskTree:
         return RiskTree(root=self._root.deepcopy(with_value=with_value), name=self.name)
 
     def display(self, *, width: int = 80, precision: int = 2) -> None:
-        print(f"<RiskTree> '{self.name}':")
+        print(f"<RiskTree '{self.name}'>:")
         root_depth = self._root.depth
         for node in self._preorder(self._root):
             prefixed_name = f"{'    ' * (node.depth - root_depth)}{node.name}"
@@ -308,6 +308,6 @@ class RiskTree:
 
     def __str__(self) -> str:
         try:
-            return f"<RiskTree> '{self.name}' (risk_capital={self._root.risk_capital:,.2f})"
+            return f"<RiskTree '{self.name}'> (risk_capital={self._root.risk_capital:,.2f})"
         except ValueError:
-            return f"<RiskTree> '{self.name}'"
+            return f"<RiskTree '{self.name}'>"
