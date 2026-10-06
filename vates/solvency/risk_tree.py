@@ -76,7 +76,7 @@ def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
         raise ValueError(f"Risk ({risk_vector[0]}) is a single scalar, expected vector.")
     corr_matrix = np.array(corr_matrix)
     if corr_matrix.shape != (n, n):
-        raise ValueError(f'Correclation matrix shape: {corr_matrix.shape}, expected ({n}, {n}).')
+        raise ValueError(f'Correlation matrix shape: {corr_matrix.shape}, expected ({n}, {n}).')
     return math.sqrt(risk_vector @ corr_matrix @ risk_vector.T)
 
 
