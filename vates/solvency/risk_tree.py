@@ -23,7 +23,7 @@ where ``x`` is the vector of child capitals and ``C`` their correlation matrix.
 
 Nodes are addressed by "/"-separated paths relative to the root of their tree,
 where the root itself has the empty path ``""`` and ``"."`` denotes the current
-node::
+node (node names therefore contain neither ``"/"`` nor ``"."``)::
 
     tree = RiskTree(root="C-ROSS MC")
     tree.root.add_sub_risk("Market", agg_func=market_agg)
@@ -50,8 +50,11 @@ def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
         risk_aggregation([market, life, non_life], corr_matrix=CORR_MATRIX_SCR)
 
     The result equals the simple sum of the capitals only when every correlation
-    is 1; otherwise the aggregation is diversified downwards.  At least two risks
-    are required, since the aggregation of a single risk is the identity.
+    is 1; otherwise the aggregation is diversified downwards.  Off-diagonal
+    entries may be negative -- the Solvency II life matrix correlates mortality
+    and longevity at -0.25 -- which lets opposite risks offset each other.  At
+    least two risks are required, since the aggregation of a single risk is the
+    identity.
 
     Args:
         *args: The risk capitals to aggregate, either as separate positional
@@ -63,10 +66,9 @@ def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
         float: The aggregated risk capital.
 
     Raises:
-        ValueError: If no risk is supplied, if the capitals are supplied as a
-            one-element sequence (a single risk cannot be aggregated), if
-            ``corr_matrix`` is not of shape ``(n, n)``, or if the quadratic form
-            is negative (an invalid correlation matrix).
+        ValueError: If fewer than two risks are supplied, if ``corr_matrix`` is
+            not of shape ``(n, n)``, or if the quadratic form is negative (the
+            matrix is not positive semi-definite, so not a correlation matrix).
     """
     if len(args) == 0:
         raise ValueError(f"No risk is provided.")
@@ -90,8 +92,8 @@ class RiskNode:
     :meth:`set_agg_func` and :meth:`aggregate`).
 
     Children are attached with :meth:`add_sub_risk` / :meth:`link_child`.  The
-    name of a node must not contain ``"/"``, which is reserved as the path
-    separator, and must be unique among its siblings.  Every node also carries an
+    name of a node must be unique among its siblings and free of ``"/"`` and
+    ``"."``, which are reserved by the path syntax.  Every node also carries an
     ``identifier``: a lower-case, keyword-friendly version of its name, used as
     the keyword argument name when the parent aggregates (``"Non-life"`` ->
     ``"non_life"``).
@@ -107,19 +109,21 @@ class RiskNode:
     def __init__(self, name: str, /, *, identifier: str | None = None):
         """
         Args:
-            name: Name of the node, unique among its siblings and free of ``"/"``.
+            name: Name of the node, unique among its siblings and free of ``"/"``
+                and ``"."``, which are reserved by the path syntax.
             identifier: Keyword-friendly alias of the node, used as the keyword
                 argument name when its parent aggregates.  Defaults to the
                 normalised ``name``.
 
         Raises:
-            ValueError: If ``name`` contains ``"/"``.
+            ValueError: If ``name`` contains ``"/"`` or ``"."``.
         """
         name = str(name)
-        if "/" in name:
-            raise ValueError(f"Invalid {name=}: contains '/'.")
+        for bad in ("/", "."):
+            if bad in name:
+                raise ValueError(f"Invalid {name=}: contains '{bad}'.")
         self._name: str = name
-        self._identifier: str = self._normalize_identifier(identifier or name)
+        self._identifier: str = self._normalize_identifier(identifier or self._name)
         self._risk_capital: float | None = None
         self._parent: RiskNode | None = None
         self._children: list[RiskNode] = []
@@ -232,6 +236,10 @@ class RiskNode:
         """
         Attach one or more sub-risks below this node.
 
+        The arguments are validated as a whole before anything is attached: if any
+        of them is rejected, neither the children nor the aggregation function of
+        this node change.
+
         Args:
             *args: The children to attach, given either as existing
                 :class:`RiskNode` objects or as names from which new nodes are
@@ -245,15 +253,47 @@ class RiskNode:
                 child already has a parent, is a root, or duplicates an existing
                 child by object, name or identifier.
         """
-        if agg_func is not None:
-            self.set_agg_func(agg_func)
+        staged = []
         for arg in args:
             if isinstance(arg, RiskNode):
-                self.link_child(arg)
+                self._stage_child(arg, staged)
             elif isinstance(arg, str):
-                self.link_child(RiskNode(arg))
+                self._stage_child(RiskNode(arg), staged)
             else:
                 raise TypeError(f"Invalid {type(arg)=}, expected ('RiskNode', 'str').")
+        if agg_func is not None:
+            self.set_agg_func(agg_func)
+        for node in staged:
+            self.link_child(node)
+
+    def _stage_child(self, node: Self, /, staged: list[Self]) -> None:
+        """
+        Validate ``node`` as a new child of this node and append it to ``staged``.
+
+        The conditions are those of :meth:`link_child`, extended to the children
+        already staged by the same :meth:`add_sub_risk` call, so that a whole call
+        can be validated -- and abandoned -- before anything is linked.
+
+        Args:
+            node: The candidate child.
+            staged: The children accepted so far in the current call, appended to
+                in place.
+
+        Raises:
+            ValueError: If ``node`` cannot become a child of this node.
+        """
+        children = self._children + staged
+        if node._parent is not None:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: has parent '{node._parent._name}'.")
+        if node is self.root:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: is root.")
+        if node in children:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate object.")
+        if node._name in [c._name for c in children]:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate name.")
+        if node._identifier in [c._identifier for c in children]:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate identifier.")
+        staged.append(node)
 
     def link_child(self, node: Self, /) -> None:
         """
@@ -367,9 +407,10 @@ class RiskNode:
         Resolve a relative path and return the node it denotes.
 
         Components are separated by ``"/"``: ``""`` and ``"."`` stay on the
-        current node, and any other component matches a direct child by name.  A
-        leading ``"/"`` is ignored, so ``"Market/Spread"``,
-        ``"/Market/Spread"`` and ``"./Market/Spread"`` are equivalent.
+        current node, and any other component matches a direct child by name
+        (no name being allowed to contain ``"."`` or ``"/"``).  A leading
+        ``"/"`` is ignored, so ``"Market/Spread"``, ``"/Market/Spread"``
+        and ``"./Market/Spread"`` are equivalent.
 
         Args:
             path: The path to resolve, or ``None`` for this node itself.
@@ -428,22 +469,16 @@ class RiskNode:
         Return an independent copy of this node and of all its descendants.
 
         The copy keeps the names, the identifiers and the aggregation functions of
-        the original nodes, but has no parent, and paths inside the copy are
-        relative to the copied node.
-
-        The aggregation functions are shared by reference rather than copied: the
-        copy calls the very same objects, so any mutable state they carry -- a
-        closure, an attribute of a callable object, a mutable default argument --
-        stays common to the original and the copy.  Risk capitals are numbers and
-        are therefore independent.
+        the original nodes, and has no parent, so paths inside it are relative to
+        the copy. The aggregation functions are shared rather than copied, hence
+        any mutable state they carry stays common to both; capitals are numbers and
+        therefore independent. Only the leaf values are carried over, the internal
+        ones are recomputed from the copied children on first access.
 
         Args:
             with_value: If ``True`` (default), copy the risk capitals as they are
                 currently cached; if ``False``, copy the structure with all
-                capitals cleared.  Linking the copied children clears the cached
-                capital of the copied internal nodes, so those are recomputed from
-                the copied children on first access; the cached values of the
-                leaves are carried over as they are.
+                capitals cleared.
 
         Returns:
             RiskNode: The copied node, detached from the original tree.
@@ -658,9 +693,8 @@ class RiskTree:
         """
         Return an independent copy of the whole tree.
 
-        The copied tree shares the aggregation functions of the original one, and
-        the values of the leaves are independent; see :meth:`RiskNode.deepcopy`
-        for the details.
+        The copied tree shares the aggregation functions of the original one; see
+        :meth:`RiskNode.deepcopy`.
 
         Args:
             with_value: If ``True`` (default), copy the risk capitals as they are
