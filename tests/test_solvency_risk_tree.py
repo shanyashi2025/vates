@@ -10,6 +10,8 @@ semantics -- plus the integration with the three builders.
 """
 
 import math
+from decimal import Decimal
+from fractions import Fraction
 
 import numpy as np
 import pytest
@@ -310,10 +312,32 @@ class TestCapitalAggregation:
         with pytest.raises(ValueError, match="non-leaf"):
             tree.set_risk_capital("M", 1.0)
 
-    @pytest.mark.parametrize("bad", [None, "1.0"])
+    @pytest.mark.parametrize("value", [3, 3.5, np.float64(3.5), np.float32(3.5),
+                                       np.int64(3), np.int32(3), Fraction(7, 2)],
+                             ids=["int", "float", "np.float64", "np.float32",
+                                  "np.int64", "np.int32", "Fraction"])
+    def test_set_risk_capital_accepts_real_numbers(self, tree, value):
+        # NumPy scalars matter in practice: capitals read out of a pandas or NumPy
+        # pipeline are often `np.int64` / `np.float32`, which an `(int, float)`
+        # check would reject.
+        tree.set_risk_capital("M/E", value)
+        assert tree.get_risk_capital("M/E") == value
+
+    @pytest.mark.parametrize("bad", [None, "1.0", True, Decimal("3.5"), np.array(3.5)],
+                             ids=["None", "str", "bool", "Decimal", "0-d array"])
     def test_set_risk_capital_requires_a_number(self, tree, bad):
         with pytest.raises(TypeError, match="Invalid type of risk capital"):
             tree.set_risk_capital("M/E", bad)
+
+    def test_set_risk_capital_rejects_nan(self, tree):
+        with pytest.raises(ValueError, match="Invalid value of risk capital"):
+            tree.set_risk_capital("M/E", float("nan"))
+
+    def test_set_risk_capital_accepts_negative_and_infinite_values(self, tree):
+        tree.set_risk_capital("M/E", -5.0)
+        assert tree.get_risk_capital("M/E") == -5.0  # a capital may be an offset
+        tree.set_risk_capital("M/E", float("inf"))
+        assert tree.get_risk_capital("M/E") == float("inf")  # only NaN is refused
 
     def test_reading_a_valueless_leaf_raises_value_error(self):
         with pytest.raises(ValueError, match="hasn't been provided"):

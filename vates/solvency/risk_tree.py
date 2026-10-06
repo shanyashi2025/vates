@@ -360,11 +360,11 @@ class RiskNode:
         their next access.
 
         Args:
-            value: The risk capital to store.
+            value (float): The risk capital to store.
 
         Raises:
-            ValueError: If this node is not a leaf.
-            TypeError: If ``value`` is not an ``int`` or a ``float``.
+            ValueError: If this node is not a leaf, or if ``value`` is NaN.
+            TypeError: If ``value`` is not a real number (usually expected `float`).
         """
         if not self.is_leaf:
             raise ValueError(f"{self._name}: non-leaf node rejects set value for risk capital.")
