@@ -8,6 +8,9 @@ from vates.solvency.hk_rbc.rules import (
 )
 
 
+def _max_at_zero(**capitals: float) -> float:
+    return max(max(capitals.values()), 0.0)
+
 def _pcr_agg(market: float, life_insurance: float, general_insurance: float, counterparty_default: float,
              operational: float) -> float:
     return risk_aggregation(market, life_insurance, general_insurance, counterparty_default,
@@ -51,8 +54,7 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None, is_zeroize: bool = Tr
         "Mortality", "Longevity", "Catastrophe", "Morbidity", "Expense", "Lapse", agg_func=_life_risk_agg)
 
     # Life Insurance/Lapse
-    tree.get_node("Life Insurance/Lapse").add_sub_risk(
-        "Level", "Mass", agg_func=lambda level, mass: max(level, mass, 0.0))
+    tree.get_node("Life Insurance/Lapse").add_sub_risk("Level", "Mass", agg_func=_max_at_zero)
 
     # General Insurance
     tree.get_node("General Insurance").add_sub_risk(

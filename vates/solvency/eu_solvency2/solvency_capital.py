@@ -10,6 +10,10 @@ from vates.solvency.eu_solvency2.rules import (
     CORR_MATRIX_MARKET,
 )
 
+
+def _max_at_zero(**capitals: float) -> float:
+    return max(max(capitals.values()), 0.0)
+
 def _scr_agg(market: float, counterparty_default: float, life: float, health: float, non_life: float,
              intangibles: float) -> float:
     return risk_aggregation(market, counterparty_default, life, health, non_life,
@@ -63,8 +67,7 @@ def make_solvency2_scr_module(*, submodule: str | None = None, is_zeroize: bool 
         agg_func=_life_risk_agg)
 
     # Life/Lapse
-    tree.get_node("Life/Lapse").add_sub_risk(
-        "Increase", "Decrease", "Mass", agg_func=lambda increase, decrease, mass: max(increase, decrease, mass, 0.0))
+    tree.get_node("Life/Lapse").add_sub_risk("Increase", "Decrease", "Mass", agg_func=_max_at_zero)
 
     # Health
     tree.get_node("Health").add_sub_risk("NSLT", "SLT", "Catastrophe", agg_func=_health_risk_agg)
@@ -80,8 +83,7 @@ def make_solvency2_scr_module(*, submodule: str | None = None, is_zeroize: bool 
             medical_payment_increase, medical_payment_decrease) + income_protection)
 
     # Health/SLT/Lapse
-    tree.get_node("Health/SLT/Lapse").add_sub_risk(
-        "Increase", "Decrease", "Mass", agg_func=lambda increase, decrease, mass: max(increase, decrease, mass, 0.0))
+    tree.get_node("Health/SLT/Lapse").add_sub_risk("Increase", "Decrease", "Mass", agg_func=_max_at_zero)
 
     # Market
     tree.get_node("Market").add_sub_risk(

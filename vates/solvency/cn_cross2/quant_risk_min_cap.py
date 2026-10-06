@@ -16,6 +16,9 @@ from vates.solvency.cn_cross2.rules import (
 )
 
 
+def _max_at_zero(**capitals: float) -> float:
+    return max(max(capitals.values()), 0.0)
+
 def _overall_risk_agg(life: float, non_life: float, market: float, credit: float) -> float:
     return risk_aggregation(life, non_life, market, credit, corr_matrix=MC_CORR_MATRIX)
 
@@ -59,9 +62,7 @@ def make_cross2_mc_module(*, submodule: str | None = None, is_zeroize: bool = Tr
     tree.get_node("Life/Loss/Morbidity").add_sub_risk("Incidence", "Trend", agg_func=_morb_risk_agg)
 
     # Life/Lapse
-    tree.get_node("Life/Lapse").add_sub_risk(
-        "Lapse Up", "Lapse Down", "Mass Lapse",
-        agg_func=lambda lapse_up, lapse_down, mass_lapse: max(lapse_up, lapse_down, mass_lapse, 0.0))
+    tree.get_node("Life/Lapse").add_sub_risk("Lapse Up", "Lapse Down", "Mass Lapse", agg_func=_max_at_zero)
 
     # Non-Life
     tree.get_node("Non-life").add_sub_risk(
@@ -73,9 +74,7 @@ def make_cross2_mc_module(*, submodule: str | None = None, is_zeroize: bool = Tr
         agg_func=_market_risk_agg)
 
     # Market/Interest Rate
-    tree.get_node("Market/Interest Rate").add_sub_risk(
-        "Interest Rate Up", "Interest Rate Down",
-        agg_func=lambda interest_rate_up, interest_rate_down: max(interest_rate_up, interest_rate_down, 0.0))
+    tree.get_node("Market/Interest Rate").add_sub_risk("Interest Rate Up", "Interest Rate Down", agg_func=_max_at_zero)
 
     # Credit
     tree.get_node("Credit").add_sub_risk("Spread", "Counterparty Default", agg_func=_credit_risk_agg)
