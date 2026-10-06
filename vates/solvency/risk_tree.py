@@ -73,8 +73,7 @@ class RiskNode:
         while node is not None:
             nodes.append(node)
             node = node._parent
-        nodes.reverse()
-        return nodes  # (root, .., parent)
+        return nodes  # [parent, grandparent, .., root]
 
     @property
     def descendants(self) -> list[Self]:
@@ -109,17 +108,15 @@ class RiskNode:
     def add_sub_risk(self, *args: Self | str, agg_func = None) -> None:
         for arg in args:
             if isinstance(arg, RiskNode):
-                self._add_child(arg)
+                self.link_child(arg)
             elif isinstance(arg, str):
-                self._add_child(RiskNode(arg))
+                self.link_child(RiskNode(arg))
             else:
                 raise TypeError(f"Invalid {type(arg)=}, expected ('RiskNode', 'str').")
         if agg_func is not None:
-            if self._agg_func is not None:
-                raise ValueError(f"{self._name}: aggregation function has already been set.")
-            self._agg_func = agg_func
+            self.set_agg_func(agg_func)
 
-    def _add_child(self, node: Self) -> None:
+    def link_child(self, node: Self, /) -> None:
         if node._parent is not None:
             raise ValueError(f"{self._name}: can't add '{node._name}' as child: has parent '{node._parent._name}'.")
         if node is self.root:
@@ -132,6 +129,14 @@ class RiskNode:
             raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate identifier.")
         self._children.append(node)
         node._parent = self
+
+    def link_parent(self, node: Self, /) -> None:
+        node.link_child(self)
+
+    def set_agg_func(self, func, /) -> None:
+        if self._agg_func is not None:
+            raise ValueError(f"{self._name}: aggregation function has already been set.")
+        self._agg_func = func
 
     def set_risk_capital(self, value: float | None = None, /) -> None:
         if not self.is_leaf:
@@ -151,7 +156,7 @@ class RiskNode:
         if self.is_leaf:
             return
         if self._agg_func is None:
-            raise ValueError(f"{self._name}: aggregation function is None; use `set_agg_func(..)` to set.")
+            raise ValueError(f"{self._name}: aggregation function is None.")
         kwargs = {c._identifier: c.risk_capital for c in self._children}
         self._risk_capital = self._agg_func(**kwargs)
 
@@ -182,22 +187,20 @@ class RiskNode:
         return "".join([(c if c in allowed else "_") for c in chars])
 
     def zeroize(self) -> None:
-        for node in self.descendants:
+        for node in preorder_traversal(self):
             if node.is_leaf:
                 node.set_risk_capital(0.0)
 
     def deepcopy(self, *, with_value: bool = True) -> Self:
         copied_node = RiskNode(self._name, identifier=self._identifier)
         copied_node._agg_func = self._agg_func
+        copied_node._risk_capital = self._risk_capital if with_value else None
         _path_slice_start = len(self.path)
         for desc in self.descendants:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             copied_desc._agg_func = desc._agg_func
-            copied_node.goto(desc._parent.path[_path_slice_start:]).add_sub_risk(copied_desc)
-        if with_value:
-            for node in copied_node.descendants:
-                if node.is_leaf:
-                    node.set_risk_capital(self.goto(node.path)._risk_capital)
+            copied_desc._risk_capital = desc._risk_capital if with_value else None
+            copied_desc.link_parent(copied_node.goto(desc._parent.path[_path_slice_start:]))
         return copied_node
 
 
@@ -205,7 +208,7 @@ class RiskTree:
 
     __slots__ = ("_root",)
 
-    def __init__(self, /, root: RiskNode | str):
+    def __init__(self, root: RiskNode | str):
         if not isinstance(root, (RiskNode, str)):
             raise TypeError(f"Invalid {type(root)=}, expected ('RiskNode', 'str').")
         self._root: RiskNode = root if isinstance(root, RiskNode) else RiskNode(root)
@@ -221,14 +224,6 @@ class RiskTree:
     @property
     def is_subtree(self) -> bool:
         return not self._root.is_root
-
-    @property
-    def n_nodes(self) -> int:
-        return len(self.list_nodes())
-
-    @property
-    def n_leaf_nodes(self) -> int:
-        return len(self.list_leaf_nodes())
 
     def get_risk_capital(self, path: str | None = None, /) -> float:
         return self._root.goto(path).risk_capital
@@ -249,7 +244,7 @@ class RiskTree:
         return RiskTree(self._root.goto(path))
 
     def list_nodes(self) -> list[RiskNode]:
-        return self._preorder(self._root)
+        return preorder_traversal(self._root)
 
     def list_leaf_nodes(self) -> list[RiskNode]:
         return [node for node in self.list_nodes() if node.is_leaf]
@@ -273,28 +268,18 @@ class RiskTree:
                 for nk, nv in cls._flatten_dict(v).items():
                     flattened[k + joiner + nk] = nv
             else:
-                raise TypeError(f"Invalid {type(v)=}, expected 'float' or 'dict'.")
+                raise TypeError(f"Invalid {type(v)=}, expected ('float', 'dict').")
         return flattened
 
     def zeroize(self) -> None:
         self._root.zeroize()
 
-    @classmethod
-    def _preorder(cls, node: RiskNode) -> list[RiskNode]:
-        nodes = [node]
-        for c in node.children:
-            nodes.extend(cls._preorder(c))
-        return nodes
-
-    def preorder_traversal(self) -> list[RiskNode]:
-        return self._preorder(self._root)
-
     def deepcopy(self, *, with_value: bool = True) -> Self:
-        return RiskTree(root=self._root.deepcopy(with_value=with_value))
+        return RiskTree(self._root.deepcopy(with_value=with_value))
 
     def display(self, *, width: int = 80, precision: int = 2) -> None:
         root_depth = self._root.depth
-        for node in self._preorder(self._root):
+        for node in preorder_traversal(self._root):
             prefixed_name = f"{'    ' * (node.depth - root_depth)}{node.name}"
             try:
                 val = node.risk_capital
@@ -302,3 +287,10 @@ class RiskTree:
                 print(f"{prefixed_name} {val:>{val_width},.{precision}f}")
             except ValueError:
                 print(prefixed_name)
+
+
+def preorder_traversal(node: RiskNode) -> list[RiskNode]:
+    nodes = [node]
+    for c in node.children:
+        nodes.extend(preorder_traversal(c))
+    return nodes
