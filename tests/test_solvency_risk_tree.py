@@ -20,8 +20,9 @@ import pytest
 from vates.solvency.risk_tree import RiskNode, RiskTree, preorder_traversal, risk_aggregation
 from vates.solvency.cn_cross2 import make_cross2_mc_module
 from vates.solvency.eu_solvency2 import make_solvency2_scr_module
-from vates.solvency.eu_solvency2.rules import CORR_MATRIX_LIFE
+from vates.solvency.eu_solvency2.rules import CORR_MATRIX_LIFE, CORR_MATRIX_MARKET as SII_CORR_MARKET
 from vates.solvency.hk_rbc import make_hkrbc_pcr_module
+from vates.solvency.hk_rbc.rules import CORR_MATRIX_MARKET as HKRBC_CORR_MARKET
 
 BUILDERS = [make_cross2_mc_module, make_solvency2_scr_module, make_hkrbc_pcr_module]
 BUILDER_IDS = ["cn_cross2", "eu_solvency2", "hk_rbc"]
@@ -449,6 +450,99 @@ class TestCapitalAggregation:
         assert tree.get_risk_capital() == 0.0
 
 
+class TestAggScope:
+    """`agg_scope`: which capitals the aggregation function of a node is given."""
+
+    @staticmethod
+    def _sum_tree(agg, *, scope="children"):
+        """`T -> M(E, F), L(H)` with `agg` on the root: `M = 3`, `L = 4`."""
+        tree = RiskTree("T")
+        tree.set_up_node("", children=("M", "L"), agg_func=agg, agg_scope=scope)
+        tree.set_up_node("M", children=("E", "F"), agg_func=_sum_agg)
+        tree.set_up_node("L", children=("H",), agg_func=_sum_agg)
+        tree.batch_set_risk_capital({"M/E": 1.0, "M/F": 2.0, "L/H": 4.0})
+        return tree
+
+    def test_children_scope_is_the_default(self):
+        tree = RiskTree("T")
+        tree.set_up_node("", children=("A", "B"), agg_func=_sum_agg)
+        assert tree.root._agg_scope == "children"
+
+    def test_children_scope_passes_only_the_direct_children(self):
+        agg = _RecordingAgg()
+        tree = self._sum_tree(agg)
+        assert tree.get_risk_capital() == 7.0
+        assert agg.seen[-1] == {"m": 3.0, "l": 4.0}  # `e` and `f` are not passed
+
+    def test_descendants_scope_passes_every_node_below(self):
+        # Including the intermediate nodes, so one rule can use both a sub-module's
+        # own aggregated capital and the risk factors nested inside it.
+        agg = _RecordingAgg()
+        tree = self._sum_tree(agg, scope="descendants")
+        assert tree.get_risk_capital() == 14.0
+        assert agg.seen[-1] == {"m": 3.0, "e": 1.0, "f": 2.0, "l": 4.0, "h": 4.0}
+
+    def test_a_descendant_without_an_agg_func_makes_aggregation_fail(self):
+        # The capital of an internal descendant is part of what the node above
+        # receives, so that descendant has to be aggregatable itself.
+        tree = RiskTree("T")
+        tree.set_up_node("", children=("M", "L"))
+        tree.set_up_node("M", children=("E", "F"))
+        tree.set_risk_capital("M/E", 1.0)
+        tree.set_risk_capital("M/F", 2.0)
+        tree.set_risk_capital("L", 4.0)
+        tree.root.set_agg_func(_sum_agg, scope="descendants")
+        with pytest.raises(ValueError, match="M: aggregation function is None"):
+            tree.get_risk_capital()
+
+    def test_the_scope_is_set_through_set_up_node(self):
+        tree = RiskTree("T")
+        tree.set_up_node("", children=("A",), agg_func=_sum_agg, agg_scope="descendants")
+        assert tree.root._agg_scope == "descendants"
+
+    def test_an_unknown_scope_is_rejected_when_it_is_set(self):
+        node = RiskNode("T")
+        node.add_child("A")
+        with pytest.raises(ValueError, match="Invalid agg scope"):
+            node.set_agg_func(_sum_agg, scope="descendent")  # a plausible typo
+        assert node._agg_func is None and node._agg_scope == "children"
+
+    def test_a_scope_without_an_agg_func_is_rejected(self):
+        tree = RiskTree("T")
+        with pytest.raises(ValueError, match="without agg_func"):
+            tree.set_up_node("", children=("A",), agg_scope="descendants")
+        assert tree.root.children == []  # nothing was attached
+
+    def test_duplicate_identifiers_below_raise_value_error(self):
+        # Identifiers become keyword names, so they have to be unique over the whole
+        # subtree once the scope reaches beyond the direct children.
+        tree = RiskTree("T")
+        tree.set_up_node("", children=("Life", "Health"), agg_func=_sum_agg, agg_scope="descendants")
+        tree.set_up_node("Life", children=("Mortality",), agg_func=_sum_agg)
+        tree.set_up_node("Health", children=("Mortality",), agg_func=_sum_agg)
+        tree.batch_set_risk_capital({"Life/Mortality": 1.0, "Health/Mortality": 2.0})
+        with pytest.raises(ValueError, match=r"duplicate identifiers among descendants: \['mortality'\]"):
+            tree.get_risk_capital()
+        assert tree.root._risk_capital is None  # nothing was cached
+
+    def test_a_nested_leaf_change_invalidates_the_ancestors(self):
+        tree = self._sum_tree(_sum_agg, scope="descendants")
+        assert tree.get_risk_capital() == 14.0  # m(3) + e(1) + f(2) + l(4) + h(4)
+        tree.set_risk_capital("M/E", 10.0)
+        assert tree.get_risk_capital() == 32.0  # m(12) + e(10) + f(2) + l(4) + h(4)
+
+    def test_deepcopy_carries_the_scope_of_every_node(self):
+        tree = RiskTree("T")
+        tree.set_up_node("", children=("M", "L"), agg_func=_sum_agg, agg_scope="descendants")
+        tree.set_up_node("M", children=("E", "F"), agg_func=_sum_agg, agg_scope="descendants")
+        tree.set_up_node("L", children=("H",), agg_func=_sum_agg)
+        tree.batch_set_risk_capital({"M/E": 1.0, "M/F": 2.0, "L/H": 4.0})
+        copied = tree.deepcopy()
+        assert [n._agg_scope for n in copied.list_nodes()] == [n._agg_scope for n in tree.list_nodes()]
+        # 7 under the children scope: the copy would otherwise silently differ
+        assert copied.get_risk_capital() == tree.get_risk_capital() == 14.0
+
+
 class TestRiskTree:
     def test_root_from_name_or_node(self):
         assert RiskTree("T").root.name == "T"
@@ -774,3 +868,32 @@ class TestSolvencyModules:
         top_leaf = top.get_node(f"{path}/{leaf.path}")
         assert top_leaf is not leaf
         assert top_leaf.risk_capital == 0.0  # the top module is untouched by the copy
+
+    def test_solvency2_market_aggregates_over_the_nested_interest_rate_module(self):
+        # The interest-rate sub-module is aggregated on its own (the larger of the up
+        # and down shocks), but `Market` also needs the two shocks themselves, since
+        # they select its correlation matrix: the descendants scope lets one function
+        # see both the sub-module and the risk factors below it.
+        tree = make_solvency2_scr_module()
+        tree.set_risk_capital("Market/Interest Rate/Interest Rate Increase", 3.0)
+        tree.set_risk_capital("Market/Interest Rate/Interest Rate Decrease", 7.0)
+        tree.batch_set_risk_capital({"Market/Equity": 2.0, "Market/Property": 5.0, "Market/Spread": 4.0,
+                                     "Market/Concentration": 6.0, "Market/Currency": 1.0})
+        market = tree.get_node("Market")
+        assert market._agg_scope == "descendants"
+        assert {"interest_rate", "interest_rate_increase", "interest_rate_decrease"} <= {
+            node.identifier for node in market.descendants}
+        assert tree.get_risk_capital("Market/Interest Rate") == 7.0  # the larger shock
+        assert tree.get_risk_capital("Market") == pytest.approx(
+            risk_aggregation(7.0, 2.0, 5.0, 4.0, 6.0, 1.0, corr_matrix=SII_CORR_MARKET("decrease")))
+
+    def test_hkrbc_market_aggregates_over_the_nested_interest_rate_module(self):
+        tree = make_hkrbc_pcr_module()
+        tree.set_risk_capital("Market/Interest Rate/Interest Rate Upward", 7.0)
+        tree.set_risk_capital("Market/Interest Rate/Interest Rate Downward", 3.0)
+        tree.batch_set_risk_capital({"Market/Credit Spread": 1.0, "Market/Equity": 2.0,
+                                     "Market/Property": 3.0, "Market/Currency": 4.0})
+        assert tree.get_node("Market")._agg_scope == "descendants"
+        assert tree.get_risk_capital("Market/Interest Rate") == 7.0  # the larger shock
+        assert tree.get_risk_capital("Market") == pytest.approx(
+            risk_aggregation(7.0, 1.0, 2.0, 3.0, 4.0, corr_matrix=HKRBC_CORR_MARKET("upward")))

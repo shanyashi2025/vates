@@ -12,23 +12,31 @@ provides the two building blocks of such a hierarchy:
   tree-level lookups such as ``get_risk_capital`` or ``get_subtree``.
 
 Capitals are aggregated bottom-up.  Every internal node owns an *aggregation
-function* (``agg_func``) that receives the risk capitals of its direct children
-as keyword arguments keyed by their ``identifier``, and returns the capital of
-the node itself.  The usual implementation is :func:`risk_aggregation`, which
-applies the standard-formula correlation matrix to the child capitals::
+function* (``agg_func``) that receives risk capitals as keyword arguments keyed by
+their ``identifier``, and returns the capital of the node itself.  Which capitals
+those are is the *aggregation scope*: by default (``scope="children"``) those of
+the direct children, or, with ``scope="descendants"``, those of every node below,
+so that a rule can consume both a sub-module's own aggregated capital and the risk
+factors nested inside it.  Every internal node below such a node must be
+aggregatable itself, its capital being part of what the node above receives.  The
+usual implementation is :func:`risk_aggregation`, which applies the
+standard-formula correlation matrix to the capitals it is given::
 
     sqrt(x' @ C @ x)
 
-where ``x`` is the vector of child capitals and ``C`` their correlation matrix.
+where ``x`` is the vector of capitals and ``C`` their correlation matrix.
 
 Nodes are addressed by "/"-separated paths relative to the root of their tree,
 where the root itself has the empty path ``""`` and ``"."`` denotes the current
 node (node names therefore contain neither ``"/"`` nor ``"."``)::
 
-    tree = RiskTree(root="C-ROSS MC")
+    tree = RiskTree(root="Solvency II SCR")
     tree.set_up_node("", children=("Market", "Life"), agg_func=overall_risk_agg)
-    tree.set_up_node("Market", children=("Interest Rate", "Equity"), agg_func=market_agg)
-    tree.set_risk_capital("Market/Interest Rate", 1_000.0)
+    tree.set_up_node("Market", children=("Interest Rate", "Equity"), agg_func=market_agg,
+                     agg_scope="descendants")
+    tree.set_up_node("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"),
+                     agg_func=max_at_zero)
+    tree.set_risk_capital("Market/Interest Rate/Interest Rate Up", 1_000.0)
 
 A ``RiskTree`` is only a *view* on a node and never copies it; use ``deepcopy``
 to obtain an independent structure.
@@ -37,7 +45,11 @@ to obtain an independent structure.
 import math
 import numbers
 import numpy as np
-from typing import Callable, Self
+from typing import Callable, Literal, Self
+
+
+# The values accepted by the `scope` argument of `RiskNode.set_agg_func`.
+
 
 
 def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
@@ -90,8 +102,9 @@ class RiskNode:
 
     A node is either a *leaf* -- a risk factor whose capital is provided directly
     through :meth:`set_risk_capital` -- or an *internal* node, whose capital is
-    computed from its children by its aggregation function (see
-    :meth:`set_agg_func` and :meth:`aggregate`).
+    computed by its aggregation function from the capitals below it: those of its
+    direct children, or of all its descendants, depending on the aggregation scope
+    (see :meth:`set_agg_func` and :meth:`aggregate`).
 
     Children are attached with :meth:`add_child`, or, from a tree, with
     :meth:`RiskTree.set_up_node`.  The name of a node must be unique among its
@@ -108,7 +121,9 @@ class RiskNode:
     node that already has a parent raises, which also makes cycles impossible.
     """
 
-    __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func",)
+    __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func", "_agg_scope",)
+
+    _allowed_agg_scopes = ("children", "descendants")
 
     def __init__(self, name: str, /, *, identifier: str | None = None):
         """
@@ -134,6 +149,7 @@ class RiskNode:
         self._parent: RiskNode | None = None
         self._children: list[RiskNode] = []
         self._agg_func: Callable[..., float] | None = None
+        self._agg_scope: Literal["children", "descendants"] = "children"
 
     @property
     def name(self) -> str:
@@ -151,12 +167,12 @@ class RiskNode:
         Risk capital of the node.
 
         For a leaf this is the value provided through :meth:`set_risk_capital`;
-        for an internal node it is the aggregation of its children, computed and
-        cached on first access.
+        for an internal node it is the aggregation of the nodes its aggregation
+        scope selects, computed and cached on first access.
 
         Raises:
             ValueError: If the node is a leaf without a provided value, or an
-                internal node whose children cannot be aggregated.
+                internal node whose capitals cannot be aggregated.
         """
         if self._risk_capital is None:
             self.aggregate()
@@ -297,24 +313,36 @@ class RiskNode:
             raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate identifier.")
         staged.append(node)
 
-    def set_agg_func(self, func: Callable[..., float], /) -> None:
+    def set_agg_func(self, func: Callable[..., float], /, *,
+                     scope: Literal["children", "descendants"] = "children") -> None:
         """
         Set the aggregation function of this node.
 
-        The function is called as ``func(**{child.identifier: child.risk_capital})``
-        when the node aggregates, so its parameter names must match the
-        identifiers of the children.
+        The function is called as ``func(**{node.identifier: node.risk_capital})``
+        when the node aggregates, so its parameter names must match the identifiers
+        of the nodes it is given: the direct children by default, or, with
+        ``scope="descendants"``, every node below this one.  The latter lets a rule
+        use both a sub-module's own aggregated capital and the risk factors nested
+        inside it; the capitals it has no parameter for are passed all the same, so
+        a rule that needs only some of them ends in ``**kwargs``.
 
         Args:
-            func: Callable that takes the capitals of the children as keyword
+            func: Callable that takes the capitals selected by ``scope`` as keyword
                 arguments and returns the risk capital of this node.
+            scope: The nodes the function is given: ``"children"`` (default) for
+                the direct children only, or ``"descendants"`` for every node below
+                this one.
 
         Raises:
-            ValueError: If an aggregation function has already been set.
+            ValueError: If an aggregation function has already been set, or if
+                ``scope`` is neither ``"children"`` nor ``"descendants"``.
         """
         if self._agg_func is not None:
             raise ValueError(f"{self._name}: aggregation function has already been set.")
+        if scope not in self._allowed_agg_scopes:
+            raise ValueError(f"Invalid agg scope: {scope!r}, expected {self._allowed_agg_scopes}.")
         self._agg_func = func
+        self._agg_scope = scope
         self.clr_risk_capital()
 
     def set_risk_capital(self, value: float, /) -> None:
@@ -356,20 +384,35 @@ class RiskNode:
         """
         Compute and cache the risk capital of this internal node.
 
-        Calls the aggregation function of the node with the capitals of its
-        direct children as keyword arguments keyed by their identifiers, and
-        stores the result.  Does nothing on a leaf node.
+        Calls the aggregation function of the node with the risk capitals selected
+        by its aggregation scope -- its direct children, or all its descendants --
+        as keyword arguments keyed by their identifiers, and stores the result.  A
+        node aggregating from its descendants needs the identifiers below it to be
+        unique, since they become the names of those keyword arguments.  Does
+        nothing on a leaf node.
 
         Raises:
-            ValueError: If the node is internal but has no aggregation function,
-                or if the capital of a child is not available.
+            ValueError: If the node is internal but has no aggregation function, if
+                its aggregation scope is unknown, if two nodes below a node that
+                aggregates from its descendants share an identifier, or if a
+                capital it needs is not available.
         """
         if self.is_leaf:
             return
         if self._agg_func is None:
             raise ValueError(f"{self._name}: aggregation function is None.")
-        kwargs = {c._identifier: c.risk_capital for c in self._children}
-        self._risk_capital = self._agg_func(**kwargs)
+        if self._agg_scope == "children":
+            capitals = {x._identifier: x.risk_capital for x in self._children}
+        elif self._agg_scope == "descendants":
+            descendants = self.descendants
+            identifiers = [x._identifier for x in descendants]
+            duplicates = sorted({i for i in identifiers if identifiers.count(i) > 1})
+            if duplicates:
+                raise ValueError(f"{self._name}: duplicate identifiers among descendants: {duplicates}.")
+            capitals = {x._identifier: x.risk_capital for x in descendants}
+        else:
+            raise NotImplementedError(f"agg scope: {self._agg_scope}.")
+        self._risk_capital = self._agg_func(**capitals)
 
     def goto(self, path: str | None, /) -> Self:
         """
@@ -468,11 +511,13 @@ class RiskNode:
         """
         copied_node = RiskNode(self._name, identifier=self._identifier)
         copied_node._agg_func = self._agg_func
+        copied_node._agg_scope = self._agg_scope
         copied_node._risk_capital = self._risk_capital if with_value else None
         _path_slice_start = len(self.path)
         for desc in self.descendants:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             copied_desc._agg_func = desc._agg_func
+            copied_desc._agg_scope = desc._agg_scope
             copied_desc._risk_capital = desc._risk_capital if with_value else None
             copied_node.goto(desc._parent.path[_path_slice_start:]).add_child(copied_desc)
         return copied_node
@@ -547,6 +592,12 @@ class RiskTree:
         aggregated capital of the node itself, i.e. the capital that the
         aggregation rule saves compared with adding the sub-risks up.
 
+        This is the saving of an aggregation over the direct children, which is the
+        default scope: a node that aggregates from its descendants is not formed
+        from its direct children, so there the value is informational only.  A
+        direct child that is an internal node without an aggregation function has
+        no capital to add up, and reading it raises.
+
         Args:
             path: Path of the node relative to the root, or ``None`` (default)
                 for the root itself.
@@ -580,7 +631,8 @@ class RiskTree:
 
     def set_up_node(self, path: str, /, *,
                     children: tuple[str | RiskNode, ...] | str | RiskNode = tuple(),
-                    agg_func: Callable[..., float] | None = None) -> None:
+                    agg_func: Callable[..., float] | None = None,
+                    agg_scope: Literal["children", "descendants"] = "children") -> None:
         """
         Set up the node at ``path``: attach its children and set its aggregation.
 
@@ -606,27 +658,35 @@ class RiskTree:
             agg_func: Aggregation function of the node, or ``None`` (default) to
                 leave it unset and provide it later through
                 :meth:`RiskNode.set_agg_func`.
+            agg_scope: The aggregation scope of ``agg_func``: ``"children"``
+                (default) for its direct children, or ``"descendants"`` for every
+                node below it; see :meth:`RiskNode.set_agg_func`.  It is rejected
+                when ``agg_func`` is ``None``, there being no aggregation function
+                to apply it to.
 
         Raises:
             ValueError: If ``path`` does not exist, if the node already has an
-                aggregation function, or if a child is rejected -- see
+                aggregation function, if ``agg_scope`` is given without
+                ``agg_func``, or if a child is rejected -- see
                 :meth:`RiskNode.add_child` for the conditions.
             TypeError: If ``children`` is neither a child nor a sequence of
                 children, or if a child is neither a :class:`RiskNode` nor a
                 ``str``.
         """
+        if agg_func is None and agg_scope != "children":
+            raise ValueError(f"Invalid {agg_scope=} without agg_func.")
         node = self.get_node(path)
         if agg_func is not None and node._agg_func is not None:
             # Pre-flight check: `set_agg_func` below would otherwise refuse the node
             # only after `add_child` has already attached the children.
-            raise ValueError(f"{node.name}: aggregation function has already been set.")
+            raise ValueError(f"{node._name}: aggregation function has already been set.")
         if isinstance(children, (str, RiskNode)):
             children = (children, )
         else:
             children = tuple(children)
         node.add_child(*children)
         if agg_func is not None:
-            node.set_agg_func(agg_func)
+            node.set_agg_func(agg_func, scope=agg_scope)
 
     def get_toptree(self) -> Self:
         """

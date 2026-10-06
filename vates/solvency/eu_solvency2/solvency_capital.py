@@ -36,7 +36,7 @@ def _slth_risk_agg(mortality: float, longevity: float, disability_morbidity: flo
                             corr_matrix=CORR_MATRIX_SLTH)
 
 def _market_risk_agg(interest_rate_increase: float, interest_rate_decrease: float, equity: float, property_: float,
-                     spread: float, concentration: float, currency: float) -> float:
+                     spread: float, concentration: float, currency: float, **kwargs) -> float:
     if interest_rate_increase > interest_rate_decrease:
         interest_rate = interest_rate_increase
         corr_matrix = CORR_MATRIX_MARKET("increase")
@@ -88,9 +88,12 @@ def make_solvency2_scr_module(*, submodule: str | None = None, is_zeroize: bool 
 
     # Market
     tree.set_up_node("Market",
-                     children=("Interest Rate Increase", "Interest Rate Decrease", "Equity",
-                               RiskNode("Property", identifier="property_"), "Spread", "Concentration", "Currency"),
-                     agg_func=_market_risk_agg)
+                     children=("Interest Rate", "Equity", RiskNode("Property", identifier="property_"), "Spread",
+                               "Concentration", "Currency"),
+                     agg_func=_market_risk_agg, agg_scope="descendants")
+
+    tree.set_up_node("Market/Interest Rate", children=("Interest Rate Increase", "Interest Rate Decrease"),
+                     agg_func=_max_at_zero)
 
     # Counterparty Default
     tree.set_up_node("Counterparty Default", children=("Type 1", "Type 2"), agg_func=_counterparty_default_risk_agg)

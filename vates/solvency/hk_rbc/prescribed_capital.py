@@ -17,7 +17,7 @@ def _pcr_agg(market: float, life_insurance: float, general_insurance: float, cou
                             corr_matrix=CORR_MATRIX_PCR) + operational
 
 def _market_risk_agg(interest_rate_upward: float, interest_rate_downward: float, credit_spread: float, equity: float,
-                     property_: float, currency: float) -> float:
+                     property_: float, currency: float, **kwargs) -> float:
     if interest_rate_upward > interest_rate_downward:
         interest_rate = interest_rate_upward
         corr_matrix = CORR_MATRIX_MARKET("upward")
@@ -47,9 +47,12 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None, is_zeroize: bool = Tr
 
     # Market
     tree.set_up_node("Market",
-                     children=("Interest Rate Upward", "Interest Rate Downward", "Credit Spread", "Equity",
+                     children=("Interest Rate", "Credit Spread", "Equity",
                                RiskNode("Property", identifier="property_"), "Currency"),
-                     agg_func=_market_risk_agg)
+                     agg_func=_market_risk_agg, agg_scope="descendants")
+
+    tree.set_up_node("Market/Interest Rate", children=("Interest Rate Upward", "Interest Rate Downward"),
+                     agg_func=_max_at_zero)
 
     # Life Insurance
     tree.set_up_node("Life Insurance",
