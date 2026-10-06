@@ -26,7 +26,8 @@ where the root itself has the empty path ``""`` and ``"."`` denotes the current
 node (node names therefore contain neither ``"/"`` nor ``"."``)::
 
     tree = RiskTree(root="C-ROSS MC")
-    tree.root.add_sub_risk("Market", agg_func=market_agg)
+    tree.set_up_node("", children=("Market", "Life"), agg_func=overall_risk_agg)
+    tree.set_up_node("Market", children=("Interest Rate", "Equity"), agg_func=market_agg)
     tree.set_risk_capital("Market/Interest Rate", 1_000.0)
 
 A ``RiskTree`` is only a *view* on a node and never copies it; use ``deepcopy``
@@ -92,17 +93,18 @@ class RiskNode:
     computed from its children by its aggregation function (see
     :meth:`set_agg_func` and :meth:`aggregate`).
 
-    Children are attached with :meth:`add_sub_risk` / :meth:`link_child`.  The
-    name of a node must be unique among its siblings and free of ``"/"`` and
-    ``"."``, which are reserved by the path syntax.  Every node also carries an
-    ``identifier``: a lower-case, keyword-friendly version of its name, used as
-    the keyword argument name when the parent aggregates (``"Non-life"`` ->
-    ``"non_life"``).  A leading digit is prefixed by ``"_"`` (``"1 Year"`` ->
-    ``"_1_year"``), so an identifier is always a valid parameter name.
+    Children are attached with :meth:`add_child`, or, from a tree, with
+    :meth:`RiskTree.set_up_node`.  The name of a node must be unique among its
+    siblings and free of ``"/"`` and ``"."``, which are reserved by the path
+    syntax.  Every node also carries an ``identifier``: a lower-case,
+    keyword-friendly version of its name, used as the keyword argument name when
+    the parent aggregates (``"Non-life"`` -> ``"non_life"``).  A leading digit is
+    prefixed by ``"_"`` (``"1 Year"`` -> ``"_1_year"``), so an identifier is
+    always a valid parameter name.
 
     The aggregated capital is cached.  Setting the capital of a leaf clears the
     cache of all its ancestors, so :attr:`risk_capital` recomputes whenever a
-    value below it has changed.  A node belongs to at most one tree: linking a
+    value below it has changed.  A node belongs to at most one tree: adding a
     node that already has a parent raises, which also makes cycles impossible.
     """
 
@@ -270,9 +272,9 @@ class RiskNode:
         """
         Validate ``node`` as a new child of this node and append it to ``staged``.
 
-        The conditions are those of :meth:`link_child`, extended to the children
-        already staged by the same :meth:`add_sub_risk` call, so that a whole call
-        can be validated -- and abandoned -- before anything is linked.
+        The conditions are those of :meth:`add_child`, extended to the children
+        already staged by the same call, so that a whole call can be validated --
+        and abandoned -- before anything is attached.
 
         Args:
             node: The candidate child.
@@ -294,15 +296,6 @@ class RiskNode:
         if node._identifier in [c._identifier for c in children]:
             raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate identifier.")
         staged.append(node)
-
-    def _link_parent(self, node: Self, /) -> None:
-        """
-        Attach this node below ``node``.
-
-        Equivalent to ``node.add_sub_risk(self)``; see :meth:`add_sub_risk` for the
-        conditions and the exceptions raised.
-        """
-        node.add_child(self)
 
     def set_agg_func(self, func: Callable[..., float], /) -> None:
         """
@@ -481,7 +474,7 @@ class RiskNode:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             copied_desc._agg_func = desc._agg_func
             copied_desc._risk_capital = desc._risk_capital if with_value else None
-            copied_desc._link_parent(copied_node.goto(desc._parent.path[_path_slice_start:]))
+            copied_node.goto(desc._parent.path[_path_slice_start:]).add_child(copied_desc)
         return copied_node
 
 
@@ -490,7 +483,9 @@ class RiskTree:
     A view on a solvency risk-module tree, identified by its root node.
 
     The tree wraps an existing :class:`RiskNode` without copying it, so structure
-    and values are shared with the tree that node belongs to.  Paths passed to the
+    and values are shared with the tree that node belongs to.  A hierarchy level is
+    built with :meth:`set_up_node`, and capitals are provided with
+    :meth:`set_risk_capital` or :meth:`batch_set_risk_capital`.  Paths passed to the
     methods below are resolved from the root of this tree, hence for a subtree of
     a larger tree they are relative to that subtree and not to the outermost root
     (the :attr:`RiskNode.path` of a node, in contrast, is always absolute within
@@ -585,7 +580,46 @@ class RiskTree:
 
     def set_up_node(self, path: str, /, *, children: tuple[str | RiskNode, ...] = tuple(),
                     agg_func: Callable[..., float] | None = None) -> None:
+        """
+        Set up the node at ``path``: attach its children and set its aggregation.
+
+        A convenience for building a hierarchy level by level: the children are
+        attached as by :meth:`RiskNode.add_child`, and ``agg_func`` is set as by
+        :meth:`RiskNode.set_agg_func`.  Capitals are not touched; the leaves of the
+        new level are given values afterwards with :meth:`set_risk_capital` or
+        :meth:`batch_set_risk_capital`.
+
+        The call is all-or-nothing: when it raises, neither the children nor the
+        aggregation function of the node change.  A node is given an aggregation
+        function only once, so setting up the same node twice with ``agg_func``
+        raises rather than leaving the second set of children behind.
+
+        Args:
+            path: Path of the node relative to the root of this tree, where ``""``
+                and ``"."`` denote the root itself.
+            children: The children to attach, as names or as :class:`RiskNode`
+                objects; they are unpacked into :meth:`RiskNode.add_child`, so a
+                single name has to be a one-element tuple, a bare ``str`` being
+                taken apart into one child per character.
+            agg_func: Aggregation function of the node, or ``None`` (default) to
+                leave it unset and provide it later through
+                :meth:`RiskNode.set_agg_func`.
+
+        Raises:
+            ValueError: If ``path`` does not exist, if the node already has an
+                aggregation function, or if a child is rejected -- see
+                :meth:`RiskNode.add_child` for the conditions.
+            TypeError: If a child is neither a :class:`RiskNode` nor a ``str``.
+        """
         node = self.get_node(path)
+        if agg_func is not None and node._agg_func is not None:
+            # Pre-flight check: `set_agg_func` below would otherwise refuse the node
+            # only after `add_child` has already attached the children.
+            raise ValueError(f"{node.name}: aggregation function has already been set.")
+        if isinstance(children, (str, RiskNode)):
+            children = (children, )
+        else:
+            children = tuple(children)
         node.add_child(*children)
         if agg_func is not None:
             node.set_agg_func(agg_func)
