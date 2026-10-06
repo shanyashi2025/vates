@@ -59,8 +59,8 @@ class MinCapUnderlyingInput:
                 },
                 "Expense": max(self.pv_expense - self.pv_base, 0),
                 "Lapse": {
-                    "Lapse Up": self.pv_lapse_up - self.pv_base,
-                    "Lapse Down": self.pv_lapse_dn - self.pv_base,
+                    "Lapse Rate/Lapse Up": self.pv_lapse_up - self.pv_base,
+                    "Lapse Rate/Lapse Down": self.pv_lapse_dn - self.pv_base,
                     "Mass Lapse": self.pv_lapse_mass - self.pv_base,
                 },
             },

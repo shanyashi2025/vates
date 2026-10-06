@@ -393,9 +393,11 @@ class RiskNode:
 
         Raises:
             ValueError: If the node is internal but has no aggregation function, if
-                its aggregation scope is unknown, if two nodes below a node that
-                aggregates from its descendants share an identifier, or if a
-                capital it needs is not available.
+                two nodes below a node that aggregates from its descendants share an
+                identifier, or if a capital it needs is not available.
+            NotImplementedError: If its aggregation scope is neither ``"children"``
+                nor ``"descendants"``.  :meth:`set_agg_func` only accepts those, so
+                this guards against the scope being written directly.
         """
         if self.is_leaf:
             return

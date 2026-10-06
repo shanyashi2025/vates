@@ -11,6 +11,9 @@ from vates.solvency.hk_rbc.rules import (
 def _max_at_zero(**capitals: float) -> float:
     return max(max(capitals.values()), 0.0)
 
+def _floor_at_zero(*args: float) -> tuple[float, ...]:
+    return tuple([max(x, 0.0) for x in args])
+
 def _pcr_agg(market: float, life_insurance: float, general_insurance: float, counterparty_default: float,
              operational: float) -> float:
     return risk_aggregation(market, life_insurance, general_insurance, counterparty_default,
@@ -29,7 +32,7 @@ def _market_risk_agg(interest_rate_upward: float, interest_rate_downward: float,
 
 def _life_risk_agg(mortality: float, longevity: float, catastrophe: float, morbidity: float, expense: float,
                    lapse: float) -> float:
-    return risk_aggregation(mortality, longevity, catastrophe, morbidity, expense, lapse,
+    return risk_aggregation(*_floor_at_zero(mortality, longevity, catastrophe, morbidity, expense, lapse),
                             corr_matrix=CORR_MATRIX_LIFE)
 
 def _gi_risk_agg(reserve_premium: float, catastrophe: float, mortgage_insurance: float) -> float:
@@ -60,7 +63,12 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None, is_zeroize: bool = Tr
                      agg_func=_life_risk_agg)
 
     # Life Insurance/Lapse
-    tree.set_up_node("Life Insurance/Lapse", children=("Level", "Mass"), agg_func=_max_at_zero)
+    tree.set_up_node("Life Insurance/Lapse", children=(RiskNode("Level & Trend", identifier="level"), "Mass"),
+                     agg_func=_max_at_zero)
+
+    # Life Insurance/Lapse/Level & Trend
+    tree.set_up_node("Life Insurance/Lapse/Level & Trend", children=("Lapse Upward", "Lapse Downward"),
+                     agg_func=_max_at_zero)
 
     # General Insurance
     tree.set_up_node("General Insurance", children=("Reserve Premium", "Catastrophe", "Mortgage Insurance"),

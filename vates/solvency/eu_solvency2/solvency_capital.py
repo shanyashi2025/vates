@@ -14,6 +14,9 @@ from vates.solvency.eu_solvency2.rules import (
 def _max_at_zero(**capitals: float) -> float:
     return max(max(capitals.values()), 0.0)
 
+def _floor_at_zero(*args: float) -> tuple[float, ...]:
+    return tuple([max(x, 0.0) for x in args])
+
 def _scr_agg(market: float, counterparty_default: float, life: float, health: float, non_life: float,
              intangibles: float) -> float:
     return risk_aggregation(market, counterparty_default, life, health, non_life,
@@ -24,7 +27,7 @@ def _nonlife_risk_agg(premium_reserve: float, catastrophe: float, lapse: float) 
 
 def _life_risk_agg(mortality: float, longevity: float, disability: float, expense: float, revision: float, lapse: float,
                    catastrophe: float) -> float:
-    return risk_aggregation(mortality, longevity, disability, expense, revision, lapse, catastrophe,
+    return risk_aggregation(*_floor_at_zero(mortality, longevity, disability, expense, revision, lapse, catastrophe),
                             corr_matrix=CORR_MATRIX_LIFE)
 
 def _health_risk_agg(nslt: float, slt: float, catastrophe: float) -> float:
@@ -32,7 +35,7 @@ def _health_risk_agg(nslt: float, slt: float, catastrophe: float) -> float:
 
 def _slth_risk_agg(mortality: float, longevity: float, disability_morbidity: float, expense: float, revision: float,
                    lapse: float) -> float:
-    return risk_aggregation(mortality, longevity, disability_morbidity, expense, revision, lapse,
+    return risk_aggregation(*_floor_at_zero(mortality, longevity, disability_morbidity, expense, revision, lapse),
                             corr_matrix=CORR_MATRIX_SLTH)
 
 def _market_risk_agg(interest_rate_increase: float, interest_rate_decrease: float, equity: float, property_: float,
@@ -43,7 +46,7 @@ def _market_risk_agg(interest_rate_increase: float, interest_rate_decrease: floa
     else:
         interest_rate = interest_rate_decrease
         corr_matrix = CORR_MATRIX_MARKET("decrease")
-    return risk_aggregation(interest_rate, equity, property_, spread, concentration, currency,
+    return risk_aggregation(max(interest_rate, 0.0), equity, property_, spread, concentration, currency,
                             corr_matrix=corr_matrix)
 
 def _counterparty_default_risk_agg(type_1: float, type_2: float) -> float:

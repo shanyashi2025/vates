@@ -19,6 +19,9 @@ from vates.solvency.cn_cross2.rules import (
 def _max_at_zero(**capitals: float) -> float:
     return max(max(capitals.values()), 0.0)
 
+def _floor_at_zero(*args: float) -> tuple[float, ...]:
+    return tuple([max(x, 0.0) for x in args])
+
 def _overall_risk_agg(life: float, non_life: float, market: float, credit: float) -> float:
     return risk_aggregation(life, non_life, market, credit, corr_matrix=MC_CORR_MATRIX)
 
@@ -27,7 +30,7 @@ def _life_risk_agg(loss: float, expense: float, lapse: float) -> float:
 
 def _loss_risk_agg(mortality: float, catastrophe: float, longevity: float, morbidity: float, health: float, other: float
                    ) -> float:
-    return risk_aggregation(mortality, catastrophe, longevity, morbidity, health, other,
+    return risk_aggregation(*_floor_at_zero(mortality, catastrophe, longevity, morbidity, health, other),
                             corr_matrix=LOSS_MC_CORR_MATRIX)
 
 def _nonlife_risk_agg(premium_reserve: float, catastrophe: float, k: float):
@@ -62,7 +65,10 @@ def make_cross2_mc_module(*, submodule: str | None = None, is_zeroize: bool = Tr
     tree.set_up_node("Life/Loss/Morbidity", children=("Incidence", "Trend"), agg_func=_morb_risk_agg)
 
     # Life/Lapse
-    tree.set_up_node("Life/Lapse", children=("Lapse Up", "Lapse Down", "Mass Lapse"), agg_func=_max_at_zero)
+    tree.set_up_node("Life/Lapse", children=("Lapse Rate", "Mass Lapse"), agg_func=_max_at_zero)
+
+    # Life/Lapse/Lapse Rate
+    tree.set_up_node("Life/Lapse/Lapse Rate", children=("Lapse Up", "Lapse Down"), agg_func=_max_at_zero)
 
     # Non-Life
     tree.set_up_node("Non-life", children=("Premium Reserve", "Catastrophe"),
