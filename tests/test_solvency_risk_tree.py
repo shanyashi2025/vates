@@ -170,9 +170,21 @@ class TestRiskNodeStructure:
         node.goto("Other").set_risk_capital(2.0)
         assert node.risk_capital == 3.0
 
-    def test_non_string_identifier_raises_type_error(self):
+    @pytest.mark.parametrize("identifier", [1, 0, False], ids=["int", "falsy int", "bool"])
+    def test_non_string_identifier_raises_type_error(self, identifier):
+        # A falsy non-str identifier used to be swallowed by `identifier or name`.
         with pytest.raises(TypeError, match="expected 'str'"):
-            RiskNode("A", identifier=1)
+            RiskNode("A", identifier=identifier)
+
+    def test_empty_identifier_raises_value_error(self):
+        with pytest.raises(ValueError, match="Empty chars"):
+            RiskNode("A", identifier="")
+
+    def test_none_identifier_falls_back_to_the_normalised_name(self):
+        assert RiskNode("Non-life", identifier=None).identifier == "non_life"
+
+    def test_an_explicit_identifier_is_normalised_like_a_name(self):
+        assert RiskNode("Property", identifier="Type 1").identifier == "type_1"
 
     def test_an_empty_name_is_rejected_by_the_identifier_check(self):
         with pytest.raises(ValueError, match="Empty chars"):

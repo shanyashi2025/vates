@@ -114,11 +114,13 @@ class RiskNode:
             name: Name of the node, unique among its siblings and free of ``"/"``
                 and ``"."``, which are reserved by the path syntax.
             identifier: Keyword-friendly alias of the node, used as the keyword
-                argument name when its parent aggregates.  Defaults to the
-                normalised ``name``.
+                argument name when its parent aggregates.  It is normalised like a
+                name, and defaults to the normalised ``name`` when ``None``.
 
         Raises:
-            ValueError: If ``name`` contains ``"/"`` or ``"."``.
+            TypeError: If ``identifier`` is not a ``str``.
+            ValueError: If ``name`` contains ``"/"`` or ``"."``, or if
+                ``identifier`` is empty.
         """
         name = str(name)
         for bad in ("/", "."):
