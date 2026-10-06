@@ -4,7 +4,7 @@ from functools import partial
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.utils import maybe_raise_if_ne
-from vates.solvency.risk_tree import  RiskTree, risk_aggregation
+from vates.solvency.risk_tree import  RiskTree, RiskNode, risk_aggregation
 from vates.solvency.cn_cross2.rules import (
     MC_CORR_MATRIX,
     MORB_MC_CORR_MATRIX,
@@ -49,35 +49,35 @@ def make_cross2_mc_module(*, submodule: str | None = None, is_zeroize: bool = Tr
     tree = RiskTree(root="C-ROSS MC")
 
     # (root)
-    tree.root.add_sub_risk("Life", "Non-life", "Market", "Credit", agg_func=_overall_risk_agg)
+    tree.set_up_node("", children=("Life", "Non-life", "Market", "Credit"), agg_func=_overall_risk_agg)
 
     # Life
-    tree.get_node("Life").add_sub_risk("Loss", "Expense", "Lapse", agg_func=_life_risk_agg)
+    tree.set_up_node("Life", children=("Loss", "Expense", "Lapse"), agg_func=_life_risk_agg)
 
     # Life/Loss
-    tree.get_node("Life/Loss").add_sub_risk(
-        "Mortality", "Catastrophe", "Longevity", "Morbidity", "Health", "Other", agg_func=_loss_risk_agg)
+    tree.set_up_node("Life/Loss", children=("Mortality", "Catastrophe", "Longevity", "Morbidity", "Health", "Other"),
+                     agg_func=_loss_risk_agg)
 
     # Life/Loss/Morbidity
-    tree.get_node("Life/Loss/Morbidity").add_sub_risk("Incidence", "Trend", agg_func=_morb_risk_agg)
+    tree.set_up_node("Life/Loss/Morbidity", children=("Incidence", "Trend"), agg_func=_morb_risk_agg)
 
     # Life/Lapse
-    tree.get_node("Life/Lapse").add_sub_risk("Lapse Up", "Lapse Down", "Mass Lapse", agg_func=_max_at_zero)
+    tree.set_up_node("Life/Lapse", children=("Lapse Up", "Lapse Down", "Mass Lapse"), agg_func=_max_at_zero)
 
     # Non-Life
-    tree.get_node("Non-life").add_sub_risk(
-        "Premium Reserve", "Catastrophe", agg_func=partial(_nonlife_risk_agg, k=nonlife_mc_k))
+    tree.set_up_node("Non-life", children=("Premium Reserve", "Catastrophe"),
+                     agg_func=partial(_nonlife_risk_agg, k=nonlife_mc_k))
 
     # Market
-    tree.get_node("Market").add_sub_risk(
-        "Interest Rate", "Equity", "Real Estate", "Overseas Fixed-income", "Overseas Equity", "Exchange Rate",
-        agg_func=_market_risk_agg)
+    tree.set_up_node("Market",
+                     children=("Interest Rate", "Equity", "Real Estate", "Overseas Fixed-income", "Overseas Equity",
+                               "Exchange Rate"), agg_func=_market_risk_agg)
 
     # Market/Interest Rate
-    tree.get_node("Market/Interest Rate").add_sub_risk("Interest Rate Up", "Interest Rate Down", agg_func=_max_at_zero)
+    tree.set_up_node("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"), agg_func=_max_at_zero)
 
     # Credit
-    tree.get_node("Credit").add_sub_risk("Spread", "Counterparty Default", agg_func=_credit_risk_agg)
+    tree.set_up_node("Credit", children=("Spread", "Counterparty Default"), agg_func=_credit_risk_agg)
 
     if is_zeroize:
         tree.zeroize()

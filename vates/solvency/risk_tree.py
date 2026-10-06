@@ -236,26 +236,22 @@ class RiskNode:
         names.reverse()
         return "/".join(names[1:])
 
-    def add_sub_risk(self, *args: Self | str, agg_func: Callable[..., float] | None = None) -> None:
+    def add_child(self, *args: Self | str) -> None:
         """
         Attach one or more sub-risks below this node.
 
         The arguments are validated as a whole before anything is attached: if any
-        of them is rejected, neither the children nor the aggregation function of
-        this node change.
+        of them is rejected, the children of this node doesn't change.
 
         Args:
             *args: The children to attach, given either as existing
                 :class:`RiskNode` objects or as names from which new nodes are
                 created.
-            agg_func: Optional aggregation function of this node, set through
-                :meth:`set_agg_func`.
 
         Raises:
             TypeError: If an argument is neither a ``RiskNode`` nor a ``str``.
-            ValueError: If this node already has an aggregation function, or if a
-                child already has a parent, is a root, or duplicates an existing
-                child by object, name or identifier.
+            ValueError: If a child already has a parent, is a root, or
+                duplicates an existing child by object, name or identifier.
         """
         staged = []
         for arg in args:
@@ -265,10 +261,10 @@ class RiskNode:
                 self._stage_child(RiskNode(arg), staged)
             else:
                 raise TypeError(f"Invalid {type(arg)=}, expected ('RiskNode', 'str').")
-        if agg_func is not None:
-            self.set_agg_func(agg_func)
         for node in staged:
-            self.link_child(node)
+            self._children.append(node)
+            node._parent = self
+            self.clr_risk_capital()
 
     def _stage_child(self, node: Self, /, staged: list[Self]) -> None:
         """
@@ -299,40 +295,14 @@ class RiskNode:
             raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate identifier.")
         staged.append(node)
 
-    def link_child(self, node: Self, /) -> None:
-        """
-        Attach ``node`` as the last child of this node.
-
-        Args:
-            node: The node to attach.  It must not already have a parent and must
-                not be the root of this node's tree, which rules out cycles.
-
-        Raises:
-            ValueError: If ``node`` already has a parent, is the root, or
-                duplicates an existing child by object, name or identifier.
-        """
-        if node._parent is not None:
-            raise ValueError(f"{self._name}: can't add '{node._name}' as child: has parent '{node._parent._name}'.")
-        if node is self.root:
-            raise ValueError(f"{self._name}: can't add '{node._name}' as child: is root.")
-        if node in self._children:
-            raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate object.")
-        if node._name in [c._name for c in self._children]:
-            raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate name.")
-        if node._identifier in [c._identifier for c in self._children]:
-            raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate identifier.")
-        self._children.append(node)
-        node._parent = self
-        self.clr_risk_capital()
-
-    def link_parent(self, node: Self, /) -> None:
+    def _link_parent(self, node: Self, /) -> None:
         """
         Attach this node below ``node``.
 
-        Equivalent to ``node.link_child(self)``; see :meth:`link_child` for the
+        Equivalent to ``node.add_sub_risk(self)``; see :meth:`add_sub_risk` for the
         conditions and the exceptions raised.
         """
-        node.link_child(self)
+        node.add_child(self)
 
     def set_agg_func(self, func: Callable[..., float], /) -> None:
         """
@@ -511,7 +481,7 @@ class RiskNode:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             copied_desc._agg_func = desc._agg_func
             copied_desc._risk_capital = desc._risk_capital if with_value else None
-            copied_desc.link_parent(copied_node.goto(desc._parent.path[_path_slice_start:]))
+            copied_desc._link_parent(copied_node.goto(desc._parent.path[_path_slice_start:]))
         return copied_node
 
 
@@ -612,6 +582,13 @@ class RiskTree:
             ValueError: If ``path`` does not exist.
         """
         return self._root.goto(path)
+
+    def set_up_node(self, path: str, /, *, children: tuple[str | RiskNode, ...] = tuple(),
+                    agg_func: Callable[..., float] | None = None) -> None:
+        node = self.get_node(path)
+        node.add_child(*children)
+        if agg_func is not None:
+            node.set_agg_func(agg_func)
 
     def get_toptree(self) -> Self:
         """

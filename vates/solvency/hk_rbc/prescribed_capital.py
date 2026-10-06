@@ -41,24 +41,27 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None, is_zeroize: bool = Tr
     tree = RiskTree(root="HKRBC PCR")
 
     # (root)
-    tree.root.add_sub_risk(
-        "Market", "Life Insurance", "General Insurance", "Counterparty Default", "Operational", agg_func=_pcr_agg)
+    tree.set_up_node("",
+                     children=("Market", "Life Insurance", "General Insurance", "Counterparty Default", "Operational"),
+                     agg_func=_pcr_agg)
 
     # Market
-    tree.get_node("Market").add_sub_risk(
-        "Interest Rate Upward", "Interest Rate Downward", "Credit Spread", "Equity",
-        RiskNode("Property", identifier="property_"), "Currency", agg_func=_market_risk_agg)
+    tree.set_up_node("Market",
+                     children=("Interest Rate Upward", "Interest Rate Downward", "Credit Spread", "Equity",
+                               RiskNode("Property", identifier="property_"), "Currency"),
+                     agg_func=_market_risk_agg)
 
     # Life Insurance
-    tree.get_node("Life Insurance").add_sub_risk(
-        "Mortality", "Longevity", "Catastrophe", "Morbidity", "Expense", "Lapse", agg_func=_life_risk_agg)
+    tree.set_up_node("Life Insurance",
+                     children=("Mortality", "Longevity", "Catastrophe", "Morbidity", "Expense", "Lapse"),
+                     agg_func=_life_risk_agg)
 
     # Life Insurance/Lapse
-    tree.get_node("Life Insurance/Lapse").add_sub_risk("Level", "Mass", agg_func=_max_at_zero)
+    tree.set_up_node("Life Insurance/Lapse", children=("Level", "Mass"), agg_func=_max_at_zero)
 
     # General Insurance
-    tree.get_node("General Insurance").add_sub_risk(
-        "Reserve Premium", "Catastrophe", "Mortgage Insurance", agg_func=_gi_risk_agg)
+    tree.set_up_node("General Insurance", children=("Reserve Premium", "Catastrophe", "Mortgage Insurance"),
+                     agg_func=_gi_risk_agg)
 
     if is_zeroize:
         tree.zeroize()
