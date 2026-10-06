@@ -34,6 +34,7 @@ to obtain an independent structure.
 """
 
 import math
+import numbers
 import numpy as np
 from typing import Callable, Self
 
@@ -96,7 +97,8 @@ class RiskNode:
     ``"."``, which are reserved by the path syntax.  Every node also carries an
     ``identifier``: a lower-case, keyword-friendly version of its name, used as
     the keyword argument name when the parent aggregates (``"Non-life"`` ->
-    ``"non_life"``).
+    ``"non_life"``).  A leading digit is prefixed by ``"_"`` (``"1 Year"`` ->
+    ``"_1_year"``), so an identifier is always a valid parameter name.
 
     The aggregated capital is cached.  Setting the capital of a leaf clears the
     cache of all its ancestors, so :attr:`risk_capital` recomputes whenever a
@@ -123,7 +125,7 @@ class RiskNode:
             if bad in name:
                 raise ValueError(f"Invalid {name=}: contains '{bad}'.")
         self._name: str = name
-        self._identifier: str = self._normalize_identifier(identifier or self._name)
+        self._identifier: str = self._normalize_identifier(self._name if identifier is None else identifier)
         self._risk_capital: float | None = None
         self._parent: RiskNode | None = None
         self._children: list[RiskNode] = []
@@ -366,8 +368,10 @@ class RiskNode:
         """
         if not self.is_leaf:
             raise ValueError(f"{self._name}: non-leaf node rejects set value for risk capital.")
-        if not isinstance(value, (float, int)):
+        if isinstance(value, bool) or not isinstance(value, numbers.Real):
             raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
+        if value != value:  # finiteness guard for NaN
+            raise ValueError(f"Invalid value of risk capital: {value!r}.")
         self._risk_capital = value
         if self._parent is not None:
             self._parent.clr_risk_capital()  # cascade
@@ -441,22 +445,36 @@ class RiskNode:
         return self.goto(other)
 
     @classmethod
-    def _normalize_identifier(cls, /, chars: str) -> str:
+    def _normalize_identifier(cls, chars: str, /) -> str:
         """
         Turn a name into an identifier that can be used as a keyword argument name.
 
         Lower-cases ``chars`` and replaces every character outside ``[a-z0-9_]``
         by ``"_"`` (``"Non-life"`` -> ``"non_life"``, ``"Type 1"`` -> ``"type_1"``).
+        A leading digit is prefixed by ``"_"`` (``"1 Year"`` -> ``"_1_year"``), so
+        that the result is always a valid parameter name and usable as a keyword
+        when the parent aggregates.
 
         Args:
             chars: The name to normalise.
 
         Returns:
             str: The normalised identifier.
+
+        Raises:
+            TypeError: If ``chars`` is not a ``str``.
+            ValueError: If ``chars`` is empty.
         """
+        if not isinstance(chars, str):
+            raise TypeError(f"Invalid type: {type(chars)}, expected 'str'.")
+        if len(chars) == 0:
+            raise ValueError(f"Empty chars is not allowed.")
         chars = chars.lower()
         allowed = [chr(c) for c in range(97, 123)] + [chr(c) for c in range(48, 58)] + ["_"]
-        return "".join([(c if c in allowed else "_") for c in chars])
+        chars = "".join([(c if c in allowed else "_") for c in chars])
+        if chars[0] in "0123456789":
+            chars = "_" + chars
+        return chars
 
     def zeroize(self) -> None:
         """Set the risk capital of every leaf below this node to ``0.0``."""

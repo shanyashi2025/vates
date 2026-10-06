@@ -147,6 +147,35 @@ class TestRiskNodeStructure:
         with pytest.raises(ValueError, match="contains"):
             RiskNode(name)
 
+    @pytest.mark.parametrize("name, identifier", [
+        ("Non-life", "non_life"),
+        ("Type 1", "type_1"),
+        ("1 Year", "_1_year"),          # digit-led: prefixed to stay a valid kwarg name
+        ("2015-35 Module", "_2015_35_module"),
+        ("  Mixed  CASE ", "__mixed__case_"),
+    ])
+    def test_identifier_normalisation(self, name, identifier):
+        assert RiskNode(name).identifier == identifier
+
+    def test_a_digit_led_identifier_can_be_used_by_an_agg_func(self):
+        # The "_" prefix is what makes this parameter name expressible.
+        def agg(_1_year: float, other: float) -> float:
+            return _1_year + other
+
+        node = RiskNode("Root")
+        node.add_sub_risk("1 Year", "Other", agg_func=agg)
+        node.goto("1 Year").set_risk_capital(1.0)
+        node.goto("Other").set_risk_capital(2.0)
+        assert node.risk_capital == 3.0
+
+    def test_non_string_identifier_raises_type_error(self):
+        with pytest.raises(TypeError, match="expected 'str'"):
+            RiskNode("A", identifier=1)
+
+    def test_an_empty_name_is_rejected_by_the_identifier_check(self):
+        with pytest.raises(ValueError, match="Empty chars"):
+            RiskNode("")
+
     def test_new_node_is_a_detached_leaf(self):
         node = RiskNode("A")
         assert node.is_root and node.is_leaf and node.parent is None
