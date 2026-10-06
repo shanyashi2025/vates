@@ -537,6 +537,32 @@ class TestSetUpNode:
         tree.batch_set_risk_capital({"M": 1.0, "L": 2.0})
         assert tree.get_risk_capital() == 3.0
 
+    def test_a_single_name_may_be_given_on_its_own(self):
+        # Normalised to a one-element sequence, so a bare `str` is one child rather
+        # than one child per character.
+        tree = RiskTree("T")
+        tree.set_up_node("", children="Market", agg_func=_sum_agg)
+        assert [c.name for c in tree.root.children] == ["Market"]
+
+    def test_a_single_node_may_be_given_on_its_own(self):
+        tree = RiskTree("T")
+        child = RiskNode("Property", identifier="property_")
+        tree.set_up_node("", children=child, agg_func=lambda property_: property_)
+        assert tree.root.children == [child]
+        assert child.parent is tree.root
+
+    def test_children_may_be_any_iterable(self):
+        # The annotation asks for a tuple, but a list is normalised as well.
+        tree = RiskTree("T")
+        tree.set_up_node("", children=["A", "B"], agg_func=_sum_agg)
+        assert [c.name for c in tree.root.children] == ["A", "B"]
+
+    def test_a_children_argument_that_is_no_sequence_raises_type_error(self):
+        tree = RiskTree("T")
+        with pytest.raises(TypeError):
+            tree.set_up_node("", children=42, agg_func=_sum_agg)
+        assert tree.root.children == [] and tree.root._agg_func is None
+
     def test_leaves_of_the_new_level_are_created_without_a_value(self):
         tree = RiskTree("T")
         tree.set_up_node("", children=("A", "B"), agg_func=_sum_agg)

@@ -578,7 +578,8 @@ class RiskTree:
         """
         return self._root.goto(path)
 
-    def set_up_node(self, path: str, /, *, children: tuple[str | RiskNode, ...] = tuple(),
+    def set_up_node(self, path: str, /, *,
+                    children: tuple[str | RiskNode, ...] | str | RiskNode = tuple(),
                     agg_func: Callable[..., float] | None = None) -> None:
         """
         Set up the node at ``path``: attach its children and set its aggregation.
@@ -598,9 +599,10 @@ class RiskTree:
             path: Path of the node relative to the root of this tree, where ``""``
                 and ``"."`` denote the root itself.
             children: The children to attach, as names or as :class:`RiskNode`
-                objects; they are unpacked into :meth:`RiskNode.add_child`, so a
-                single name has to be a one-element tuple, a bare ``str`` being
-                taken apart into one child per character.
+                objects, unpacked into :meth:`RiskNode.add_child`.  A single child
+                may be passed on its own -- a bare ``str`` is one child, not one
+                child per character -- and anything else is read as a sequence of
+                children.
             agg_func: Aggregation function of the node, or ``None`` (default) to
                 leave it unset and provide it later through
                 :meth:`RiskNode.set_agg_func`.
@@ -609,7 +611,9 @@ class RiskTree:
             ValueError: If ``path`` does not exist, if the node already has an
                 aggregation function, or if a child is rejected -- see
                 :meth:`RiskNode.add_child` for the conditions.
-            TypeError: If a child is neither a :class:`RiskNode` nor a ``str``.
+            TypeError: If ``children`` is neither a child nor a sequence of
+                children, or if a child is neither a :class:`RiskNode` nor a
+                ``str``.
         """
         node = self.get_node(path)
         if agg_func is not None and node._agg_func is not None:
