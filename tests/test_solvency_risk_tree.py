@@ -202,19 +202,19 @@ class TestRiskNodeStructure:
     def test_new_node_is_a_detached_leaf(self):
         node = RiskNode("A")
         assert node.is_root and node.is_leaf and node.parent is None
-        assert node.children == [] and node.siblings == [] and node.depth == 0
+        assert node.children == () and node.siblings == () and node.depth == 0
         assert node.path == "" and node.root is node
 
     def test_add_child_accepts_names_and_nodes(self):
         root = RiskNode("T")
         child = RiskNode("B")
         root.add_child("A", child)
-        assert root.children == [root.get_descendant("A"), child]
+        assert root.children == (root.get_descendant("A"), child)
         assert [c.parent for c in root.children] == [root, root]
         assert not root.is_leaf
         assert root.get_descendant("A").depth == 1
         assert root.get_descendant("B").root is root
-        assert root.get_descendant("B").siblings == [root.get_descendant("A")]
+        assert root.get_descendant("B").siblings == (root.get_descendant("A"), )
         assert root.get_descendant("B").path == "B"
 
     def test_add_child_rejects_other_types(self):
@@ -264,7 +264,7 @@ class TestRiskNodeStructure:
         assert [n.name for n in node.root.descendants] == ["M", "E", "F", "L", "H"]
         assert [n.name for n in tree.get_node("M").descendants] == ["E", "F"]
         assert [n.name for n in node.siblings] == ["F"]
-        assert tree.root.siblings == []
+        assert tree.root.siblings == ()
         assert node.depth == 2 and tree.root.depth == 0
 
     def test_path_is_absolute_from_the_outermost_root(self, tree):
@@ -286,7 +286,7 @@ class TestRiskNodeStructure:
             root.add_child(".")
         with pytest.raises(ValueError, match="contains '/'"):
             root.add_child("/")
-        assert root.children == []
+        assert root.children == ()
 
     def test_get_descendant_unknown_child_raises_value_error(self, tree):
         with pytest.raises(KeyError, match="M: has no child node named 'X'"):
@@ -436,18 +436,18 @@ class TestCapitalAggregation:
         node = RiskNode("S")
         with pytest.raises((TypeError, ValueError)):
             node.add_child(*bad_args)
-        assert node.children == []
+        assert node.children == ()
 
     def test_add_child_rejects_the_same_node_twice(self):
         node = RiskNode("S")
         child = RiskNode("A")
         with pytest.raises(ValueError, match="duplicate object"):
             node.add_child(child, child)
-        assert node.children == [] and child.parent is None
+        assert node.children == () and child.parent is None
 
     def test_zeroize_sets_every_leaf_to_zero(self, tree):
         tree.zeroize()
-        assert all(leaf.risk_capital == 0.0 for leaf in tree.list_leaf_nodes())
+        assert all(leaf.risk_capital == 0.0 for leaf in tree.get_leaf_nodes())
         assert tree.get_risk_capital() == 0.0
 
 
@@ -533,7 +533,7 @@ class TestAggScope:
         tree.grow("L", children=("H",), agg_func=_sum_agg)
         tree.batch_set_risk_capital({"M/E": 1.0, "M/F": 2.0, "L/H": 4.0})
         copied = tree.deepcopy()
-        assert [n._agg_scope for n in copied.list_nodes()] == [n._agg_scope for n in tree.list_nodes()]
+        assert [n._agg_scope for n in copied.get_all_nodes()] == [n._agg_scope for n in tree.get_all_nodes()]
         # 7 under the children scope: the copy would otherwise silently differ
         assert copied.get_risk_capital() == tree.get_risk_capital() == 14.0
 
@@ -583,8 +583,8 @@ class TestRiskTree:
         assert subtree.get_node("E") is tree.get_node("M/E")
 
     def test_list_nodes_and_leaves_are_preorder(self, tree):
-        assert [n.name for n in tree.list_nodes()] == ["T", "M", "E", "F", "L", "H"]
-        assert [n.name for n in tree.list_leaf_nodes()] == ["E", "F", "H"]
+        assert [n.name for n in tree.get_all_nodes()] == ["T", "M", "E", "F", "L", "H"]
+        assert [n.name for n in tree.get_leaf_nodes()] == ["E", "F", "H"]
 
     def test_batch_set_risk_capital_accepts_flat_and_nested_dicts(self):
         tree = RiskTree("T")
@@ -637,7 +637,7 @@ class TestGrow:
         tree = RiskTree("T")
         child = RiskNode("Property", identifier="property_")
         tree.grow("", children=child, agg_func=lambda property_: property_)
-        assert tree.root.children == [child]
+        assert tree.root.children == (child, )
         assert child.parent is tree.root
 
     def test_children_may_be_any_iterable(self):
@@ -650,12 +650,12 @@ class TestGrow:
         tree = RiskTree("T")
         with pytest.raises(TypeError):
             tree.grow("", children=42, agg_func=_sum_agg)
-        assert tree.root.children == [] and tree.root._agg_func is None
+        assert tree.root.children == () and tree.root._agg_func is None
 
     def test_leaves_of_the_new_level_are_created_without_a_value(self):
         tree = RiskTree("T")
         tree.grow("", children=("A", "B"), agg_func=_sum_agg)
-        assert all(leaf._risk_capital is None for leaf in tree.list_leaf_nodes())
+        assert all(leaf._risk_capital is None for leaf in tree.get_leaf_nodes())
         with pytest.raises(ValueError, match="hasn't been provided"):
             tree.get_risk_capital()
 
@@ -738,20 +738,20 @@ class TestGrow:
         tree = RiskTree("T")
         with pytest.raises((TypeError, ValueError)):
             tree.grow("", children=bad_children, agg_func=_sum_agg)
-        assert tree.root.children == [] and tree.root._agg_func is None
+        assert tree.root.children == () and tree.root._agg_func is None
 
     def test_a_child_that_already_has_a_parent_is_rejected(self):
         tree = RiskTree("T")
         tree.grow("", children=("M", "L"), agg_func=_sum_agg)
         with pytest.raises(ValueError, match="has parent"):
             tree.grow("L", children=(tree.get_node("M"),), agg_func=_sum_agg)
-        assert tree.get_node("L").children == [] and tree.get_node("L")._agg_func is None
+        assert tree.get_node("L").children == () and tree.get_node("L")._agg_func is None
 
     def test_unknown_path_raises_value_error(self):
         tree = RiskTree("T")
         with pytest.raises(KeyError, match="has no child node named 'Nope'"):
             tree.grow("Nope", children=("A",), agg_func=_sum_agg)
-        assert tree.root.children == []  # the tree is untouched
+        assert tree.root.children == ()  # the tree is untouched
 
 
 class TestDisplay:
@@ -787,14 +787,14 @@ class TestDeepcopy:
         assert tree.get_risk_capital() == 7.0
         assert copied.root is not tree.root
         assert copied.root.parent is None
-        assert [n.name for n in copied.list_nodes()] == [n.name for n in tree.list_nodes()]
+        assert [n.name for n in copied.get_all_nodes()] == [n.name for n in tree.get_all_nodes()]
         assert copied.get_node("M").identifier == tree.get_node("M").identifier
 
     def test_copy_of_a_subtree_is_rebased_on_its_own_root(self, tree):
         copied = tree.get_subtree("M").deepcopy()
         assert copied.is_toptree and copied.root.parent is None
         assert copied.root.path == ""
-        assert [n.path for n in copied.list_nodes()] == ["", "E", "F"]
+        assert [n.path for n in copied.get_all_nodes()] == ["", "E", "F"]
         assert copied.get_risk_capital() == 3.0
 
     def test_with_value_false_clears_the_leaf_values(self, tree):
@@ -839,7 +839,7 @@ class TestSolvencyModules:
     def test_module_builds_zeroizes_and_aggregates(self, make_module):
         tree = make_module()
         assert tree.is_toptree
-        leaves = tree.list_leaf_nodes()
+        leaves = tree.get_leaf_nodes()
         # `is_zeroize=True` by default: every leaf starts at 0.0, and the whole
         # hierarchy aggregates without any `agg_func` parameter-name mismatch.
         assert leaves and tree.get_risk_capital() == 0.0
@@ -855,9 +855,9 @@ class TestSolvencyModules:
         path = top.root.children[0].path
         sub = make_module(submodule=path)
         assert sub.is_toptree and sub.root.name == top.root.children[0].name
-        assert [n.name for n in sub.list_nodes()] == [
-            n.name for n in top.get_subtree(path).list_nodes()]
-        leaf = sub.list_leaf_nodes()[0]
+        assert [n.name for n in sub.get_all_nodes()] == [
+            n.name for n in top.get_subtree(path).get_all_nodes()]
+        leaf = sub.get_leaf_nodes()[0]
         leaf.set_risk_capital(1.0)
         assert leaf.risk_capital == 1.0
         top_leaf = top.get_node(f"{path}/{leaf.path}")

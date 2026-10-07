@@ -68,10 +68,11 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None, is_zeroize: bool = Tr
     # General Insurance
     tree.grow("General Insurance", children=("Reserve Premium", "Catastrophe", "Mortgage Insurance"), agg_func=_gi_risk_agg)
 
+    tree.lock_structure()
     if is_zeroize:
         tree.zeroize()
 
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule).deepcopy()
+        return tree.get_subtree(submodule).deepcopy(lock_structure=True)

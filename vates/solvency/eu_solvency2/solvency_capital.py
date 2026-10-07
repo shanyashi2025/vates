@@ -101,10 +101,11 @@ def make_solvency2_scr_module(*, submodule: str | None = None, is_zeroize: bool 
     # Counterparty Default
     tree.grow("Counterparty Default", children=("Type 1", "Type 2"), agg_func=_counterparty_default_risk_agg)
 
+    tree.lock_structure()
     if is_zeroize:
         tree.zeroize()
 
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule).deepcopy()
+        return tree.get_subtree(submodule).deepcopy(lock_structure=True)

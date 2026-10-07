@@ -85,13 +85,14 @@ def make_cross2_mc_module(*, submodule: str | None = None, is_zeroize: bool = Tr
     # Credit
     tree.grow("Credit", children=("Spread", "Counterparty Default"), agg_func=_credit_risk_agg)
 
+    tree.lock_structure()
     if is_zeroize:
         tree.zeroize()
 
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule).deepcopy()
+        return tree.get_subtree(submodule).deepcopy(lock_structure=True)
 
 
 @time_synchronized
@@ -210,7 +211,7 @@ class MinCapConsolidator:
         self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
 
     def consolidate(self) -> None:
-        for node in self._risk_module.list_leaf_nodes():
+        for node in self._risk_module.get_leaf_nodes():
             node.set_risk_capital(sum(unit.get_risk_capital(node.path) for unit in self._units))
 
         self._loss_absorbency = self._calculate_loss_absorbency()
@@ -231,8 +232,8 @@ class MinCapConsolidator:
             return 0.0
 
         la_risk_module = make_cross2_mc_module()
-        for node in (la_risk_module.get_subtree("Market").list_leaf_nodes() +
-                     la_risk_module.get_subtree("Credit").list_leaf_nodes()):
+        for node in (la_risk_module.get_subtree("Market").get_leaf_nodes() +
+                     la_risk_module.get_subtree("Credit").get_leaf_nodes()):
             node.set_risk_capital(sum(unit.get_risk_capital(node.path) for unit in units))
 
         return calculate_loss_absorbency(

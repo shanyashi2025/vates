@@ -42,6 +42,7 @@ A ``RiskTree`` is only a *view* on a node and never copies it; use ``deepcopy``
 to obtain an independent structure.
 """
 
+import functools
 import math
 import numbers
 import numpy as np
@@ -91,6 +92,28 @@ def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
         raise ValueError(f'Correlation matrix shape: {corr_matrix.shape}, expected ({n}, {n}).')
     return math.sqrt(risk_vector @ corr_matrix @ risk_vector.T)
 
+def on_structure_locked_rejected(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if self.is_structure_locked:
+            raise AttributeError(f"{type(self).__name__} structure is locked: '{func.__name__}' is not allowed.")
+        result = func(self, *args, **kwargs)
+        return result
+    return wrapper
+
+def on_structure_locked_cached(key: str):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if self.is_structure_locked and (result := getattr(self, key, None)) is not None:
+                return result
+            result = func(self, *args, **kwargs)
+            if self.is_structure_locked:
+                setattr(self, key, result)
+            return result
+        return wrapper
+    return decorator
+
 
 class RiskNode:
     """
@@ -117,8 +140,10 @@ class RiskNode:
     node that already has a parent raises, which also makes cycles impossible.
     """
 
-    __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func", "_agg_scope",)
+    __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func", "_agg_scope",
+                 "_is_structure_locked", "_root", "_siblings", "_ancestors", "_descendants", "_leaves", "_path")
 
+    _derived_caches = ("_root", "_siblings", "_ancestors", "_descendants", "_leaves", "_path")
     _allowed_agg_scopes = ("children", "descendants")  # _allowed_agg_scopes[0] will be used as default
 
     def __init__(self, name: str, /, *, identifier: str | None = None):
@@ -139,9 +164,10 @@ class RiskNode:
         self._identifier: str = self._normalize_identifier(self._name if identifier is None else identifier)
         self._risk_capital: float | None = None
         self._parent: RiskNode | None = None
-        self._children: list[RiskNode] = []
+        self._children: tuple[RiskNode, ...] = ()
         self._agg_func: Callable[..., float] | None = None
         self._agg_scope: Literal["children", "descendants"] | None = None
+        self._is_structure_locked: bool = False
 
     @property
     def name(self) -> str:
@@ -173,6 +199,7 @@ class RiskNode:
         return self._risk_capital
 
     @property
+    @on_structure_locked_cached("_root")
     def root(self) -> Self:
         """Outermost ancestor of the node (the node itself if it has no parent)."""
         node = self
@@ -186,35 +213,46 @@ class RiskNode:
         return self._parent
 
     @property
-    def children(self) -> list[Self]:
+    def children(self) -> tuple[Self, ...]:
         """Direct children of the node, in the order they were linked."""
         return self._children
 
     @property
-    def siblings(self) -> list[Self]:
+    @on_structure_locked_cached("_siblings")
+    def siblings(self) -> tuple[Self, ...]:
         """Other children of the parent, in order; empty for a root."""
         if self._parent is None:
-            return []
-        return [x for x in self._parent._children if x is not self]
+            return ()
+        return tuple([x for x in self._parent._children if x is not self])
 
     @property
-    def ancestors(self) -> list[Self]:
-        """Ancestors of the node, ordered ``[parent, grandparent, .., root]``."""
+    @on_structure_locked_cached("_ancestors")
+    def ancestors(self) -> tuple[Self, ...]:
+        """Ancestors of the node, ordered ``(parent, grandparent, .., root)``."""
         nodes = []
         node = self._parent
         while node is not None:
             nodes.append(node)
             node = node._parent
-        return nodes  # [parent, grandparent, .., root]
+        return tuple(nodes)
 
     @property
-    def descendants(self) -> list[Self]:
+    @on_structure_locked_cached("_descendants")
+    def descendants(self) -> tuple[Self, ...]:
         """All nodes below the node, in preorder (a child before its own children)."""
         nodes = []
         for c in self._children:
             nodes.append(c)
             nodes.extend(c.descendants)
-        return nodes
+        return tuple(nodes)
+
+    @property
+    @on_structure_locked_cached("_leaves")
+    def leaves(self) -> tuple[Self, ...]:
+        """Leaf nodes of the subtree rooted at this node. This includes the node
+        when it has no children, so that the leaves of a leaf are the node itself.
+        """
+        return tuple([node for node in (self.descendants + (self, )) if node.is_leaf])
 
     @property
     def is_root(self) -> bool:
@@ -224,7 +262,7 @@ class RiskNode:
     @property
     def is_leaf(self) -> bool:
         """``True`` if the node has no children."""
-        return len(self._children) == 0
+        return not self._children
 
     @property
     def depth(self) -> int:
@@ -232,6 +270,7 @@ class RiskNode:
         return len(self.ancestors)
 
     @property
+    @on_structure_locked_cached("_path")
     def path(self) -> str:
         """
         Path of the node relative to the root of its tree, e.g. ``"Market/Spread"``.
@@ -246,6 +285,7 @@ class RiskNode:
         names.reverse()
         return "/".join(names[1:])
 
+    @on_structure_locked_rejected
     def add_child(self, *args: Self | str) -> None:
         """
         Attach one or more sub-risks below this node.
@@ -260,7 +300,7 @@ class RiskNode:
 
         Raises:
             TypeError: If an argument is neither a ``RiskNode`` nor a ``str``.
-            ValueError: If a child already has a parent, is a root, or
+            ValueError: If a child structure is locked, already has a parent, is a root, or
                 duplicates an existing child by object, name or identifier.
         """
         staged = []
@@ -271,8 +311,8 @@ class RiskNode:
                 self._stage_child(RiskNode(arg), staged)
             else:
                 raise TypeError(f"Invalid {type(arg)=}, expected ('RiskNode', 'str').")
+        self._children += tuple(staged)
         for node in staged:
-            self._children.append(node)
             node._parent = self
             self.clr_risk_capital()
 
@@ -292,7 +332,9 @@ class RiskNode:
         Raises:
             ValueError: If ``node`` cannot become a child of this node.
         """
-        children = self._children + staged
+        children = self._children + tuple(staged)
+        if node.is_structure_locked:
+            raise ValueError(f"{self._name}: can't add '{node._name}' as child: structure is locked.")
         if node._parent is not None:
             raise ValueError(f"{self._name}: can't add '{node._name}' as child: has parent '{node._parent._name}'.")
         if node is self.root:
@@ -337,6 +379,7 @@ class RiskNode:
         self._agg_scope = scope or self._allowed_agg_scopes[0]
         self.clr_risk_capital()
 
+    @on_structure_locked_rejected
     def grow(self, *, children: tuple[str | Self, ...] | str | Self = tuple(),
              agg_func: Callable[..., float] | None = None, agg_scope: Literal["children", "descendants"] | None = None
              ) -> None:
@@ -494,7 +537,7 @@ class RiskNode:
 
         Raises:
             TypeError: If ``key`` is not a ``str``.
-            ValueError: If a component has no matching child.
+            KeyError: If a component has no matching child.
         """
         if not isinstance(key, str):
             raise TypeError(f"Invalid type of key: '{type(key)}', expected 'str'.")
@@ -564,11 +607,10 @@ class RiskNode:
 
     def zeroize(self) -> None:
         """Set the risk capital of every leaf below this node to ``0.0``."""
-        for node in preorder_traversal(self):
-            if node.is_leaf:
-                node.set_risk_capital(0.0)
+        for node in self.leaves:
+            node.set_risk_capital(0.0)
 
-    def deepcopy(self, *, with_value: bool = True) -> Self:
+    def deepcopy(self, *, with_value: bool = True, lock_structure: bool = False) -> Self:
         """
         Return an independent copy of this node and of all its descendants.
 
@@ -583,6 +625,7 @@ class RiskNode:
             with_value: If ``True`` (default), copy the risk capitals as they are
                 currently cached; if ``False``, copy the structure with all
                 capitals cleared.
+            lock_structure: If ``True``, call ``lock_structure()``; defaults to ``False``.
 
         Returns:
             RiskNode: The copied node, detached from the original tree.
@@ -598,8 +641,41 @@ class RiskNode:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             _copy_stuffs(original=desc, copied=copied_desc)
             copied_root.get_descendant(desc._parent.path[offset:]).add_child(copied_desc)
+        if lock_structure:
+            copied_root.lock_structure()
         return copied_root
 
+    @property
+    def is_structure_locked(self) -> bool:
+        return self._is_structure_locked
+
+    def lock_structure(self) -> None:
+        if not self.is_root:
+            self.root.lock_structure()
+            return
+        self._lock_structure()
+        for node in self.descendants:
+            node._lock_structure()
+
+    def _reset_derived_caches(self) -> None:
+        for attr in self._derived_caches:
+            setattr(self, attr, None)  # not computed yet / no longer valid
+
+    def _lock_structure(self) -> None:
+        self._reset_derived_caches()
+        self._is_structure_locked = True
+
+    def unlock_structure(self) -> None:
+        if not self.is_root:
+            self.root.unlock_structure()
+            return
+        self._unlock_structure()
+        for node in self.descendants:
+            node._unlock_structure()
+
+    def _unlock_structure(self) -> None:
+        self._reset_derived_caches()
+        self._is_structure_locked = False
 
 class RiskTree:
     """
@@ -660,7 +736,7 @@ class RiskTree:
             ValueError: If ``key`` does not exist, or if the capital of the node
                 is not available.
         """
-        return self._root.get_descendant(key).risk_capital
+        return self.get_node(key).risk_capital
 
     def get_risk_diversification(self, key: str = "", /) -> float:
         """
@@ -687,7 +763,7 @@ class RiskTree:
             ValueError: If ``key`` does not exist, or if a capital is not
                 available.
         """
-        node = self._root.get_descendant(key)
+        node = self.get_node(key)
         if node.is_leaf:
             return 0.0
         return sum([c.risk_capital for c in node.children]) - node.risk_capital
@@ -703,10 +779,11 @@ class RiskTree:
             RiskNode: The node found at ``key``.
 
         Raises:
-            ValueError: If ``key`` does not exist.
+            KeyError: If ``key`` does not exist.
         """
         return self._root.get_descendant(key)
 
+    @on_structure_locked_rejected
     def grow(self, key: str, /, *, children: tuple[str | RiskNode, ...] | str | RiskNode = tuple(),
              agg_func: Callable[..., float] | None = None, agg_scope: Literal["children", "descendants"] | None = None
              ) -> None:
@@ -715,7 +792,7 @@ class RiskTree:
 
         See :meth:`RiskNode.grow` for the conditions and the exceptions raised.
         """
-        self._root.get_descendant(key).grow(children=children, agg_func=agg_func, agg_scope=agg_scope)
+        self.get_node(key).grow(children=children, agg_func=agg_func, agg_scope=agg_scope)
 
     def get_toptree(self) -> Self:
         """
@@ -742,15 +819,15 @@ class RiskTree:
         Raises:
             ValueError: If ``key`` does not exist.
         """
-        return RiskTree(self._root.get_descendant(key))
+        return RiskTree(self.get_node(key))
 
-    def list_nodes(self) -> list[RiskNode]:
+    def get_all_nodes(self) -> tuple[RiskNode, ...]:
         """All nodes of the tree, in preorder (the root first, then each subtree)."""
-        return preorder_traversal(self._root)
+        return (self._root, ) + self._root.descendants
 
-    def list_leaf_nodes(self) -> list[RiskNode]:
+    def get_leaf_nodes(self) -> tuple[RiskNode, ...]:
         """All leaf nodes of the tree, in preorder."""
-        return [node for node in self.list_nodes() if node.is_leaf]
+        return self._root.leaves
 
     def set_risk_capital(self, key: str, /, value: float) -> None:
         """
@@ -759,7 +836,7 @@ class RiskTree:
         See :meth:`RiskNode.set_risk_capital` for the conditions and the
         exceptions raised.
         """
-        self._root.get_descendant(key).set_risk_capital(value)
+        self.get_node(key).set_risk_capital(value)
 
     def batch_set_risk_capital(self, value_dict: dict[str, float | dict], /) -> None:
         """
@@ -813,7 +890,7 @@ class RiskTree:
         """Set the risk capital of every leaf of the tree to ``0.0``."""
         self._root.zeroize()
 
-    def deepcopy(self, *, with_value: bool = True) -> Self:
+    def deepcopy(self, *, with_value: bool = True, lock_structure: bool = False) -> Self:
         """
         Return an independent copy of the whole tree.
 
@@ -824,11 +901,13 @@ class RiskTree:
             with_value: If ``True`` (default), copy the risk capitals as they are
                 currently cached; if ``False``, copy the structure with all
                 capitals cleared.
+            lock_structure: If ``True``, call ``lock_structure()``; defaults to ``False``.
 
         Returns:
             RiskTree: The copied tree, detached from the original one.
         """
-        return RiskTree(self._root.deepcopy(with_value=with_value))
+        copied_tree = RiskTree(self._root.deepcopy(with_value=with_value, lock_structure=lock_structure))
+        return copied_tree
 
     def display(self, *, width: int = 80, precision: int = 2) -> None:
         """
@@ -852,6 +931,16 @@ class RiskTree:
                 print(f"{prefixed_name} {val:>{val_width},.{precision}f}")
             except ValueError:
                 print(prefixed_name)
+
+    @property
+    def is_structure_locked(self) -> bool:
+        return self._root.is_structure_locked
+
+    def lock_structure(self) -> None:
+        self._root.lock_structure()
+
+    def unlock_structure(self) -> None:
+        self._root.unlock_structure()
 
 
 def preorder_traversal(node: RiskNode) -> list[RiskNode]:
