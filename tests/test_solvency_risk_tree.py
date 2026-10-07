@@ -169,8 +169,8 @@ class TestRiskNodeStructure:
         node = RiskNode("Root")
         node.add_child("1 Year", "Other")
         node.set_agg_func(agg)
-        node.goto("1 Year").set_risk_capital(1.0)
-        node.goto("Other").set_risk_capital(2.0)
+        node.get_descendant("1 Year").set_risk_capital(1.0)
+        node.get_descendant("Other").set_risk_capital(2.0)
         assert node.risk_capital == 3.0
 
     @pytest.mark.parametrize("identifier", [1, 0, False], ids=["int", "falsy int", "bool"])
@@ -189,9 +189,15 @@ class TestRiskNodeStructure:
     def test_an_explicit_identifier_is_normalised_like_a_name(self):
         assert RiskNode("Property", identifier="Type 1").identifier == "type_1"
 
-    def test_an_empty_name_is_rejected_by_the_identifier_check(self):
-        with pytest.raises(ValueError, match="Empty chars"):
+    def test_a_bad_name_is_rejected(self):
+        with pytest.raises(ValueError, match="cannot be empty"):
             RiskNode("")
+        with pytest.raises(ValueError, match="cannot be empty"):
+            RiskNode("  ")
+        with pytest.raises(ValueError, match="contains '.'"):
+            RiskNode("A.B")
+        with pytest.raises(ValueError, match="contains '/'"):
+            RiskNode("A/B")
 
     def test_new_node_is_a_detached_leaf(self):
         node = RiskNode("A")
@@ -203,13 +209,13 @@ class TestRiskNodeStructure:
         root = RiskNode("T")
         child = RiskNode("B")
         root.add_child("A", child)
-        assert root.children == [root.goto("A"), child]
+        assert root.children == [root.get_descendant("A"), child]
         assert [c.parent for c in root.children] == [root, root]
         assert not root.is_leaf
-        assert root.goto("A").depth == 1
-        assert root.goto("B").root is root
-        assert root.goto("B").siblings == [root.goto("A")]
-        assert root.goto("B").path == "B"
+        assert root.get_descendant("A").depth == 1
+        assert root.get_descendant("B").root is root
+        assert root.get_descendant("B").siblings == [root.get_descendant("A")]
+        assert root.get_descendant("B").path == "B"
 
     def test_add_child_rejects_other_types(self):
         with pytest.raises(TypeError, match="Invalid"):
@@ -245,7 +251,7 @@ class TestRiskNodeStructure:
         root = RiskNode("T")
         root.add_child("A")
         with pytest.raises(ValueError, match="is root"):
-            root.goto("A").add_child(root)
+            root.get_descendant("A").add_child(root)
 
     def test_a_node_cannot_be_added_as_its_own_child(self):
         root = RiskNode("T")
@@ -266,19 +272,11 @@ class TestRiskNodeStructure:
         assert tree.get_subtree("M").get_node("E").path == "M/E"
         assert tree.root.path == ""
 
-    def test_goto_resolves_paths(self, tree):
-        assert tree.root.goto(None) is tree.root
-        assert tree.root.goto("") is tree.root
-        assert tree.root.goto(".") is tree.root
-        assert tree.root.goto("M/E") is tree.get_node("M/E")
-        assert tree.root.goto("/M/E") is tree.get_node("M/E")  # leading "/" ignored
-        assert tree.get_node("M").goto("E") is tree.get_node("M/E")
-
-    @pytest.mark.parametrize("path", ["..", "M/.."])
-    def test_goto_has_no_parent_component(self, tree, path):
-        # No name may contain ".", so ".." can never match a child.
-        with pytest.raises(ValueError, match="can't goto node"):
-            tree.get_node("M/E").goto(path)
+    def test_get_descendant_resolves_paths(self, tree):
+        assert tree.root.get_descendant("") is tree.root
+        assert tree.root.get_descendant("M/E") is tree.get_node("M/E")
+        assert tree.root.get_descendant("/M/E") is tree.get_node("M/E")  # leading "/" ignored
+        assert tree.get_node("M").get_descendant("E") is tree.get_node("M/E")
 
     def test_names_may_not_look_like_path_syntax(self):
         root = RiskNode("T")
@@ -286,17 +284,19 @@ class TestRiskNodeStructure:
             root.add_child("..")
         with pytest.raises(ValueError, match="contains '.'"):
             root.add_child(".")
+        with pytest.raises(ValueError, match="contains '/'"):
+            root.add_child("/")
         assert root.children == []
 
-    def test_goto_unknown_child_raises_value_error(self, tree):
-        with pytest.raises(ValueError, match="failed at 'X'"):
-            tree.root.goto("M/X")
+    def test_get_descendant_unknown_child_raises_value_error(self, tree):
+        with pytest.raises(KeyError, match="M: has no child node named 'X'"):
+            tree.root.get_descendant("M/X")
 
-    def test_goto_rejects_non_string_paths(self, tree):
+    def test_get_descendant_rejects_non_string_paths(self, tree):
         with pytest.raises(TypeError, match="expected 'str'"):
-            tree.root.goto(1)
+            tree.root.get_descendant(1)
 
-    def test_truediv_is_goto(self, tree):
+    def test_truediv_is_get_descendant(self, tree):
         assert tree.root / "M" / "F" is tree.get_node("M/F")
 
 
@@ -313,8 +313,8 @@ class TestCapitalAggregation:
             return non_life + 2.0 * life
         node.add_child("Non-life", "Life")
         node.set_agg_func(_agg)
-        node.goto("Non-life").set_risk_capital(1.0)
-        node.goto("Life").set_risk_capital(2.0)
+        node.get_descendant("Non-life").set_risk_capital(1.0)
+        node.get_descendant("Life").set_risk_capital(2.0)
         assert node.risk_capital == 5.0
 
     def test_explicit_identifier_is_the_keyword(self):
@@ -323,8 +323,8 @@ class TestCapitalAggregation:
             return property_ + equity
         node.add_child(RiskNode("Property", identifier="property_"), "Equity")
         node.set_agg_func(_agg)
-        node.goto("Property").set_risk_capital(1.0)
-        node.goto("Equity").set_risk_capital(2.0)
+        node.get_descendant("Property").set_risk_capital(1.0)
+        node.get_descendant("Equity").set_risk_capital(2.0)
         assert node.risk_capital == 3.0
 
     def test_set_risk_capital_on_a_non_leaf_raises_value_error(self, tree):
@@ -396,8 +396,8 @@ class TestCapitalAggregation:
         node = RiskNode("P")
         node.add_child("A", "B")
         node.set_agg_func(_sum_agg)
-        node.goto("A").set_risk_capital(1.0)
-        node.goto("B").set_risk_capital(2.0)
+        node.get_descendant("A").set_risk_capital(1.0)
+        node.get_descendant("B").set_risk_capital(2.0)
         assert node.risk_capital == 3.0
         extra = RiskNode("C")
         extra.set_risk_capital(10.0)
@@ -412,7 +412,7 @@ class TestCapitalAggregation:
         node.add_child("X")
         node.set_agg_func(_sum_agg)
         assert node._risk_capital is None
-        node.goto("X").set_risk_capital(3.0)
+        node.get_descendant("X").set_risk_capital(3.0)
         assert node.risk_capital == 3.0
 
     def test_set_agg_func_twice_raises_value_error(self):
@@ -560,7 +560,7 @@ class TestRiskTree:
         assert tree.get_risk_capital("M/E") == 1.0
 
     def test_get_risk_capital_unknown_path_raises_value_error(self, tree):
-        with pytest.raises(ValueError, match="can't goto node"):
+        with pytest.raises(KeyError, match="has no child node named 'Nope'"):
             tree.get_risk_capital("Nope")
 
     def test_get_node_returns_the_node_itself(self, tree):
@@ -605,7 +605,7 @@ class TestRiskTree:
     def test_batch_set_risk_capital_rejects_unknown_and_non_leaf_paths(self, tree):
         with pytest.raises(ValueError, match="non-leaf"):
             tree.batch_set_risk_capital({"M": 1.0})
-        with pytest.raises(ValueError, match="can't goto node"):
+        with pytest.raises(KeyError, match="M: has no child node named 'Nope'"):
             tree.batch_set_risk_capital({"M/Nope": 1.0})
 
     def test_flatten_dict_joins_nested_keys(self):
@@ -658,8 +658,8 @@ class TestGrow:
         with pytest.raises(ValueError, match="hasn't been provided"):
             tree.get_risk_capital()
 
-    @pytest.mark.parametrize("path", ["", ".", "/"])
-    def test_empty_dot_and_slash_paths_denote_the_root(self, path):
+    @pytest.mark.parametrize("path", ["", "/"])
+    def test_empty_and_slash_paths_denote_the_root(self, path):
         tree = RiskTree("T")
         tree.grow(path, children=("A",))
         assert [c.name for c in tree.root.children] == ["A"]
@@ -748,7 +748,7 @@ class TestGrow:
 
     def test_unknown_path_raises_value_error(self):
         tree = RiskTree("T")
-        with pytest.raises(ValueError, match="can't goto node"):
+        with pytest.raises(KeyError, match="has no child node named 'Nope'"):
             tree.grow("Nope", children=("A",), agg_func=_sum_agg)
         assert tree.root.children == []  # the tree is untouched
 

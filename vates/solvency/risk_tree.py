@@ -27,15 +27,15 @@ standard-formula correlation matrix to the capitals it is given::
 where ``x`` is the vector of capitals and ``C`` their correlation matrix.
 
 Nodes are addressed by "/"-separated paths relative to the root of their tree,
-where the root itself has the empty path ``""`` and ``"."`` denotes the current
-node (node names therefore contain neither ``"/"`` nor ``"."``)::
+where the root itself has the empty path ``""`` denotes the current
+node (node names therefore contain no ``"/"``)::
 
     tree = RiskTree(root="Solvency II SCR")
     tree.grow("", children=("Market", "Life"), agg_func=overall_risk_agg)
     tree.grow("Market", children=("Interest Rate", "Equity"), agg_func=market_agg,
-                     agg_scope="descendants")
+              agg_scope="descendants")
     tree.grow("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"),
-                     agg_func=max_at_zero)
+              agg_func=max_at_zero)
     tree.set_risk_capital("Market/Interest Rate/Interest Rate Up", 1_000.0)
 
 A ``RiskTree`` is only a *view* on a node and never copies it; use ``deepcopy``
@@ -104,7 +104,7 @@ class RiskNode:
 
     Children are attached with :meth:`add_child`, or, from a tree, with
     :meth:`RiskTree.grow`.  The name of a node must be unique among its
-    siblings and free of ``"/"`` and ``"."``, which are reserved by the path
+    siblings and free of ``"/"``, which are reserved by the path
     syntax.  Every node also carries an ``identifier``: a lower-case,
     keyword-friendly version of its name, used as the keyword argument name when
     the parent aggregates (``"Non-life"`` -> ``"non_life"``).  A leading digit is
@@ -131,15 +131,11 @@ class RiskNode:
                 name, and defaults to the normalised ``name`` when ``None``.
 
         Raises:
-            TypeError: If ``identifier`` is not a ``str``.
-            ValueError: If ``name`` contains ``"/"`` or ``"."``, or if
+            TypeError: If ``name`` is not a ``str``, or if ``identifier`` is not a ``str``.
+            ValueError: If ``name`` is empty or contains ``"/"`` or ``"."``, or if
                 ``identifier`` is empty.
         """
-        name = str(name)
-        for bad in ("/", "."):
-            if bad in name:
-                raise ValueError(f"Invalid {name=}: contains '{bad}'.")
-        self._name: str = name
+        self._name: str = self._validate_name(name)
         self._identifier: str = self._normalize_identifier(self._name if identifier is None else identifier)
         self._risk_capital: float | None = None
         self._parent: RiskNode | None = None
@@ -462,43 +458,77 @@ class RiskNode:
             raise NotImplementedError(f"agg scope: {self._agg_scope}.")
         self._risk_capital = self._agg_func(**capitals)
 
-    def goto(self, path: str | None, /) -> Self:
+    def get_child(self, name: str, /) -> Self:
         """
-        Resolve a relative path and return the node it denotes.
-
-        Components are separated by ``"/"``: ``""`` and ``"."`` stay on the
-        current node, and any other component matches a direct child by name
-        (no name being allowed to contain ``"."`` or ``"/"``).  A leading
-        ``"/"`` is ignored, so ``"Market/Spread"``, ``"/Market/Spread"``
-        and ``"./Market/Spread"`` are equivalent.
+        Get the child node by a given name.
 
         Args:
-            path: The path to resolve, or ``None`` for this node itself.
+            name: The ``name`` to lookup.
 
         Returns:
-            RiskNode: The node found at ``path``.
+            RiskNode: The child node named ``name``.
 
         Raises:
-            TypeError: If ``path`` is neither ``None`` nor a ``str``.
-            ValueError: If a component has no matching child.
+            ValueError: If current node has no matching child.
         """
-        if path is None:
-            return self
-        if not isinstance(path, str):
-            raise TypeError(f"Invalid type of path: '{type(path)}', expected 'str'.")
-        node = self
-        for p in path.split("/"):
-            if p == "." or p == "":
-                pass
-            else:
-                node = next((c for c in node._children if c._name == p), None)
-            if node is None:
-                raise ValueError(f"{self._name}: can't goto node: '{path}'; failed at '{p}'.")
+        node = next((c for c in self._children if c._name == name), None)
+        if node is None:
+            raise KeyError(f"{self._name}: has no child node named '{name}'.")
         return node
 
-    def __truediv__(self, other: str, /) -> Self:
-        """Resolve ``other`` as a path relative to this node: ``node / "Market/Spread"``."""
-        return self.goto(other)
+    def get_descendant(self, key: str, /) -> Self:
+        """
+        Resolve a relative path and return the descendant node it denotes.
+
+        Components are separated by ``"/"``: ``""`` stays on the
+        current node, and any other component matches a direct child by name
+        (no name being allowed to contain ```"/"``).  A leading
+        ``"/"`` is ignored, so ``"Market/Spread"``, ``"/Market/Spread"``
+        and ``"Market/Spread"`` are equivalent.
+
+        Args:
+            key: The relative path to resolve, or ``""`` for this node itself.
+
+        Returns:
+            RiskNode: The node found at ``key``.
+
+        Raises:
+            TypeError: If ``key`` is not a ``str``.
+            ValueError: If a component has no matching child.
+        """
+        if not isinstance(key, str):
+            raise TypeError(f"Invalid type of key: '{type(key)}', expected 'str'.")
+        node = self
+        for k in key.split("/"):
+            node = node.get_child(k) if k else node
+        return node
+
+    def __truediv__(self, key: str, /) -> Self:
+        """Resolve ``key`` as a path relative to this node: ``node / "Market/Spread"``."""
+        return self.get_descendant(key)
+
+    @classmethod
+    def _validate_name(cls, name: str, /) -> str:
+        """
+        Args:
+            name: Name of the node, unique among its siblings and free of ``"/"``
+                and ``"."``, which are reserved by the path syntax.
+
+        Raises:
+            TypeError: If ``name`` is not a ``str``.
+            ValueError: If ``name`` is empty or contains ``"/"`` or ``"."``.
+
+        Returns:
+            str: The validated name.
+        """
+        if not isinstance(name, str):
+            raise TypeError(f"Invalid type of name: {type(name)}, expected 'str'.")
+        if name == "" or all(c == " " for c in name):
+            raise ValueError(f"Name cannot be empty: {name}.")
+        for bad in ("/", "."):
+            if bad in name:
+                raise ValueError(f"Invalid {name=}: contains '{bad}'.")
+        return name
 
     @classmethod
     def _normalize_identifier(cls, chars: str, /) -> str:
@@ -567,7 +597,7 @@ class RiskNode:
         for desc in self.descendants:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             _copy_stuffs(original=desc, copied=copied_desc)
-            copied_root.goto(desc._parent.path[offset:]).add_child(copied_desc)
+            copied_root.get_descendant(desc._parent.path[offset:]).add_child(copied_desc)
         return copied_root
 
 
@@ -615,24 +645,24 @@ class RiskTree:
         """``True`` if the root node still has a parent, i.e. the tree is a subtree."""
         return not self._root.is_root
 
-    def get_risk_capital(self, path: str | None = None, /) -> float:
+    def get_risk_capital(self, key: str = "", /) -> float:
         """
         Risk capital of one node of the tree.
 
         Args:
-            path: Path of the node relative to the root, or ``None`` (default)
+            key: Path of the node relative to the root, or ``""`` (default)
                 for the root itself.
 
         Returns:
             float: The risk capital of the node.
 
         Raises:
-            ValueError: If ``path`` does not exist, or if the capital of the node
+            ValueError: If ``key`` does not exist, or if the capital of the node
                 is not available.
         """
-        return self._root.goto(path).risk_capital
+        return self._root.get_descendant(key).risk_capital
 
-    def get_risk_diversification(self, path: str | None = None, /) -> float:
+    def get_risk_diversification(self, key: str = "", /) -> float:
         """
         Diversification benefit at one node of the tree.
 
@@ -647,45 +677,45 @@ class RiskTree:
         no capital to add up, and reading it raises.
 
         Args:
-            path: Path of the node relative to the root, or ``None`` (default)
+            key: Path of the node relative to the root, or ``""`` (default)
                 for the root itself.
 
         Returns:
             float: The diversification benefit, ``0.0`` for a leaf node.
 
         Raises:
-            ValueError: If ``path`` does not exist, or if a capital is not
+            ValueError: If ``key`` does not exist, or if a capital is not
                 available.
         """
-        node = self._root.goto(path)
+        node = self._root.get_descendant(key)
         if node.is_leaf:
             return 0.0
         return sum([c.risk_capital for c in node.children]) - node.risk_capital
 
-    def get_node(self, path: str, /) -> RiskNode:
+    def get_node(self, key: str = "", /) -> RiskNode:
         """
-        Node at ``path``.
+        Node at ``key``.
 
         Args:
-            path: Path of the node relative to the root, ``""`` for the root.
+            key: Path of the node relative to the root, ``""`` for the root.
 
         Returns:
-            RiskNode: The node found at ``path``.
+            RiskNode: The node found at ``key``.
 
         Raises:
-            ValueError: If ``path`` does not exist.
+            ValueError: If ``key`` does not exist.
         """
-        return self._root.goto(path)
+        return self._root.get_descendant(key)
 
-    def grow(self, path: str, /, *, children: tuple[str | RiskNode, ...] | str | RiskNode = tuple(),
+    def grow(self, key: str, /, *, children: tuple[str | RiskNode, ...] | str | RiskNode = tuple(),
              agg_func: Callable[..., float] | None = None, agg_scope: Literal["children", "descendants"] | None = None
              ) -> None:
         """
-        Set up the node at ``path``: attach its children and set its aggregation.
+        Set up the node at ``key`` (``""`` denotes the root): attach its children and set its aggregation.
 
         See :meth:`RiskNode.grow` for the conditions and the exceptions raised.
         """
-        self._root.goto(path).grow(children=children, agg_func=agg_func, agg_scope=agg_scope)
+        self._root.get_descendant(key).grow(children=children, agg_func=agg_func, agg_scope=agg_scope)
 
     def get_toptree(self) -> Self:
         """
@@ -697,12 +727,12 @@ class RiskTree:
         """
         return RiskTree(self._root.root)
 
-    def get_subtree(self, path: str, /) -> Self:
+    def get_subtree(self, key: str, /) -> Self:
         """
-        Tree on the node at ``path``.
+        Tree on the node at ``key``.
 
         Args:
-            path: Path of the root of the subtree, relative to the root of this
+            key: Path of the root of the subtree, relative to the root of this
                 tree.
 
         Returns:
@@ -710,9 +740,9 @@ class RiskTree:
                 :meth:`deepcopy` if the subtree must be modified on its own.
 
         Raises:
-            ValueError: If ``path`` does not exist.
+            ValueError: If ``key`` does not exist.
         """
-        return RiskTree(self._root.goto(path))
+        return RiskTree(self._root.get_descendant(key))
 
     def list_nodes(self) -> list[RiskNode]:
         """All nodes of the tree, in preorder (the root first, then each subtree)."""
@@ -722,14 +752,14 @@ class RiskTree:
         """All leaf nodes of the tree, in preorder."""
         return [node for node in self.list_nodes() if node.is_leaf]
 
-    def set_risk_capital(self, path: str, /, value: float) -> None:
+    def set_risk_capital(self, key: str, /, value: float) -> None:
         """
-        Provide the risk capital of the leaf node at ``path``.
+        Provide the risk capital of the leaf node at ``key``.
 
         See :meth:`RiskNode.set_risk_capital` for the conditions and the
         exceptions raised.
         """
-        self._root.goto(path).set_risk_capital(value)
+        self._root.get_descendant(key).set_risk_capital(value)
 
     def batch_set_risk_capital(self, value_dict: dict[str, float | dict], /) -> None:
         """
@@ -744,10 +774,10 @@ class RiskTree:
         Raises:
             TypeError: If a key is not a ``str``, or a value is neither a number
                 nor a ``dict``.
-            ValueError: If a path does not exist, or does not point to a leaf.
+            ValueError: If a key does not exist, or does not point to a leaf.
         """
-        for path, value in self._flatten_dict(value_dict).items():
-            self.set_risk_capital(path, value)
+        for key, value in self._flatten_dict(value_dict).items():
+            self.set_risk_capital(key, value)
 
     @classmethod
     def _flatten_dict(cls, nested: dict[str, float | dict], /, joiner: str = "/") -> dict[str, float]:
