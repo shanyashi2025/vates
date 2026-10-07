@@ -823,6 +823,121 @@ class TestDeepcopy:
         assert agg.seen[-1] == {"a": 5.0}  # the copy called the original object
 
 
+class TestLockStructure:
+    """`lock_structure` freezes the hierarchy of a whole tree, never the capitals.
+
+    The `tree` fixture is `T -> M(E=1, F=2), L(H=4)`, so its leaves are
+    `["E", "F", "H"]` and `T = 7`.
+    """
+
+    def test_a_fresh_tree_is_unlocked(self, tree):
+        assert not tree.is_structure_locked
+        assert not any(node.is_structure_locked for node in tree.get_all_nodes())
+        tree.unlock_structure()  # a no-op
+        assert not tree.is_structure_locked
+
+    def test_locking_is_whole_tree_from_any_node(self, tree):
+        tree.get_node("M/E").lock_structure()
+        assert tree.is_structure_locked
+        assert all(node.is_structure_locked for node in tree.get_all_nodes())
+
+    def test_unlocking_from_a_subtree_unlocks_the_whole_tree(self, tree):
+        tree.lock_structure()
+        tree.get_subtree("M").unlock_structure()
+        assert not tree.is_structure_locked
+        assert not any(node.is_structure_locked for node in tree.get_all_nodes())
+
+    def test_locking_one_tree_does_not_lock_another(self, make_tree):
+        locked, other = make_tree(), make_tree()
+        locked.lock_structure()
+        assert not other.is_structure_locked
+        other.grow("", children=("X",))  # still growable
+        assert [n.name for n in other.root.children] == ["M", "L", "X"]
+
+    def test_a_locked_tree_rejects_every_structural_change(self, tree):
+        tree.lock_structure()
+        with pytest.raises(AttributeError, match="structure is locked"):
+            tree.grow("M", children=("G",))
+        with pytest.raises(AttributeError, match="structure is locked"):
+            tree.get_node("M").grow(children=("G",))
+        with pytest.raises(AttributeError, match="structure is locked"):
+            tree.get_node("M").add_child("G")
+        with pytest.raises(AttributeError, match="structure is locked"):
+            tree.get_node("M").set_agg_func(_sum_agg)
+        assert [n.name for n in tree.get_all_nodes()] == ["T", "M", "E", "F", "L", "H"]
+
+    def test_a_locked_node_cannot_become_a_child(self, tree):
+        subtree = RiskTree("O")
+        subtree.grow("", children=("X",), agg_func=_sum_agg)
+        subtree.lock_structure()
+        with pytest.raises(ValueError, match="structure is locked"):
+            tree.get_node("M").add_child(subtree.root)
+        subtree.unlock_structure()
+        tree.get_node("M").add_child(subtree.root)  # accepted once unlocked
+        assert subtree.root.parent is tree.get_node("M")
+
+    def test_capitals_stay_writable_and_aggregate_while_locked(self, tree):
+        tree.lock_structure()
+        tree.set_risk_capital("M/E", 10.0)
+        tree.batch_set_risk_capital({"M/F": 20.0, "L/H": 40.0})
+        assert tree.get_risk_capital() == 70.0
+        tree.zeroize()
+        assert tree.get_risk_capital() == 0.0
+
+    def test_reads_are_unaffected_by_the_lock(self, tree):
+        before = [(n.path, n.depth, n.ancestors, n.descendants, n.leaves, n.root)
+                  for n in tree.get_all_nodes()]
+        tree.lock_structure()
+        after = [(n.path, n.depth, n.ancestors, n.descendants, n.leaves, n.root)
+                 for n in tree.get_all_nodes()]
+        assert after == before
+        assert [n.name for n in tree.get_leaf_nodes()] == ["E", "F", "H"]
+
+    def test_locking_twice_keeps_the_caches_and_unlocking_drops_them(self, tree):
+        tree.lock_structure()
+        leaf = tree.get_node("M/E")
+        assert leaf.path == "M/E" and leaf._path == "M/E"
+        tree.lock_structure()  # already locked: no reset
+        assert leaf._path == "M/E"
+        tree.unlock_structure()
+        assert leaf._path is None
+
+    def test_relocking_refreshes_every_derived_cache(self, tree):
+        def snapshot():
+            return {n.path: (n.root, n.siblings, n.ancestors, n.descendants, n.leaves, n.path)
+                    for n in tree.get_all_nodes()}
+
+        tree.lock_structure()
+        tree.get_leaf_nodes()  # populate the caches
+        tree.unlock_structure()
+        tree.grow("M", children=("G",))
+        tree.set_risk_capital("M/G", 3.0)
+        expected = snapshot()  # unlocked: computed, never cached
+        tree.lock_structure()
+        assert snapshot() == expected
+        assert [n.name for n in tree.get_leaf_nodes()] == ["E", "F", "G", "H"]
+
+    @pytest.mark.parametrize("arg, expected", [(None, False), (True, True), (False, False)],
+                             ids=["inherit", "force-on", "force-off"])
+    def test_deepcopy_of_an_unlocked_tree(self, tree, arg, expected):
+        assert tree.deepcopy(lock_structure=arg).is_structure_locked is expected
+
+    @pytest.mark.parametrize("arg, expected", [(None, True), (True, True), (False, False)],
+                             ids=["inherit", "force-on", "force-off"])
+    def test_deepcopy_of_a_locked_tree(self, tree, arg, expected):
+        tree.lock_structure()
+        assert tree.deepcopy(lock_structure=arg).is_structure_locked is expected
+
+    def test_a_locked_copy_is_independent_of_its_source(self, tree):
+        tree.lock_structure()
+        copied = tree.deepcopy()  # inherits the lock
+        with pytest.raises(AttributeError, match="structure is locked"):
+            copied.grow("", children=("X",))
+        copied.set_risk_capital("M/E", 10.0)  # capitals stay writable
+        assert copied.get_risk_capital() == 16.0
+        assert tree.get_risk_capital() == 7.0
+
+
 class TestPreorderTraversal:
     def test_preorder_order(self, tree):
         assert [n.name for n in preorder_traversal(tree.root)] == ["T", "M", "E", "F", "L", "H"]

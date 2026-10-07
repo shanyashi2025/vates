@@ -75,4 +75,4 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None, is_zeroize: bool = Tr
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule).deepcopy(lock_structure=True)
+        return tree.get_subtree(submodule).deepcopy()

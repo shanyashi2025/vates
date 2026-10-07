@@ -108,4 +108,4 @@ def make_solvency2_scr_module(*, submodule: str | None = None, is_zeroize: bool 
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule).deepcopy(lock_structure=True)
+        return tree.get_subtree(submodule).deepcopy()

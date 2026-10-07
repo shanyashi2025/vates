@@ -38,6 +38,13 @@ node (node names therefore contain no ``"/"``)::
               agg_func=max_at_zero)
     tree.set_risk_capital("Market/Interest Rate/Interest Rate Up", 1_000.0)
 
+Once its hierarchy is final, a tree can be locked with
+:meth:`RiskTree.lock_structure`: structural changes then raise
+``AttributeError``, while capitals stay writable so that the same tree can be
+reused for every scenario.  Locking is always whole-tree, and the derived views
+of each node (``path``, ``descendants``, ``leaves``, ...) are cached while it
+lasts.  :meth:`RiskTree.unlock_structure` gives the structure back.
+
 A ``RiskTree`` is only a *view* on a node and never copies it; use ``deepcopy``
 to obtain an independent structure.
 """
@@ -93,6 +100,7 @@ def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
     return math.sqrt(risk_vector @ corr_matrix @ risk_vector.T)
 
 def on_structure_locked_rejected(func):
+    """Refuse a structural mutator with an ``AttributeError`` while the structure is locked."""
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         if self.is_structure_locked:
@@ -102,6 +110,7 @@ def on_structure_locked_rejected(func):
     return wrapper
 
 def on_structure_locked_cached(key: str):
+    """Cache the result of a derived property in the slot ``key`` while the structure is locked."""
     def decorator(func):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -143,7 +152,7 @@ class RiskNode:
     __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func", "_agg_scope",
                  "_is_structure_locked", "_root", "_siblings", "_ancestors", "_descendants", "_leaves", "_path")
 
-    _derived_caches = ("_root", "_siblings", "_ancestors", "_descendants", "_leaves", "_path")
+    _derived_caches = ("_root", "_siblings", "_ancestors", "_descendants", "_leaves", "_path")  # cached while locked
     _allowed_agg_scopes = ("children", "descendants")  # _allowed_agg_scopes[0] will be used as default
 
     def __init__(self, name: str, /, *, identifier: str | None = None):
@@ -302,6 +311,7 @@ class RiskNode:
             TypeError: If an argument is neither a ``RiskNode`` nor a ``str``.
             ValueError: If a child structure is locked, already has a parent, is a root, or
                 duplicates an existing child by object, name or identifier.
+            AttributeError: If the structure of this node is locked.
         """
         staged = []
         for arg in args:
@@ -347,6 +357,7 @@ class RiskNode:
             raise ValueError(f"{self._name}: can't add '{node._name}' as child: duplicate identifier.")
         staged.append(node)
 
+    @on_structure_locked_rejected
     def set_agg_func(self, func: Callable[..., float], /, *,
                      scope: Literal["children", "descendants"] | None = None) -> None:
         """
@@ -370,6 +381,7 @@ class RiskNode:
         Raises:
             ValueError: If an aggregation function has already been set, or if
                 ``scope`` is neither ``"children"`` nor ``"descendants"``.
+            AttributeError: If the structure of this node is locked.
         """
         if self._agg_func is not None:
             raise ValueError(f"{self._name}: aggregation function has already been set.")
@@ -414,6 +426,7 @@ class RiskNode:
             TypeError: If ``children`` is neither a child nor a sequence of
                 children, or if a child is neither a :class:`RiskNode` nor a
                 ``str``.
+            AttributeError: If the structure of this node is locked.
         """
         if agg_func is not None:
             # Pre-flight check: `set_agg_func` below would otherwise refuse the node
@@ -606,11 +619,13 @@ class RiskNode:
         return chars
 
     def zeroize(self) -> None:
-        """Set the risk capital of every leaf below this node to ``0.0``."""
+        """Set the risk capital of every leaf of this node's subtree -- the node
+        itself when it has no children -- to ``0.0``.
+        """
         for node in self.leaves:
             node.set_risk_capital(0.0)
 
-    def deepcopy(self, *, with_value: bool = True, lock_structure: bool = False) -> Self:
+    def deepcopy(self, *, with_value: bool = True, lock_structure: bool | None = None) -> Self:
         """
         Return an independent copy of this node and of all its descendants.
 
@@ -625,7 +640,8 @@ class RiskNode:
             with_value: If ``True`` (default), copy the risk capitals as they are
                 currently cached; if ``False``, copy the structure with all
                 capitals cleared.
-            lock_structure: If ``True``, call ``lock_structure()``; defaults to ``False``.
+            lock_structure: Whether the copy is locked: ``None`` (default) copies
+                the state of the original, ``True`` or ``False`` forces it.
 
         Returns:
             RiskNode: The copied node, detached from the original tree.
@@ -641,15 +657,25 @@ class RiskNode:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
             _copy_stuffs(original=desc, copied=copied_desc)
             copied_root.get_descendant(desc._parent.path[offset:]).add_child(copied_desc)
+        lock_structure = self._is_structure_locked if lock_structure is None else lock_structure
         if lock_structure:
             copied_root.lock_structure()
         return copied_root
 
     @property
     def is_structure_locked(self) -> bool:
+        """``True`` if the structure of the tree this node belongs to is locked."""
         return self._is_structure_locked
 
     def lock_structure(self) -> None:
+        """
+        Lock the structure of the whole tree this node belongs to.
+
+        Adding children and setting aggregation functions then raise
+        ``AttributeError``, while risk capitals stay writable; the derived views
+        become cached.  Called on a node rather than on a root, it locks the whole
+        tree and not the subtree.
+        """
         if not self.is_root:
             self.root.lock_structure()
             return
@@ -658,14 +684,24 @@ class RiskNode:
             node._lock_structure()
 
     def _reset_derived_caches(self) -> None:
+        """Forget every derived view cached by this node."""
         for attr in self._derived_caches:
             setattr(self, attr, None)  # not computed yet / no longer valid
 
     def _lock_structure(self) -> None:
+        """Lock this node only, as part of :meth:`lock_structure`'s walk."""
+        if self._is_structure_locked:
+            return  # already locked: the structure cannot have changed since
         self._reset_derived_caches()
         self._is_structure_locked = True
 
     def unlock_structure(self) -> None:
+        """
+        Unlock the structure of the whole tree this node belongs to.
+
+        The mirror of :meth:`lock_structure`: the derived caches are dropped and
+        the hierarchy can be grown again.
+        """
         if not self.is_root:
             self.root.unlock_structure()
             return
@@ -674,6 +710,9 @@ class RiskNode:
             node._unlock_structure()
 
     def _unlock_structure(self) -> None:
+        """Unlock this node only, as part of :meth:`unlock_structure`'s walk."""
+        if not self._is_structure_locked:
+            return  # already unlocked: the caches are unused until the next lock resets them
         self._reset_derived_caches()
         self._is_structure_locked = False
 
@@ -689,7 +728,8 @@ class RiskTree:
     a larger tree they are relative to that subtree and not to the outermost root
     (the :attr:`RiskNode.path` of a node, in contrast, is always absolute within
     the whole structure).  Use :meth:`deepcopy` to obtain an independent
-    structure.
+    structure.  Once built, :meth:`lock_structure` freezes the hierarchy, so that
+    only capitals can change.
     """
 
     __slots__ = ("_root",)
@@ -890,7 +930,7 @@ class RiskTree:
         """Set the risk capital of every leaf of the tree to ``0.0``."""
         self._root.zeroize()
 
-    def deepcopy(self, *, with_value: bool = True, lock_structure: bool = False) -> Self:
+    def deepcopy(self, *, with_value: bool = True, lock_structure: bool | None = None) -> Self:
         """
         Return an independent copy of the whole tree.
 
@@ -901,7 +941,8 @@ class RiskTree:
             with_value: If ``True`` (default), copy the risk capitals as they are
                 currently cached; if ``False``, copy the structure with all
                 capitals cleared.
-            lock_structure: If ``True``, call ``lock_structure()``; defaults to ``False``.
+            lock_structure: Whether the copied tree is locked: ``None`` (default)
+                copies the state of the original, ``True`` or ``False`` forces it.
 
         Returns:
             RiskTree: The copied tree, detached from the original one.
@@ -923,7 +964,7 @@ class RiskTree:
                 grouped by thousands (``f"{value:,.{precision}f}"``).
         """
         root_depth = self._root.depth
-        for node in preorder_traversal(self._root):
+        for node in self.get_all_nodes():
             prefixed_name = f"{'    ' * (node.depth - root_depth)}{node.name}"
             try:
                 val = node.risk_capital
@@ -934,12 +975,20 @@ class RiskTree:
 
     @property
     def is_structure_locked(self) -> bool:
+        """``True`` if the structure of this tree is locked."""
         return self._root.is_structure_locked
 
     def lock_structure(self) -> None:
+        """
+        Lock the structure of the whole tree this view is on.
+
+        See :meth:`RiskNode.lock_structure`; a view of a subtree locks the
+        outermost tree, not the subtree alone.
+        """
         self._root.lock_structure()
 
     def unlock_structure(self) -> None:
+        """Unlock the structure; the mirror of :meth:`lock_structure`."""
         self._root.unlock_structure()
 
 
