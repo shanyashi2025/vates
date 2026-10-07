@@ -31,10 +31,10 @@ where the root itself has the empty path ``""`` and ``"."`` denotes the current
 node (node names therefore contain neither ``"/"`` nor ``"."``)::
 
     tree = RiskTree(root="Solvency II SCR")
-    tree.set_up_node("", children=("Market", "Life"), agg_func=overall_risk_agg)
-    tree.set_up_node("Market", children=("Interest Rate", "Equity"), agg_func=market_agg,
+    tree.grow("", children=("Market", "Life"), agg_func=overall_risk_agg)
+    tree.grow("Market", children=("Interest Rate", "Equity"), agg_func=market_agg,
                      agg_scope="descendants")
-    tree.set_up_node("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"),
+    tree.grow("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"),
                      agg_func=max_at_zero)
     tree.set_risk_capital("Market/Interest Rate/Interest Rate Up", 1_000.0)
 
@@ -103,7 +103,7 @@ class RiskNode:
     (see :meth:`set_agg_func` and :meth:`aggregate`).
 
     Children are attached with :meth:`add_child`, or, from a tree, with
-    :meth:`RiskTree.set_up_node`.  The name of a node must be unique among its
+    :meth:`RiskTree.grow`.  The name of a node must be unique among its
     siblings and free of ``"/"`` and ``"."``, which are reserved by the path
     syntax.  Every node also carries an ``identifier``: a lower-case,
     keyword-friendly version of its name, used as the keyword argument name when
@@ -577,7 +577,7 @@ class RiskTree:
 
     The tree wraps an existing :class:`RiskNode` without copying it, so structure
     and values are shared with the tree that node belongs to.  A hierarchy level is
-    built with :meth:`set_up_node`, and capitals are provided with
+    built with :meth:`grow`, and capitals are provided with
     :meth:`set_risk_capital` or :meth:`batch_set_risk_capital`.  Paths passed to the
     methods below are resolved from the root of this tree, hence for a subtree of
     a larger tree they are relative to that subtree and not to the outermost root

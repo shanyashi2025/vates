@@ -3,7 +3,7 @@ the `risk_aggregation` correlation formula it is built on.
 
 The module is the backbone of the three solvency standard formulas shipped in this
 package (`cn_cross2`, `eu_solvency2`, `hk_rbc`): each builder assembles a
-risk-module hierarchy once with `RiskTree.set_up_node`, then leaf capitals are
+risk-module hierarchy once with `RiskTree.grow`, then leaf capitals are
 pushed through it.  These tests pin that contract -- path resolution, hierarchy
 setup, the identifier -> keyword-argument mapping used by `agg_func`, the capital
 cache and its invalidation, and the copy/view semantics -- plus the integration
@@ -217,7 +217,7 @@ class TestRiskNodeStructure:
 
     def test_add_child_sets_children_but_no_aggregation_function(self):
         # Setting the aggregation function is no longer part of `add_child`: it is
-        # done separately, with `set_agg_func` or `RiskTree.set_up_node`.
+        # done separately, with `set_agg_func` or `RiskTree.grow`.
         root = RiskNode("T")
         root.add_child("A")
         assert root._agg_func is None
@@ -495,7 +495,7 @@ class TestAggScope:
         with pytest.raises(ValueError, match="M: aggregation function is None"):
             tree.get_risk_capital()
 
-    def test_the_scope_is_set_through_set_up_node(self):
+    def test_the_scope_is_set_through_grow(self):
         tree = RiskTree("T")
         tree.grow("", children=("A",), agg_func=_sum_agg, agg_scope="descendants")
         assert tree.root._agg_scope == "descendants"
@@ -613,8 +613,8 @@ class TestRiskTree:
         assert RiskTree._flatten_dict({"a": {"b": 1.0}}, joiner=".") == {"a.b": 1.0}
 
 
-class TestSetUpNode:
-    """`RiskTree.set_up_node`: the tree-level way to build one hierarchy level."""
+class TestGrow:
+    """`RiskTree.grow`: the tree-level way to build one hierarchy level."""
 
     def test_children_and_agg_func_are_set_in_one_call(self):
         tree = RiskTree("T")
