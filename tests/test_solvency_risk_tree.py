@@ -298,6 +298,7 @@ class TestRiskNodeStructure:
 
     def test_truediv_is_get_descendant(self, tree):
         assert tree.root / "M" / "F" is tree.get_node("M/F")
+        assert tree.get_node("M") / "F" is tree.get_node("M/F")
 
 
 class TestCapitalAggregation:

@@ -233,7 +233,7 @@ class BondFixed(Asset):
             valn_date=self.period, market_price=self._mv_price_dirty, spots=self.ra_spots, eff_dur_delta=eff_dur_delta
         )
 
-    def _update_on_time_change(self) -> None:
+    def _on_time_change(self) -> None:
         self._cash_flow = 0.0
         self._purchase_proceeds = 0.0
         self._disposal_proceeds = 0.0

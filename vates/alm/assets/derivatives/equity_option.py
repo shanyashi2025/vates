@@ -138,7 +138,7 @@ class EquityOption(Asset):
     def is_alive_beg(self) -> bool:
         return self.period <= self._exercise_date
 
-    def _update_on_time_change(self) -> None:
+    def _on_time_change(self) -> None:
         self._cash_flow = 0.0
         self._purchase_proceeds = 0.0
         self._disposal_proceeds = 0.0

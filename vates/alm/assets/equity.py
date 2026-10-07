@@ -83,7 +83,7 @@ class Equity(Asset):
     def is_alive(self) -> bool:
         return True
 
-    def _update_on_time_change(self) -> None:
+    def _on_time_change(self) -> None:
         self._cash_flow = 0.0
         self._purchase_proceeds = 0.0
         self._disposal_proceeds = 0.0

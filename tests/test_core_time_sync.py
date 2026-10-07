@@ -1,5 +1,5 @@
 """Regression tests for the `time` / `period` setters, the underlying
-`ProjectionTimeSynchronizer`, and the `add_projection_time_synchronizer`
+`ProjectionTimeSynchronizer`, and the `time_synchronized`
 class decorator.
 
 The setters are the pair most likely to regress: the `time` setter recently
@@ -150,30 +150,30 @@ class TestProjectionTimeSynchronizer:
         assert s.time is None
         assert s.period is None
 
-    def test_observer_without_hook_still_synced(self):
-        # The hook is optional: a plain observer is still kept in sync, the
+    def test_listener_without_hook_still_synced(self):
+        # The hook is optional: a plain  is still kept in sync, the
         # `getattr(..., None)` branch is what makes this non-fatal.
         class Plain:
             pass
 
         s = ProjectionTimeSynchronizer()
-        obs = Plain()
-        s.attach_time_observer(obs)
+        listener = Plain()
+        s.attach_listener(listener)
         s.set(time=4, period="2027-04")
-        assert obs.time == 4
-        assert obs.period == pd.Period("2027-04", freq="M")
+        assert listener.time == 4
+        assert listener.period == pd.Period("2027-04", freq="M")
 
     def test_hook_sees_updated_time_and_period(self):
-        # The hook runs *after* `time`/`period` are assigned on the observer.
+        # The hook runs *after* `time`/`period` are assigned on the listener.
         seen = []
 
-        class Observer:
-            def _update_on_time_change(self):
+        class Listener:
+            def _on_time_change(self):
                 seen.append((self.time, self.period))
 
         s = ProjectionTimeSynchronizer()
-        obs = Observer()
-        s.attach_time_observer(obs)
+        listener = Listener()
+        s.attach_listener(listener)
         s.set(time=2, period="2027-02")
         assert seen == [(2, pd.Period("2027-02", freq="M"))]
 
@@ -194,86 +194,86 @@ class TestProjectionTimeSynchronizer:
         assert s.time == 3
         assert s.period == pd.Period("2027-03", freq="M")
 
-    def test_observer_notified(self):
+    def test_listener_notified(self):
         calls = []
 
-        class Observer:
-            def _update_on_time_change(self):
+        class Listener:
+            def _on_time_change(self):
                 calls.append(self.time)
 
         s = ProjectionTimeSynchronizer()
-        obs = Observer()
-        s.attach_time_observer(obs)
+        listener = Listener()
+        s.attach_listener(listener)
         s.set(time=1)
         s.set(time=2)
         assert calls == [1, 2]
 
-    def test_detach_time_observer_removes(self):
+    def test_detach_time_listener_removes(self):
         s = ProjectionTimeSynchronizer()
-        observer = self._Observer()
-        s.attach_time_observer(observer)
-        assert len(s._time_observers) == 1
-        s.detach_time_observer(observer)
-        assert len(s._time_observers) == 0
+        listener = self._Listener()
+        s.attach_listener(listener)
+        assert len(s._listeners) == 1
+        s.detach_listener(listener)
+        assert len(s._listeners) == 0
         s.set(time=1)
-        assert observer.calls == 0  # no longer notified
+        assert listener.calls == 0  # no longer notified
 
-    def test_detach_time_observer_absent_noop(self):
+    def test_detach_time_listener_absent_noop(self):
         s = ProjectionTimeSynchronizer()
-        observer = self._Observer()  # hold a strong reference so it stays alive
-        s.attach_time_observer(observer)
-        s.detach_time_observer(self._Observer())  # different instance -> not found
-        assert len(s._time_observers) == 1
+        listener = self._Listener()  # hold a strong reference so it stays alive
+        s.attach_listener(listener)
+        s.detach_listener(self._Listener())  # different instance -> not found
+        assert len(s._listeners) == 1
         # detaching from an empty synchronizer is harmless
         s2 = ProjectionTimeSynchronizer()
-        s2.detach_time_observer(self._Observer())
-        assert len(s2._time_observers) == 0
+        s2.detach_listener(self._Listener())
+        assert len(s2._listeners) == 0
 
     def test_duplicate_attach_ignored_silently(self):
         # Re-attaching the same object is silently skipped (hard dedup, no
         # warning); the original single registration remains and still receives
         # notifications.
         s = ProjectionTimeSynchronizer()
-        observer = self._Observer()
-        s.attach_time_observer(observer)
-        s.attach_time_observer(observer)
-        assert len(s._time_observers) == 1  # duplicate ignored
+        listener = self._Listener()
+        s.attach_listener(listener)
+        s.attach_listener(listener)
+        assert len(s._listeners) == 1  # duplicate ignored
         s.set(time=1)
-        assert observer.calls == 1
+        assert listener.calls == 1
 
-    class _Observer:
+    class _Listener:
         def __init__(self):
             self.calls = 0
 
-        def _update_on_time_change(self):
+        def _on_time_change(self):
             self.calls += 1
 
-    def test_dead_observer_dropped_automatically(self):
-        # `WeakSet` drops dead observers eagerly, with no threshold heuristic.
-        # Live observers must be strongly referenced from outside.
+    def test_dead_listener_dropped_automatically(self):
+        # `WeakSet` drops dead listeners eagerly, with no threshold heuristic.
+        # Live listeners must be strongly referenced from outside.
         s = ProjectionTimeSynchronizer()
 
-        dead = self._Observer()
-        s.attach_time_observer(dead)
-        assert len(s._time_observers) == 1
+        dead = self._Listener()
+        s.attach_listener(dead)
+        assert len(s._listeners) == 1
 
-        live = [self._Observer() for _ in range(4)]
-        for observer in live:
-            s.attach_time_observer(observer)
-        assert len(s._time_observers) == 5
+        live = [self._Listener() for _ in range(4)]
+        for listener in live:
+            s.attach_listener(listener)
+        assert len(s._listeners) == 5
 
         del dead
         gc.collect()
-        assert len(s._time_observers) == 4  # dead one gone, live four remain
+        assert len(s._listeners) == 4  # dead one gone, live four remain
 
-    def test_dead_observer_not_notified(self):
-        # An observer with no other reference is collected, so it is never
+    def test_dead_listener_not_notified(self):
+        # An listener with no other reference is collected, so it is never
         # notified and no longer counted.
         s = ProjectionTimeSynchronizer()
-        s.attach_time_observer(self._Observer())
-        gc.collect()  # the observer has no other reference after the call returns
+        s.attach_listener(self._Listener())
+        gc.collect()  # the listener has no other reference after the call returns
         s.set(time=1)
-        assert len(s._time_observers) == 0
+        assert len(s._listeners) == 0
 
 
 class TestAddProjectionTimeSynchronizer:
@@ -281,10 +281,10 @@ class TestAddProjectionTimeSynchronizer:
     caches `time`/`period` as plain instance attributes.
 
     Mirrors `vates/alm/assets/asset_base.py` (the canonical user): a bare
-    `@add_projection_time_synchronizer`, a keyword-only `model_engine` parameter,
+    `@time_synchronized`, a keyword-only `model_engine` parameter,
     and `time`/`period` cached as plain instance attributes refreshed through the
     shared synchronizer. The decorator does not store the synchronizer on the
-    instance; wiring is observed through the synchronizer's observer set.
+    instance; wiring is observed through the synchronizer's listener set.
     """
 
     def test_bare_decorator_wires_to_engine_synchronizer(self, make_configured, tmp_path):
@@ -295,7 +295,7 @@ class TestAddProjectionTimeSynchronizer:
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
         # registered with the engine's synchronizer, so reads reflect its state
-        assert asset in m.time_synchronizer._time_observers
+        assert asset in m.time_synchronizer._listeners
         assert asset.time is None
         assert asset.period is None
 
@@ -314,11 +314,11 @@ class TestAddProjectionTimeSynchronizer:
             pass
 
         class Equity(Asset):
-            def _update_on_time_change(self):
+            def _on_time_change(self):
                 recorded.append(self.time)
 
         m = make_configured(tmp_path)
-        eq = Equity(model_engine=m)  # keep a strong ref; observers are weakly held
+        eq = Equity(model_engine=m)  # keep a strong ref; listeners are weakly held
         m.time = 1
         m.time = 2
         assert recorded == [1, 2]
@@ -334,19 +334,19 @@ class TestAddProjectionTimeSynchronizer:
             def __init__(self, *, model_engine=None):
                 recorded.append("init")
 
-            def _update_on_time_change(self):
+            def _on_time_change(self):
                 recorded.append("hook")
 
         m = make_configured(tmp_path)
-        asset = Asset(model_engine=m)  # keep a strong ref; observers are weakly held
+        asset = Asset(model_engine=m)  # keep a strong ref; listeners are weakly held
         assert recorded == ["init"]
         m.time = 1
         assert recorded == ["init", "hook"]
         assert asset.time == 1
 
-    def test_observer_not_attached_when_init_raises(self, make_configured, tmp_path):
-        # The observer is attached only after `__init__` completes, so a failed
-        # construction leaves no half-built observer in the synchronizer.
+    def test_listener_not_attached_when_init_raises(self, make_configured, tmp_path):
+        # The listener is attached only after `__init__` completes, so a failed
+        # construction leaves no half-built listener in the synchronizer.
         @time_synchronized
         class Asset:
             def __init__(self, *, model_engine=None):
@@ -355,7 +355,7 @@ class TestAddProjectionTimeSynchronizer:
         m = make_configured(tmp_path)
         with pytest.raises(RuntimeError, match="boom"):
             Asset(model_engine=m)
-        assert len(m.time_synchronizer._time_observers) == 0
+        assert len(m.time_synchronizer._listeners) == 0
 
     def test_engine_period_setter_propagates_to_asset(self, make_configured, tmp_path):
         @time_synchronized
@@ -419,7 +419,7 @@ class TestAddProjectionTimeSynchronizer:
         assert asset.time == 1
 
     def test_parentheses_form_equivalent(self, make_configured, tmp_path):
-        # `add_projection_time_synchronizer()` (no args) returns the decorator
+        # `time_synchronized()` (no args) returns the decorator
         # factory; applying it yields the same behavior as the bare form.
         Asset = time_synchronized()(type("Asset", (), {}))
 
@@ -429,23 +429,23 @@ class TestAddProjectionTimeSynchronizer:
         assert asset.time == 4
         assert asset.period == m.START_DATE + 4
 
-    def test_observer_registered_and_notified(self, make_configured, tmp_path):
-        # When the class defines `update_on_time_change`, the decorator registers
+    def test_listener_registered_and_notified(self, make_configured, tmp_path):
+        # When the class defines `_on_time_change`, the decorator registers
         # the instance and it is notified on every time change.
         recorded = []
 
         @time_synchronized
         class Asset:
-            def _update_on_time_change(self):
+            def _on_time_change(self):
                 recorded.append(self.time)
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
-        assert len(m.time_synchronizer._time_observers) == 1
+        assert len(m.time_synchronizer._listeners) == 1
         m.time = 1
         m.time = 5
         assert recorded == [1, 5]
-        assert len(m.time_synchronizer._time_observers) == 1  # still attached
+        assert len(m.time_synchronizer._listeners) == 1  # still attached
         # the engine and the decorated object share the notify path
         assert asset.time == 5
 
@@ -458,7 +458,7 @@ class TestAddProjectionTimeSynchronizer:
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
-        assert len(m.time_synchronizer._time_observers) == 1
+        assert len(m.time_synchronizer._listeners) == 1
         m.time = 1
         assert asset.time == 1
         assert asset.period == m.START_DATE + 1

@@ -84,7 +84,7 @@ class Cash(Asset):
     def ret_id_short_pos(self) -> str:
         return self._ret_id_short_pos
 
-    def _update_on_time_change(self) -> None:
+    def _on_time_change(self) -> None:
         self._purchase_proceeds = 0.0
         self._disposal_proceeds = 0.0
 
