@@ -58,48 +58,48 @@ def make_solvency2_scr_module(*, submodule: str | None = None, is_zeroize: bool 
     tree = RiskTree(root="Solvency II SCR")
 
     # (root)
-    tree.set_up_node("", children=("Market", "Counterparty Default", "Life", "Health", "Non-life", "Intangibles"),
-                     agg_func=_scr_agg)
+    tree.grow("", children=("Market", "Counterparty Default", "Life", "Health", "Non-life", "Intangibles"),
+              agg_func=_scr_agg)
 
     # Non-life
-    tree.set_up_node("Non-life", children=("Premium Reserve", "Catastrophe", "Lapse"), agg_func=_nonlife_risk_agg)
+    tree.grow("Non-life", children=("Premium Reserve", "Catastrophe", "Lapse"), agg_func=_nonlife_risk_agg)
 
     # Life
-    tree.set_up_node("Life",
-                     children=("Mortality", "Longevity", "Disability", "Expense", "Revision", "Lapse", "Catastrophe"),
-                     agg_func=_life_risk_agg)
+    tree.grow("Life",
+              children=("Mortality", "Longevity", "Disability", "Expense", "Revision", "Lapse", "Catastrophe"),
+              agg_func=_life_risk_agg)
 
     # Life/Lapse
-    tree.set_up_node("Life/Lapse", children=("Increase", "Decrease", "Mass"), agg_func=_max_at_zero)
+    tree.grow("Life/Lapse", children=("Increase", "Decrease", "Mass"), agg_func=_max_at_zero)
 
     # Health
-    tree.set_up_node("Health", children=("NSLT", "SLT", "Catastrophe"), agg_func=_health_risk_agg)
+    tree.grow("Health", children=("NSLT", "SLT", "Catastrophe"), agg_func=_health_risk_agg)
 
     # Health/SLT
-    tree.set_up_node("Health/SLT",
-                     children=("Mortality", "Longevity", "Disability-Morbidity", "Expense", "Revision", "Lapse"),
-                     agg_func=_slth_risk_agg)
+    tree.grow("Health/SLT",
+              children=("Mortality", "Longevity", "Disability-Morbidity", "Expense", "Revision", "Lapse"),
+              agg_func=_slth_risk_agg)
 
     # Health/SLT/Disability-Morbidity
-    tree.set_up_node("Health/SLT/Disability-Morbidity",
-                     children=("Medical Payment Increase", "Medical Payment Decrease", "Income Protection"),
-                     agg_func=lambda medical_payment_increase, medical_payment_decrease, income_protection: max(
-                         medical_payment_increase, medical_payment_decrease) + income_protection)
+    tree.grow("Health/SLT/Disability-Morbidity",
+              children=("Medical Payment Increase", "Medical Payment Decrease", "Income Protection"),
+              agg_func=lambda medical_payment_increase, medical_payment_decrease, income_protection: max(
+                  medical_payment_increase, medical_payment_decrease) + income_protection)
 
     # Health/SLT/Lapse
-    tree.set_up_node("Health/SLT/Lapse", children=("Increase", "Decrease", "Mass"), agg_func=_max_at_zero)
+    tree.grow("Health/SLT/Lapse", children=("Increase", "Decrease", "Mass"), agg_func=_max_at_zero)
 
     # Market
-    tree.set_up_node("Market",
-                     children=("Interest Rate", "Equity", RiskNode("Property", identifier="property_"), "Spread",
-                               "Concentration", "Currency"),
-                     agg_func=_market_risk_agg, agg_scope="descendants")
+    tree.grow("Market",
+              children=("Interest Rate", "Equity", RiskNode("Property", identifier="property_"), "Spread",
+                        "Concentration", "Currency"),
+              agg_func=_market_risk_agg, agg_scope="descendants")
 
-    tree.set_up_node("Market/Interest Rate", children=("Interest Rate Increase", "Interest Rate Decrease"),
-                     agg_func=_max_at_zero)
+    tree.grow("Market/Interest Rate", children=("Interest Rate Increase", "Interest Rate Decrease"),
+              agg_func=_max_at_zero)
 
     # Counterparty Default
-    tree.set_up_node("Counterparty Default", children=("Type 1", "Type 2"), agg_func=_counterparty_default_risk_agg)
+    tree.grow("Counterparty Default", children=("Type 1", "Type 2"), agg_func=_counterparty_default_risk_agg)
 
     if is_zeroize:
         tree.zeroize()

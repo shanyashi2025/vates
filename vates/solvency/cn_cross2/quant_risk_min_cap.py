@@ -52,38 +52,38 @@ def make_cross2_mc_module(*, submodule: str | None = None, is_zeroize: bool = Tr
     tree = RiskTree(root="C-ROSS MC")
 
     # (root)
-    tree.set_up_node("", children=("Life", "Non-life", "Market", "Credit"), agg_func=_overall_risk_agg)
+    tree.grow("", children=("Life", "Non-life", "Market", "Credit"), agg_func=_overall_risk_agg)
 
     # Life
-    tree.set_up_node("Life", children=("Loss", "Expense", "Lapse"), agg_func=_life_risk_agg)
+    tree.grow("Life", children=("Loss", "Expense", "Lapse"), agg_func=_life_risk_agg)
 
     # Life/Loss
-    tree.set_up_node("Life/Loss", children=("Mortality", "Catastrophe", "Longevity", "Morbidity", "Health", "Other"),
-                     agg_func=_loss_risk_agg)
+    tree.grow("Life/Loss", children=("Mortality", "Catastrophe", "Longevity", "Morbidity", "Health", "Other"),
+              agg_func=_loss_risk_agg)
 
     # Life/Loss/Morbidity
-    tree.set_up_node("Life/Loss/Morbidity", children=("Incidence", "Trend"), agg_func=_morb_risk_agg)
+    tree.grow("Life/Loss/Morbidity", children=("Incidence", "Trend"), agg_func=_morb_risk_agg)
 
     # Life/Lapse
-    tree.set_up_node("Life/Lapse", children=("Lapse Rate", "Mass Lapse"), agg_func=_max_at_zero)
+    tree.grow("Life/Lapse", children=("Lapse Rate", "Mass Lapse"), agg_func=_max_at_zero)
 
     # Life/Lapse/Lapse Rate
-    tree.set_up_node("Life/Lapse/Lapse Rate", children=("Lapse Up", "Lapse Down"), agg_func=_max_at_zero)
+    tree.grow("Life/Lapse/Lapse Rate", children=("Lapse Up", "Lapse Down"), agg_func=_max_at_zero)
 
     # Non-Life
-    tree.set_up_node("Non-life", children=("Premium Reserve", "Catastrophe"),
-                     agg_func=partial(_nonlife_risk_agg, k=nonlife_mc_k))
+    tree.grow("Non-life", children=("Premium Reserve", "Catastrophe"),
+              agg_func=partial(_nonlife_risk_agg, k=nonlife_mc_k))
 
     # Market
-    tree.set_up_node("Market",
-                     children=("Interest Rate", "Equity", "Real Estate", "Overseas Fixed-income", "Overseas Equity",
-                               "Exchange Rate"), agg_func=_market_risk_agg)
+    tree.grow("Market",
+              children=("Interest Rate", "Equity", "Real Estate", "Overseas Fixed-income", "Overseas Equity", "Exchange Rate"),
+              agg_func=_market_risk_agg)
 
     # Market/Interest Rate
-    tree.set_up_node("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"), agg_func=_max_at_zero)
+    tree.grow("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"), agg_func=_max_at_zero)
 
     # Credit
-    tree.set_up_node("Credit", children=("Spread", "Counterparty Default"), agg_func=_credit_risk_agg)
+    tree.grow("Credit", children=("Spread", "Counterparty Default"), agg_func=_credit_risk_agg)
 
     if is_zeroize:
         tree.zeroize()

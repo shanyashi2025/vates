@@ -44,35 +44,29 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None, is_zeroize: bool = Tr
     tree = RiskTree(root="HKRBC PCR")
 
     # (root)
-    tree.set_up_node("",
-                     children=("Market", "Life Insurance", "General Insurance", "Counterparty Default", "Operational"),
-                     agg_func=_pcr_agg)
+    tree.grow("", children=("Market", "Life Insurance", "General Insurance", "Counterparty Default", "Operational"),
+              agg_func=_pcr_agg)
 
     # Market
-    tree.set_up_node("Market",
-                     children=("Interest Rate", "Credit Spread", "Equity",
-                               RiskNode("Property", identifier="property_"), "Currency"),
-                     agg_func=_market_risk_agg, agg_scope="descendants")
+    tree.grow("Market",
+              children=("Interest Rate", "Credit Spread", "Equity", RiskNode("Property", identifier="property_"), "Currency"),
+              agg_func=_market_risk_agg, agg_scope="descendants")
 
-    tree.set_up_node("Market/Interest Rate", children=("Interest Rate Upward", "Interest Rate Downward"),
-                     agg_func=_max_at_zero)
+    tree.grow("Market/Interest Rate", children=("Interest Rate Upward", "Interest Rate Downward"), agg_func=_max_at_zero)
 
     # Life Insurance
-    tree.set_up_node("Life Insurance",
-                     children=("Mortality", "Longevity", "Catastrophe", "Morbidity", "Expense", "Lapse"),
-                     agg_func=_life_risk_agg)
+    tree.grow("Life Insurance", children=("Mortality", "Longevity", "Catastrophe", "Morbidity", "Expense", "Lapse"),
+              agg_func=_life_risk_agg)
 
     # Life Insurance/Lapse
-    tree.set_up_node("Life Insurance/Lapse", children=(RiskNode("Level & Trend", identifier="level"), "Mass"),
-                     agg_func=_max_at_zero)
+    tree.grow("Life Insurance/Lapse", children=(RiskNode("Level & Trend", identifier="level"), "Mass"),
+              agg_func=_max_at_zero)
 
     # Life Insurance/Lapse/Level & Trend
-    tree.set_up_node("Life Insurance/Lapse/Level & Trend", children=("Lapse Upward", "Lapse Downward"),
-                     agg_func=_max_at_zero)
+    tree.grow("Life Insurance/Lapse/Level & Trend", children=("Lapse Upward", "Lapse Downward"), agg_func=_max_at_zero)
 
     # General Insurance
-    tree.set_up_node("General Insurance", children=("Reserve Premium", "Catastrophe", "Mortgage Insurance"),
-                     agg_func=_gi_risk_agg)
+    tree.grow("General Insurance", children=("Reserve Premium", "Catastrophe", "Mortgage Insurance"), agg_func=_gi_risk_agg)
 
     if is_zeroize:
         tree.zeroize()

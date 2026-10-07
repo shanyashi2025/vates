@@ -48,10 +48,6 @@ import numpy as np
 from typing import Callable, Literal, Self
 
 
-# The values accepted by the `scope` argument of `RiskNode.set_agg_func`.
-
-
-
 def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
     """
     Aggregate risk capitals using a correlation matrix (standard-formula style).
@@ -123,7 +119,7 @@ class RiskNode:
 
     __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func", "_agg_scope",)
 
-    _allowed_agg_scopes = ("children", "descendants")
+    _allowed_agg_scopes = ("children", "descendants")  # _allowed_agg_scopes[0] will be used as default
 
     def __init__(self, name: str, /, *, identifier: str | None = None):
         """
@@ -149,7 +145,7 @@ class RiskNode:
         self._parent: RiskNode | None = None
         self._children: list[RiskNode] = []
         self._agg_func: Callable[..., float] | None = None
-        self._agg_scope: Literal["children", "descendants"] = "children"
+        self._agg_scope: Literal["children", "descendants"] | None = None
 
     @property
     def name(self) -> str:
@@ -314,7 +310,7 @@ class RiskNode:
         staged.append(node)
 
     def set_agg_func(self, func: Callable[..., float], /, *,
-                     scope: Literal["children", "descendants"] = "children") -> None:
+                     scope: Literal["children", "descendants"] | None = None) -> None:
         """
         Set the aggregation function of this node.
 
@@ -339,11 +335,61 @@ class RiskNode:
         """
         if self._agg_func is not None:
             raise ValueError(f"{self._name}: aggregation function has already been set.")
-        if scope not in self._allowed_agg_scopes:
+        if scope is not None and scope not in self._allowed_agg_scopes:
             raise ValueError(f"Invalid agg scope: {scope!r}, expected {self._allowed_agg_scopes}.")
         self._agg_func = func
-        self._agg_scope = scope
+        self._agg_scope = scope or self._allowed_agg_scopes[0]
         self.clr_risk_capital()
+
+    def grow(self, *, children: tuple[str | Self, ...] | str | Self = tuple(),
+             agg_func: Callable[..., float] | None = None, agg_scope: Literal["children", "descendants"] | None = None
+             ) -> None:
+        """
+        Set up the node: attach its children and set its aggregation.
+
+        A convenience for building a hierarchy level by level: the children are
+        attached as by :meth:`add_child`, and ``agg_func`` is set as by
+        :meth:`set_agg_func`.  Capitals are not touched.
+
+        The call is all-or-nothing: when it raises, neither the children nor the
+        aggregation function of the node change.  A node is given an aggregation
+        function only once, so setting up the same node twice with ``agg_func``
+        raises rather than leaving the second set of children behind.
+
+        Args:
+            children: The children to attach, as names or as :class:`RiskNode`
+                objects, unpacked into :meth:`add_child`.  A single child may be
+                passed on its own -- a bare ``str`` is one child, not one child
+                per character -- and anything else is read as a sequence of children.
+            agg_func: Aggregation function of the node, or ``None`` (default) to
+                leave it unset and provide it later through :meth:`set_agg_func`.
+            agg_scope: The aggregation scope of ``agg_func``: ``"children"``
+                (default) for its direct children, or ``"descendants"`` for every
+                node below it; see :meth:`set_agg_func`.  It is ignored
+                when ``agg_func`` is ``None``, there being no aggregation function
+                to apply it to.
+
+        Raises:
+            ValueError: If the node already has an aggregation function, or if a
+                child is rejected -- see :meth:`add_child` for the conditions.
+            TypeError: If ``children`` is neither a child nor a sequence of
+                children, or if a child is neither a :class:`RiskNode` nor a
+                ``str``.
+        """
+        if agg_func is not None:
+            # Pre-flight check: `set_agg_func` below would otherwise refuse the node
+            # only after `add_child` has already attached the children.
+            if self._agg_func is not None:
+                raise ValueError(f"{self._name}: aggregation function has already been set.")
+            if agg_scope is not None and agg_scope not in self._allowed_agg_scopes:
+                raise ValueError(f"Invalid agg scope: {agg_scope!r}, expected {self._allowed_agg_scopes}.")
+        if isinstance(children, (str, RiskNode)):
+            children = (children, )
+        else:
+            children = tuple(children)
+        self.add_child(*children)
+        if agg_func is not None:
+            self.set_agg_func(agg_func, scope=agg_scope)
 
     def set_risk_capital(self, value: float, /) -> None:
         """
@@ -511,18 +557,18 @@ class RiskNode:
         Returns:
             RiskNode: The copied node, detached from the original tree.
         """
-        copied_node = RiskNode(self._name, identifier=self._identifier)
-        copied_node._agg_func = self._agg_func
-        copied_node._agg_scope = self._agg_scope
-        copied_node._risk_capital = self._risk_capital if with_value else None
-        _path_slice_start = len(self.path)
+        def _copy_stuffs(*, original: RiskNode, copied: RiskNode) -> None:
+            copied._agg_func = original._agg_func
+            copied._agg_scope = original._agg_scope
+            copied._risk_capital = original._risk_capital if with_value else None
+        copied_root = RiskNode(self._name, identifier=self._identifier)
+        _copy_stuffs(original=self, copied=copied_root)
+        offset = len(self.path)
         for desc in self.descendants:
             copied_desc = RiskNode(desc._name, identifier=desc._identifier)
-            copied_desc._agg_func = desc._agg_func
-            copied_desc._agg_scope = desc._agg_scope
-            copied_desc._risk_capital = desc._risk_capital if with_value else None
-            copied_node.goto(desc._parent.path[_path_slice_start:]).add_child(copied_desc)
-        return copied_node
+            _copy_stuffs(original=desc, copied=copied_desc)
+            copied_root.goto(desc._parent.path[offset:]).add_child(copied_desc)
+        return copied_root
 
 
 class RiskTree:
@@ -631,64 +677,15 @@ class RiskTree:
         """
         return self._root.goto(path)
 
-    def set_up_node(self, path: str, /, *,
-                    children: tuple[str | RiskNode, ...] | str | RiskNode = tuple(),
-                    agg_func: Callable[..., float] | None = None,
-                    agg_scope: Literal["children", "descendants"] = "children") -> None:
+    def grow(self, path: str, /, *, children: tuple[str | RiskNode, ...] | str | RiskNode = tuple(),
+             agg_func: Callable[..., float] | None = None, agg_scope: Literal["children", "descendants"] | None = None
+             ) -> None:
         """
         Set up the node at ``path``: attach its children and set its aggregation.
 
-        A convenience for building a hierarchy level by level: the children are
-        attached as by :meth:`RiskNode.add_child`, and ``agg_func`` is set as by
-        :meth:`RiskNode.set_agg_func`.  Capitals are not touched; the leaves of the
-        new level are given values afterwards with :meth:`set_risk_capital` or
-        :meth:`batch_set_risk_capital`.
-
-        The call is all-or-nothing: when it raises, neither the children nor the
-        aggregation function of the node change.  A node is given an aggregation
-        function only once, so setting up the same node twice with ``agg_func``
-        raises rather than leaving the second set of children behind.
-
-        Args:
-            path: Path of the node relative to the root of this tree, where ``""``
-                and ``"."`` denote the root itself.
-            children: The children to attach, as names or as :class:`RiskNode`
-                objects, unpacked into :meth:`RiskNode.add_child`.  A single child
-                may be passed on its own -- a bare ``str`` is one child, not one
-                child per character -- and anything else is read as a sequence of
-                children.
-            agg_func: Aggregation function of the node, or ``None`` (default) to
-                leave it unset and provide it later through
-                :meth:`RiskNode.set_agg_func`.
-            agg_scope: The aggregation scope of ``agg_func``: ``"children"``
-                (default) for its direct children, or ``"descendants"`` for every
-                node below it; see :meth:`RiskNode.set_agg_func`.  It is rejected
-                when ``agg_func`` is ``None``, there being no aggregation function
-                to apply it to.
-
-        Raises:
-            ValueError: If ``path`` does not exist, if the node already has an
-                aggregation function, if ``agg_scope`` is given without
-                ``agg_func``, or if a child is rejected -- see
-                :meth:`RiskNode.add_child` for the conditions.
-            TypeError: If ``children`` is neither a child nor a sequence of
-                children, or if a child is neither a :class:`RiskNode` nor a
-                ``str``.
+        See :meth:`RiskNode.grow` for the conditions and the exceptions raised.
         """
-        if agg_func is None and agg_scope != "children":
-            raise ValueError(f"Invalid {agg_scope=} without agg_func.")
-        node = self.get_node(path)
-        if agg_func is not None and node._agg_func is not None:
-            # Pre-flight check: `set_agg_func` below would otherwise refuse the node
-            # only after `add_child` has already attached the children.
-            raise ValueError(f"{node._name}: aggregation function has already been set.")
-        if isinstance(children, (str, RiskNode)):
-            children = (children, )
-        else:
-            children = tuple(children)
-        node.add_child(*children)
-        if agg_func is not None:
-            node.set_agg_func(agg_func, scope=agg_scope)
+        self._root.goto(path).grow(children=children, agg_func=agg_func, agg_scope=agg_scope)
 
     def get_toptree(self) -> Self:
         """
