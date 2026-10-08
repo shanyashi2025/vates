@@ -4,7 +4,7 @@ from functools import partial
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable
 from vates.utils import maybe_raise_if_ne
-from vates.solvency.risk_tree import  RiskTree, RiskNode, risk_aggregation
+from vates.solvency.risk_tree import  RiskTree, risk_aggregation
 from vates.solvency.cn_cross2.rules import (
     MC_CORR_MATRIX,
     MORB_MC_CORR_MATRIX,
@@ -47,47 +47,30 @@ def _market_risk_agg(interest_rate: float, equity: float, real_estate: float, ov
 def _credit_risk_agg(spread: float, counterparty_default: float) -> float:
     return risk_aggregation(spread, counterparty_default, corr_matrix=CREDIT_MC_CORR_MATRIX)
 
-def make_cross2_mc_module(*, submodule: str | None = None, is_zeroize: bool = True,
-                          nonlife_mc_k: float = 1.0) -> RiskTree:
-    tree = RiskTree(root="C-ROSS MC")
+def make_cross2_mc_module(*, submodule: str | None = None, nonlife_mc_k: float = 1.0) -> RiskTree:
+    structure_notation = {
+        "C-ROSS MC": {"children": ("Life", "Non-life", "Market", "Credit"), "agg_func": _overall_risk_agg},
+        "C-ROSS MC/Life": {"children": ("Loss", "Expense", "Lapse"), "agg_func": _life_risk_agg},
+        "C-ROSS MC/Life/Loss": {
+            "children": ("Mortality", "Catastrophe", "Longevity", "Morbidity", "Health", "Other"),
+            "agg_func": _loss_risk_agg},
+        "C-ROSS MC/Life/Loss/Morbidity": {"children": ("Incidence", "Trend"), "agg_func": _morb_risk_agg},
+        "C-ROSS MC/Life/Lapse": {"children": ("Lapse Rate", "Mass Lapse"), "agg_func": _max_at_zero},
+        "C-ROSS MC/Life/Lapse/Lapse Rate": {"children": ("Lapse Up", "Lapse Down"), "agg_func": _max_at_zero},
+        "C-ROSS MC/Non-life": {
+            "children": ("Premium Reserve", "Catastrophe"),
+            "agg_func": partial(_nonlife_risk_agg, k=nonlife_mc_k)},
+        "C-ROSS MC/Market": {
+            "children": ("Interest Rate", "Equity", "Real Estate", "Overseas Fixed-income", "Overseas Equity",
+                         "Exchange Rate"),
+            "agg_func": _market_risk_agg},
+        "C-ROSS MC/Market/Interest Rate": {
+            "children": ("Interest Rate Up", "Interest Rate Down"),
+            "agg_func": _max_at_zero},
+        "C-ROSS MC/Credit": {"children": ("Spread", "Counterparty Default"), "agg_func": _credit_risk_agg},
+    }
 
-    # (root)
-    tree.grow("", children=("Life", "Non-life", "Market", "Credit"), agg_func=_overall_risk_agg)
-
-    # Life
-    tree.grow("Life", children=("Loss", "Expense", "Lapse"), agg_func=_life_risk_agg)
-
-    # Life/Loss
-    tree.grow("Life/Loss", children=("Mortality", "Catastrophe", "Longevity", "Morbidity", "Health", "Other"),
-              agg_func=_loss_risk_agg)
-
-    # Life/Loss/Morbidity
-    tree.grow("Life/Loss/Morbidity", children=("Incidence", "Trend"), agg_func=_morb_risk_agg)
-
-    # Life/Lapse
-    tree.grow("Life/Lapse", children=("Lapse Rate", "Mass Lapse"), agg_func=_max_at_zero)
-
-    # Life/Lapse/Lapse Rate
-    tree.grow("Life/Lapse/Lapse Rate", children=("Lapse Up", "Lapse Down"), agg_func=_max_at_zero)
-
-    # Non-Life
-    tree.grow("Non-life", children=("Premium Reserve", "Catastrophe"),
-              agg_func=partial(_nonlife_risk_agg, k=nonlife_mc_k))
-
-    # Market
-    tree.grow("Market",
-              children=("Interest Rate", "Equity", "Real Estate", "Overseas Fixed-income", "Overseas Equity", "Exchange Rate"),
-              agg_func=_market_risk_agg)
-
-    # Market/Interest Rate
-    tree.grow("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"), agg_func=_max_at_zero)
-
-    # Credit
-    tree.grow("Credit", children=("Spread", "Counterparty Default"), agg_func=_credit_risk_agg)
-
-    tree.lock_structure()
-    if is_zeroize:
-        tree.zeroize()
+    tree = RiskTree.from_structure_notation(structure_notation=structure_notation, is_lock_structure=True, is_zeroize=True)
 
     if submodule is None:
         return tree

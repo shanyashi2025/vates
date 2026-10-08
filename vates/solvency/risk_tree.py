@@ -55,6 +55,7 @@ import functools
 import math
 import numbers
 import numpy as np
+from dataclasses import dataclass
 from typing import Callable, Literal, Self
 
 
@@ -128,6 +129,32 @@ def on_structure_locked_cached(key: str):
 
 _MISSING: object = object()  # marks "no default given" as distinct from a `None` default
 
+@dataclass(frozen=True)
+class RiskNodeNotation:
+    name: str
+    identifier: str | None = None
+    children: tuple[str, ...] = ()
+    agg_func: Callable[..., float] | None = None
+    agg_scope: Literal["children", "descendants"] | None = None
+
+    def to_dict(self) -> dict[str, ...]:
+        return {
+            "name": self.name,
+            "identifier": self.identifier,
+            "children": self.children,
+            "agg_func": self.agg_func,
+            "agg_scope": self.agg_scope,
+        }
+
+    @classmethod
+    def from_dict(cls, arg: dict[str, ...], /) -> Self:
+        return RiskNodeNotation(
+            name=arg["name"],
+            identifier=arg.get("identifier", None),
+            children=arg.get("children", ()),
+            agg_func=arg.get("agg_func", None),
+            agg_scope=arg.get("agg_scope", None),
+        )
 
 class RiskNode:
     """
@@ -653,7 +680,7 @@ class RiskNode:
         for node in self.leaves:
             node.set_risk_capital(0.0)
 
-    def deepcopy(self, *, with_value: bool = True, lock_structure: bool | None = None) -> Self:
+    def deepcopy(self, *, with_value: bool = True, is_lock_structure: bool | None = None) -> Self:
         """
         Return an independent copy of this node and of all its descendants.
 
@@ -668,26 +695,19 @@ class RiskNode:
             with_value: If ``True`` (default), copy the risk capitals as they are
                 currently cached; if ``False``, copy the structure with all
                 capitals cleared.
-            lock_structure: Whether the copy is locked: ``None`` (default) copies
+            is_lock_structure: Whether the copy is locked: ``None`` (default) copies
                 the state of the original, ``True`` or ``False`` forces it.
 
         Returns:
             RiskNode: The copied node, detached from the original tree.
         """
-        def _copy_stuffs(*, original: RiskNode, copied: RiskNode) -> None:
-            copied._agg_func = original._agg_func
-            copied._agg_scope = original._agg_scope
-            copied._risk_capital = original._risk_capital if with_value else None
-        copied_root = RiskNode(self._name, identifier=self._identifier)
-        _copy_stuffs(original=self, copied=copied_root)
-        offset = len(self.path)
-        for desc in self.descendants:
-            copied_desc = RiskNode(desc._name, identifier=desc._identifier)
-            _copy_stuffs(original=desc, copied=copied_desc)
-            copied_root.get_descendant(desc._parent.path[offset:]).add_child(copied_desc)
-        lock_structure = self._is_structure_locked if lock_structure is None else lock_structure
-        if lock_structure:
+        copied_root = self.from_structure_notation(self.export_structure_notation())
+        is_lock_structure = self._is_structure_locked if is_lock_structure is None else is_lock_structure
+        if is_lock_structure:
             copied_root.lock_structure()
+        if with_value:
+            for node in copied_root.leaves:
+                node._risk_capital = self.get_descendant(node.path)._risk_capital
         return copied_root
 
     @property
@@ -744,6 +764,62 @@ class RiskNode:
             return  # already unlocked: the caches are unused until the next lock resets them
         self._reset_derived_caches()
         self._is_structure_locked = False
+
+    def export_structure_notation(self) -> dict[str, RiskNodeNotation]:
+        nodes = (self,) + self.descendants
+        structure: dict[str, RiskNodeNotation] = {}
+        offset = len(self.path)
+        for node in nodes:
+            key = (self._name + "/" + node.path[offset:].strip("/")).strip("/")
+            structure[key] = RiskNodeNotation(
+                name=node._name,
+                identifier=node._identifier,
+                children=tuple([c._name for c in node._children]) if node._children else (),
+                agg_func=node._agg_func,
+                agg_scope=node._agg_scope,
+            )
+        return structure
+
+    @classmethod
+    def from_structure_notation(cls, structure_notation: dict[str, RiskNodeNotation | dict], /) -> Self:
+        node_dict: dict[str, tuple[RiskNode, RiskNodeNotation]] = {}
+        for key, val in structure_notation.items():
+            inferred_name = key.strip("/").split("/")[-1]
+            if isinstance(val, dict):
+                if val.get("name", None) is None:
+                    val["name"] = inferred_name
+                notation = RiskNodeNotation.from_dict(val)
+            elif isinstance(val, RiskNodeNotation):
+                notation = val
+            else:
+                raise TypeError(f"'{key}': invalid value type '{type(val)}', epxected ('dict', 'RiskNode').")
+            if inferred_name != notation.name:
+                raise KeyError(f"'{key}': name conflict: inferred from key '{inferred_name}' != '{notation.name}'.")
+            node = RiskNode(notation.name, identifier=notation.identifier)
+            if notation.agg_func is not None:
+                node.set_agg_func(notation.agg_func, scope=notation.agg_scope)
+            node_dict[key] = node, notation
+
+        for key, (node, notation) in node_dict.items():
+            if notation.children:
+                child_objs = []
+                for child_name in notation.children:
+                    child_key = key.strip("/") + "/" + child_name
+                    child = node_dict.get(child_key, None)
+                    if child is not None:
+                        child_objs.append(child[0])
+                    else:
+                        child_objs.append(RiskNode(child_name))
+                node.add_child(*tuple(child_objs))
+
+        root_seen: list[tuple[RiskNode, str]] = []
+        for key, (node, notation) in node_dict.items():
+            if node.is_root:
+                root_seen.append((node, key))
+        if len(root_seen) > 1:
+            raise ValueError(f"Multiple roots: '{[n[1] for n in root_seen]}'.")
+
+        return root_seen[0][0]
 
 
 class RiskTree:
@@ -977,7 +1053,7 @@ class RiskTree:
         """Set the risk capital of every leaf of the tree to ``0.0``."""
         self._root.zeroize()
 
-    def deepcopy(self, *, with_value: bool = True, lock_structure: bool | None = None) -> Self:
+    def deepcopy(self, *, with_value: bool = True, is_lock_structure: bool | None = None) -> Self:
         """
         Return an independent copy of the whole tree.
 
@@ -988,13 +1064,13 @@ class RiskTree:
             with_value: If ``True`` (default), copy the risk capitals as they are
                 currently cached; if ``False``, copy the structure with all
                 capitals cleared.
-            lock_structure: Whether the copied tree is locked: ``None`` (default)
+            is_lock_structure: Whether the copied tree is locked: ``None`` (default)
                 copies the state of the original, ``True`` or ``False`` forces it.
 
         Returns:
             RiskTree: The copied tree, detached from the original one.
         """
-        copied_tree = RiskTree(self._root.deepcopy(with_value=with_value, lock_structure=lock_structure))
+        copied_tree = RiskTree(self._root.deepcopy(with_value=with_value, is_lock_structure=is_lock_structure))
         return copied_tree
 
     def display(self, *, width: int = 80, precision: int = 2) -> None:
@@ -1037,6 +1113,20 @@ class RiskTree:
     def unlock_structure(self) -> None:
         """Unlock the structure; the mirror of :meth:`lock_structure`."""
         self._root.unlock_structure()
+
+    def export_structure_notation(self) -> dict[str, RiskNodeNotation]:
+        return self._root.export_structure_notation()
+
+    @classmethod
+    def from_structure_notation(cls, structure_notation: dict[str, dict | RiskNodeNotation], *,
+                                is_lock_structure: bool = True, is_zeroize: bool = True) -> Self:
+        root = RiskNode.from_structure_notation(structure_notation)
+        tree = RiskTree(root)
+        if is_lock_structure:
+            tree.lock_structure()
+        if is_zeroize:
+            tree.zeroize()
+        return tree
 
 
 def preorder_traversal(node: RiskNode) -> list[RiskNode]:

@@ -1,4 +1,4 @@
-from vates.solvency.risk_tree import RiskNode, RiskTree, risk_aggregation
+from vates.solvency.risk_tree import RiskTree, risk_aggregation
 from vates.solvency.hk_rbc.rules import (
     CORR_MATRIX_PCR,
     CORR_MATRIX_MARKET,
@@ -40,37 +40,33 @@ def _gi_risk_agg(reserve_premium: float, catastrophe: float, mortgage_insurance:
     return risk_aggregation(gi_ex_mi, mortgage_insurance, corr_matrix=CORR_MATRIX_GI)
 
 
-def make_hkrbc_pcr_module(*, submodule: str | None = None, is_zeroize: bool = True) -> RiskTree:
-    tree = RiskTree(root="HKRBC PCR")
+def make_hkrbc_pcr_module(*, submodule: str | None = None) -> RiskTree:
+    structure_notation = {
+        "HKRBC PCR": {
+            "children": ("Market", "Life Insurance", "General Insurance", "Counterparty Default", "Operational"),
+            "agg_func": _pcr_agg},
+        "HKRBC PCR/Market": {
+            "children": ("Interest Rate", "Credit Spread", "Equity", "Property", "Currency"),
+            "agg_func": _market_risk_agg, "agg_scope": "descendants"},
+        "HKRBC PCR/Market/Interest Rate": {
+            "children": ("Interest Rate Upward", "Interest Rate Downward"),
+            "agg_func": _max_at_zero},
+        "HKRBC PCR/Market/Property": {"identifier": "property_"},
+        "HKRBC PCR/Life Insurance": {
+            "children": ("Mortality", "Longevity", "Catastrophe", "Morbidity", "Expense", "Lapse"),
+            "agg_func": _life_risk_agg},
+        "HKRBC PCR/Life Insurance/Lapse": {"children": ("Level & Trend", "Mass"), "agg_func": _max_at_zero},
+        "HKRBC PCR/Life Insurance/Lapse/Level & Trend": {
+            "identifier": "level",
+            "children": ("Lapse Upward", "Lapse Downward"),
+            "agg_func": _max_at_zero},
+        "HKRBC PCR/General Insurance": {
+            "children": ("Reserve Premium", "Catastrophe", "Mortgage Insurance"),
+            "agg_func": _gi_risk_agg},
+    }
 
-    # (root)
-    tree.grow("", children=("Market", "Life Insurance", "General Insurance", "Counterparty Default", "Operational"),
-              agg_func=_pcr_agg)
-
-    # Market
-    tree.grow("Market",
-              children=("Interest Rate", "Credit Spread", "Equity", RiskNode("Property", identifier="property_"), "Currency"),
-              agg_func=_market_risk_agg, agg_scope="descendants")
-
-    tree.grow("Market/Interest Rate", children=("Interest Rate Upward", "Interest Rate Downward"), agg_func=_max_at_zero)
-
-    # Life Insurance
-    tree.grow("Life Insurance", children=("Mortality", "Longevity", "Catastrophe", "Morbidity", "Expense", "Lapse"),
-              agg_func=_life_risk_agg)
-
-    # Life Insurance/Lapse
-    tree.grow("Life Insurance/Lapse", children=(RiskNode("Level & Trend", identifier="level"), "Mass"),
-              agg_func=_max_at_zero)
-
-    # Life Insurance/Lapse/Level & Trend
-    tree.grow("Life Insurance/Lapse/Level & Trend", children=("Lapse Upward", "Lapse Downward"), agg_func=_max_at_zero)
-
-    # General Insurance
-    tree.grow("General Insurance", children=("Reserve Premium", "Catastrophe", "Mortgage Insurance"), agg_func=_gi_risk_agg)
-
-    tree.lock_structure()
-    if is_zeroize:
-        tree.zeroize()
+    tree = RiskTree.from_structure_notation(structure_notation=structure_notation, is_lock_structure=True,
+                                            is_zeroize=True)
 
     if submodule is None:
         return tree

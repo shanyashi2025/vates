@@ -72,6 +72,17 @@ def tree(make_tree):
     return make_tree()
 
 
+tree_structure_notation = {
+    "T": {"identifier": "t", "children": ("M", "L"), "agg_func": _sum_agg},
+    "T/M": {"name": "M", "children": ("E", "F"), "agg_func": _sum_agg},
+    "T/M/E": {"name": "E", "identifier": "e", "children": (), "agg_func": None},
+    "T/M/F": {"children": ()},
+    "T/L": {"children": ("H", ), "agg_func": _sum_agg},
+    "T/L/H": {},
+}
+
+
+
 class TestRiskAggregation:
     def test_uncorrelated_risks_are_combined_in_quadrature(self):
         assert risk_aggregation(3.0, 4.0, corr_matrix=np.eye(2)) == pytest.approx(5.0)
@@ -863,6 +874,7 @@ class TestDeepcopy:
         assert copied.get_node("M/E")._risk_capital == 1.0  # leaf value carried over
         assert copied.root._risk_capital is None  # internal cache rebuilt lazily
         assert copied.get_risk_capital() == 7.0
+        assert copied.root._risk_capital == 7.0
 
     def test_the_aggregation_function_object_is_shared(self):
         agg = _RecordingAgg()
@@ -997,13 +1009,13 @@ class TestLockStructure:
     @pytest.mark.parametrize("arg, expected", [(None, False), (True, True), (False, False)],
                              ids=["inherit", "force-on", "force-off"])
     def test_deepcopy_of_an_unlocked_tree(self, tree, arg, expected):
-        assert tree.deepcopy(lock_structure=arg).is_structure_locked is expected
+        assert tree.deepcopy(is_lock_structure=arg).is_structure_locked is expected
 
     @pytest.mark.parametrize("arg, expected", [(None, True), (True, True), (False, False)],
                              ids=["inherit", "force-on", "force-off"])
     def test_deepcopy_of_a_locked_tree(self, tree, arg, expected):
         tree.lock_structure()
-        assert tree.deepcopy(lock_structure=arg).is_structure_locked is expected
+        assert tree.deepcopy(is_lock_structure=arg).is_structure_locked is expected
 
     def test_a_locked_copy_is_independent_of_its_source(self, tree):
         tree.lock_structure()
@@ -1013,6 +1025,51 @@ class TestLockStructure:
         copied.put_risk_capital("M/E", 10.0)  # capitals stay writable
         assert copied.get_risk_capital() == 16.0
         assert tree.get_risk_capital() == 7.0
+
+
+class TestStructureNotation:
+    def test_export_structure_notation(self, tree):
+        notation = tree.export_structure_notation()
+        assert set(notation.keys()) == {"T", "T/M", "T/M/E", "T/M/F", "T/L", "T/L/H"}
+
+    def test_build_from_structure_notation(self):
+        tree = RiskTree.from_structure_notation(tree_structure_notation)
+        assert tree.root.name == "T"
+        assert set(n.name for n in tree.get_leaf_nodes()) == {"E", "F", "H"}
+        assert tree.root._risk_capital is None
+        assert tree.is_structure_locked is True
+        tree = RiskTree.from_structure_notation(tree_structure_notation, is_lock_structure=False)
+        assert tree.is_structure_locked is False
+        tree = RiskTree.from_structure_notation(tree_structure_notation, is_zeroize=True)
+        assert tree.get_risk_capital() == 0.0
+
+    def test_structure_notation_can_replicate_tree(self, tree):
+        tree_built = RiskTree.from_structure_notation(tree_structure_notation)
+        assert tree_built.export_structure_notation() == tree.export_structure_notation()
+
+    def test_build_from_exported_structure_notation(self, tree):
+        structure_notation = tree.export_structure_notation()
+        tree_built = RiskTree.from_structure_notation(structure_notation)
+        assert tree_built.export_structure_notation() == structure_notation
+
+    def test_can_auto_add_leaf(self):
+        notation = {"T": {"children": ("M", "N")},}
+        tree = RiskTree.from_structure_notation(notation)
+        assert tree.get_node("M").is_leaf is True
+        assert tree.get_node("N").is_leaf is True
+
+    def test_multiple_roots_raises(self):
+        notation = {"T": {"children": ("M",)}, "S": {}}
+        with pytest.raises(ValueError, match="Multiple roots"):
+            RiskTree.from_structure_notation(notation)
+        notation = {"T": {"children": ("M", )}, "T/M/N": {"children": ("Q", )}}
+        with pytest.raises(ValueError, match="Multiple roots"):
+            RiskTree.from_structure_notation(notation)
+
+    def test_name_conflict_raises(self):
+        notation = {"T": {"name": "Nope"}}
+        with pytest.raises(KeyError, match="name conflict"):
+            RiskTree.from_structure_notation(notation)
 
 
 class TestPreorderTraversal:

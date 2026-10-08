@@ -1,6 +1,6 @@
 import math
 
-from vates.solvency.risk_tree import RiskNode, RiskTree, risk_aggregation
+from vates.solvency.risk_tree import RiskTree, risk_aggregation
 from vates.solvency.eu_solvency2.rules import (
     CORR_MATRIX_SCR,
     CORR_MATRIX_NONLIFE,
@@ -53,57 +53,41 @@ def _counterparty_default_risk_agg(type_1: float, type_2: float) -> float:
     return math.sqrt(type_1 ** 2 + 1.5 * type_1 * type_2 + type_2 ** 2)
 
 
-def make_solvency2_scr_module(*, submodule: str | None = None, is_zeroize: bool = True
-                              ) -> RiskTree:
-    tree = RiskTree(root="Solvency II SCR")
+def make_solvency2_scr_module(*, submodule: str | None = None) -> RiskTree:
+    structure_notation = {
+        "Solvency II SCR": {
+            "children": ("Market", "Counterparty Default", "Life", "Health", "Non-life", "Intangibles"),
+            "agg_func": _scr_agg},
+        "Solvency II SCR/Non-life": {
+            "children": ("Premium Reserve", "Catastrophe", "Lapse"),
+            "agg_func": _nonlife_risk_agg},
+        "Solvency II SCR/Life": {
+            "children": ("Mortality", "Longevity", "Disability", "Expense", "Revision", "Lapse", "Catastrophe"),
+            "agg_func": _life_risk_agg},
+        "Solvency II SCR/Life/Lapse": {"children": ("Increase", "Decrease", "Mass"), "agg_func": _max_at_zero},
+        "Solvency II SCR/Health": {"children": ("NSLT", "SLT", "Catastrophe"), "agg_func": _health_risk_agg},
+        "Solvency II SCR/Health/SLT": {
+            "children": ("Mortality", "Longevity", "Disability-Morbidity", "Expense", "Revision", "Lapse"),
+            "agg_func": _slth_risk_agg},
+        "Solvency II SCR/Health/SLT/Disability-Morbidity": {
+            "children": ("Medical Payment Increase", "Medical Payment Decrease", "Income Protection"),
+            "agg_func": lambda medical_payment_increase, medical_payment_decrease, income_protection: max(
+                medical_payment_increase, medical_payment_decrease) + income_protection},
+        "Solvency II SCR/Health/SLT/Lapse": {"children": ("Increase", "Decrease", "Mass"), "agg_func": _max_at_zero},
+        "Solvency II SCR/Market": {
+            "children": ("Interest Rate", "Equity", "Property", "Spread", "Concentration", "Currency"),
+            "agg_func": _market_risk_agg, "agg_scope": "descendants"},
+        "Solvency II SCR/Market/Property": {"identifier": "property_"},
+        "Solvency II SCR/Market/Interest Rate": {
+            "children": ("Interest Rate Increase", "Interest Rate Decrease"),
+            "agg_func": _max_at_zero},
+        "Solvency II SCR/Counterparty Default": {
+            "children": ("Type 1", "Type 2"),
+            "agg_func": _counterparty_default_risk_agg},
+    }
 
-    # (root)
-    tree.grow("", children=("Market", "Counterparty Default", "Life", "Health", "Non-life", "Intangibles"),
-              agg_func=_scr_agg)
-
-    # Non-life
-    tree.grow("Non-life", children=("Premium Reserve", "Catastrophe", "Lapse"), agg_func=_nonlife_risk_agg)
-
-    # Life
-    tree.grow("Life",
-              children=("Mortality", "Longevity", "Disability", "Expense", "Revision", "Lapse", "Catastrophe"),
-              agg_func=_life_risk_agg)
-
-    # Life/Lapse
-    tree.grow("Life/Lapse", children=("Increase", "Decrease", "Mass"), agg_func=_max_at_zero)
-
-    # Health
-    tree.grow("Health", children=("NSLT", "SLT", "Catastrophe"), agg_func=_health_risk_agg)
-
-    # Health/SLT
-    tree.grow("Health/SLT",
-              children=("Mortality", "Longevity", "Disability-Morbidity", "Expense", "Revision", "Lapse"),
-              agg_func=_slth_risk_agg)
-
-    # Health/SLT/Disability-Morbidity
-    tree.grow("Health/SLT/Disability-Morbidity",
-              children=("Medical Payment Increase", "Medical Payment Decrease", "Income Protection"),
-              agg_func=lambda medical_payment_increase, medical_payment_decrease, income_protection: max(
-                  medical_payment_increase, medical_payment_decrease) + income_protection)
-
-    # Health/SLT/Lapse
-    tree.grow("Health/SLT/Lapse", children=("Increase", "Decrease", "Mass"), agg_func=_max_at_zero)
-
-    # Market
-    tree.grow("Market",
-              children=("Interest Rate", "Equity", RiskNode("Property", identifier="property_"), "Spread",
-                        "Concentration", "Currency"),
-              agg_func=_market_risk_agg, agg_scope="descendants")
-
-    tree.grow("Market/Interest Rate", children=("Interest Rate Increase", "Interest Rate Decrease"),
-              agg_func=_max_at_zero)
-
-    # Counterparty Default
-    tree.grow("Counterparty Default", children=("Type 1", "Type 2"), agg_func=_counterparty_default_risk_agg)
-
-    tree.lock_structure()
-    if is_zeroize:
-        tree.zeroize()
+    tree = RiskTree.from_structure_notation(structure_notation=structure_notation, is_lock_structure=True,
+                                            is_zeroize=True)
 
     if submodule is None:
         return tree
