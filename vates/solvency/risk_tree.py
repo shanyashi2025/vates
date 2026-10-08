@@ -155,7 +155,8 @@ class RiskNode:
     """
 
     __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func", "_agg_scope",
-                 "_is_structure_locked", "_root", "_siblings", "_ancestors", "_descendants", "_leaves", "_path")
+                 "_is_structure_locked", "_root", "_siblings", "_ancestors", "_descendants", "_leaves", "_path",
+                 "_path_to_descendant")
 
     _derived_caches = ("_root", "_siblings", "_ancestors", "_descendants", "_leaves", "_path")  # cached while locked
     _allowed_agg_scopes = ("children", "descendants")  # _allowed_agg_scopes[0] will be used as default
@@ -182,6 +183,7 @@ class RiskNode:
         self._agg_func: Callable[..., float] | None = None
         self._agg_scope: Literal["children", "descendants"] | None = None
         self._is_structure_locked: bool = False
+        self._path_to_descendant: dict[str, RiskNode] = {}
 
     @property
     def name(self) -> str:
@@ -569,6 +571,8 @@ class RiskNode:
             raise TypeError(f"Invalid type of key: '{type(key)}', expected 'str'.")
         if key == "":
             return self
+        if self._is_structure_locked and (node := self._path_to_descendant.get(key, None)) is not None:
+            return node
         node = self
         for name in key.split("/"):
             if name == "":
@@ -579,6 +583,8 @@ class RiskNode:
                     raise KeyError(f"{self._name}: has no descendant '{key}'; '{node._name}' has no child named '{name}'.")
                 return default
             node = child
+        if self._is_structure_locked:
+            self._path_to_descendant[key] = node
         return node
 
     def __truediv__(self, key: str, /) -> Self:
@@ -709,6 +715,7 @@ class RiskNode:
         """Forget every derived view cached by this node."""
         for attr in self._derived_caches:
             setattr(self, attr, None)  # not computed yet / no longer valid
+        self._path_to_descendant = {}
 
     def _lock_structure(self) -> None:
         """Lock this node only, as part of :meth:`lock_structure`'s walk."""

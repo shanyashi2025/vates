@@ -955,6 +955,30 @@ class TestLockStructure:
         tree.unlock_structure()
         assert leaf._path is None
 
+    def test_path_to_descendant_caches_while_locked(self, tree):
+        root = tree.root
+        node_e = tree.get_node("M/E")
+        node_h = tree.get_node("L/H")
+        node_m = tree.get_node("M")
+        node_f = tree.get_node("M").get_descendant("F")
+        assert root._path_to_descendant == {}
+        assert node_m._path_to_descendant == {}
+        tree.lock_structure()
+        _ = tree.get_node("M/E")
+        _ = tree.get_node("L/H")
+        _ = tree.get_node("M")
+        _ = tree.get_node("M").get_descendant("E")
+        _ = tree.get_node("M").get_descendant("F")
+        _ = tree.get_node("M").get_descendant("G", None)
+        assert root._path_to_descendant == {"M": node_m, "M/E": node_e, "L/H": node_h}
+        assert node_m._path_to_descendant == {"E": node_e, "F": node_f}
+        tree.lock_structure()  # already locked: no reset
+        assert root._path_to_descendant == {"M/E": node_e, "L/H": node_h, "M": node_m}
+        assert node_m._path_to_descendant == {"E": node_e, "F": node_f}
+        tree.unlock_structure()
+        assert root._path_to_descendant == {}
+        assert node_m._path_to_descendant == {}
+
     def test_relocking_refreshes_every_derived_cache(self, tree):
         def snapshot():
             return {n.path: (n.root, n.siblings, n.ancestors, n.descendants, n.leaves, n.path)
