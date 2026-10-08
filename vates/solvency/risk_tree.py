@@ -36,14 +36,16 @@ node (node names therefore contain no ``"/"``)::
               agg_scope="descendants")
     tree.grow("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"),
               agg_func=max_at_zero)
-    tree.set_risk_capital("Market/Interest Rate/Interest Rate Up", 1_000.0)
+    tree.put_risk_capital("Market/Interest Rate/Interest Rate Up", 1_000.0)
 
 Once its hierarchy is final, a tree can be locked with
 :meth:`RiskTree.lock_structure`: structural changes then raise
 ``AttributeError``, while capitals stay writable so that the same tree can be
 reused for every scenario.  Locking is always whole-tree, and the derived views
 of each node (``path``, ``descendants``, ``leaves``, ...) are cached while it
-lasts.  :meth:`RiskTree.unlock_structure` gives the structure back.
+lasts, among them the resolution of the paths leading to its descendants, so
+repeated lookups of the same node are cheap.  :meth:`RiskTree.unlock_structure`
+gives the structure back.
 
 A ``RiskTree`` is only a *view* on a node and never copies it; use ``deepcopy``
 to obtain an independent structure.
@@ -122,6 +124,9 @@ def on_structure_locked_cached(key: str):
             return result
         return wrapper
     return decorator
+
+
+_MISSING: object = object()  # marks "no default given" as distinct from a `None` default
 
 
 class RiskNode:
@@ -514,25 +519,30 @@ class RiskNode:
             raise NotImplementedError(f"agg scope: {self._agg_scope}.")
         self._risk_capital = self._agg_func(**capitals)
 
-    def get_child(self, name: str, /) -> Self:
+    def get_child(self, name: str, /, default: object = _MISSING) -> Self | object:
         """
-        Get the child node by a given name.
+        Get the direct child node of a given name.
 
         Args:
-            name: The ``name`` to lookup.
+            name: The ``name`` to look up among the direct children.
+            default: What to return instead of raising when there is no such child;
+                it is compared by identity, so any value -- ``None`` included -- can be
+                used.  Leave it unset to have a missing child raise.
 
         Returns:
-            RiskNode: The child node named ``name``.
+            RiskNode: The child node named ``name``, or ``default`` when given.
 
         Raises:
-            ValueError: If current node has no matching child.
+            KeyError: If no child is named ``name`` and ``default`` was not given.
         """
         node = next((c for c in self._children if c._name == name), None)
-        if node is None:
-            raise KeyError(f"{self._name}: has no child node named '{name}'.")
-        return node
+        if node is not None:
+            return node
+        if default is _MISSING:
+            raise KeyError(f"{self._name}: has no child named '{name}'.")
+        return default
 
-    def get_descendant(self, key: str, /) -> Self:
+    def get_descendant(self, key: str, /, default: object = _MISSING) -> Self | object:
         """
         Resolve a relative path and return the descendant node it denotes.
 
@@ -544,19 +554,31 @@ class RiskNode:
 
         Args:
             key: The relative path to resolve, or ``""`` for this node itself.
+            default: What to return instead of raising when ``key`` does not resolve;
+                it is compared by identity, so any value -- ``None`` included -- can be
+                used.  Leave it unset to have an unresolvable path raise.
 
         Returns:
-            RiskNode: The node found at ``key``.
+            RiskNode: The node found at ``key``, or ``default`` when given.
 
         Raises:
             TypeError: If ``key`` is not a ``str``.
-            KeyError: If a component has no matching child.
+            KeyError: If a component has no matching child and ``default`` was not given.
         """
         if not isinstance(key, str):
             raise TypeError(f"Invalid type of key: '{type(key)}', expected 'str'.")
+        if key == "":
+            return self
         node = self
-        for k in key.split("/"):
-            node = node.get_child(k) if k else node
+        for name in key.split("/"):
+            if name == "":
+                continue  # stays
+            child = node.get_child(name, None)
+            if child is None:
+                if default is _MISSING:
+                    raise KeyError(f"{self._name}: has no descendant '{key}'; '{node._name}' has no child named '{name}'.")
+                return default
+            node = child
         return node
 
     def __truediv__(self, key: str, /) -> Self:
@@ -716,6 +738,7 @@ class RiskNode:
         self._reset_derived_caches()
         self._is_structure_locked = False
 
+
 class RiskTree:
     """
     A view on a solvency risk-module tree, identified by its root node.
@@ -723,7 +746,7 @@ class RiskTree:
     The tree wraps an existing :class:`RiskNode` without copying it, so structure
     and values are shared with the tree that node belongs to.  A hierarchy level is
     built with :meth:`grow`, and capitals are provided with
-    :meth:`set_risk_capital` or :meth:`batch_set_risk_capital`.  Paths passed to the
+    :meth:`put_risk_capital` or :meth:`batch_put_risk_capital`.  Paths passed to the
     methods below are resolved from the root of this tree, hence for a subtree of
     a larger tree they are relative to that subtree and not to the outermost root
     (the :attr:`RiskNode.path` of a node, in contrast, is always absolute within
@@ -752,7 +775,7 @@ class RiskTree:
         return self._root
 
     @property
-    def is_toptree(self) -> bool:
+    def is_supertree(self) -> bool:
         """``True`` if the root node has no parent, i.e. the tree is not a subtree."""
         return self._root.is_root
 
@@ -808,20 +831,28 @@ class RiskTree:
             return 0.0
         return sum([c.risk_capital for c in node.children]) - node.risk_capital
 
-    def get_node(self, key: str = "", /) -> RiskNode:
+    def get_node(self, key: str = "", /, default: object = _MISSING) -> RiskNode | object:
         """
         Node at ``key``.
 
         Args:
             key: Path of the node relative to the root, ``""`` for the root.
+            default: What to return instead of raising when ``key`` does not exist; it
+                is compared by identity, so any value -- ``None`` included -- can be
+                used.  Leave it unset to have a missing node raise.
 
         Returns:
-            RiskNode: The node found at ``key``.
+            RiskNode: The node found at ``key``, or ``default`` when given.
 
         Raises:
-            KeyError: If ``key`` does not exist.
+            KeyError: If ``key`` does not exist and ``default`` was not given.
         """
-        return self._root.get_descendant(key)
+        node = self._root.get_descendant(key, None)
+        if node is not None:
+            return node
+        if default is _MISSING:
+            raise KeyError(f"Tree (root '{self._root.name}') has no node '{key}'.")
+        return default
 
     @on_structure_locked_rejected
     def grow(self, key: str, /, *, children: tuple[str | RiskNode, ...] | str | RiskNode = tuple(),
@@ -834,7 +865,7 @@ class RiskTree:
         """
         self.get_node(key).grow(children=children, agg_func=agg_func, agg_scope=agg_scope)
 
-    def get_toptree(self) -> Self:
+    def get_supertree(self) -> Self:
         """
         Tree on the outermost ancestor of this tree's root.
 
@@ -844,22 +875,31 @@ class RiskTree:
         """
         return RiskTree(self._root.root)
 
-    def get_subtree(self, key: str, /) -> Self:
+    def get_subtree(self, key: str, /, default: object = _MISSING) -> Self | object:
         """
         Tree on the node at ``key``.
 
         Args:
             key: Path of the root of the subtree, relative to the root of this
                 tree.
+            default: What to return instead of raising when ``key`` does not exist; it
+                is compared by identity, so any value -- ``None`` included -- can be
+                used.  Leave it unset to have a missing subtree raise.
 
         Returns:
             RiskTree: A live view on the same nodes, not a copy; use
-                :meth:`deepcopy` if the subtree must be modified on its own.
+                :meth:`deepcopy` if the subtree must be modified on its own.  When
+                ``default`` is given, it is returned instead if there is no such node.
 
         Raises:
-            ValueError: If ``key`` does not exist.
+            KeyError: If ``key`` does not exist and ``default`` was not given.
         """
-        return RiskTree(self.get_node(key))
+        node = self.get_node(key, None)
+        if node is not None:
+            return RiskTree(node)
+        if default is _MISSING:
+            raise KeyError(f"Tree (root '{self._root.name}') has no subtree '{key}'.")
+        return default
 
     def get_all_nodes(self) -> tuple[RiskNode, ...]:
         """All nodes of the tree, in preorder (the root first, then each subtree)."""
@@ -869,7 +909,7 @@ class RiskTree:
         """All leaf nodes of the tree, in preorder."""
         return self._root.leaves
 
-    def set_risk_capital(self, key: str, /, value: float) -> None:
+    def put_risk_capital(self, key: str, /, value: float) -> None:
         """
         Provide the risk capital of the leaf node at ``key``.
 
@@ -878,7 +918,7 @@ class RiskTree:
         """
         self.get_node(key).set_risk_capital(value)
 
-    def batch_set_risk_capital(self, leaf_values: dict[str, float | dict], /) -> None:
+    def batch_put_risk_capital(self, leaf_values: dict[str, float | dict], /) -> None:
         """
         Provide the risk capitals of several leaves at once.
 
@@ -894,7 +934,7 @@ class RiskTree:
             ValueError: If a key does not exist, or does not point to a leaf.
         """
         for key, value in self._flatten_dict(leaf_values).items():
-            self.set_risk_capital(key, value)
+            self.put_risk_capital(key, value)
 
     @classmethod
     def _flatten_dict(cls, nested: dict[str, float | dict], /, joiner: str = "/") -> dict[str, float]:
