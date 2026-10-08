@@ -878,12 +878,12 @@ class RiskTree:
         """
         self.get_node(key).set_risk_capital(value)
 
-    def batch_set_risk_capital(self, value_dict: dict[str, float | dict], /) -> None:
+    def batch_set_risk_capital(self, leaf_values: dict[str, float | dict], /) -> None:
         """
         Provide the risk capitals of several leaves at once.
 
         Args:
-            value_dict: Mapping of leaf paths to values, either flat
+            leaf_values: Mapping of leaf paths to values, either flat
                 (``{"Market/Equity": 1.0}``) or nested
                 (``{"Market": {"Equity": 1.0}}``).  Nested dictionaries are
                 flattened into "/"-joined paths.
@@ -893,7 +893,7 @@ class RiskTree:
                 nor a ``dict``.
             ValueError: If a key does not exist, or does not point to a leaf.
         """
-        for key, value in self._flatten_dict(value_dict).items():
+        for key, value in self._flatten_dict(leaf_values).items():
             self.set_risk_capital(key, value)
 
     @classmethod

@@ -124,8 +124,8 @@ class MinCapUnit:
         self.tdv_divers: TDimVariable = create_tdv("diversification")
         self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
 
-    def calculate(self, *, risk_capital_dict: dict[str, float], la_pv_base: float = 0.0, la_pv_lower_limit = 0.0) -> None:
-        self._risk_module.batch_set_risk_capital(risk_capital_dict)
+    def calculate(self, *, leaf_values: dict[str, float], la_pv_base: float = 0.0, la_pv_lower_limit = 0.0) -> None:
+        self._risk_module.batch_set_risk_capital(leaf_values)
 
         if self.require_loss_absorbency:
             self._la_pv_base = la_pv_base

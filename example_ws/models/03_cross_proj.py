@@ -15,7 +15,7 @@ from company_package import (
 
 
 @dataclass
-class MinCapUnderlyingInput:
+class MinCapContext:
     pv_base: float = 0.0
     pv_mortality: float = 0.0
     pv_catastrophe: float = 0.0
@@ -45,7 +45,7 @@ class MinCapUnderlyingInput:
     mc_spread: float = 0.0
     mc_counterparty_default: float = 0.0
 
-    def calculate_risk_capital(self) -> dict[str, float | dict]:
+    def calculate_leaf_values(self) -> dict[str, float | dict]:
         return {
             "Life": {
                 "Loss": {
@@ -205,28 +205,28 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
         mc_factor_spread = cross_mc_factor_df.at[date_index, 'mc_factor_spread']
         for key, mc_unit in mc_units.items():
             # --- (3.0) initialize an MinCapUnderlyingInput instance ---
-            mc_underlying_input = MinCapUnderlyingInput()
+            ctx = MinCapContext()
 
             # --- (3.1) calculate asset mc ---
             aging_assets_master = aging_assets_master_dict[key]
             # --- (3.1.1) equity risk mc ---
             for asset in aging_assets_master.equity_ls:
-                mc_underlying_input.mc_equity += asset.market_value * mc_factor_equity
+                ctx.mc_equity += asset.market_value * mc_factor_equity
             # --- (3.1.2) interest rate risk mc ---
             for asset in aging_assets_master.fixed_bond_ls:
-                mc_underlying_input.aa_int_base += asset.pricer.calculate_market_price(p, cross_intba_spot) * asset.units
-                mc_underlying_input.aa_int_up += asset.pricer.calculate_market_price(p, cross_intup_spot) * asset.units
-                mc_underlying_input.aa_int_dn += asset.pricer.calculate_market_price(p, cross_intdn_spot) * asset.units
-                mc_underlying_input.mc_spread += asset.market_value * mc_factor_spread
+                ctx.aa_int_base += asset.pricer.calculate_market_price(p, cross_intba_spot) * asset.units
+                ctx.aa_int_up += asset.pricer.calculate_market_price(p, cross_intup_spot) * asset.units
+                ctx.aa_int_dn += asset.pricer.calculate_market_price(p, cross_intdn_spot) * asset.units
+                ctx.mc_spread += asset.market_value * mc_factor_spread
 
             # --- (3.2) collect liability mc input ---
-            mc_underlying_input.add_from_epl(epl=epl, liab_ls=liabs_dict.get(key, None) or [], date_col=str(date_index))
+            ctx.add_from_epl(epl=epl, liab_ls=liabs_dict.get(key, None) or [], date_col=str(date_index))
 
             # --- (3.3) calculate minimum capital ---
             mc_unit.calculate(
-                risk_capital_dict=mc_underlying_input.calculate_risk_capital(),
-                la_pv_base=mc_underlying_input.pv_base if mc_unit.require_loss_absorbency else 0.0,
-                la_pv_lower_limit=mc_underlying_input.pv_la_lower_limit if mc_unit.require_loss_absorbency else 0.0,
+                leaf_values=ctx.calculate_leaf_values(),
+                la_pv_base=ctx.pv_base if mc_unit.require_loss_absorbency else 0.0,
+                la_pv_lower_limit=ctx.pv_la_lower_limit if mc_unit.require_loss_absorbency else 0.0,
             )
 
         # --- (4) consolidate company minimum capital ---
