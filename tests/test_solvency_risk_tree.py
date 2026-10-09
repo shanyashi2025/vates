@@ -3,7 +3,7 @@ the `risk_aggregation` correlation formula it is built on.
 
 The module is the backbone of the three solvency standard formulas shipped in this
 package (`cn_cross2`, `eu_solvency2`, `hk_rbc`): each builder assembles a
-risk-module hierarchy once with `RiskTree.grow`, then leaf capitals are
+risk-module hierarchy once with `RiskTree.from_structure`, then leaf capitals are
 pushed through it.  These tests pin that contract -- path resolution, hierarchy
 setup, the identifier -> keyword-argument mapping used by `agg_func`, the capital
 cache and its invalidation, and the copy/view semantics -- plus the integration
@@ -57,9 +57,12 @@ def make_tree():
 
     def _make(values=None):
         tree = RiskTree(root="T")
-        tree.grow("", children=("M", "L"), agg_func=_sum_agg)
-        tree.grow("M", children=("E", "F"), agg_func=_sum_agg)
-        tree.grow("L", children=("H",), agg_func=_sum_agg)
+        tree.root.add_child("M", "L")
+        tree.root.set_agg_func(_sum_agg)
+        tree.get_node("M").add_child("E", "F")
+        tree.get_node("M").set_agg_func(_sum_agg)
+        tree.get_node("L").add_child("H")
+        tree.get_node("L").set_agg_func(_sum_agg)
         tree.batch_put_risk_capital(values or {"M/E": 1.0, "M/F": 2.0, "L/H": 4.0})
         return tree
 
@@ -72,13 +75,10 @@ def tree(make_tree):
     return make_tree()
 
 
-tree_structure_notation = {
-    "T": {"identifier": "t", "children": ("M", "L"), "agg_func": _sum_agg},
-    "T/M": {"name": "M", "children": ("E", "F"), "agg_func": _sum_agg},
-    "T/M/E": {"name": "E", "identifier": "e", "children": (), "agg_func": None},
-    "T/M/F": {"children": ()},
+tree_structure = {
+    "T": {"children": ("M", "L"), "agg_func": _sum_agg},
+    "T/M": {"children": ("E", "F"), "agg_func": _sum_agg},
     "T/L": {"children": ("H", ), "agg_func": _sum_agg},
-    "T/L/H": {},
 }
 
 
@@ -231,13 +231,6 @@ class TestRiskNodeStructure:
     def test_add_child_rejects_other_types(self):
         with pytest.raises(TypeError, match="Invalid"):
             RiskNode("T").add_child(42)
-
-    def test_add_child_sets_children_but_no_aggregation_function(self):
-        # Setting the aggregation function is no longer part of `add_child`: it is
-        # done separately, with `set_agg_func` or `RiskTree.grow`.
-        root = RiskNode("T")
-        root.add_child("A")
-        assert root._agg_func is None
 
     def test_duplicate_name_raises_value_error(self):
         root = RiskNode("T")
@@ -522,15 +515,19 @@ class TestAggScope:
     def _sum_tree(agg, *, scope="children"):
         """`T -> M(E, F), L(H)` with `agg` on the root: `M = 3`, `L = 4`."""
         tree = RiskTree("T")
-        tree.grow("", children=("M", "L"), agg_func=agg, agg_scope=scope)
-        tree.grow("M", children=("E", "F"), agg_func=_sum_agg)
-        tree.grow("L", children=("H",), agg_func=_sum_agg)
+        tree.root.add_child("M", "L")
+        tree.root.set_agg_func(agg, scope=scope)
+        tree.get_node("M").add_child("E", "F")
+        tree.get_node("M").set_agg_func(_sum_agg)
+        tree.get_node("L").add_child("H")
+        tree.get_node("L").set_agg_func(_sum_agg)
         tree.batch_put_risk_capital({"M/E": 1.0, "M/F": 2.0, "L/H": 4.0})
         return tree
 
     def test_children_scope_is_the_default(self):
         tree = RiskTree("T")
-        tree.grow("", children=("A", "B"), agg_func=_sum_agg)
+        tree.root.add_child("A", "B")
+        tree.root.set_agg_func(_sum_agg)
         assert tree.root._agg_scope == "children"
 
     def test_children_scope_passes_only_the_direct_children(self):
@@ -551,8 +548,8 @@ class TestAggScope:
         # The capital of an internal descendant is part of what the node above
         # receives, so that descendant has to be aggregatable itself.
         tree = RiskTree("T")
-        tree.grow("", children=("M", "L"))
-        tree.grow("M", children=("E", "F"))
+        tree.root.add_child("M", "L")
+        tree.get_node("M").add_child("E", "F")
         tree.put_risk_capital("M/E", 1.0)
         tree.put_risk_capital("M/F", 2.0)
         tree.put_risk_capital("L", 4.0)
@@ -560,9 +557,10 @@ class TestAggScope:
         with pytest.raises(ValueError, match="M: aggregation function is None"):
             tree.get_risk_capital()
 
-    def test_the_scope_is_set_through_grow(self):
+    def test_the_scope_is_set(self):
         tree = RiskTree("T")
-        tree.grow("", children=("A",), agg_func=_sum_agg, agg_scope="descendants")
+        tree.root.add_child("A")
+        tree.root.set_agg_func(_sum_agg, scope="descendants")
         assert tree.root._agg_scope == "descendants"
 
     def test_an_unknown_scope_is_rejected_when_it_is_set(self):
@@ -576,9 +574,12 @@ class TestAggScope:
         # Identifiers become keyword names, so they have to be unique over the whole
         # subtree once the scope reaches beyond the direct children.
         tree = RiskTree("T")
-        tree.grow("", children=("Life", "Health"), agg_func=_sum_agg, agg_scope="descendants")
-        tree.grow("Life", children=("Mortality",), agg_func=_sum_agg)
-        tree.grow("Health", children=("Mortality",), agg_func=_sum_agg)
+        tree.root.add_child("Life", "Health")
+        tree.root.set_agg_func(_sum_agg, scope="descendants")
+        tree.get_node("Life").add_child("Mortality")
+        tree.get_node("Life").set_agg_func(_sum_agg)
+        tree.get_node("Health").add_child("Mortality")
+        tree.get_node("Health").set_agg_func(_sum_agg)
         tree.batch_put_risk_capital({"Life/Mortality": 1.0, "Health/Mortality": 2.0})
         with pytest.raises(ValueError, match=r"duplicate identifiers among descendants: \['mortality'\]"):
             tree.get_risk_capital()
@@ -592,9 +593,12 @@ class TestAggScope:
 
     def test_deepcopy_carries_the_scope_of_every_node(self):
         tree = RiskTree("T")
-        tree.grow("", children=("M", "L"), agg_func=_sum_agg, agg_scope="descendants")
-        tree.grow("M", children=("E", "F"), agg_func=_sum_agg, agg_scope="descendants")
-        tree.grow("L", children=("H",), agg_func=_sum_agg)
+        tree.root.add_child("M", "L")
+        tree.root.set_agg_func(_sum_agg, scope="descendants")
+        tree.get_node("M").add_child("E", "F")
+        tree.get_node("M").set_agg_func(_sum_agg, scope="descendants")
+        tree.get_node("L").add_child("H")
+        tree.get_node("L").set_agg_func(_sum_agg)
         tree.batch_put_risk_capital({"M/E": 1.0, "M/F": 2.0, "L/H": 4.0})
         copied = tree.deepcopy()
         assert [n._agg_scope for n in copied.get_all_nodes()] == [n._agg_scope for n in tree.get_all_nodes()]
@@ -633,7 +637,8 @@ class TestRiskTree:
 
     def test_diversification_is_sum_of_children_minus_the_node(self):
         tree = RiskTree("T")
-        tree.grow("", children=("A", "B"), agg_func=lambda a, b: math.sqrt(a ** 2 + b ** 2))
+        tree.root.add_child("A", "B")
+        tree.root.set_agg_func(lambda a, b: math.sqrt(a ** 2 + b ** 2))
         tree.batch_put_risk_capital({"A": 3.0, "B": 4.0})
         assert tree.get_risk_diversification() == pytest.approx(2.0)  # 7 - 5
         assert tree.get_risk_diversification("A") == 0.0  # leaf
@@ -652,8 +657,10 @@ class TestRiskTree:
 
     def test_batch_set_risk_capital_accepts_flat_and_nested_dicts(self):
         tree = RiskTree("T")
-        tree.grow("", children=("M",), agg_func=_sum_agg)
-        tree.grow("M", children=("E", "F"), agg_func=_sum_agg)
+        tree.root.add_child("M")
+        tree.root.set_agg_func(_sum_agg)
+        tree.get_node("M").add_child("E", "F")
+        tree.get_node("M").set_agg_func(_sum_agg)
         tree.batch_put_risk_capital({"M/E": 1.0, "M/F": 2.0})
         assert tree.get_risk_capital() == 3.0
         tree.batch_put_risk_capital({"M": {"E": 10.0, "F": 20.0}})
@@ -661,7 +668,8 @@ class TestRiskTree:
 
     def test_batch_set_risk_capital_rejects_bad_keys_and_values(self):
         tree = RiskTree("T")
-        tree.grow("", children=("A",), agg_func=_sum_agg)
+        tree.root.add_child("A")
+        tree.root.set_agg_func(_sum_agg)
         with pytest.raises(TypeError, match="expected 'str'"):
             tree.batch_put_risk_capital({1: 2.0})
         with pytest.raises(TypeError, match=r"expected \('float', 'dict'\)"):
@@ -678,146 +686,6 @@ class TestRiskTree:
         assert RiskTree._flatten_dict({"a": {"b": 1.0}}, joiner=".") == {"a.b": 1.0}
 
 
-class TestGrow:
-    """`RiskTree.grow`: the tree-level way to build one hierarchy level."""
-
-    def test_children_and_agg_func_are_set_in_one_call(self):
-        tree = RiskTree("T")
-        tree.grow("", children=("M", "L"), agg_func=_sum_agg)
-        assert [c.name for c in tree.root.children] == ["M", "L"]
-        assert not tree.root.is_leaf
-        assert tree.root._agg_func is _sum_agg
-        tree.batch_put_risk_capital({"M": 1.0, "L": 2.0})
-        assert tree.get_risk_capital() == 3.0
-
-    def test_a_single_name_may_be_given_on_its_own(self):
-        # Normalised to a one-element sequence, so a bare `str` is one child rather
-        # than one child per character.
-        tree = RiskTree("T")
-        tree.grow("", children="Market", agg_func=_sum_agg)
-        assert [c.name for c in tree.root.children] == ["Market"]
-
-    def test_a_single_node_may_be_given_on_its_own(self):
-        tree = RiskTree("T")
-        child = RiskNode("Property", identifier="property_")
-        tree.grow("", children=child, agg_func=lambda property_: property_)
-        assert tree.root.children == (child, )
-        assert child.parent is tree.root
-
-    def test_children_may_be_any_iterable(self):
-        # The annotation asks for a tuple, but a list is normalised as well.
-        tree = RiskTree("T")
-        tree.grow("", children=["A", "B"], agg_func=_sum_agg)
-        assert [c.name for c in tree.root.children] == ["A", "B"]
-
-    def test_a_children_argument_that_is_no_sequence_raises_type_error(self):
-        tree = RiskTree("T")
-        with pytest.raises(TypeError):
-            tree.grow("", children=42, agg_func=_sum_agg)
-        assert tree.root.children == () and tree.root._agg_func is None
-
-    def test_leaves_of_the_new_level_are_created_without_a_value(self):
-        tree = RiskTree("T")
-        tree.grow("", children=("A", "B"), agg_func=_sum_agg)
-        assert all(leaf._risk_capital is None for leaf in tree.get_leaf_nodes())
-        with pytest.raises(ValueError, match="hasn't been provided"):
-            tree.get_risk_capital()
-
-    @pytest.mark.parametrize("path", ["", "/"])
-    def test_empty_and_slash_paths_denote_the_root(self, path):
-        tree = RiskTree("T")
-        tree.grow(path, children=("A",))
-        assert [c.name for c in tree.root.children] == ["A"]
-
-    def test_paths_are_relative_to_the_root_of_the_tree(self):
-        tree = RiskTree("T")
-        tree.grow("", children=("M",), agg_func=_sum_agg)
-        tree.grow("M", children=("E", "F"), agg_func=_sum_agg)
-        assert tree.get_node("M/E").path == "M/E"
-        assert tree.get_node("M/F").parent is tree.get_node("M")
-
-    def test_paths_are_relative_to_the_root_of_a_subtree(self):
-        tree = RiskTree("T")
-        tree.grow("", children=("M",))
-        tree.grow("M", children=("E",))
-        subtree = tree.get_subtree("M")
-        subtree.grow("E", children=("X",), agg_func=_sum_agg)
-        assert subtree.get_node("E/X") is tree.get_node("M/E/X")  # the very same node
-        assert subtree.get_node("E/X").path == "M/E/X"  # absolute from the outer root
-
-    def test_children_may_be_existing_nodes_with_their_own_identifier(self):
-        def _agg(property_: float, equity: float) -> float:
-            return property_ + equity
-
-        tree = RiskTree("T")
-        tree.grow("", children=(RiskNode("Property", identifier="property_"), "Equity"),
-                  agg_func=_agg)
-        tree.put_risk_capital("Property", 1.0)
-        tree.put_risk_capital("Equity", 2.0)
-        assert tree.get_risk_capital() == 3.0
-
-    def test_without_agg_func_the_children_are_attached_but_nothing_aggregates(self):
-        tree = RiskTree("T")
-        tree.grow("", children=("A", "B"))
-        assert [c.name for c in tree.root.children] == ["A", "B"]
-        assert tree.root._agg_func is None
-        with pytest.raises(ValueError, match="aggregation function is None"):
-            tree.get_risk_capital()
-        tree.root.set_agg_func(_sum_agg)  # may still be provided afterwards
-        tree.put_risk_capital("A", 1.0)
-        tree.put_risk_capital("B", 2.0)
-        assert tree.get_risk_capital() == 3.0
-
-    def test_children_default_to_empty(self):
-        tree = RiskTree("T")
-        tree.root.set_risk_capital(5.0)
-        tree.grow("")  # no children, no agg_func: the node is left alone
-        assert tree.root.is_leaf and tree.get_risk_capital() == 5.0
-
-    def test_an_agg_func_on_a_childless_node_leaves_it_a_leaf(self):
-        # There is nothing to aggregate, so the node is still a leaf and its capital
-        # must be provided rather than computed.
-        tree = RiskTree("T")
-        tree.grow("", agg_func=_sum_agg)
-        assert tree.root.is_leaf and tree.root._agg_func is _sum_agg
-        with pytest.raises(ValueError, match="hasn't been provided"):
-            tree.get_risk_capital()
-
-    def test_it_is_atomic_when_the_agg_func_is_already_set(self):
-        tree = RiskTree("T")
-        tree.grow("", children=("M",), agg_func=_sum_agg)
-        tree.grow("M", children=("A",), agg_func=_sum_agg)
-        with pytest.raises(ValueError, match="already been set"):
-            tree.grow("M", children=("X",), agg_func=_sum_agg)
-        assert [c.name for c in tree.get_node("M").children] == ["A"]  # no "X"
-        assert tree.get_node("M")._agg_func is _sum_agg
-
-    @pytest.mark.parametrize("bad_children", [
-        ("A", 42),          # not a RiskNode or a str
-        ("A", "A"),         # duplicate name inside the call
-        ("A-B", "A B"),     # duplicate identifier inside the call
-        ("A.B",),           # reserved character in the name
-    ], ids=["bad type", "duplicate name", "duplicate identifier", "reserved character"])
-    def test_it_sets_nothing_when_a_child_is_rejected(self, bad_children):
-        tree = RiskTree("T")
-        with pytest.raises((TypeError, ValueError)):
-            tree.grow("", children=bad_children, agg_func=_sum_agg)
-        assert tree.root.children == () and tree.root._agg_func is None
-
-    def test_a_child_that_already_has_a_parent_is_rejected(self):
-        tree = RiskTree("T")
-        tree.grow("", children=("M", "L"), agg_func=_sum_agg)
-        with pytest.raises(ValueError, match="has parent"):
-            tree.grow("L", children=(tree.get_node("M"),), agg_func=_sum_agg)
-        assert tree.get_node("L").children == () and tree.get_node("L")._agg_func is None
-
-    def test_unknown_path_raises_value_error(self):
-        tree = RiskTree("T")
-        with pytest.raises(KeyError, match="has no node 'Nope'"):
-            tree.grow("Nope", children=("A",), agg_func=_sum_agg)
-        assert tree.root.children == ()  # the tree is untouched
-
-
 class TestDisplay:
     def test_display_prints_each_node_with_its_capital(self, tree, capsys):
         tree.display(width=20, precision=1)
@@ -827,7 +695,8 @@ class TestDisplay:
 
     def test_display_omits_the_value_of_a_node_without_capital(self, capsys):
         tree = RiskTree("T")
-        tree.grow("", children=("A", "B"), agg_func=_sum_agg)
+        tree.root.add_child("A", "B")
+        tree.root.set_agg_func(_sum_agg)
         tree.put_risk_capital("A", 1.0)
         tree.display(width=20, precision=1)
         lines = capsys.readouterr().out.splitlines()
@@ -879,7 +748,8 @@ class TestDeepcopy:
     def test_the_aggregation_function_object_is_shared(self):
         agg = _RecordingAgg()
         tree = RiskTree("T")
-        tree.grow("", children=("A",), agg_func=agg)
+        tree.root.add_child("A")
+        tree.root.set_agg_func(agg)
         tree.put_risk_capital("A", 1.0)
         assert tree.get_risk_capital() == 1.0
         copied = tree.deepcopy()
@@ -916,15 +786,11 @@ class TestLockStructure:
         locked, other = make_tree(), make_tree()
         locked.lock_structure()
         assert not other.is_structure_locked
-        other.grow("", children=("X",))  # still growable
+        other.root.add_child("X")  # still growable
         assert [n.name for n in other.root.children] == ["M", "L", "X"]
 
     def test_a_locked_tree_rejects_every_structural_change(self, tree):
         tree.lock_structure()
-        with pytest.raises(AttributeError, match="structure is locked"):
-            tree.grow("M", children=("G",))
-        with pytest.raises(AttributeError, match="structure is locked"):
-            tree.get_node("M").grow(children=("G",))
         with pytest.raises(AttributeError, match="structure is locked"):
             tree.get_node("M").add_child("G")
         with pytest.raises(AttributeError, match="structure is locked"):
@@ -933,7 +799,8 @@ class TestLockStructure:
 
     def test_a_locked_node_cannot_become_a_child(self, tree):
         subtree = RiskTree("O")
-        subtree.grow("", children=("X",), agg_func=_sum_agg)
+        subtree.root.add_child("X")
+        subtree.root.set_agg_func(_sum_agg)
         subtree.lock_structure()
         with pytest.raises(ValueError, match="structure is locked"):
             tree.get_node("M").add_child(subtree.root)
@@ -999,7 +866,7 @@ class TestLockStructure:
         tree.lock_structure()
         tree.get_leaf_nodes()  # populate the caches
         tree.unlock_structure()
-        tree.grow("M", children=("G",))
+        tree.get_node("M").add_child("G")
         tree.put_risk_capital("M/G", 3.0)
         expected = snapshot()  # unlocked: computed, never cached
         tree.lock_structure()
@@ -1021,55 +888,65 @@ class TestLockStructure:
         tree.lock_structure()
         copied = tree.deepcopy()  # inherits the lock
         with pytest.raises(AttributeError, match="structure is locked"):
-            copied.grow("", children=("X",))
+            copied.root.add_child("X")
         copied.put_risk_capital("M/E", 10.0)  # capitals stay writable
         assert copied.get_risk_capital() == 16.0
         assert tree.get_risk_capital() == 7.0
 
 
-class TestStructureNotation:
-    def test_export_structure_notation(self, tree):
-        notation = tree.export_structure_notation()
-        assert set(notation.keys()) == {"T", "T/M", "T/M/E", "T/M/F", "T/L", "T/L/H"}
+class TestStructureSpec:
+    def test_export_structure(self, tree):
+        structure = tree.to_structure()
+        assert set(structure.keys()) == {"T", "T/M", "T/M/E", "T/M/F", "T/L", "T/L/H"}
 
-    def test_build_from_structure_notation(self):
-        tree = RiskTree.from_structure_notation(tree_structure_notation)
+    def test_build_from_structure(self):
+        tree = RiskTree.from_structure(tree_structure)
         assert tree.root.name == "T"
         assert set(n.name for n in tree.get_leaf_nodes()) == {"E", "F", "H"}
         assert tree.root._risk_capital is None
         assert tree.is_structure_locked is True
-        tree = RiskTree.from_structure_notation(tree_structure_notation, is_lock_structure=False)
+        tree = RiskTree.from_structure(tree_structure, is_lock_structure=False)
         assert tree.is_structure_locked is False
-        tree = RiskTree.from_structure_notation(tree_structure_notation, is_zeroize=True)
+        tree = RiskTree.from_structure(tree_structure, is_zeroize=True)
         assert tree.get_risk_capital() == 0.0
 
-    def test_structure_notation_can_replicate_tree(self, tree):
-        tree_built = RiskTree.from_structure_notation(tree_structure_notation)
-        assert tree_built.export_structure_notation() == tree.export_structure_notation()
+    def test_structure_can_replicate_tree(self, tree):
+        tree_built = RiskTree.from_structure(tree_structure)
+        assert tree_built.to_structure() == tree.to_structure()
 
-    def test_build_from_exported_structure_notation(self, tree):
-        structure_notation = tree.export_structure_notation()
-        tree_built = RiskTree.from_structure_notation(structure_notation)
-        assert tree_built.export_structure_notation() == structure_notation
+    def test_build_from_exported_structure(self, tree):
+        structure = tree.to_structure()
+        tree_built = RiskTree.from_structure(structure)
+        assert tree_built.to_structure() == structure
 
-    def test_can_auto_add_leaf(self):
-        notation = {"T": {"children": ("M", "N")},}
-        tree = RiskTree.from_structure_notation(notation)
+    def test_leaf_can_be_auto_added(self):
+        structure = {"T": {"children": ("M", "N")},}
+        tree = RiskTree.from_structure(structure)
         assert tree.get_node("M").is_leaf is True
         assert tree.get_node("N").is_leaf is True
 
     def test_multiple_roots_raises(self):
-        notation = {"T": {"children": ("M",)}, "S": {}}
+        structure = {"T": {"children": ("M",)}, "S": {}}
         with pytest.raises(ValueError, match="Multiple roots"):
-            RiskTree.from_structure_notation(notation)
-        notation = {"T": {"children": ("M", )}, "T/M/N": {"children": ("Q", )}}
+            RiskTree.from_structure(structure)
+        structure = {"T": {"children": ("M", )}, "T/M/N": {"children": ("Q", )}}
         with pytest.raises(ValueError, match="Multiple roots"):
-            RiskTree.from_structure_notation(notation)
+            RiskTree.from_structure(structure)
+
+    def test_bad_input_raises_errors(self):
+        with pytest.raises(TypeError, match="expected 'dict'"):
+            RiskTree.from_structure(42)
+        with pytest.raises(ValueError, match="empty"):
+            RiskTree.from_structure({})
+        with pytest.raises(TypeError, match="expected 'str'"):
+            RiskTree.from_structure({42: "foo"})
+        with pytest.raises(TypeError, match=r"epxected \('dict', 'RiskNodeSpec'\)"):
+            RiskTree.from_structure({"foo": 42})
 
     def test_name_conflict_raises(self):
-        notation = {"T": {"name": "Nope"}}
+        structure = {"T": {"name": "Nope"}}
         with pytest.raises(KeyError, match="name conflict"):
-            RiskTree.from_structure_notation(notation)
+            RiskTree.from_structure(structure)
 
 
 class TestPreorderTraversal:

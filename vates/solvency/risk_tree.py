@@ -31,12 +31,13 @@ where the root itself has the empty path ``""`` denotes the current
 node (node names therefore contain no ``"/"``)::
 
     tree = RiskTree(root="Solvency II SCR")
-    tree.grow("", children=("Market", "Life"), agg_func=overall_risk_agg)
-    tree.grow("Market", children=("Interest Rate", "Equity"), agg_func=market_agg,
-              agg_scope="descendants")
-    tree.grow("Market/Interest Rate", children=("Interest Rate Up", "Interest Rate Down"),
-              agg_func=max_at_zero)
-    tree.put_risk_capital("Market/Interest Rate/Interest Rate Up", 1_000.0)
+    tree.root.add_child("Market", "Life")
+    tree.root.set_agg_func(overall_risk_agg)
+    tree.get_node("Market").add_child("Interest Rate", "Equity")
+    tree.get_node("Market").set_agg_func(market_agg, scope="descendants")
+    tree.get_node("Market/Interest Rate").add_child("Interest Rate Increase", "Interest Rate Decrease")
+    tree.get_node("Market/Interest Rate").set_agg_func(max_at_zero)
+    tree.put_risk_capital("Market/Interest Rate/Interest Rate Increase", 1_000.0)
 
 Once its hierarchy is final, a tree can be locked with
 :meth:`RiskTree.lock_structure`: structural changes then raise
@@ -130,7 +131,7 @@ def on_structure_locked_cached(key: str):
 _MISSING: object = object()  # marks "no default given" as distinct from a `None` default
 
 @dataclass(frozen=True)
-class RiskNodeNotation:
+class RiskNodeSpec:
     name: str
     identifier: str | None = None
     children: tuple[str, ...] = ()
@@ -148,7 +149,7 @@ class RiskNodeNotation:
 
     @classmethod
     def from_dict(cls, arg: dict[str, ...], /) -> Self:
-        return RiskNodeNotation(
+        return RiskNodeSpec(
             name=arg["name"],
             identifier=arg.get("identifier", None),
             children=arg.get("children", ()),
@@ -166,9 +167,8 @@ class RiskNode:
     direct children, or of all its descendants, depending on the aggregation scope
     (see :meth:`set_agg_func` and :meth:`aggregate`).
 
-    Children are attached with :meth:`add_child`, or, from a tree, with
-    :meth:`RiskTree.grow`.  The name of a node must be unique among its
-    siblings and free of ``"/"``, which are reserved by the path
+    Children are attached with :meth:`add_child`.  The name of a node must be unique
+    among its siblings and free of ``"/"``, which are reserved by the path
     syntax.  Every node also carries an ``identifier``: a lower-case,
     keyword-friendly version of its name, used as the keyword argument name when
     the parent aggregates (``"Non-life"`` -> ``"non_life"``).  A leading digit is
@@ -425,58 +425,6 @@ class RiskNode:
         self._agg_scope = scope or self._allowed_agg_scopes[0]
         self.clr_risk_capital()
 
-    @on_structure_locked_rejected
-    def grow(self, *, children: tuple[str | Self, ...] | str | Self = tuple(),
-             agg_func: Callable[..., float] | None = None, agg_scope: Literal["children", "descendants"] | None = None
-             ) -> None:
-        """
-        Set up the node: attach its children and set its aggregation.
-
-        A convenience for building a hierarchy level by level: the children are
-        attached as by :meth:`add_child`, and ``agg_func`` is set as by
-        :meth:`set_agg_func`.  Capitals are not touched.
-
-        The call is all-or-nothing: when it raises, neither the children nor the
-        aggregation function of the node change.  A node is given an aggregation
-        function only once, so setting up the same node twice with ``agg_func``
-        raises rather than leaving the second set of children behind.
-
-        Args:
-            children: The children to attach, as names or as :class:`RiskNode`
-                objects, unpacked into :meth:`add_child`.  A single child may be
-                passed on its own -- a bare ``str`` is one child, not one child
-                per character -- and anything else is read as a sequence of children.
-            agg_func: Aggregation function of the node, or ``None`` (default) to
-                leave it unset and provide it later through :meth:`set_agg_func`.
-            agg_scope: The aggregation scope of ``agg_func``: ``"children"``
-                (default) for its direct children, or ``"descendants"`` for every
-                node below it; see :meth:`set_agg_func`.  It is ignored
-                when ``agg_func`` is ``None``, there being no aggregation function
-                to apply it to.
-
-        Raises:
-            ValueError: If the node already has an aggregation function, or if a
-                child is rejected -- see :meth:`add_child` for the conditions.
-            TypeError: If ``children`` is neither a child nor a sequence of
-                children, or if a child is neither a :class:`RiskNode` nor a
-                ``str``.
-            AttributeError: If the structure of this node is locked.
-        """
-        if agg_func is not None:
-            # Pre-flight check: `set_agg_func` below would otherwise refuse the node
-            # only after `add_child` has already attached the children.
-            if self._agg_func is not None:
-                raise ValueError(f"{self._name}: aggregation function has already been set.")
-            if agg_scope is not None and agg_scope not in self._allowed_agg_scopes:
-                raise ValueError(f"Invalid agg scope: {agg_scope!r}, expected {self._allowed_agg_scopes}.")
-        if isinstance(children, (str, RiskNode)):
-            children = (children, )
-        else:
-            children = tuple(children)
-        self.add_child(*children)
-        if agg_func is not None:
-            self.set_agg_func(agg_func, scope=agg_scope)
-
     def set_risk_capital(self, value: float, /) -> None:
         """
         Provide the risk capital of a leaf node.
@@ -701,7 +649,7 @@ class RiskNode:
         Returns:
             RiskNode: The copied node, detached from the original tree.
         """
-        copied_root = self.from_structure_notation(self.export_structure_notation())
+        copied_root = self.from_structure(self.to_structure())
         is_lock_structure = self._is_structure_locked if is_lock_structure is None else is_lock_structure
         if is_lock_structure:
             copied_root.lock_structure()
@@ -749,7 +697,7 @@ class RiskNode:
         Unlock the structure of the whole tree this node belongs to.
 
         The mirror of :meth:`lock_structure`: the derived caches are dropped and
-        the hierarchy can be grown again.
+        the hierarchy can be changed again.
         """
         if not self.is_root:
             self.root.unlock_structure()
@@ -765,13 +713,26 @@ class RiskNode:
         self._reset_derived_caches()
         self._is_structure_locked = False
 
-    def export_structure_notation(self) -> dict[str, RiskNodeNotation]:
+    def to_structure(self) -> dict[str, RiskNodeSpec]:
+        """
+        Describe the subtree of this node as a spec dictionary.
+
+        The keys are the paths of the nodes, prefixed by the name of this node
+        (``"Market"``, ``"Market/Equity"``, ...), and the values their
+        :class:`RiskNodeNotation`, so capitals are left out.  A spec can be
+        given back to :meth:`from_structure`, which rebuilds the same
+        structure, hence it makes a reusable blueprint of the hierarchy.
+
+        Returns:
+            dict[str, RiskNodeSpec]: Mapping of node paths to their spec,
+                this node first.
+        """
         nodes = (self,) + self.descendants
-        structure: dict[str, RiskNodeNotation] = {}
+        structure: dict[str, RiskNodeSpec] = {}
         offset = len(self.path)
         for node in nodes:
             key = (self._name + "/" + node.path[offset:].strip("/")).strip("/")
-            structure[key] = RiskNodeNotation(
+            structure[key] = RiskNodeSpec(
                 name=node._name,
                 identifier=node._identifier,
                 children=tuple([c._name for c in node._children]) if node._children else (),
@@ -781,29 +742,60 @@ class RiskNode:
         return structure
 
     @classmethod
-    def from_structure_notation(cls, structure_notation: dict[str, RiskNodeNotation | dict], /) -> Self:
-        node_dict: dict[str, tuple[RiskNode, RiskNodeNotation]] = {}
-        for key, val in structure_notation.items():
+    def from_structure(cls, structure: dict[str, RiskNodeSpec | dict], /) -> Self:
+        """
+        Rebuild a node hierarchy from a spec dictionary.
+
+        The counterpart of :meth:`export_structure`, whose output it
+        accepts as is: the keys are paths whose last component names the node, and
+        the values are :class:`RiskNodeSpec` or equivalent dictionaries.  A
+        ``name`` missing from such a dictionary is inferred from the key and written
+        back into it; a ``name`` given is checked against the key.  A child announced
+        by a spec but absent from the dictionary is created as a bare node.  No
+        risk capital is set, and the returned node is the only one left without a
+        parent.
+
+        Args:
+            structure: Mapping of node paths to their spec.
+
+        Returns:
+            RiskNode: The rebuilt node, which has no parent.
+
+        Raises:
+            TypeError: If structure is not a ``dict``, if a key is not a ``str``,
+                if a value is neither a ``dict`` nor a ``RiskNodeSpec``.
+            KeyError: If structure is empty, if the name implied by a key differs from the ``name`` of its spec.
+            ValueError: If more than one node is left without a parent.
+        """
+        if not isinstance(structure, dict):
+            raise TypeError(f"Invalid type of structure: '{type(structure)}', expected 'dict'.")
+        if len(structure) == 0:
+            raise ValueError(f"Structure dict is empty, nothing to build.")
+
+        node_dict: dict[str, tuple[RiskNode, RiskNodeSpec]] = {}
+        for key, val in structure.items():
+            if not isinstance(key, str):
+                raise TypeError(f"'{key}': invalid key type '{type(key)}', expected 'str'.")
             inferred_name = key.strip("/").split("/")[-1]
             if isinstance(val, dict):
                 if val.get("name", None) is None:
                     val["name"] = inferred_name
-                notation = RiskNodeNotation.from_dict(val)
-            elif isinstance(val, RiskNodeNotation):
-                notation = val
+                spec = RiskNodeSpec.from_dict(val)
+            elif isinstance(val, RiskNodeSpec):
+                spec = val
             else:
-                raise TypeError(f"'{key}': invalid value type '{type(val)}', epxected ('dict', 'RiskNode').")
-            if inferred_name != notation.name:
-                raise KeyError(f"'{key}': name conflict: inferred from key '{inferred_name}' != '{notation.name}'.")
-            node = RiskNode(notation.name, identifier=notation.identifier)
-            if notation.agg_func is not None:
-                node.set_agg_func(notation.agg_func, scope=notation.agg_scope)
-            node_dict[key] = node, notation
+                raise TypeError(f"'{key}': invalid value type '{type(val)}', epxected ('dict', 'RiskNodeSpec').")
+            if inferred_name != spec.name:
+                raise KeyError(f"'{key}': name conflict: inferred from key '{inferred_name}' != '{spec.name}'.")
+            node = RiskNode(spec.name, identifier=spec.identifier)
+            if spec.agg_func is not None:
+                node.set_agg_func(spec.agg_func, scope=spec.agg_scope)
+            node_dict[key] = node, spec
 
-        for key, (node, notation) in node_dict.items():
-            if notation.children:
+        for key, (node, spec) in node_dict.items():
+            if spec.children:
                 child_objs = []
-                for child_name in notation.children:
+                for child_name in spec.children:
                     child_key = key.strip("/") + "/" + child_name
                     child = node_dict.get(child_key, None)
                     if child is not None:
@@ -813,11 +805,13 @@ class RiskNode:
                 node.add_child(*tuple(child_objs))
 
         root_seen: list[tuple[RiskNode, str]] = []
-        for key, (node, notation) in node_dict.items():
+        for key, (node, spec) in node_dict.items():
             if node.is_root:
                 root_seen.append((node, key))
         if len(root_seen) > 1:
             raise ValueError(f"Multiple roots: '{[n[1] for n in root_seen]}'.")
+        if len(root_seen) == 0:
+            raise ValueError(f"No root: should never get here.")
 
         return root_seen[0][0]
 
@@ -828,7 +822,8 @@ class RiskTree:
 
     The tree wraps an existing :class:`RiskNode` without copying it, so structure
     and values are shared with the tree that node belongs to.  A hierarchy level is
-    built with :meth:`grow`, and capitals are provided with
+    built with :meth:`from_structure` (or with :meth:`RiskNode.add_child` and
+    :meth: `RiskNode.set_agg_func` node-by-node), and capitals are provided with
     :meth:`put_risk_capital` or :meth:`batch_put_risk_capital`.  Paths passed to the
     methods below are resolved from the root of this tree, hence for a subtree of
     a larger tree they are relative to that subtree and not to the outermost root
@@ -936,17 +931,6 @@ class RiskTree:
         if default is _MISSING:
             raise KeyError(f"Tree (root '{self._root.name}') has no node '{key}'.")
         return default
-
-    @on_structure_locked_rejected
-    def grow(self, key: str, /, *, children: tuple[str | RiskNode, ...] | str | RiskNode = tuple(),
-             agg_func: Callable[..., float] | None = None, agg_scope: Literal["children", "descendants"] | None = None
-             ) -> None:
-        """
-        Set up the node at ``key`` (``""`` denotes the root): attach its children and set its aggregation.
-
-        See :meth:`RiskNode.grow` for the conditions and the exceptions raised.
-        """
-        self.get_node(key).grow(children=children, agg_func=agg_func, agg_scope=agg_scope)
 
     def get_supertree(self) -> Self:
         """
@@ -1114,13 +1098,39 @@ class RiskTree:
         """Unlock the structure; the mirror of :meth:`lock_structure`."""
         self._root.unlock_structure()
 
-    def export_structure_notation(self) -> dict[str, RiskNodeNotation]:
-        return self._root.export_structure_notation()
+    def to_structure(self) -> dict[str, RiskNodeSpec]:
+        """
+        Describe the structure of the tree as a spec dictionary.
+
+        See :meth:`RiskNode.export_structure`; the keys are the paths of
+        the nodes relative to the root, whose name they start with.
+
+        Returns:
+            dict[str, RiskNodeSpec]: Mapping of node paths to their spec,
+                the root first.
+        """
+        return self._root.to_structure()
 
     @classmethod
-    def from_structure_notation(cls, structure_notation: dict[str, dict | RiskNodeNotation], *,
-                                is_lock_structure: bool = True, is_zeroize: bool = True) -> Self:
-        root = RiskNode.from_structure_notation(structure_notation)
+    def from_structure(cls, structure: dict[str, dict | RiskNodeSpec], *,
+                       is_lock_structure: bool = True, is_zeroize: bool = True) -> Self:
+        """
+        Build a tree from a spec dictionary. A convenience for building the hierarchy.
+
+        The hierarchy is built by :meth:`RiskNode.from_structure`, whose
+        root becomes the root of the tree.
+
+        Args:
+            structure: Mapping of node paths to their spec, as
+                produced by :meth:`export_structure`.
+            is_lock_structure: If ``True`` (default), lock the tree once built.
+            is_zeroize: If ``True`` (default), set the capital of every leaf to
+                ``0.0``, a spec carrying none.
+
+        Returns:
+            RiskTree: The built tree.
+        """
+        root = RiskNode.from_structure(structure)
         tree = RiskTree(root)
         if is_lock_structure:
             tree.lock_structure()

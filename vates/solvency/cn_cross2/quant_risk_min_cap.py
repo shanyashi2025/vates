@@ -48,7 +48,7 @@ def _credit_risk_agg(spread: float, counterparty_default: float) -> float:
     return risk_aggregation(spread, counterparty_default, corr_matrix=CREDIT_MC_CORR_MATRIX)
 
 def make_cross2_mc_module(*, submodule: str | None = None, nonlife_mc_k: float = 1.0) -> RiskTree:
-    structure_notation = {
+    structure = {
         "C-ROSS MC": {"children": ("Life", "Non-life", "Market", "Credit"), "agg_func": _overall_risk_agg},
         "C-ROSS MC/Life": {"children": ("Loss", "Expense", "Lapse"), "agg_func": _life_risk_agg},
         "C-ROSS MC/Life/Loss": {
@@ -70,7 +70,7 @@ def make_cross2_mc_module(*, submodule: str | None = None, nonlife_mc_k: float =
         "C-ROSS MC/Credit": {"children": ("Spread", "Counterparty Default"), "agg_func": _credit_risk_agg},
     }
 
-    tree = RiskTree.from_structure_notation(structure_notation=structure_notation, is_lock_structure=True, is_zeroize=True)
+    tree = RiskTree.from_structure(structure=structure, is_lock_structure=True, is_zeroize=True)
 
     if submodule is None:
         return tree

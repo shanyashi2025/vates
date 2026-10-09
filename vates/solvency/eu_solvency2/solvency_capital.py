@@ -54,7 +54,7 @@ def _counterparty_default_risk_agg(type_1: float, type_2: float) -> float:
 
 
 def make_solvency2_scr_module(*, submodule: str | None = None) -> RiskTree:
-    structure_notation = {
+    structure = {
         "Solvency II SCR": {
             "children": ("Market", "Counterparty Default", "Life", "Health", "Non-life", "Intangibles"),
             "agg_func": _scr_agg},
@@ -86,8 +86,8 @@ def make_solvency2_scr_module(*, submodule: str | None = None) -> RiskTree:
             "agg_func": _counterparty_default_risk_agg},
     }
 
-    tree = RiskTree.from_structure_notation(structure_notation=structure_notation, is_lock_structure=True,
-                                            is_zeroize=True)
+    tree = RiskTree.from_structure(structure=structure, is_lock_structure=True,
+                                   is_zeroize=True)
 
     if submodule is None:
         return tree

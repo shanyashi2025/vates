@@ -41,7 +41,7 @@ def _gi_risk_agg(reserve_premium: float, catastrophe: float, mortgage_insurance:
 
 
 def make_hkrbc_pcr_module(*, submodule: str | None = None) -> RiskTree:
-    structure_notation = {
+    structure = {
         "HKRBC PCR": {
             "children": ("Market", "Life Insurance", "General Insurance", "Counterparty Default", "Operational"),
             "agg_func": _pcr_agg},
@@ -65,8 +65,8 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None) -> RiskTree:
             "agg_func": _gi_risk_agg},
     }
 
-    tree = RiskTree.from_structure_notation(structure_notation=structure_notation, is_lock_structure=True,
-                                            is_zeroize=True)
+    tree = RiskTree.from_structure(structure=structure, is_lock_structure=True,
+                                   is_zeroize=True)
 
     if submodule is None:
         return tree
