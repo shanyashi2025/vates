@@ -75,7 +75,7 @@ def make_cross2_mc_module(*, submodule: str | None = None, nonlife_mc_k: float =
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule).deepcopy()
+        return tree.get_subtree(submodule).duplicate()
 
 
 @time_synchronized
@@ -108,7 +108,7 @@ class MinCapUnit:
         self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
 
     def calculate(self, *, leaf_values: dict[str, float], la_pv_base: float = 0.0, la_pv_lower_limit = 0.0) -> None:
-        self._risk_module.batch_put_risk_capital(leaf_values)
+        self._risk_module.batch_set_risk_capital(leaf_values)
 
         if self.require_loss_absorbency:
             self._la_pv_base = la_pv_base

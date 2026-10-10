@@ -71,4 +71,4 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None) -> RiskTree:
     if submodule is None:
         return tree
     else:
-        return tree.get_subtree(submodule).deepcopy()
+        return tree.get_subtree(submodule).duplicate()

@@ -37,7 +37,7 @@ node (node names therefore contain no ``"/"``)::
     tree.get_node("Market").set_agg_func(market_agg, scope="descendants")
     tree.get_node("Market/Interest Rate").add_child("Interest Rate Increase", "Interest Rate Decrease")
     tree.get_node("Market/Interest Rate").set_agg_func(max_at_zero)
-    tree.put_risk_capital("Market/Interest Rate/Interest Rate Increase", 1_000.0)
+    tree.set_risk_capital("Market/Interest Rate/Interest Rate Increase", 1_000.0)
 
 Once its hierarchy is final, a tree can be locked with
 :meth:`RiskTree.lock_structure`: structural changes then raise
@@ -48,7 +48,7 @@ lasts, among them the resolution of the paths leading to its descendants, so
 repeated lookups of the same node are cheap.  :meth:`RiskTree.unlock_structure`
 gives the structure back.
 
-A ``RiskTree`` is only a *view* on a node and never copies it; use ``deepcopy``
+A ``RiskTree`` is only a *view* on a node and never copies it; use ``duplicate``
 to obtain an independent structure.
 """
 
@@ -628,7 +628,7 @@ class RiskNode:
         for node in self.leaves:
             node.set_risk_capital(0.0)
 
-    def deepcopy(self, *, with_value: bool = True, is_lock_structure: bool | None = None) -> Self:
+    def duplicate(self, *, with_value: bool = True, is_lock_structure: bool | None = None) -> Self:
         """
         Return an independent copy of this node and of all its descendants.
 
@@ -815,6 +815,24 @@ class RiskNode:
 
         return root_seen[0][0]
 
+    def __str__(self) -> str:
+        try:
+            risk_capital = f"{self.risk_capital:.2f}"
+        except ValueError:
+            risk_capital = "<uncalculated>"
+
+        _describe = [
+            ("name", self._name),
+            ("risk_capital", risk_capital),
+            ("identifier", self._identifier),
+            ("children", tuple((c._name for c in self._children))),
+            ("parent", self._parent._name if self._parent else "None"),
+            ("ancestors", tuple(reversed([c._name for c in self.ancestors]))),
+            ("agg_func", self._agg_func.__name__ if self._agg_func else "None"),
+        ]
+        _describe = [f"{item[0]:15}:    {item[1]}" for item in _describe]
+        return "\n".join(_describe)
+
 
 class RiskTree:
     """
@@ -824,11 +842,11 @@ class RiskTree:
     and values are shared with the tree that node belongs to.  A hierarchy level is
     built with :meth:`from_structure` (or with :meth:`RiskNode.add_child` and
     :meth: `RiskNode.set_agg_func` node-by-node), and capitals are provided with
-    :meth:`put_risk_capital` or :meth:`batch_put_risk_capital`.  Paths passed to the
+    :meth:`set_risk_capital` or :meth:`batch_set_risk_capital`.  Paths passed to the
     methods below are resolved from the root of this tree, hence for a subtree of
     a larger tree they are relative to that subtree and not to the outermost root
     (the :attr:`RiskNode.path` of a node, in contrast, is always absolute within
-    the whole structure).  Use :meth:`deepcopy` to obtain an independent
+    the whole structure).  Use :meth:`duplicate` to obtain an independent
     structure.  Once built, :meth:`lock_structure` freezes the hierarchy, so that
     only capitals can change.
     """
@@ -955,7 +973,7 @@ class RiskTree:
 
         Returns:
             RiskTree: A live view on the same nodes, not a copy; use
-                :meth:`deepcopy` if the subtree must be modified on its own.  When
+                :meth:`duplicate` if the subtree must be modified on its own.  When
                 ``default`` is given, it is returned instead if there is no such node.
 
         Raises:
@@ -976,7 +994,7 @@ class RiskTree:
         """All leaf nodes of the tree, in preorder."""
         return self._root.leaves
 
-    def put_risk_capital(self, key: str, /, value: float) -> None:
+    def set_risk_capital(self, key: str, /, value: float) -> None:
         """
         Provide the risk capital of the leaf node at ``key``.
 
@@ -985,7 +1003,7 @@ class RiskTree:
         """
         self.get_node(key).set_risk_capital(value)
 
-    def batch_put_risk_capital(self, leaf_values: dict[str, float | dict], /) -> None:
+    def batch_set_risk_capital(self, leaf_values: dict[str, float | dict], /) -> None:
         """
         Provide the risk capitals of several leaves at once.
 
@@ -1001,7 +1019,7 @@ class RiskTree:
             ValueError: If a key does not exist, or does not point to a leaf.
         """
         for key, value in self._flatten_dict(leaf_values).items():
-            self.put_risk_capital(key, value)
+            self.set_risk_capital(key, value)
 
     @classmethod
     def _flatten_dict(cls, nested: dict[str, float | dict], /, joiner: str = "/") -> dict[str, float]:
@@ -1037,12 +1055,12 @@ class RiskTree:
         """Set the risk capital of every leaf of the tree to ``0.0``."""
         self._root.zeroize()
 
-    def deepcopy(self, *, with_value: bool = True, is_lock_structure: bool | None = None) -> Self:
+    def duplicate(self, *, with_value: bool = True, is_lock_structure: bool | None = None) -> Self:
         """
         Return an independent copy of the whole tree.
 
         The copied tree shares the aggregation functions of the original one; see
-        :meth:`RiskNode.deepcopy`.
+        :meth:`RiskNode.duplicate`.
 
         Args:
             with_value: If ``True`` (default), copy the risk capitals as they are
@@ -1054,31 +1072,51 @@ class RiskTree:
         Returns:
             RiskTree: The copied tree, detached from the original one.
         """
-        copied_tree = RiskTree(self._root.deepcopy(with_value=with_value, is_lock_structure=is_lock_structure))
+        copied_tree = RiskTree(self._root.duplicate(with_value=with_value, is_lock_structure=is_lock_structure))
         return copied_tree
 
-    def display(self, *, width: int = 80, precision: int = 2) -> None:
-        """
-        Print the tree, with the capital of every node that has one.
-
-        Nodes without an available capital -- typically leaves without a provided
-        value -- are printed without a number.
-
-        Args:
-            width: Column at which a printed value ends; a name reaching beyond
-                ``width`` is simply followed by one space.
-            precision: Number of decimals of the printed values, which are also
-                grouped by thousands (``f"{value:,.{precision}f}"``).
-        """
-        root_depth = self._root.depth
-        for node in self.get_all_nodes():
-            prefixed_name = f"{'    ' * (node.depth - root_depth)}{node.name}"
+    def _describe(self, *, width: int = 80, precision: int = 2, max_depth: int = -1) -> list[str]:
+        all_nodes = self.get_all_nodes()
+        self_depth = self._root.depth
+        if max_depth != -1:
+            all_nodes = (n for n in all_nodes if (n.depth - self_depth) <= max_depth)
+        _describe = []
+        if self.is_subtree:
+            _describe.append(f"(subtree rooted from: {'/'.join(reversed([c.name for c in self._root.ancestors]))})")
+        for node in all_nodes:
+            prefixed_name = f"{'    ' * (node.depth - self_depth)}{node.name}"
             try:
                 val = node.risk_capital
                 val_width = width - len(prefixed_name)
-                print(f"{prefixed_name} {val:>{val_width},.{precision}f}")
+                _describe.append(f"{prefixed_name} {val:>{val_width},.{precision}f}")
             except ValueError:
-                print(prefixed_name)
+                _describe.append(prefixed_name)
+        return _describe
+
+    def display(self, *, width: int = 80, precision: int = 2, max_depth: int = -1, max_rows: int = 60) -> None:
+        """
+        Print the tree.
+
+        Args:
+            width: Column at which a printed value ends.
+            precision: Number of decimals of the printed values.
+            max_depth: Nodes whose (depth - self.depth) <= ``max_depth``
+                will be included; defaults to -1, means no limit.
+            max_rows: Max number of rows to be printed.
+        """
+        _describe = self._describe(width=width, precision=precision, max_depth=max_depth)
+        for row in _describe[:max_rows]:
+            print(row)
+        if (total_rows := len(_describe)) > max_rows:
+            print(f"...")
+            print(f"[{total_rows} rows] (use `display(.., max_rows={total_rows})` to show all rows)")
+
+    def __str__(self) -> str:
+        _describe = self._describe()
+        max_rows = 10
+        if (total_rows := len(_describe)) > max_rows:
+            _describe = _describe[:max_rows] + ["...", f"[{total_rows} rows]"]
+        return "\n".join(_describe)
 
     @property
     def is_structure_locked(self) -> bool:
@@ -1124,8 +1162,7 @@ class RiskTree:
             structure: Mapping of node paths to their spec, as
                 produced by :meth:`export_structure`.
             is_lock_structure: If ``True`` (default), lock the tree once built.
-            is_zeroize: If ``True`` (default), set the capital of every leaf to
-                ``0.0``, a spec carrying none.
+            is_zeroize: If ``True`` (default), set the capital of every leaf to ``0.0``.
 
         Returns:
             RiskTree: The built tree.
