@@ -7,10 +7,11 @@ so every variable here is created *after* `configure_run` (see `make_configured`
 import numpy as np
 import pandas as pd
 import pytest
+import weakref
 
 from enum import Enum
 
-from vates import ConstVariable, TDimVariable
+from vates import ConstVariable, TDimVariable, make_proj_variable
 
 
 class _AssetType(Enum):
@@ -180,3 +181,88 @@ class TestCachedDims:
         v = TDimVariable("t", owner="o", group="g", dims=[["A", "B"]], max_t=24, start_date = pd.Period("1999-12", "M"))
         assert len(ConstVariable._cached_dims) == 2
         assert len(TDimVariable._cached_dims) == 1
+
+
+class TestMakeVariable:
+
+    @pytest.mark.parametrize("bad", [None, 1, 3.14, []])
+    def test_wrong_variable_type_type(self, bad):
+        with pytest.raises(TypeError, match="expected 'str'"):
+            v = make_proj_variable("t", variable_type=bad, owner="o", group="g")
+
+    @pytest.mark.parametrize("bad", ["Nope", "42"])
+    def test_wrong_variable_type_value(self, bad):
+        with pytest.raises(ValueError, match=r"expected \('const', 'tdim'\)"):
+            v = make_proj_variable("t", variable_type=bad, owner="o", group="g")
+
+    def test_make_const_variable(self, configured):
+        v = make_proj_variable("c", variable_type="c", owner="o", group="g", dims=[["A", "B"]], model_engine=configured)
+        assert isinstance(v, ConstVariable)
+        assert v.name == "c"
+        assert v.owner == "o"
+        assert v.group == "g"
+        assert v.dims == (("A", "B"), )
+        assert weakref.ref(v) in configured._proj_variables
+
+    @pytest.mark.parametrize("good", ["c", "const", "CoNsT"])
+    def test_correct_const_var_type_value(self, configured, good):
+        v = make_proj_variable("c", variable_type=good, owner="o", group="g", model_engine=configured)
+        assert isinstance(v, ConstVariable)
+
+    def test_make_tdim_variable(self, configured):
+        v = make_proj_variable("t", variable_type="t", owner="o", group="g", dims=[["A", "B"]], model_engine=configured)
+        assert isinstance(v, TDimVariable)
+        assert v.name == "t"
+        assert v.owner == "o"
+        assert v.group == "g"
+        assert v.dims == (("A", "B"), )
+        assert v.max_t == configured.MAX_T
+        assert v.start_date == configured.START_DATE
+        assert weakref.ref(v) in configured._proj_variables
+
+    @pytest.mark.parametrize("good", ["t", "tdim", "time_DiMeNSioned"])
+    def test_correct_tdim_var_type_value(self, configured, good):
+        v = make_proj_variable("t", variable_type=good, owner="o", group="g", model_engine=configured)
+        assert isinstance(v, TDimVariable)
+
+    def test_var_type_defaults_to_tdim(self, configured):
+        v = make_proj_variable("t", owner="o", group="g", model_engine=configured)
+        assert isinstance(v, TDimVariable)
+
+    def test_none_engine_no_impact_to_const_var(self):
+        c = make_proj_variable("c", variable_type="c", owner="o", group="g")
+        assert isinstance(c, ConstVariable)
+        c = make_proj_variable("c", variable_type="c", owner="o", group="g", model_engine=None)
+        assert isinstance(c, ConstVariable)
+
+    def test_none_engine_warns_to_tdim_var(self):
+        with pytest.warns(UserWarning, match="'model_engine' is 'None'"):
+            t = make_proj_variable("t", variable_type="t", owner="o", group="g")
+        assert isinstance(t, TDimVariable)
+        with pytest.warns(UserWarning, match="'model_engine' is 'None'"):
+            t = make_proj_variable("t", variable_type="t", owner="o", group="g", model_engine=None)
+        assert isinstance(t, TDimVariable)
+
+    def test_engine_has_no_max_t_raises(self):
+        class NoMaxTEngine:
+            ...
+        engine = NoMaxTEngine()
+        with pytest.raises(AttributeError, match="MAX_T"):
+            v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
+
+    def test_engine_has_no_start_date_defaults_to_none(self):
+        class NoStartDateEngine:
+            MAX_T = 24
+        engine = NoStartDateEngine()
+        t = make_proj_variable("t", owner="o", group="g", model_engine=engine)
+        assert isinstance(t, TDimVariable)
+        assert t.start_date is None
+
+    def test_engine_has_no_attach_leaves_silently(self):
+        class NoAttachEngine:
+            MAX_T = 24
+            _proj_variables = []
+        engine = NoAttachEngine()
+        v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
+        assert isinstance(v, TDimVariable)
+        assert len(engine._proj_variables) == 0

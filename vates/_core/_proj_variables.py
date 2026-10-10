@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Literal
 
 
 class ProjVariable(ABC):
@@ -73,6 +75,9 @@ class ProjVariable(ABC):
     @abstractmethod
     def __setitem__(self, index, value):
         ...
+
+    def __matmul__(self, other):
+        return other.__rmatmul__(self)
 
 
 class ConstVariable(ProjVariable):
@@ -312,3 +317,34 @@ class TDimVariable(ProjVariable):
             self._result[t] = value
         else:
             self._result[t,] = value.copy()
+
+
+def make_proj_variable(
+    name: str,
+    /,
+    *,
+    model_engine = None,
+    variable_type: Literal["const", "c", "tdim", "t", "time_dimensioned"] = "t",
+    owner: str,
+    group: str,
+    dims: list | None = None,
+) -> ConstVariable | TDimVariable:
+    if not isinstance(variable_type, str):
+        raise TypeError(f"Invalid type of 'variable_type': '{type(variable_type)}', expected 'str'.")
+
+    if variable_type.lower() in ("const", "c"):
+        var = ConstVariable(name, owner=owner, group=group, dims=dims)
+    elif variable_type.lower() in ("tdim", "t", "time_dimensioned"):
+        if model_engine is not None:
+            var = TDimVariable(name, owner=owner, group=group, dims=dims,
+                               max_t=getattr(model_engine, "MAX_T"), start_date=getattr(model_engine, "START_DATE", None))
+        else:
+            var = TDimVariable(name, owner=owner, group=group, dims=dims, max_t=1200)
+            warnings.warn(f"Create 'TDimVariable': 'max_t=1200' and 'start_date=None'; 'model_engine' is 'None'.")
+    else:
+        raise ValueError(f"Invalid value of 'variable_type': '{variable_type}', expected ('const', 'tdim').")
+
+    if model_engine is not None and (func := getattr(model_engine, "attach_proj_variable", None)) is not None:
+        func(var)
+
+    return var

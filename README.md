@@ -102,8 +102,8 @@ The runlog can be found in `results\my_model.runlog.json` file.
 
 #### 2. Add Variables for Output
 
-You can set up instances of `TDimVariable` and/or `ConstVariable`, the projected results will be automatically written 
-to the `results\my_model.proj.csv` file.
+You can set up instances of `TDimVariable` and/or `ConstVariable`, the `@` operator tells `model` to output the 
+projected results, which can be read by `model.proj_result`.
 
 ```python
 from vates import ProjModelEngine, ConstVariable, TDimVariable
@@ -111,8 +111,9 @@ from vates import ProjModelEngine, ConstVariable, TDimVariable
 model = ProjModelEngine(slug='my_model', description='example model')
 model.configure_run(start_year=2025, end_year=2026)
 
-const_var = ConstVariable('const_var', model_engine=model)
-tdim_var = TDimVariable('tdim_var', model_engine=model)
+const_var = ConstVariable('const_var', owner="owner", group="group") @ model
+tdim_var = TDimVariable('tdim_var', owner="owner", group="group",
+                        max_t=model.MAX_T, start_date=model.START_DATE) @ model
 
 @model.bind_projection
 def my_projection(m: ProjModelEngine):
@@ -123,9 +124,23 @@ def my_projection(m: ProjModelEngine):
     tdim_var[t] = p.year * 100 + p.month + t / 100
 
 model.run()
+
+# 1. read the entire results 
+df = model.proj_result()
+print(df)
+
+# 2. read value of a specific cell (group + owner + variable + date)
+val = model.proj_result(
+  group="group",
+  owner="owner",
+  variable="tdim_var",
+  date="202602",
+)
+print(f"{val:.4f}")  # 202602.0200
 ```
 
-You can use function `proj_result` to read the result from a `.proj.csv` file.
+The projected results are saved on disk as a `.proj.csv` file - `results\my_model.proj.csv`, which can be read by 
+the function `proj_result`.
 
 ```python
 from vates import proj_result
@@ -141,8 +156,8 @@ print(df)
 val = proj_result(
   results_directory=r"results",
   slug="my_model",
-  group="ungrouped",
-  owner="unowned",
+  group="group",
+  owner="owner",
   variable="tdim_var",
   date="202602",
 )

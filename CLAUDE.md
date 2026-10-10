@@ -47,8 +47,8 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
 - **`variables`** — bound functions write results into `ConstVariable` (scalar/array, constant) or
   `TDimVariable` (indexed by `t`/`pd.Period`) instances. Variables self-register with the engine via
   `include_proj_variable`. On run, the engine serializes them to `{slug}.proj.csv`. Each
-  variable carries `group`/`owner`/`name` and up to 3 labeled `dims` (lists or Enums), which become
-  row labels like `name[a:b:c]`. Use `proj_result(...)` (`vates/_core/_utils.py`) to read `.proj.csv`
+  variable carries `group`/`owner`/`name` and up to 3 labeled `dims` (lists, tuples or Enums), which become
+  row labels like `name[a:b:c]`. Use `proj_result(...)` (`vates/_core/_proj_result_reader.py`) to read `.proj.csv`
   back into a DataFrame or a single cell `(group, owner, variable [, date])` value.
 
 - **`StochExecutor`** — multiprocessing wrapper over `ProjModelEngine` for stochastic runs.
@@ -59,7 +59,7 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
   (mean/std/median/max/min and `perc%`). Two caveats: the bound function is executed in worker
   processes, so it must be top-level/picklable.
 
-- **`RunConfig`** (`vates/_core/_utils.py`) — frozen dataclass with exhaustive validation
+- **`RunConfig`** (`vates/_core/_run_configuration.py`) — frozen dataclass with exhaustive validation
   (`validate_number` / `validate_string` / `validate_period` / ...); created via `RunConfig.create`.
   `max_t` is constrained to 0–2400, months capped 0–2400 steps, period range 1900-01 to 5999-12.
 
