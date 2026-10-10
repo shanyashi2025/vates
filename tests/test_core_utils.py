@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from vates._core._utils import RunConfiguration, parse_int_list_from_str
+from vates._core._run_configuration import RunConfiguration, parse_int_list_from_str
 
 WORKSPACE = "C:\\work"
 

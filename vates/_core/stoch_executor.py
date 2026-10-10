@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable, Self, get_type_hints
 
 from vates._core.proj_model_engine import ProjModelEngine
-from vates._core._utils import RunConfiguration, apply_default_if_none
+from vates._core._run_configuration import RunConfiguration
 from vates.global_conf import CheckLevel, CHECK_LEVEL
 
 
@@ -150,11 +150,11 @@ class StochExecutor:
             raise ValueError(f"start_year: value 'None' is not allowed.")
 
         none_items: list[str] = []
-        workspace_directory = apply_default_if_none(
+        workspace_directory = RunConfiguration.apply_default_if_none(
             "workspace_directory", workspace_directory, os.getcwd(), record=none_items
         )
         workspace_directory_path = Path(workspace_directory)
-        results_directory = apply_default_if_none(
+        results_directory = RunConfiguration.apply_default_if_none(
             "results_directory",
             results_directory,
             workspace_directory_path / "results" / (scenario or ""),
@@ -168,9 +168,9 @@ class StochExecutor:
         super().__setattr__('_sims_str', simulations)
         super().__setattr__('_run_config', RunConfiguration.create(
             start_year=start_year,
-            start_month=apply_default_if_none("start_month", start_month, 12, record=none_items),
-            end_year=apply_default_if_none("end_year", end_year, start_year, record=none_items),
-            end_month=apply_default_if_none("end_month", end_month, 12, record=none_items),
+            start_month=RunConfiguration.apply_default_if_none("start_month", start_month, 12, record=none_items),
+            end_year=RunConfiguration.apply_default_if_none("end_year", end_year, start_year, record=none_items),
+            end_month=RunConfiguration.apply_default_if_none("end_month", end_month, 12, record=none_items),
             scenario=scenario,
             simulations=simulations,
             workspace_directory=workspace_directory,
@@ -182,7 +182,7 @@ class StochExecutor:
             stoch_result_file_id=None,
             enable_write_runlog=True,
             max_workers=self._apply_max_workers(
-                apply_default_if_none("max_workers", max_workers, 1, record=none_items)),
+                RunConfiguration.apply_default_if_none("max_workers", max_workers, 1, record=none_items)),
         ))
 
         if len(none_items) > 0:
