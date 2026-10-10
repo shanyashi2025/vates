@@ -4,7 +4,7 @@ import warnings
 from collections.abc import Mapping
 from typing import Self
 
-from vates._core import ProjModelEngine, TDimVariable
+from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
 from vates.finmath import CallOrPut, BlackScholesCalculator
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
@@ -101,7 +101,7 @@ class EquityOption(Asset):
                 raise ValueError(f"Equity option {self.asset_id} price {price:.4f} != calculated {calc_price:.4f}.")
 
         # create array variables
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='equity_option')
+        create_tdv = lambda name: make_proj_variable(name, model_engine=model_engine, owner=asset_id, group='equity_option')
         self.tdv_units_bd: TDimVariable = create_tdv("units_bd")
         self.tdv_units_ad: TDimVariable = create_tdv("units_ad")
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")

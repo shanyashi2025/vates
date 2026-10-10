@@ -2,7 +2,7 @@ import math
 import pandas as pd
 from functools import partial
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.utils import maybe_raise_if_ne
 from vates.solvency.risk_tree import  RiskTree, risk_aggregation
 from vates.solvency.cn_cross2.rules import (
@@ -98,7 +98,7 @@ class MinCapUnit:
         self._loss_absorbency: float = 0.0
         self._last_calculate: int | None = None
 
-        create_tdv = lambda varname: TDimVariable(varname, model_engine=model_engine, owner=tdv_owner, group='CROSS_MC')
+        create_tdv = lambda varname: make_proj_variable(varname, model_engine=model_engine, owner=tdv_owner, group='CROSS_MC')
         self.tdv_min_cap: TDimVariable = create_tdv("minimum_capital")
         self.tdv_life_mc: TDimVariable = create_tdv("life_mc")
         self.tdv_nonlife_mc: TDimVariable = create_tdv("nonlife_mc")
@@ -184,7 +184,7 @@ class MinCapConsolidator:
         self._min_cap: float = 0.0
         self._last_calculate: int | None = None
 
-        create_tdv = lambda varname: TDimVariable(varname, model_engine=model_engine, owner=tdv_owner, group='CROSS_MC')
+        create_tdv = lambda varname: make_proj_variable(varname, model_engine=model_engine, owner=tdv_owner, group='CROSS_MC')
         self.tdv_min_cap: TDimVariable = create_tdv("minimum_capital")
         self.tdv_life_mc: TDimVariable = create_tdv("life_mc")
         self.tdv_nonlife_mc: TDimVariable = create_tdv("nonlife_mc")

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.utils import maybe_raise_if_ne
 
 
@@ -38,9 +38,9 @@ class EquityIndex:
         """
         self.index_id: str = index_id
         self._total_return_index = 1.0
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=index_id, group='equity_index')
-        self.tdv_tot_return_index: TDimVariable = create_tdv("tot_return_index")
-        self.tdv_dividend_yield_ac: TDimVariable = create_tdv("dividend_yield_ac")
+        tdv_kwargs = {"model_engine": model_engine, "owner": index_id, "group": 'equity_index'}
+        self.tdv_tot_return_index = make_proj_variable("tot_return_index", **tdv_kwargs)
+        self.tdv_dividend_yield_ac = make_proj_variable("dividend_yield_ac", **tdv_kwargs)
         self._last_update: int = self.time or 0
 
     @property

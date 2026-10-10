@@ -2,13 +2,14 @@
 `configure_run` defaulting, `run()` guard states, and the `bind_projection`
 annotation contract."""
 
-import inspect
+import gc
 import warnings
+import weakref
 
 import pandas as pd
 import pytest
 
-from vates import ProjModelEngine
+from vates import ProjModelEngine, ConstVariable, TDimVariable
 
 
 class TestConstruction:
@@ -294,6 +295,70 @@ class TestSetattrGuard:
         m.time = 3  # a property with an `fset` passes through the guard
         assert m.time == 3
 
+
+class TestAttachProjVariable:
+
+    def test_attach_proj_variable(self, make_configured, tmp_path):
+        m = make_configured(tmp_path)
+        assert len(m._proj_variables) == 0
+        v1 = ConstVariable("const", owner="owner", group="group")
+        v2 = TDimVariable("tdim", owner="owner", group="group", max_t=m.MAX_T, start_date=m.START_DATE)
+        m.attach_proj_variable(v1)
+        m.attach_proj_variable(v2)
+        assert len(m._proj_variables) == 2
+        assert weakref.ref(v1) in m._proj_variables
+        assert weakref.ref(v2) in m._proj_variables
+
+    def test_duplicate_attach_ignored_silently(self, make_configured, tmp_path):
+        m = make_configured(tmp_path)
+        assert len(m._proj_variables) == 0
+        v = ConstVariable("const", owner="owner", group="group")
+        m.attach_proj_variable(v)
+        assert len(m._proj_variables) == 1
+        m.attach_proj_variable(v)
+        assert len(m._proj_variables) == 1
+
+    @pytest.mark.parametrize("bad", [42, "foo", 3.14])
+    def test_wrong_type_rejected(self, make_configured, tmp_path, bad):
+        m = make_configured(tmp_path)
+        assert len(m._proj_variables) == 0
+        with pytest.raises(TypeError):
+            m.attach_proj_variable(bad)
+        assert len(m._proj_variables) == 0
+
+    def test_rmatmul(self, make_configured, tmp_path):
+        m = make_configured(tmp_path)
+        assert len(m._proj_variables) == 0
+        v1 = ConstVariable("const", owner="owner", group="group")
+        v2 = v1 @ m
+        assert v2 is v1
+        assert len(m._proj_variables) == 1
+        m.attach_proj_variable(v1)
+        assert len(m._proj_variables) == 1
+        v3 = ConstVariable("const", owner="owner", group="group") @ m
+        assert len(m._proj_variables) == 2
+
+    def test_wrong_matmul(self, make_configured, tmp_path):
+        m = make_configured(tmp_path)
+        v = ConstVariable("const", owner="owner", group="group")
+        with pytest.raises(TypeError, match="unsupported operand"):
+            m @ v
+        with pytest.raises(TypeError, match="unsupported operand"):
+            m @= v
+
+    def test_dead_variable_dropped_automatically(self, make_configured, tmp_path):
+        m = make_configured(tmp_path)
+        dead = ConstVariable("const", owner="owner", group="group") @ m
+        live = [ConstVariable("const", owner="owner", group="group") @ m for _ in range(4)]
+        assert len([v for v in m._proj_variables if v() is not None]) == 5
+
+        del dead
+        gc.collect()
+        assert len([v for v in m._proj_variables if v() is not None]) == 4
+
+        m.attach_proj_variable(ConstVariable("const", owner="owner", group="group"))
+        gc.collect()
+        assert len([v for v in m._proj_variables if v() is not None]) == 4
 
 def zero_arg():
     pass

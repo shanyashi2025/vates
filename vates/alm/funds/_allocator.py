@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto, unique
 from typing import Self
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.global_conf import CheckLevel
 from vates.alm.assets import Asset, Cash
 from vates.alm.enums import AssetBuySellApproach, AssetPurchaseMethod
@@ -358,11 +358,11 @@ class AssetAllocator:
         self.asset_report_bases: list[str] = asset_report_bases
 
         tdv_kwargs = {"model_engine": model_engine, "owner": self.name, "group": 'rebalance'}
-        self.tdv_fund_size = TDimVariable("fund_size", **tdv_kwargs)
-        self.tdv_ag_size_bd = TDimVariable("size_bd", dims=[self.alloc_group_names], **tdv_kwargs)
-        self.tdv_ag_size_ad = TDimVariable("size_ad", dims=[self.alloc_group_names], **tdv_kwargs)
-        self.tdv_ag_wgt_pc_bd = TDimVariable("weight_pc_bd", dims=[self.alloc_group_names], **tdv_kwargs)
-        self.tdv_ag_wgt_pc_ad = TDimVariable("weight_pc_ad", dims=[self.alloc_group_names], **tdv_kwargs)
+        self.tdv_fund_size = make_proj_variable("fund_size", **tdv_kwargs)
+        self.tdv_ag_size_bd = make_proj_variable("size_bd", dims=[self.alloc_group_names], **tdv_kwargs)
+        self.tdv_ag_size_ad = make_proj_variable("size_ad", dims=[self.alloc_group_names], **tdv_kwargs)
+        self.tdv_ag_wgt_pc_bd = make_proj_variable("weight_pc_bd", dims=[self.alloc_group_names], **tdv_kwargs)
+        self.tdv_ag_wgt_pc_ad = make_proj_variable("weight_pc_ad", dims=[self.alloc_group_names], **tdv_kwargs)
 
     def _sequence_alloc_groups(self, alloc_groups: list[AssetAllocationGroup]) -> list[AssetAllocationGroup]:
         """Sort allocation group by sequence.

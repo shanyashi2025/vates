@@ -12,7 +12,7 @@ except ImportError:
     has_matplotlib = False
 
 import vates
-from vates import StochExecutor, ProjModelEngine, TDimVariable
+from vates import StochExecutor, ProjModelEngine, make_proj_variable
 from company_package import run_with_json_config
 
 
@@ -32,8 +32,8 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
                 'rebalance_freq': params['rebalance_freq'],
                 'asset_amount': ibal * params['weight'],
                 'rfa_amount': ibal * params['rfawgt'],
-                'balance': TDimVariable("balance", model_engine=model, owner=key, group='MonteCarlo'),
-                'return': TDimVariable("return", model_engine=model, owner=key, group='MonteCarlo'),
+                'balance': make_proj_variable("balance", model_engine=model, owner=key, group='MonteCarlo'),
+                'return': make_proj_variable("return", model_engine=model, owner=key, group='MonteCarlo'),
                 'sum_ret': 0.0,
                 'sum_sqret': 0.0
             }
@@ -77,10 +77,11 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
             std_return = std_return * math.sqrt(12)  # annualized
             sharp_ratio = (mean_return - risk_free_rate) / std_return
 
-            port_var['twrr'] = vates.ConstVariable('twrr', model_engine=model, owner=port_name, group='MonteCarlo')
-            port_var['mean_return'] = vates.ConstVariable('mean_return', model_engine=model, owner=port_name, group='MonteCarlo')
-            port_var['std_return'] = vates.ConstVariable('std_return', model_engine=model, owner=port_name, group='MonteCarlo')
-            port_var['sharp_ratio'] = vates.ConstVariable('sharp_ratio', model_engine=model, owner=port_name, group='MonteCarlo')
+            cv_kwargs = {"variable_type": "c", "model_engine": model, "owner": port_name, "group": 'MonteCarlo'}
+            port_var['twrr'] = make_proj_variable('twrr', **cv_kwargs)
+            port_var['mean_return'] = make_proj_variable('mean_return', **cv_kwargs)
+            port_var['std_return'] = make_proj_variable('std_return', **cv_kwargs)
+            port_var['sharp_ratio'] = make_proj_variable('sharp_ratio', **cv_kwargs)
 
             port_var['twrr'][...] = twrr
             port_var['mean_return'][...] = mean_return

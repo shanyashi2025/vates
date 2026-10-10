@@ -4,7 +4,7 @@ import pandas as pd
 import warnings
 from typing import Literal
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.finmath import InterestRateTermStructure
 from vates.utils import maybe_raise_if_ne
 
@@ -54,8 +54,8 @@ class YieldCurve:
                     break
         tdv_term_dim = tdv_term_dim or [*range(12, 61, 12), *range(120, 601, 120)] # default: 1/2/3/4/5/10/20/30/40/50Y
 
-        self.tdv_spot_rates: TDimVariable = TDimVariable("spot_rate", dims=[tdv_term_dim],
-                                                         model_engine=model_engine, owner=curve_id, group='yield_curve')
+        self.tdv_spot_rates = make_proj_variable("spot_rate", owner=curve_id, group='yield_curve',
+                                                 dims=[tdv_term_dim], model_engine=model_engine)
         self._last_update: int = self.time or 0
 
     def update(self, *, from_what: Literal["spot_rates", "forward_rates", "discount_factors"] = None,

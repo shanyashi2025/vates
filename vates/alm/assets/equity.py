@@ -3,7 +3,7 @@ import warnings
 from collections.abc import Mapping
 from typing import Self
 
-from vates._core import ProjModelEngine, TDimVariable
+from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
 from vates.alm.econs import Currency, EquityIndex
 from vates.alm.assets.asset_base import Asset, AssetPhase
@@ -65,7 +65,7 @@ class Equity(Asset):
         self._purchase_proceeds: float = 0.0
         self._disposal_proceeds: float = 0.0
 
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='equity')
+        create_tdv = lambda name: make_proj_variable(name, model_engine=model_engine, owner=asset_id, group='equity')
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_dividend: TDimVariable = create_tdv("dividend")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")

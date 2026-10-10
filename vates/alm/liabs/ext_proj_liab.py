@@ -1,6 +1,6 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, TDimVariable
+from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
 from vates.alm.econs import Currency
 from vates.alm.liabs.liab_base import Liab, LiabPhase
@@ -44,10 +44,10 @@ class ExtProjLiab(Liab):
 
         self._cash_flow: float = 0.0
 
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=liab_id, group='liability')
-        self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
-        self.output_attrs_bd: list[TDimVariable] = [create_tdv(name)for name in (output_attrs_bd or [])]
-        self.output_attrs_ad: list[TDimVariable] = [create_tdv(name) for name in (output_attrs_ad or [])]
+        create_tdv = lambda name: make_proj_variable(name, model_engine=model_engine, owner=liab_id, group='liability')
+        self.tdv_cash_flow = create_tdv("cash_flow")
+        self.output_attrs_bd: list = [create_tdv(name) for name in (output_attrs_bd or [])]
+        self.output_attrs_ad: list = [create_tdv(name) for name in (output_attrs_ad or [])]
         self._set_output_attrs_bd()
         self._set_output_attrs_ad()
 

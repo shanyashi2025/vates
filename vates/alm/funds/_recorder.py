@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from enum import Enum, auto
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.global_conf import CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
 from vates.alm.funds._connector import AssetLiabConnector
@@ -78,7 +78,7 @@ class FundRecorder:
 
         # Initialize time-dimensioned variables for output
         # dims = None
-        create_tdv = lambda x: TDimVariable(x, model_engine=model_engine, owner=self.name, group='fund')
+        create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=self.name, group='fund')
         self.tdv_totass_cf: TDimVariable = create_tdv("totass_cash_flow")
         self.tdv_totliab_cf: TDimVariable = create_tdv("totliab_cash_flow")
         self.tdv_totliab_attrs_bd: list[TDimVariable] = [
@@ -91,7 +91,7 @@ class FundRecorder:
         self.tdv_proceeds_tran_in: TDimVariable = create_tdv("proceeds_transferred_in")
         self.tdv_proceeds_tran_out: TDimVariable = create_tdv("proceeds_transferred_out")
         # dims = asset_report_bases
-        create_tdv = lambda x: TDimVariable(x, model_engine=model_engine, owner=self.name, group='fund', dims=[asset_report_bases])
+        create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=self.name, group='fund', dims=[asset_report_bases])
         self.tdv_totass_rv_bd: TDimVariable = create_tdv("totass_rep_value_bd")
         self.tdv_totass_rv_ad: TDimVariable = create_tdv("totass_rep_value_ad")
         self.tdv_totass_ret_bd: TDimVariable = create_tdv("totass_inv_ret_bd")
@@ -99,10 +99,10 @@ class FundRecorder:
         self.tdv_totass_ret_ad: TDimVariable = create_tdv("totass_inv_ret_ad")
         self.tdv_totass_ror_pc_ad: TDimVariable = create_tdv("totass_ror_pc_ad")
         # dims = asset_categories
-        create_tdv = lambda x: TDimVariable(x, model_engine=model_engine, owner=self.name, group='fund', dims=[asset_categories])
+        create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=self.name, group='fund', dims=[asset_categories])
         self.tdv_catass_cf: TDimVariable = create_tdv("asset_cash_flow")
         # dims = asset_categories, asset_report_bases
-        create_tdv = lambda x: TDimVariable(x, model_engine=model_engine, owner=self.name, group='fund', dims=[asset_categories, asset_report_bases])
+        create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=self.name, group='fund', dims=[asset_categories, asset_report_bases])
         self.tdv_catass_rv_bd: TDimVariable = create_tdv("asset_rep_value_bd")
         self.tdv_catass_rv_ad: TDimVariable = create_tdv("asset_rep_value_ad")
         self.tdv_catass_ret_bd: TDimVariable = create_tdv("asset_inv_ret_bd")

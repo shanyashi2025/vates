@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from packaging import version
-from vates import StochExecutor, ProjModelEngine, ConstVariable
+from vates import StochExecutor, ProjModelEngine, make_proj_variable
 from vates.utils import KeyedArray
 from company_package import (
     run_with_json_config,
@@ -121,7 +121,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
         model.bel_dict = {}
         for fund in model.fund_master.funds:
             fund_id = fund.fund_id
-            model.bel_dict[fund_id] = ConstVariable('BEL', model_engine=model, owner=fund_id, group='fund')
+            model.bel_dict[fund_id] = make_proj_variable('BEL', variable_type="c", model_engine=model, owner=fund_id, group='fund')
             model.bel_dict[fund_id][...] = - np.dot(fund._recorder.tdv_totliab_cf.result, model.deflators)
 
 

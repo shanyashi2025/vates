@@ -6,7 +6,7 @@ import warnings
 from collections.abc import Mapping
 from typing import Self
 
-from vates._core import ProjModelEngine, TDimVariable
+from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.assets.asset_base import Asset, AssetPhase
@@ -136,7 +136,7 @@ class BondFixed(Asset):
                 raise ValueError(f"Bond {asset_id} abv_price {self._abv_price_dirty:.4f} != calculated {calc_price:.4f}.")
 
         # Initialize TDepVariable
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=asset_id, group='bond')
+        create_tdv = lambda name: make_proj_variable(name, model_engine=model_engine, owner=asset_id, group='bond')
         self.tdv_units_default: TDimVariable = create_tdv("units_default")
         self.tdv_units_maturity: TDimVariable = create_tdv("units_maturity")
         self.tdv_units_bd: TDimVariable = create_tdv("units_bd")

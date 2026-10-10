@@ -1,5 +1,5 @@
 """Shared fixtures for the `vates._core` test suite."""
-
+import pandas as pd
 import warnings
 
 import pytest
@@ -79,10 +79,19 @@ def add_variables():
     """Helper that attaches a scalar `ConstVariable` and a scalar `TDimVariable`
     to an engine (must be called after `configure_run`)."""
 
-    def _add(engine, *, owner="owner", group="group",
+    def _add(*, owner="owner", group="group",
              const_name="const_var", tdim_name="tdim_var"):
-        cvar = ConstVariable(const_name, model_engine=engine, owner=owner, group=group)
-        tvar = TDimVariable(tdim_name, model_engine=engine, owner=owner, group=group)
+        cvar = ConstVariable(const_name, owner=owner, group=group)
+        tvar = TDimVariable(tdim_name, owner=owner, group=group, max_t=(DEFAULT_END_YEAR - DEFAULT_START_YEAR) * 12,
+                            start_date=pd.Period(f"{DEFAULT_END_YEAR}-12", freq="M"))
         return cvar, tvar
 
     return _add
+
+
+@pytest.fixture(autouse=True)
+def clean_variable_cached():
+    ConstVariable._cached_dims = set()
+    TDimVariable._cached_dims = set()
+    TDimVariable._cached_metas = set()
+    yield

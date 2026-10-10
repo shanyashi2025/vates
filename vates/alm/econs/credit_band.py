@@ -2,7 +2,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
 from vates.utils import maybe_raise_if_ne
 
 
@@ -44,19 +44,17 @@ class CreditBand:
             band_id (str): credit band identifier.
         """
         self.band_id: str = band_id
-        create_tdv = lambda name: TDimVariable(name, model_engine=model_engine, owner=band_id, group='credit')
-        self.tdv_prob_of_default_ac: TDimVariable = create_tdv("prob_of_default_ac")
-        self.tdv_recovery_rate: TDimVariable = create_tdv("recovery_rate")
+        tdv_kwargs = {"model_engine": model_engine, "owner": band_id, "group": 'credit'}
+        self.tdv_prob_of_default_ac = make_proj_variable("prob_of_default_ac", **tdv_kwargs)
+        self.tdv_recovery_rate = make_proj_variable("recovery_rate", **tdv_kwargs)
         if tdv_spread_term_dim is None:
-            self.tdv_spread: TDimVariable = create_tdv("credit_spread")
+            self.tdv_spread = make_proj_variable("credit_spread", **tdv_kwargs)
         else:  # has term structure
-            self.tdv_spread: TDimVariable = TDimVariable("credit_spread", dims=[tdv_spread_term_dim],
-                                                         model_engine=model_engine, owner=band_id, group='credit')
+            self.tdv_spread = make_proj_variable("credit_spread", dims=[tdv_spread_term_dim], **tdv_kwargs)
         if tdv_spotmult_term_dim is None:
-            self.tdv_spotmult: TDimVariable = create_tdv("credit_spotmult")
+            self.tdv_spotmult = make_proj_variable("credit_spotmult", **tdv_kwargs)
         else: # has term structure
-            self.tdv_spotmult: TDimVariable = TDimVariable("credit_spotmult", dims=[tdv_spotmult_term_dim],
-                                                           model_engine=model_engine, owner=band_id, group='credit')
+            self.tdv_spotmult = make_proj_variable("credit_spotmult", dims=[tdv_spotmult_term_dim], **tdv_kwargs)
         self._last_update: int = self.time or 0
 
     @property

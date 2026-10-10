@@ -1,3 +1,4 @@
+import gc
 import glob
 import inspect
 import json
@@ -25,7 +26,7 @@ class StochExecutor:
     _run_config: RunConfiguration
     _sims_str: str
 
-    include_traced_message = ProjModelEngine.include_traced_message
+    append_traced_message = ProjModelEngine.append_traced_message
     load_json = ProjModelEngine.load_json
     read_csv = ProjModelEngine.read_csv
     read_excel = ProjModelEngine.read_excel
@@ -112,7 +113,7 @@ class StochExecutor:
             )
         super().__setattr__('_proj_cls', proj_cls)
         super().__setattr__('_projection', func)
-        self.include_traced_message(f"INFO: Function {func} has been bound to {self}.")
+        self.append_traced_message(f"INFO: Function {func} has been bound to {self}.")
         return self
 
     def configure_run(
@@ -186,7 +187,7 @@ class StochExecutor:
 
         if len(none_items) > 0:
             msg = f"Default configuration items: {', '.join(none_items)}."
-            self.include_traced_message(f"INFO: {msg}")
+            self.append_traced_message(f"INFO: {msg}")
             if CHECK_LEVEL != CheckLevel.BYPASS:
                 warnings.warn(msg)
 
@@ -194,15 +195,15 @@ class StochExecutor:
 
     def _apply_max_workers(self, requested_workers: int) -> int:
         if not isinstance(requested_workers, int):
-            self.include_traced_message(f"max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
+            self.append_traced_message(f"max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
             return 1
         if requested_workers <= 0:
-            self.include_traced_message(f"max_workers is set to 1: request={requested_workers}, exptect positive.")
+            self.append_traced_message(f"max_workers is set to 1: request={requested_workers}, exptect positive.")
             return 1
 
         _cpu_count = cpu_count()
         if requested_workers > _cpu_count:
-            self.include_traced_message(f"max_workers is set to {_cpu_count}: requested {requested_workers} > cpu_count.")
+            self.append_traced_message(f"max_workers is set to {_cpu_count}: requested {requested_workers} > cpu_count.")
         return min(requested_workers, _cpu_count)
 
     def run(
@@ -224,7 +225,7 @@ class StochExecutor:
                 if f.endswith(remove_pattern):
                     os.remove(f)
                 else:
-                    self.include_traced_message(f"INFO: Exsiting file NOT deleted: '{f}'.")
+                    self.append_traced_message(f"INFO: Exsiting file NOT deleted: '{f}'.")
         else:
             os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
 
@@ -295,6 +296,7 @@ class StochExecutor:
                 success = False
 
             del model_instance
+            gc.collect()
 
         return success, result, output_files
 
@@ -474,5 +476,5 @@ class StochExecutor:
             elif name.startswith('_'):
                 raise AttributeError(f"Cannot add a private member (underscore-prefixed) '{name}'.")
             if not hasattr(self, name) and hasattr(self, "_messages"):
-                self.include_traced_message(f"INFO: Add member: '{name}' {type(value)}")
+                self.append_traced_message(f"INFO: Add member: '{name}' {type(value)}")
         super().__setattr__(name, value)

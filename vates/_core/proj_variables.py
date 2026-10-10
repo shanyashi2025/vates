@@ -1,83 +1,25 @@
-from __future__ import annotations
 import numpy as np
 import pandas as pd
-import typing
-import weakref
 from abc import ABC, abstractmethod
 from enum import Enum
 
-if typing.TYPE_CHECKING:
-    from vates._core.proj_model_engine import ProjModelEngine
-    from vates._core._utils import RunConfiguration
-
 
 class ProjVariable(ABC):
-    """Container for projection variables used in model output.
 
-    Optional dimension labels can be provided as lists or Enums; they are used in CSV output.
+    __slots__ = ()
 
-    Attributes:
-        name (str): Variable name used in outputs.
-        owner (str): Variable owner used in outputs.
-        group (str): Variable group used in outputs.
-        _dims (list[list[str]] | None): Dimension labels (expanded from lists or Enums), or None if scalar.
-        _ndim (int): Number of dimensions (0-3).
-    """
+    name: str
+    owner: str
+    group: str
+    dims: list | None
+    ndim: int
+    result: float | np.ndarray | None
+    is_constant: bool
 
-    __slots__ = ('__weakref__', 'name', 'owner', 'group', '_dims', '_ndim',)
-
-    _unique_dims = []
-
-    def __init__(
-        self, name: str,
-        /,
-        *,
-        model_engine: ProjModelEngine | None,
-        owner: str,
-        group: str,
-        dims: list | None = None
-    ):
-        """
-        Initialize the Projection Variable.
-
-        Args:
-            model_engine (ProjModelEngine): Model engine object.
-            name (str): Variable name.
-            owner (str): Variable owner.
-            group (str): Variable group.
-            dims (tuple[tuple[str]]|None): Dimensions.
-        """
-        self.name: str = name
-        self.owner: str = owner
-        self.group: str = group
-        self._dims: tuple[tuple[str]] | None = self._resolve_dims(dims)
-        self._ndim: int = len(dims) if dims is not None else 0
-        if model_engine is not None:
-            model_engine.include_proj_variable(weakref.ref(self))
-
-    @property
-    @abstractmethod
-    def result(self):
-        pass
-
-    @property
-    @abstractmethod
-    def is_constant(self) -> bool:
-        """bool: True if constant, False if time-dimensioned."""
-        pass
-
-    @property
-    def dims(self) -> list | None:
-        """list | None: Dimension labels or None if scalar."""
-        return self._dims
-
-    @property
-    def ndim(self) -> int:
-        """int: Number of dimensions (0-3)."""
-        return self._ndim
+    _cached_dims: set[tuple[tuple, ...]] = set()
 
     @classmethod
-    def _resolve_dims(cls, dims) -> tuple[tuple] | None:
+    def _resolve_dims(cls, dims) -> tuple[tuple, ...] | None:
         """Normalize dims to a tuple of label lists.
 
         Args:
@@ -89,6 +31,7 @@ class ProjVariable(ABC):
         Raises:
             ValueError: If dims are malformed or exceed 3 dimensions.
         """
+
         if dims is None:
             return None
 
@@ -109,25 +52,27 @@ class ProjVariable(ABC):
         for dim in dims:
             if isinstance(dim, list):
                 resolved.append(tuple([_maybe_convert_to_str(x) for x in dim]))
+            elif isinstance(dim, tuple):
+                resolved.append(dim)
             elif issubclass(dim, Enum):
                 resolved.append(tuple([x.name for x in dim]))
             else:
                 raise ValueError(f"{dim}: variable dimension must be either list or enumeration.")
 
         resolved = tuple(resolved)
-        for dim in cls._unique_dims:
-            if resolved == dim:
-                return dim
-        cls._unique_dims.append(resolved)
+        cached = next((x for x in cls._cached_dims if x == resolved), None)
+        if cached is not None:
+            return cached
+        cls._cached_dims.add(resolved)
         return resolved
 
     @abstractmethod
     def __getitem__(self, index):
-        pass
+        ...
 
     @abstractmethod
     def __setitem__(self, index, value):
-        pass
+        ...
 
 
 class ConstVariable(ProjVariable):
@@ -137,22 +82,23 @@ class ConstVariable(ProjVariable):
     Optional dimension labels can be provided as lists or Enums; they are used in CSV output.
 
     Attributes:
-        name (str): Variable name used in outputs.
-        owner (str): Variable owner used in outputs.
-        group (str): Variable group used in outputs.
+        _name (str): Variable name used in outputs.
+        _owner (str): Variable owner used in outputs.
+        _group (str): Variable group used in outputs.
         _dims (list[list[str]] | None): Dimension labels (expanded from lists or Enums), or None if scalar.
         _ndim (int): Number of dimensions (0-3).
         _result: Stored value (copied if array-like).
     """
-    __slots__ = ('_result',)
+
+    __slots__ = ('__weakref__', '_name', '_owner', '_group', '_dims', '_ndim', '_result',)
 
     def __init__(
-        self, name: str,
+        self,
+        name: str,
         /,
         *,
-        model_engine: ProjModelEngine | None = None,
-        owner: str = 'unowned',
-        group: str = 'ungrouped',
+        owner: str,
+        group: str,
         dims: list | None = None
     ):
         """
@@ -160,13 +106,28 @@ class ConstVariable(ProjVariable):
 
         Args:
             name (str): Variable name.
-            model_engine (ProjModelEngine): Model engine object.
             owner (str): Variable owner.
             group (str): Variable group.
             dims (list|None): Dimensions.
         """
-        super().__init__(name, model_engine=model_engine, owner=owner, group=group, dims=dims)
+        self._name: str = name
+        self._owner: str = owner
+        self._group: str = group
+        self._dims: tuple[tuple[str]] | None = self._resolve_dims(dims)
+        self._ndim: int = len(dims) if dims is not None else 0
         self._result = None
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def owner(self) -> str:
+        return self._owner
+
+    @property
+    def group(self) -> str:
+        return self._group
 
     @property
     def result(self):
@@ -176,6 +137,16 @@ class ConstVariable(ProjVariable):
     def is_constant(self) -> bool:
         """bool: Always True for constant variables."""
         return True
+
+    @property
+    def dims(self) -> list | None:
+        """list | None: Dimension labels or None if scalar."""
+        return self._dims
+
+    @property
+    def ndim(self) -> int:
+        """int: Number of dimensions (0-3)."""
+        return self._ndim
 
     def __getitem__(self, index):
         """Return the stored value.
@@ -201,50 +172,80 @@ class TDimVariable(ProjVariable):
     dimensions (lists or Enums) are supported and preserved for CSV output.
 
     Attributes:
-        name (str): Variable name used in outputs.
-        owner (str): Variable owner used in outputs.
-        group (str): Variable group used in outputs.
+        _owner (str): Variable owner used in outputs.
         _dims (list[list[str]] | None): Dimension labels (expanded from lists or Enums), or None if scalar.
         _ndim (int): Number of dimensions (0-3).
         _result (np.ndarray): Values across time and optional dimensions.
-        _assigned (np.ndarray): True if value has been assigned otherwise False.
     """
 
-    __slots__ = ('_cfg', '_result', '_assigned',)
+    __slots__ = ('__weakref__', '_meta', '_owner', '_dims', '_ndim', '_result',)
 
-    fallback_cfg = None
-
+    _cached_metas: set[tuple[str, str, int, pd.Period | None]] = set()
 
     def __init__(
         self,
         name: str,
         /,
         *,
-        model_engine: ProjModelEngine | None,
-        owner: str = 'unowned',
-        group: str = 'ungrouped',
-        dims: list | None = None
+        owner: str,
+        group: str,
+        dims: list | None = None,
+        max_t: int,
+        start_date: pd.Period | None = None,
     ):
         """
         Initialize the Time-dimensioned Variable.
 
         Args:
-            model_engine (ProjModelEngine): Model engine object.
             name (str): Variable name.
             owner (str): Variable owner.
             group (str): Variable group.
             dims (list|None): Dimensions.
+            max_t (int): Max time.
+            start_date (pd.Period): Start date (coresponding to time 0).
         """
-        super().__init__(name, model_engine=model_engine, owner=owner, group=group, dims=dims)
-        if model_engine:
-            self._cfg: RunConfiguration = model_engine._run_config
-        elif self.fallback_cfg:
-            self._cfg = self.fallback_cfg  # for advanced users who deliberately want to use 'fallback_cfg'
-        else:
-            raise ValueError("'model_engine' is None.")
-        self._result = np.zeros(self._shape)
-        self._assigned = np.array([False] * (self._cfg.max_t + 1))
+        self._meta: tuple[str, str, int, pd.Period | None] = self._make_meta(name, group, max_t, start_date)
+        self._owner: str = owner
+        self._dims: tuple[tuple[str]] | None = self._resolve_dims(dims)
+        self._ndim: int = len(dims) if dims is not None else 0
+        shape = tuple([max_t + 1] + ([len(dim) for dim in self._dims] if self._ndim > 0 else []))
+        self._result = np.zeros(shape=shape)
 
+    @property
+    def name(self) -> str:
+        return self._meta[0]
+
+    @property
+    def group(self) -> str:
+        return self._meta[1]
+
+    @property
+    def owner(self) -> str:
+        return self._owner
+
+    @property
+    def max_t(self) -> int:
+        return self._meta[2]
+
+    @property
+    def start_date(self) -> pd.Period | None:
+        return self._meta[3]
+
+    @classmethod
+    def _make_meta(cls, name: str, group: str, max_t: int, start_date: pd.Period
+                   ) -> tuple[str, str, int, pd.Period | None]:
+        meta = (name, group, max_t, start_date)
+        cached = next((x for x in cls._cached_metas if x == meta), None)
+        if cached is not None:
+            return cached
+        if not isinstance(max_t, int):
+            raise TypeError(f"Invalid type of 'max_t': {type(max_t)}, expected 'int'.")
+        if max_t <= 0:
+            raise ValueError(f"Invalid value of 'max_t': {max_t}, expected positive.")
+        if start_date is not None and not isinstance(start_date, pd.Period):
+            raise TypeError(f"Invalid type of 'start_date': {type(max_t)}, expected 'pd.Period'.")
+        cls._cached_metas.add(meta)
+        return meta
 
     @property
     def result(self) -> np.ndarray:
@@ -256,17 +257,14 @@ class TDimVariable(ProjVariable):
         return False
 
     @property
-    def _shape(self) -> tuple[int]:
-        """Compute the internal numpy array shape.
+    def dims(self) -> list | None:
+        """list | None: Dimension labels or None if scalar."""
+        return self._dims
 
-        Returns:
-            tuple[int]: (max_t+1, [dim1, dim2, dim3]).
-        """
-        shape = (self._cfg.max_t + 1,)
-        if self._ndim > 0:
-            for dim in self._dims:
-                shape += (len(dim),)
-        return shape
+    @property
+    def ndim(self) -> int:
+        """int: Number of dimensions (0-3)."""
+        return self._ndim
 
     def __getitem__(self, index: int | pd.Period):
         """Return the result at a certain time or period.
@@ -281,17 +279,16 @@ class TDimVariable(ProjVariable):
         if type(index) == int:
             t = index
         elif type(index) == pd.Period:
-            t = (index - self._cfg.start_date).n
+            if self.start_date is None:
+                raise ValueError(f"'start_date' is None, cannot index by 'pd.Period'.")
+            t = (index - self.start_date).n
         else:
             raise TypeError(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
 
-        if not (0 <= t <= self._cfg.max_t):
-            raise ValueError(f"Invalid {index=}, expected t: 0 to {self._cfg.max_t} (period: {self._cfg.start_date} to {self._cfg.end_date}).")
+        if not (0 <= t <= self.max_t):
+            raise ValueError(f"Invalid {index=}, expected t: 0 to {self.max_t}.")
 
-        if self._assigned[t]:
-            return self._result[t] if self._ndim == 0 else self._result[t,].copy()
-        else:
-            return None
+        return self._result[t] if self._ndim == 0 else self._result[t,].copy()
 
     def __setitem__(self, index: int | pd.Period, value):
         """Set the value at the current time index.
@@ -302,16 +299,16 @@ class TDimVariable(ProjVariable):
         if type(index) == int:
             t = index
         elif type(index) == pd.Period:
-            t = (index - self._cfg.start_date).n
+            if self.start_date is None:
+                raise ValueError(f"'start_date' is None, cannot index by 'pd.Period'.")
+            t = (index - self.start_date).n
         else:
             raise TypeError(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
 
-        if not (0 <= t <= self._cfg.max_t):
-            raise ValueError(f"Invalid {index=}, expected t: 0 to {self._cfg.max_t} (period: {self._cfg.start_date} to {self._cfg.end_date}).")
+        if not (0 <= t <= self.max_t):
+            raise ValueError(f"Invalid {index=}, expected t: 0 to {self.max_t}.")
 
         if self._ndim == 0:
             self._result[t] = value
         else:
             self._result[t,] = value.copy()
-
-        self._assigned[t] = True

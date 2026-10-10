@@ -1,6 +1,6 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.utils import maybe_raise_if_ne
 
 
@@ -35,7 +35,7 @@ class Currency:
         """
         self.currency_id: str = currency_id
         self._fx_rate = 1.0
-        self.tdv_fx_rate: TDimVariable = TDimVariable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
+        self.tdv_fx_rate = make_proj_variable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
         self._last_update: int = self.time or 0
 
     @property

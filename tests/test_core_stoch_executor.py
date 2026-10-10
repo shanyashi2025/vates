@@ -25,7 +25,8 @@ def _stoch_proj(model: ProjModelEngine):
     mirroring the `em11_monte_carlo` example.
     """
     if model.time == 0:
-        model.balance = TDimVariable("balance", model_engine=model, owner="owner", group="group")
+        model.balance = TDimVariable("balance", owner="owner", group="group", max_t=model.MAX_T,
+                                     start_date=model.START_DATE) @ model
     model.balance[model.time] = float(model.time)  # deterministic per sim
 
 
