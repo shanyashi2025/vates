@@ -10,7 +10,7 @@ from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.derivatives import EquityOption
 
 
-@time_synchronized()
+@time_synchronized("model_engine.time_synchronizer")
 class EquityOptionBuilder:
     """
     Builder for creating and initializing EquityOption objects.

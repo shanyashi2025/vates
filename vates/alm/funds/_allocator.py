@@ -322,7 +322,7 @@ class AssetAllocationGroup:
         self.trade_decision = None
 
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class AssetAllocator:
     """Manages asset allocation and rebalancing for a fund.
 

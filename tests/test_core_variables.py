@@ -12,6 +12,7 @@ import weakref
 from enum import Enum
 
 from vates import ConstVariable, TDimVariable, make_proj_variable
+from vates._core.tools import _FALLBACK
 
 
 class _AssetType(Enum):
@@ -229,19 +230,20 @@ class TestMakeVariable:
         v = make_proj_variable("t", owner="o", group="g", model_engine=configured)
         assert isinstance(v, TDimVariable)
 
-    def test_none_engine_no_impact_to_const_var(self):
-        c = make_proj_variable("c", variable_type="c", owner="o", group="g")
-        assert isinstance(c, ConstVariable)
-        c = make_proj_variable("c", variable_type="c", owner="o", group="g", model_engine=None)
-        assert isinstance(c, ConstVariable)
-
-    def test_none_engine_warns_to_tdim_var(self):
-        with pytest.warns(UserWarning, match="'model_engine' is 'None'"):
-            t = make_proj_variable("t", variable_type="t", owner="o", group="g")
-        assert isinstance(t, TDimVariable)
-        with pytest.warns(UserWarning, match="'model_engine' is 'None'"):
-            t = make_proj_variable("t", variable_type="t", owner="o", group="g", model_engine=None)
-        assert isinstance(t, TDimVariable)
+    def test_no_engine_uses_fallback(self):
+        v1 = make_proj_variable("c", variable_type="c", owner="o", group="g")
+        fallback = _FALLBACK.engine
+        assert isinstance(v1, ConstVariable)
+        v2 = make_proj_variable("c", variable_type="c", owner="o", group="g", model_engine=None)
+        assert isinstance(v2, ConstVariable)
+        v3 = make_proj_variable("t", variable_type="t", owner="o", group="g")
+        assert isinstance(v3, TDimVariable)
+        assert v3.max_t == fallback.MAX_T
+        assert v3.start_date == fallback.START_DATE
+        v4 = make_proj_variable("t", variable_type="t", owner="o", group="g", model_engine=None)
+        assert isinstance(v4, TDimVariable)
+        assert v4.start_date == fallback.START_DATE
+        assert all(weakref.ref(v) in fallback._proj_variables for v in (v1, v2, v3, v4))
 
     def test_engine_has_no_max_t_raises(self):
         class NoMaxTEngine:
@@ -254,15 +256,14 @@ class TestMakeVariable:
         class NoStartDateEngine:
             MAX_T = 24
         engine = NoStartDateEngine()
-        t = make_proj_variable("t", owner="o", group="g", model_engine=engine)
-        assert isinstance(t, TDimVariable)
-        assert t.start_date is None
+        with pytest.raises(AttributeError, match="START_DATE"):
+            v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
 
-    def test_engine_has_no_attach_leaves_silently(self):
+    def test_engine_has_no_attach_raises(self):
         class NoAttachEngine:
             MAX_T = 24
+            START_DATE = None
             _proj_variables = []
         engine = NoAttachEngine()
-        v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
-        assert isinstance(v, TDimVariable)
-        assert len(engine._proj_variables) == 0
+        with pytest.raises(AttributeError, match="attach_proj_variable"):
+            v = make_proj_variable("t", owner="o", group="g", model_engine=engine)

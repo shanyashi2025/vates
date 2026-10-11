@@ -78,7 +78,7 @@ def make_cross2_mc_module(*, submodule: str | None = None, nonlife_mc_k: float =
         return tree.get_subtree(submodule).duplicate()
 
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class MinCapUnit:
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
@@ -165,7 +165,7 @@ class MinCapUnit:
         return self._risk_module.get_risk_diversification(path)
 
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class MinCapConsolidator:
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`

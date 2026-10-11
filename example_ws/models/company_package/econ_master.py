@@ -77,7 +77,7 @@ class EsgItem:
                 raise TypeError(f"{var.descr}: invalid term type {type(var.term)}, expected 'int' or 'list'.")
 
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class EsgMaster:
 
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`

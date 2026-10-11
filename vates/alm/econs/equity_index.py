@@ -4,7 +4,7 @@ from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_p
 from vates.utils import maybe_raise_if_ne
 
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class EquityIndex:
     """
     Represents an equity index and its time series.

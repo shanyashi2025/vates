@@ -15,7 +15,7 @@ class RecorderPhase(Enum):
     LIAB_REC_AD = auto()
 
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class FundRecorder:
     """Performs aggregation and performance calculations for a fund.
 

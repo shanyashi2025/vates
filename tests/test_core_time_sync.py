@@ -13,11 +13,8 @@ import pandas as pd
 import pytest
 from pandas._libs.tslibs.parsing import DateParseError
 
-import vates._core._time_synchronizer as _time_synchronizer
-from vates._core._time_synchronizer import (
-    ProjectionTimeSynchronizer,
-    time_synchronized,
-)
+from vates._core._time_synchronizer import ProjectionTimeSynchronizer
+from vates._core.tools import time_synchronized, _FALLBACK
 
 
 
@@ -287,10 +284,11 @@ class TestAddProjectionTimeSynchronizer:
     instance; wiring is observed through the synchronizer's listener set.
     """
 
-    def test_bare_decorator_wires_to_engine_synchronizer(self, make_configured, tmp_path):
-        @time_synchronized
+    def test_dot_key_decorator_wires_to_engine_synchronizer(self, make_configured, tmp_path):
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
-            pass
+            def __init__(self, model_engine):
+                pass
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
@@ -303,15 +301,63 @@ class TestAddProjectionTimeSynchronizer:
         assert asset.time == 3
         assert asset.period == m.START_DATE + 3
 
+    def test_non_dot_key_decorator_wires_to_synchronizer(self, make_configured, tmp_path):
+        @time_synchronized("time_synchronizer")
+        class Asset:
+            def __init__(self, time_synchronizer):
+                pass
+
+        m = make_configured(tmp_path)
+        asset = Asset(time_synchronizer=m.time_synchronizer)
+        # registered with the engine's synchronizer, so reads reflect its state
+        assert asset in m.time_synchronizer._listeners
+        assert asset.time is None
+        assert asset.period is None
+
+        m.time = 3
+        assert asset.time == 3
+        assert asset.period == m.START_DATE + 3
+
+    def test_bare_decorator_raises(self):
+        with pytest.raises(TypeError, match="str"):
+            @time_synchronized
+            class Asset:
+                pass
+
+    @pytest.mark.parametrize("bad", [None, 3.14, 123])
+    def test_decorator_key_wrong_type_raises(self, bad):
+        with pytest.raises(TypeError, match="expected 'str'"):
+            @time_synchronized(bad)
+            class Asset:
+                def __init__(self, model_engine):
+                    pass
+
+    def test_missing_init_raises(self):
+        with pytest.raises(AttributeError, match="'__init__' is not defined"):
+            @time_synchronized("model_engine.time_synchronizer")
+            class Asset:
+                pass
+
+    @pytest.mark.parametrize("key, sig", [("model_engine.time_synchronizer", "engine"),
+                                          ("time_synchronizer", "synchronizer"),
+                                          (".time_synchronizer", "model_engine"),])
+    def test_decorator_unmatched_key_raises(self, key, sig):
+        with pytest.raises(KeyError, match="does't match signaure of '__init__'"):
+            @time_synchronized(key)
+            class Asset:
+                def __init__(self, sig):
+                    pass
+
     def test_inherited_hook_notified_on_subclass(self, make_configured, tmp_path):
         # Only the base class is decorated; a hook defined on a subclass must
         # still be found by dynamic lookup at notify time. This is the reason the
         # decorator must not capture the hook when the class is decorated.
         recorded = []
 
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
-            pass
+            def __init__(self, model_engine):
+                pass
 
         class Equity(Asset):
             def _on_time_change(self):
@@ -329,7 +375,7 @@ class TestAddProjectionTimeSynchronizer:
         # only runs on a later `set`/`elapse` notification.
         recorded = []
 
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
             def __init__(self, *, model_engine=None):
                 recorded.append("init")
@@ -347,7 +393,7 @@ class TestAddProjectionTimeSynchronizer:
     def test_listener_not_attached_when_init_raises(self, make_configured, tmp_path):
         # The listener is attached only after `__init__` completes, so a failed
         # construction leaves no half-built listener in the synchronizer.
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
             def __init__(self, *, model_engine=None):
                 raise RuntimeError("boom")
@@ -358,9 +404,10 @@ class TestAddProjectionTimeSynchronizer:
         assert len(m.time_synchronizer._listeners) == 0
 
     def test_engine_period_setter_propagates_to_asset(self, make_configured, tmp_path):
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
-            pass
+            def __init__(self, model_engine):
+                pass
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
@@ -368,46 +415,36 @@ class TestAddProjectionTimeSynchronizer:
         assert asset.period == m.START_DATE + 6
         assert asset.time == 6
 
-    def test_no_engine_raises(self, monkeypatch):
-        monkeypatch.setattr(_time_synchronizer, "FALLBACK_TIME_SYNCHRONIZER", None)
-
-        @time_synchronized
+    def test_no_engine_uses_fallback(self):
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
-            pass
-
-        with pytest.raises(ValueError, match="Failed to detect projection time synchronizer"):
-            Asset()
-        with pytest.raises(ValueError, match="Failed to detect projection time synchronizer"):
-            Asset(model_engine=None)
-
-    def test_model_engine_without_synchronizer_raises(self, monkeypatch):
-        # `model_engine` must expose a `time_synchronizer` attribute; a plain
-        # object does not, so the fallback/error branch is reached.
-        monkeypatch.setattr(_time_synchronizer, "FALLBACK_TIME_SYNCHRONIZER", None)
-
-        @time_synchronized
-        class Asset:
-            pass
-
-        with pytest.raises(ValueError, match="Failed to detect projection time synchronizer"):
-            Asset(model_engine=object())
-
-    def test_fallback_synchronizer_used(self, monkeypatch):
-        sync = ProjectionTimeSynchronizer(time=2, period=pd.Period("2026-12", freq="M"))
-        monkeypatch.setattr(_time_synchronizer, "FALLBACK_TIME_SYNCHRONIZER", sync)
-
-        @time_synchronized
-        class Asset:
-            pass
+            def __init__(self, *args, model_engine = None):
+                pass
 
         asset = Asset()
-        assert asset.time == 2
-        assert asset.period == pd.Period("2026-12", freq="M")
+        assert asset in _FALLBACK.time_synchronizer._listeners
+        assert asset.time == _FALLBACK.time_synchronizer.time
+        assert asset.period == _FALLBACK.time_synchronizer.period
+        asset = Asset(model_engine=None)
+        assert asset in _FALLBACK.time_synchronizer._listeners
+        assert asset.period == _FALLBACK.time_synchronizer.period
+
+    def test_model_engine_without_synchronizer_uses_fallback(self, monkeypatch):
+        @time_synchronized("model_engine.time_synchronizer")
+        class Asset:
+            def __init__(self, model_engine):
+                pass
+
+        asset = Asset(model_engine=object())
+        assert asset in _FALLBACK.time_synchronizer._listeners
+        assert asset.time == _FALLBACK.time_synchronizer.time
+        assert asset.period == _FALLBACK.time_synchronizer.period
+
 
     def test_original_init_still_runs(self, make_configured, tmp_path):
         # The class's own __init__ is preserved and re-invoked with the same
         # kwargs (asset_base pattern: keyword-only model_engine parameter).
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
             def __init__(self, *, model_engine=None, label=None):
                 self.label = label
@@ -418,24 +455,16 @@ class TestAddProjectionTimeSynchronizer:
         m.time = 1
         assert asset.time == 1
 
-    def test_parentheses_form_equivalent(self, make_configured, tmp_path):
-        # `time_synchronized()` (no args) returns the decorator
-        # factory; applying it yields the same behavior as the bare form.
-        Asset = time_synchronized()(type("Asset", (), {}))
-
-        m = make_configured(tmp_path)
-        asset = Asset(model_engine=m)
-        m.time = 4
-        assert asset.time == 4
-        assert asset.period == m.START_DATE + 4
-
     def test_listener_registered_and_notified(self, make_configured, tmp_path):
         # When the class defines `_on_time_change`, the decorator registers
         # the instance and it is notified on every time change.
         recorded = []
 
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
+            def __init__(self, model_engine):
+                pass
+
             def _on_time_change(self):
                 recorded.append(self.time)
 
@@ -452,9 +481,10 @@ class TestAddProjectionTimeSynchronizer:
     def test_time_period_cached_and_refreshed(self, make_configured, tmp_path):
         # A bare decorated class caches `time`/`period` as plain instance
         # attributes, refreshed on every time change.
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
-            pass
+            def __init__(self, model_engine):
+                pass
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
@@ -468,9 +498,10 @@ class TestAddProjectionTimeSynchronizer:
     def test_mid_period_construction_seeds_cache(self, make_configured, tmp_path):
         # An object created after time has advanced reads the current time during
         # construction (spawned-asset case).
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
-            pass
+            def __init__(self, model_engine):
+                pass
 
         m = make_configured(tmp_path)
         m.time = 7
@@ -481,10 +512,12 @@ class TestAddProjectionTimeSynchronizer:
     def test_class_time_attribute_shadowed_by_instance_cache(self, make_configured, tmp_path):
         # A class-level `time`/`period` is left untouched on the class, but the
         # instance caches the synchronizer values as instance attributes.
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
             time = "class-attr"
             period = "class-attr"
+            def __init__(self, model_engine):
+                pass
 
         m = make_configured(tmp_path)
         asset = Asset(model_engine=m)
@@ -498,9 +531,10 @@ class TestAddProjectionTimeSynchronizer:
 
     def test_no_property_injected_on_class(self):
         # The decorator no longer injects `time`/`period` properties.
-        @time_synchronized
+        @time_synchronized("model_engine.time_synchronizer")
         class Asset:
-            pass
+            def __init__(self, model_engine):
+                pass
 
         assert "time" not in Asset.__dict__
         assert "period" not in Asset.__dict__

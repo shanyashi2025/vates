@@ -20,7 +20,7 @@ class AssetPhase(Enum):
     CLOSED = auto()
 
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class Asset(ABC):
     """
     Abstract base class for all financial assets.

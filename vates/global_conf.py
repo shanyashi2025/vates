@@ -10,3 +10,5 @@ class CheckLevel(Enum):
     ERROR = auto()
 
 CHECK_LEVEL = CheckLevel[os.getenv("VATES_CHECK_LEVEL", "BYPASS").upper()]
+
+FALLBACK_START_YEAR = os.getenv("VATES_FALLBACK_START_YEAR", 2025)

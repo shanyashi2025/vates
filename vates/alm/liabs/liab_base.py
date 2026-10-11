@@ -13,7 +13,7 @@ class LiabPhase(Enum):
     CLOSED = auto()
 
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class Liab(ABC):
     """
     Abstract base class for all liability types.

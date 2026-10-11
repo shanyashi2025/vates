@@ -14,7 +14,7 @@ from vates.alm.assets._bond_fixed_component import (
 from vates.alm.assets._utils import calculate_risk_adj_spot
 
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class BondFixedBuilder:
     """
     Builder for creating and initializing BondFixed objects.

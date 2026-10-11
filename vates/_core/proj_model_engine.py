@@ -143,7 +143,7 @@ class ProjModelEngine:
         """Set the configuration for a run.
 
         Args:
-            start_year (int, optional): Projection start year. Defaults to None.
+            start_year (int): Projection start year.
             start_month (int, optional): Projection start month. Defaults to 12.
             end_year (int, optional): Projection end year. Defaults to `start_year`.
             end_month (int, optional): Projection end month. Defaults to 12.

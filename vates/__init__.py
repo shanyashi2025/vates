@@ -2,6 +2,7 @@ from importlib.metadata import version, PackageNotFoundError
 from vates._core import (
     ProjModelEngine,
     StochExecutor,
+    time_synchronized,
     make_proj_variable,
     ConstVariable,
     TDimVariable,
@@ -21,6 +22,7 @@ __all__ = [
     # core
     'ProjModelEngine',
     'StochExecutor',
+    'time_synchronized',
     'make_proj_variable',
     'ConstVariable',
     'TDimVariable',

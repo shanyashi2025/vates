@@ -20,7 +20,7 @@ class FundPhase(Enum):
     PROC_LIAB_AD = auto()
     CLOSED = auto()
 
-@time_synchronized
+@time_synchronized("model_engine.time_synchronizer")
 class Fund:
     """Investment fund with assets and liabilities.
 
