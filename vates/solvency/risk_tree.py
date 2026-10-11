@@ -358,7 +358,7 @@ class RiskNode:
         self._children += tuple(staged)
         for node in staged:
             node._parent = self
-            self.clr_risk_capital()
+            self._clear_cached_risk_capital()
 
     def _stage_child(self, node: Self, /, staged: list[Self]) -> None:
         """
@@ -423,7 +423,7 @@ class RiskNode:
             raise ValueError(f"Invalid agg scope: {scope!r}, expected {self._allowed_agg_scopes}.")
         self._agg_func = func
         self._agg_scope = scope or self._allowed_agg_scopes[0]
-        self.clr_risk_capital()
+        self._clear_cached_risk_capital()
 
     def set_risk_capital(self, value: float, /) -> None:
         """
@@ -447,9 +447,9 @@ class RiskNode:
             raise ValueError(f"Invalid value of risk capital: {value!r}.")
         self._risk_capital = value
         if self._parent is not None:
-            self._parent.clr_risk_capital()  # cascade
+            self._parent._clear_cached_risk_capital()  # cascade
 
-    def clr_risk_capital(self) -> None:
+    def _clear_cached_risk_capital(self) -> None:
         """
         Clear the cached risk capital of this node and of all its ancestors.
 
@@ -458,7 +458,7 @@ class RiskNode:
         """
         self._risk_capital = None
         if self._parent is not None:
-            self._parent.clr_risk_capital()  # cascade
+            self._parent._clear_cached_risk_capital()  # cascade
 
     def aggregate(self) -> None:
         """

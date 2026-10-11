@@ -5,7 +5,7 @@ Open-source Python packages and example implementations for actuarial models.
 ## Project layout
 
 ```text
-./
+.
 ├── vates/                  # The core package
 ├── docs/                   # Project documentation
 ├── example_ws/             # Example workspace

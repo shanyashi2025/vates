@@ -441,7 +441,7 @@ class TestCapitalAggregation:
 
     def test_clr_risk_capital_clears_self_and_ancestors_only(self, tree):
         assert tree.get_risk_capital() == 7.0
-        tree.get_node("M/F").clr_risk_capital()
+        tree.get_node("M/F")._clear_cached_risk_capital()
         assert tree.get_node("M/F")._risk_capital is None
         assert tree.get_node("M")._risk_capital is None
         assert tree.root._risk_capital is None
