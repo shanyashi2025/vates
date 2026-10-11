@@ -46,7 +46,8 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
 
 - **`variables`** — bound functions write results into `ConstVariable` (scalar/array, constant) or
   `TDimVariable` (indexed by `t`/`pd.Period`) instances. Variables self-register with the engine via
-  `include_proj_variable`. On run, the engine serializes them to `{slug}.proj.csv`. Each
+  `attach_proj_variable`, can also use the syntactic sugar `@` operator `variable @ engine` or 
+  `variable @ engine.proj_variable_manager`. On run, the engine serializes them to `{slug}.proj.csv`. Each
   variable carries `group`/`owner`/`name` and up to 3 labeled `dims` (lists, tuples or Enums), which become
   row labels like `name[a:b:c]`. Use `proj_result(...)` (`vates/_core/_proj_result_reader.py`) to read `.proj.csv`
   back into a DataFrame or a single cell `(group, owner, variable [, date])` value.
@@ -66,10 +67,13 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
 ### Time synchronization pattern
 
 `ProjectionTimeSynchronizer` broadcasts `time`/`period` changes to registered listeners via
-`attach_listener`, and `time_synchronized` is a class decorator. When a class receives 
-a `model_engine` keyword argument, the decorator wires it to the engine's synchronizer so 
-the object advances with the model. This is how economic/asset class objects stay in sync 
-with the running projection. `vates/alm/assets/asset_base.py` is the canonical example (`@time_synchronized class Asset`).
+`attach_listener`, and `time_synchronized` is a class decorator. The decorator has a string argument
+`key`: if the pattern is `foo.bar`, the decorator will get `engine` from the class's argument `foo`, 
+then get `synchronizer` by `getattr(engine, "bar")`; otherwise if the decorator will directly get 
+`synchronizer` from the class's argument `key`. Then the decorator wires the class to the synchronizer 
+so the object advances with the model. This is how economic/asset class objects stay in sync 
+with the running projection. `vates/alm/assets/asset_base.py` is the canonical example 
+(`@time_synchronized("model_engine.time_synchronizer") class Asset`).
 
 ### ALM library (`vates/alm/`)
 
@@ -101,14 +105,12 @@ spreading/interpolation/extrapolation, Smith–Wilson extrapolation, Black–Sch
 
 ### Solvency (`vates/solvency/`)
 
-Currently a China C-ROSS (Phase-II) module (`cn_cross2/`: regulatory `params.py` and `quant_risk_min_cap.py`). 
+Currently a China C-ROSS (Phase-II) module (`cn_cross2/`: regulatory `rules.py` and `quant_risk_min_cap.py`). 
 Compute quantitative-risk minimum capital.
 
-### `_experiment/` and `utils/`
+### `utils/`
 
-- `vates/_experiment/` — experimental code parked out of the main public API, currently an
-  `autograd.py` (there is a matching `docs/tutorials/tut_autograd.py`).
-- `vates/utils/` — helpers: `lifecycle`, `num_var_group`, `risk_module`, `uncategorized`.
+- `vates/utils/` — helpers: `lifecycle`, `numeric_dataclass`, `uncategorized`.
 
 ### Example workflows
 

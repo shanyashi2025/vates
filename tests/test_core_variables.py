@@ -203,7 +203,7 @@ class TestMakeVariable:
         assert v.owner == "o"
         assert v.group == "g"
         assert v.dims == (("A", "B"), )
-        assert weakref.ref(v) in configured._proj_variables
+        assert v in configured.proj_variable_manager
 
     @pytest.mark.parametrize("good", ["c", "const", "CoNsT"])
     def test_correct_const_var_type_value(self, configured, good):
@@ -219,7 +219,7 @@ class TestMakeVariable:
         assert v.dims == (("A", "B"), )
         assert v.max_t == configured.MAX_T
         assert v.start_date == configured.START_DATE
-        assert weakref.ref(v) in configured._proj_variables
+        assert v in configured.proj_variable_manager
 
     @pytest.mark.parametrize("good", ["t", "tdim", "time_DiMeNSioned"])
     def test_correct_tdim_var_type_value(self, configured, good):
@@ -243,7 +243,7 @@ class TestMakeVariable:
         v4 = make_proj_variable("t", variable_type="t", owner="o", group="g", model_engine=None)
         assert isinstance(v4, TDimVariable)
         assert v4.start_date == fallback.START_DATE
-        assert all(weakref.ref(v) in fallback._proj_variables for v in (v1, v2, v3, v4))
+        assert all(v in fallback.proj_variable_manager for v in (v1, v2, v3, v4))
 
     def test_engine_has_no_max_t_raises(self):
         class NoMaxTEngine:
@@ -263,7 +263,6 @@ class TestMakeVariable:
         class NoAttachEngine:
             MAX_T = 24
             START_DATE = None
-            _proj_variables = []
         engine = NoAttachEngine()
         with pytest.raises(AttributeError, match="attach_proj_variable"):
             v = make_proj_variable("t", owner="o", group="g", model_engine=engine)

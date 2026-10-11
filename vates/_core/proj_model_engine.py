@@ -7,15 +7,13 @@ import os
 import pandas as pd
 import traceback
 import warnings
-import weakref
 from datetime import datetime
-from itertools import product
 from pathlib import Path
 from types import MethodType
 from typing import Callable, Literal, Self, get_type_hints
 
 from vates._core._proj_result_reader import proj_result
-from vates._core._proj_variables import ProjVariable
+from vates._core._proj_variables import ProjVariable, ProjVariableManager
 from vates._core._run_configuration import RunConfiguration
 from vates._core._time_synchronizer import ProjectionTimeSynchronizer
 from vates.global_conf import CheckLevel, CHECK_LEVEL
@@ -43,10 +41,10 @@ class ProjModelEngine:
         self._description: str = str(description)
 
         # runtime stuffs
-        self._cached_filepath: dict[str, tuple[Path | None, list[Path]]] = {}
-        self._proj_variables: list[weakref.ref[ProjVariable]] = []
-        self._result_files: set = set()
         self._time_synchronizer: ProjectionTimeSynchronizer = ProjectionTimeSynchronizer()
+        self._proj_variable_manager: ProjVariableManager = ProjVariableManager()
+        self._cached_filepath: dict[str, tuple[Path | None, list[Path]]] = {}
+        self._result_files: set = set()
         self._messages: list[str] = []
         self._runlog: dict = {}
 
@@ -229,7 +227,7 @@ class ProjModelEngine:
                     self._time_synchronizer.elapse(time_step)
                 self._projection(**projection_args)
             gc.collect()
-            self._proj_variables[:] = [ref for ref in self._proj_variables if ref()]  # remove dead
+            self._proj_variable_manager.clear_dead()
             self._write_results()
             exec_success = True
         except Exception as e:
@@ -275,7 +273,15 @@ class ProjModelEngine:
             writer = csv.writer(csvfile)
             writer.writerow(['group', 'owner', 'variable', 'constant'] + period_col_list)
             for v in variables:
-                self._write_variable(v, writer)
+                if v.ndim == 0:
+                    result = [v.result] if v.is_constant else ([''] + v.result.tolist())
+                    writer.writerow([v.group, v.owner, v.name] + result)
+                else:
+                    meta_col = [v.group, v.owner]
+                    for label, result in self._proj_variable_manager.normalize_nd_result(
+                            v, dim_joiner=":", dim_bracket=("[", "]")):
+                        result = [result] if v.is_constant else ([''] + result.tolist())
+                        writer.writerow(meta_col + [label] + result)
         self._result_files.add(output_file)
 
     def _write_stochastic_result(self) -> None:
@@ -321,109 +327,41 @@ class ProjModelEngine:
                 self._write_stoch_variable(v, writer, self._run_config.simulation, pos_lst_m, pos_lst_y)
         self._result_files.add(output_file)
 
+    @property
+    def proj_variable_manager(self) -> ProjVariableManager:
+        return self._proj_variable_manager
+
     def attach_proj_variable(self, proj_variable: ProjVariable, /) -> None:
-        """Attach a projection variable into `_proj_variables`
-
-        Args:
-            proj_variable (ProjVariable): Projection variable to be attched.
-
-        Raises:
-            TypeError: Invalid type.
-            ValueError: Projection variable already attched.
-        """
-        if not isinstance(proj_variable, ProjVariable):
-            raise TypeError(f"Invalid type {type(proj_variable)}, expected 'ProjVariable'.")
-        ref = weakref.ref(proj_variable)
-        if ref not in self._proj_variables:
-            self._proj_variables.append(ref)
-
-    def __rmatmul__(self, other: ProjVariable) -> ProjVariable:
-        self.attach_proj_variable(other)
-        return other
+        self._proj_variable_manager.attach_proj_variable(proj_variable)
 
     def _select_variables(self, user_select: str, default_full_or_none: Literal['full', 'none']) -> list | None:
-        sel_spc_dict = self.load_json(user_select, allow_not_found=True)
-        if sel_spc_dict is None:
-            if default_full_or_none == 'full':
-                return [r() for r in self._proj_variables if r() is not None]
-            else:
-                return None
-
-        def _is_select(v: ProjVariable) -> bool:
-            if v is None:
-                return False
-            group_dict = sel_spc_dict.get(v.group)
-            if group_dict is None:
-                return False
-            if not group_dict:  # group key is included and var name is empty: regarded as all var names included
-                return True
-            include, exclude = group_dict.get("include"), group_dict.get("exclude")
-            if include:
-                if isinstance(include, str) and include.lower() == "__all__":
-                    return True
-                return isinstance(include, list) and v.name in include
-            if exclude:
-                return isinstance(exclude, list) and v.name not in exclude
-            return True  # dict has key other than 'include' or 'exclude': regarded as all var names included
-
-        return [r() for r in self._proj_variables if _is_select(r())]
-
-    def _write_variable(self, variable: ProjVariable, writer: csv.writer) -> None:
-        if variable.ndim == 0:
-            self._write_0d_variable(variable, writer)
-        else:
-            self._write_nd_variable(variable, writer)
-
-    @staticmethod
-    def _write_0d_variable(variable: ProjVariable, writer: csv.writer) -> None:
-        result = variable.result
-        result = [result] if variable.is_constant else [''] + result.tolist()
-        writer.writerow([variable.group, variable.owner, variable.name] + result)
-
-    @staticmethod
-    def _write_nd_variable(variable: ProjVariable, writer: csv.writer) -> None:
-        fixcol = [variable.group, variable.owner]
-        dim_ranges = [range(len(dim)) for dim in variable.dims]
-        for dim_index in product(*dim_ranges):
-            dimstr = ":".join([variable.dims[i][dim_index[i]] for i in range(variable.ndim)])
-            result = variable.result[(slice(0, None),) + dim_index]
-            result = [result] if variable.is_constant else [''] + result.tolist()
-            writer.writerow(fixcol + [f'{variable.name}[{dimstr}]'] + result)
+        where = self.load_json(user_select, allow_not_found=True)
+        if where is None and default_full_or_none == 'none':
+            return None
+        return self._proj_variable_manager.select(where)
 
     def _write_stoch_variable(self, variable: ProjVariable, writer: csv.writer, sim: int,
                               pos_lst_m: list[int], pos_lst_y: list[int]) -> None:
         if variable.ndim == 0:
-            self._write_0d_stoch_variable(variable, writer, sim, pos_lst_m, pos_lst_y)
-        else:
-            self._write_nd_stoch_variable(variable, writer, sim, pos_lst_m, pos_lst_y)
-
-    @staticmethod
-    def _write_0d_stoch_variable(variable: ProjVariable, writer: csv.writer, sim: int,
-                                 pos_lst_m: list[int], pos_lst_y: list[int]) -> None:
-        result = variable.result
-        if variable.is_constant:
-            result_lst = [result]
-        else:
-            result_lst_m = result[pos_lst_m].tolist()
-            result_lst_y = result[pos_lst_y].tolist()  # to be enhanced, currently only correct for BS variable
-            result_lst = [''] + result_lst_m + result_lst_y
-        writer.writerow([sim, variable.group, variable.owner, variable.name] + result_lst)
-
-    @staticmethod
-    def _write_nd_stoch_variable(variable: ProjVariable, writer: csv.writer, sim: int,
-                                 pos_lst_m: list[int], pos_lst_y: list[int]) -> None:
-        fixcol = ([sim] if sim else []) + [variable.group, variable.owner]
-        dim_ranges = [range(len(dim)) for dim in variable.dims]
-        for dim_index in product(*dim_ranges):
-            dimstr = ":".join([variable.dims[i][dim_index[i]] for i in range(variable.ndim)])
-            result = variable.result[(slice(0, None),) + dim_index]
+            result = variable.result
             if variable.is_constant:
                 result_lst = [result]
             else:
                 result_lst_m = result[pos_lst_m].tolist()
                 result_lst_y = result[pos_lst_y].tolist()  # to be enhanced, currently only correct for BS variable
                 result_lst = [''] + result_lst_m + result_lst_y
-            writer.writerow(fixcol + [f'{variable.name}[{dimstr}]'] + result_lst)
+            writer.writerow([sim, variable.group, variable.owner, variable.name] + result_lst)
+        else:
+            meta_col = ([sim] if sim else []) + [variable.group, variable.owner]
+            for label, result in self._proj_variable_manager.normalize_nd_result(
+                    variable, dim_joiner=":", dim_bracket=("[", "]")):
+                if variable.is_constant:
+                    result_lst = [result]
+                else:
+                    result_lst_m = result[pos_lst_m].tolist()
+                    result_lst_y = result[pos_lst_y].tolist()  # to be enhanced, currently only correct for BS variable
+                    result_lst = [''] + result_lst_m + result_lst_y
+                writer.writerow(meta_col + [label] + result_lst)
 
     @property
     def runlog(self) -> dict[str, ...] | None:

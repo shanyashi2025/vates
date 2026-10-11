@@ -1,7 +1,10 @@
 import numpy as np
 import pandas as pd
+import weakref
 from abc import ABC, abstractmethod
 from enum import Enum
+from itertools import product
+from typing import Self
 
 
 class ProjVariable(ABC):
@@ -11,7 +14,7 @@ class ProjVariable(ABC):
     name: str
     owner: str
     group: str
-    dims: list | None
+    dims: tuple | None
     ndim: int
     result: float | np.ndarray | None
     is_constant: bool
@@ -74,8 +77,9 @@ class ProjVariable(ABC):
     def __setitem__(self, index, value):
         ...
 
-    def __matmul__(self, other):
-        return other.__rmatmul__(self)
+    def __matmul__(self, other: 'ProjVariableManager') -> Self:
+        other.attach_proj_variable(self)
+        return self
 
 
 class ConstVariable(ProjVariable):
@@ -315,3 +319,87 @@ class TDimVariable(ProjVariable):
             self._result[t] = value
         else:
             self._result[t,] = value.copy()
+
+
+class ProjVariableManager:
+
+    def __init__(self):
+        self._proj_variables: list[weakref.ref[ProjVariable]] = []
+
+    def attach_proj_variable(self, obj: ProjVariable, /) -> None:
+        """Attach a projection variable into `_proj_variables`
+
+        Args:
+            obj (ProjVariable): Projection variable to be attched.
+
+        Raises:
+            TypeError: Invalid type.
+            ValueError: Projection variable already attched.
+        """
+        if not isinstance(obj, ProjVariable):
+            raise TypeError(f"Invalid type {type(obj)}, expected 'ProjVariable'.")
+        ref = weakref.ref(obj)
+        if ref not in self._proj_variables:
+            self._proj_variables.append(ref)
+
+    def __rmatmul__(self, obj: ProjVariable) -> ProjVariable:
+        self.attach_proj_variable(obj)
+        return obj
+
+    def clear_dead(self) -> None:
+        self._proj_variables[:] = [ref for ref in self._proj_variables if ref() is not None]
+
+    def select(self, where: dict[str, dict] | None = None) -> list[ProjVariable]:
+        ls = [ref() for ref in self._proj_variables if ref() is not None]
+        if where is None:
+            return ls
+        return [ref for ref in ls if self._is_select(ref, where)]
+
+    @classmethod
+    def _is_select(cls, v: ProjVariable, where: dict[str, dict] | None) -> bool:
+        group: dict[str, str | list] | None = where.get(v.group, None)
+        if group is None:
+            return False
+
+        include = group.get("include", None)
+        if include is not None:
+            if isinstance(include, str):
+                return (include.lower() == "__all__") or (v.name == include)
+            elif isinstance(include, list):
+                return v.name in include
+            else:
+                raise TypeError(f"Invalid type of 'include': {type(include)}, epxected ('str', 'list[str]').")
+
+        exclude = group.get("exclude", None)
+        if exclude is not None:
+            if isinstance(exclude, list):
+                return v.name not in exclude
+            elif isinstance(exclude, str):
+                return v.name != exclude
+            else:
+                raise TypeError(f"Invalid type of 'include': {type(exclude)}, epxected ('str', 'list[str]').")
+
+        return True  # if niether 'include' nor 'exclude' provided, all variables in the group are included
+
+    @classmethod
+    def normalize_nd_result(cls, v: ProjVariable, dim_joiner: str = ":", dim_bracket: tuple[str, str] = ("[", "]")
+                            ) -> list[tuple[str, np.ndarray]]:
+        _left, right_ = dim_bracket
+        indexed_dims = (list(enumerate(dim)) for dim in v.dims)
+        ls = []
+        for item in product(*indexed_dims):
+            dim_idx, dim_str = map(tuple, zip(*item))
+            label = f"{v.name}{_left}{dim_joiner.join(dim_str)}{right_}"
+            result = v.result[(slice(0, None),) + dim_idx]
+            ls.append((label, result))
+        return ls
+
+    def __contains__(self, item) -> bool:
+        ref = item if isinstance(item, weakref.ref) else weakref.ref(item)
+        return ref in self._proj_variables
+
+    def __iter__(self):
+        for ref in self._proj_variables:
+            obj = ref()
+            if obj is not None:
+                yield obj

@@ -51,5 +51,3 @@ class ProjectionTimeSynchronizer:
             hook = getattr(listener, "_on_time_change", None)
             if hook is not None:
                 hook()
-
-
