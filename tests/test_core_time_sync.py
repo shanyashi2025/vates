@@ -422,12 +422,12 @@ class TestAddProjectionTimeSynchronizer:
                 pass
 
         asset = Asset()
-        assert asset in _FALLBACK.time_synchronizer._listeners
-        assert asset.time == _FALLBACK.time_synchronizer.time
-        assert asset.period == _FALLBACK.time_synchronizer.period
+        assert asset in _FALLBACK.synchronizer._listeners
+        assert asset.time == _FALLBACK.synchronizer.time
+        assert asset.period == _FALLBACK.synchronizer.period
         asset = Asset(model_engine=None)
-        assert asset in _FALLBACK.time_synchronizer._listeners
-        assert asset.period == _FALLBACK.time_synchronizer.period
+        assert asset in _FALLBACK.synchronizer._listeners
+        assert asset.period == _FALLBACK.synchronizer.period
 
     def test_model_engine_without_synchronizer_uses_fallback(self, monkeypatch):
         @time_synchronized("model_engine.time_synchronizer")
@@ -436,9 +436,9 @@ class TestAddProjectionTimeSynchronizer:
                 pass
 
         asset = Asset(model_engine=object())
-        assert asset in _FALLBACK.time_synchronizer._listeners
-        assert asset.time == _FALLBACK.time_synchronizer.time
-        assert asset.period == _FALLBACK.time_synchronizer.period
+        assert asset in _FALLBACK.synchronizer._listeners
+        assert asset.time == _FALLBACK.synchronizer.time
+        assert asset.period == _FALLBACK.synchronizer.period
 
 
     def test_original_init_still_runs(self, make_configured, tmp_path):

@@ -9,20 +9,20 @@ from vates._core._proj_variables import ConstVariable, TDimVariable
 
 class _FALLBACK:
     engine: ProjModelEngine
-    time_synchronizer: ProjectionTimeSynchronizer
+    synchronizer: ProjectionTimeSynchronizer
 
 def _make_fallback_engine(start_year: int | None = None) -> ProjModelEngine:
     start_year = start_year if start_year is not None else FALLBACK_START_YEAR
     engine = ProjModelEngine(slug="fallback").configure_run(start_year=start_year, end_year=start_year + 10)
     setattr(_FALLBACK, "engine", engine)
-    setattr(_FALLBACK, "time_synchronizer", engine.time_synchronizer)
+    setattr(_FALLBACK, "synchronizer", engine.time_synchronizer)
     return engine
 
 def get_fallback_engine() -> ProjModelEngine:
     return getattr(_FALLBACK, "engine", None) or _make_fallback_engine()
 
-def get_fallback_time_synchronizer() -> ProjectionTimeSynchronizer:
-    return getattr(_FALLBACK, "time_synchronizer", None) or _make_fallback_engine().time_synchronizer
+def get_fallback_synchronizer() -> ProjectionTimeSynchronizer:
+    return getattr(_FALLBACK, "synchronizer", None) or _make_fallback_engine().time_synchronizer
 
 
 def time_synchronized(key: str, /):
@@ -64,7 +64,7 @@ def time_synchronized(key: str, /):
             else:
                 synchronizer = bound.arguments.get(sync_param)
             if synchronizer is None:
-                synchronizer = get_fallback_time_synchronizer()
+                synchronizer = get_fallback_synchronizer()
             if synchronizer is None:
                 raise ValueError(f"Failed to get projection time synchronizer.")
 
