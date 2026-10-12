@@ -77,8 +77,10 @@ class ProjVariable(ABC):
     def __setitem__(self, index, value):
         ...
 
-    def __matmul__(self, other: 'ProjVariableManager') -> Self:
-        other.attach_proj_variable(self)
+    def __matmul__(self, other) -> Self:
+        hook = getattr(other, "attach_proj_variable", None)
+        if hook is not None:
+            hook(self)
         return self
 
 
@@ -323,6 +325,8 @@ class TDimVariable(ProjVariable):
 
 class ProjVariableManager:
 
+    __slots = ("_proj_variables",)
+
     def __init__(self):
         self._proj_variables: list[weakref.ref[ProjVariable]] = []
 
@@ -342,9 +346,9 @@ class ProjVariableManager:
         if ref not in self._proj_variables:
             self._proj_variables.append(ref)
 
-    def __rmatmul__(self, obj: ProjVariable) -> ProjVariable:
-        self.attach_proj_variable(obj)
-        return obj
+    def __rmatmul__(self, other: ProjVariable) -> ProjVariable:
+        self.attach_proj_variable(other)
+        return other
 
     def clear_dead(self) -> None:
         self._proj_variables[:] = [ref for ref in self._proj_variables if ref() is not None]

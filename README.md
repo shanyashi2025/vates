@@ -131,10 +131,10 @@ print(df)
 
 # 2. read value of a specific cell (group + owner + variable + date)
 val = model.proj_result(
-  group="group",
-  owner="owner",
-  variable="tdim_var",
-  date="202602",
+    group="group",
+    owner="owner",
+    variable="tdim_var",
+    date="202602",
 )
 print(f"{val:.4f}")  # 202602.0200
 ```
@@ -147,19 +147,19 @@ from vates import proj_result
 
 # 1. Get the entire results 
 df = proj_result(
-  results_directory=r"results",
-  slug="my_model",
+    results_directory=r"results",
+    slug="my_model",
 )
 print(df)
 
 # 2. Get value of a specific cell (group + owner + variable + date)
 val = proj_result(
-  results_directory=r"results",
-  slug="my_model",
-  group="group",
-  owner="owner",
-  variable="tdim_var",
-  date="202602",
+    results_directory=r"results",
+    slug="my_model",
+    group="group",
+    owner="owner",
+    variable="tdim_var",
+    date="202602",
 )
 print(f"{val:.4f}")  # 202602.0200
 ```
@@ -180,18 +180,18 @@ Similarly,
 from vates import ProjModelEngine, StochExecutor
 
 def my_projection(m: ProjModelEngine):
-  t = m.time
-  if t == 0:
-    print(f"simulation: {m.SIMULATION}")
+    t = m.time
+    if t == 0:
+        print(f"simulation: {m.SIMULATION}")
 
 def stoch_model():
-  model = StochExecutor(slug='my_stoch_model', description='example stochastic model')
-  model.configure_run(start_year=2025, end_year=2026, simulations="1-10", max_workers=2)
-  model.bind_projection(my_projection)
-  model.run()
+    model = StochExecutor(slug='my_stoch_model', description='example stochastic model')
+    model.configure_run(start_year=2025, end_year=2026, simulations="1-10", max_workers=2)
+    model.bind_projection(my_projection)
+    model.run()
 
 if __name__ == '__main__':
-  stoch_model()
+    stoch_model()
 ```
 
 Following information will display in the terminal:

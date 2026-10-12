@@ -2,7 +2,31 @@ import pandas as pd
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import overload
 
+@overload
+def proj_result(
+    *,
+    results_directory: str | Path,
+    slug: str,
+    group: None = None,
+    owner: None = None,
+    variable: None = None,
+    date: None = None,
+) -> pd.DataFrame:
+    ...
+
+@overload
+def proj_result(
+    *,
+    results_directory: str | Path,
+    slug: str,
+    group: str,
+    owner: str,
+    variable: str,
+    date: str | int | pd.Period | None = None,
+) -> float:
+    ...
 
 def proj_result(
     *,

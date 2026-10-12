@@ -10,7 +10,7 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 from types import MethodType
-from typing import Callable, Literal, Self, get_type_hints
+from typing import Callable, Literal, Self, get_type_hints, overload
 
 from vates._core._proj_result_reader import proj_result
 from vates._core._proj_variables import ProjVariable, ProjVariableManager
@@ -577,8 +577,16 @@ class ProjModelEngine:
         lineno = frame.f_lineno
         self._messages.append(f"{filename}:{lineno}: {msg}")
 
+    @overload
+    def proj_result(self, *, group: None = None, owner: None = None, variable: None = None, date: None = None) -> pd.DataFrame:
+        ...
+
+    @overload
+    def proj_result(self, *, group: str, owner: str, variable: str, date: str | int | None = None) -> float:
+        ...
+
     def proj_result(self, *, group: str | None = None, owner: str | None = None, variable: str | None = None,
-                    date: str | int | None = None,) -> pd.DataFrame | float:
+                    date: str | int | None = None) -> pd.DataFrame | float:
         return proj_result(results_directory=self.RESULTS_DIRECTORY_PATH, slug=self.SLUG,
                            group=group, owner=owner, variable=variable, date=date)
 

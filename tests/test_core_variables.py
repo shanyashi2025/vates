@@ -259,10 +259,10 @@ class TestMakeVariable:
         with pytest.raises(AttributeError, match="START_DATE"):
             v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
 
-    def test_engine_has_no_attach_raises(self):
+    def test_engine_has_no_attach_silently_leaves(self):
         class NoAttachEngine:
             MAX_T = 24
             START_DATE = None
         engine = NoAttachEngine()
-        with pytest.raises(AttributeError, match="attach_proj_variable"):
-            v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
+        v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
+        assert isinstance(v, TDimVariable)

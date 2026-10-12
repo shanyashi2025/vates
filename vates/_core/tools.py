@@ -1,29 +1,29 @@
 import inspect
 from typing import Literal
 
-from vates.global_conf import FALLBACK_START_YEAR
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core._time_synchronizer import ProjectionTimeSynchronizer
 from vates._core._proj_variables import ConstVariable, TDimVariable
 
 
 class _FALLBACK:
+    start_year: int = 2025
+    end_year: int = 2045
     engine: ProjModelEngine
     synchronizer: ProjectionTimeSynchronizer
 
-def _make_fallback_engine(start_year: int | None = None) -> ProjModelEngine:
-    start_year = start_year if start_year is not None else FALLBACK_START_YEAR
-    engine = ProjModelEngine(slug="fallback").configure_run(start_year=start_year, end_year=start_year + 10)
-    setattr(_FALLBACK, "engine", engine)
-    setattr(_FALLBACK, "synchronizer", engine.time_synchronizer)
-    return engine
+    @classmethod
+    def make_engine(cls) -> ProjModelEngine:
+        engine = ProjModelEngine(slug="fallback").configure_run(start_year=cls.start_year, end_year=cls.end_year)
+        cls.engine = engine
+        cls.synchronizer = engine.time_synchronizer
+        return engine
 
 def get_fallback_engine() -> ProjModelEngine:
-    return getattr(_FALLBACK, "engine", None) or _make_fallback_engine()
+    return getattr(_FALLBACK, "engine", None) or _FALLBACK.make_engine()
 
 def get_fallback_synchronizer() -> ProjectionTimeSynchronizer:
-    return getattr(_FALLBACK, "synchronizer", None) or _make_fallback_engine().time_synchronizer
-
+    return getattr(_FALLBACK, "synchronizer", None) or _FALLBACK.make_engine().time_synchronizer
 
 def time_synchronized(key: str, /):
     """Attach the instance as a listener of `time_synchronizer`, and add two attributes `time` and `period`.
@@ -104,6 +104,4 @@ def make_proj_variable(
         var = TDimVariable(name, owner=owner, group=group, dims=dims,
                            max_t=model_engine.MAX_T, start_date=model_engine.START_DATE)
 
-    model_engine.attach_proj_variable(var)
-
-    return var
+    return var @ model_engine
