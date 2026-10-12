@@ -4,7 +4,7 @@ import weakref
 from abc import ABC, abstractmethod
 from enum import Enum
 from itertools import product
-from typing import Self
+from typing import Self, Iterator
 
 
 class ProjVariable(ABC):
@@ -386,17 +386,18 @@ class ProjVariableManager:
         return True  # if niether 'include' nor 'exclude' provided, all variables in the group are included
 
     @classmethod
-    def normalize_nd_result(cls, v: ProjVariable, dim_joiner: str = ":", dim_bracket: tuple[str, str] = ("[", "]")
-                            ) -> list[tuple[str, np.ndarray]]:
-        _left, right_ = dim_bracket
-        indexed_dims = (list(enumerate(dim)) for dim in v.dims)
-        ls = []
-        for item in product(*indexed_dims):
-            dim_idx, dim_str = map(tuple, zip(*item))
-            label = f"{v.name}{_left}{dim_joiner.join(dim_str)}{right_}"
-            result = v.result[(slice(0, None),) + dim_idx]
-            ls.append((label, result))
-        return ls
+    def iter_label_result(cls, v: ProjVariable, dim_joiner: str = ":", dim_bracket: tuple[str, str] = ("[", "]")
+                          ) -> Iterator[tuple[str, float | np.ndarray]]:
+        if v.ndim == 0:
+            yield v.name, v.result
+        else:
+            _left, right_ = dim_bracket
+            indexed_dims = (list(enumerate(dim)) for dim in v.dims)
+            for item in product(*indexed_dims):
+                dim_idx, dim_str = map(tuple, zip(*item))
+                label = f"{v.name}{_left}{dim_joiner.join(dim_str)}{right_}"
+                result = v.result[(slice(0, None),) + dim_idx]
+                yield label, result
 
     def __contains__(self, item) -> bool:
         ref = item if isinstance(item, weakref.ref) else weakref.ref(item)

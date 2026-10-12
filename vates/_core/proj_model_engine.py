@@ -261,9 +261,12 @@ class ProjModelEngine:
 
     def _write_projection_result(self) -> None:
         """Write the projection result."""
-        if not self._run_config.enable_write_proj_result: return
-        variables = self._select_variables('__proj_variables__.json', 'full')
-        if not variables: return  # empty list
+        if not self._run_config.enable_write_proj_result:
+            return
+        variables = self._proj_variable_manager.select(
+            where=self.load_json('__proj_variables__.json', allow_not_found=True))
+        if not variables:
+            return  # empty list
 
         periods = pd.period_range(start=self.START_DATE, end=self.END_DATE, freq='M')
         period_col_list = list(map(lambda p: p.year * 100 + p.month, periods))
@@ -273,23 +276,23 @@ class ProjModelEngine:
             writer = csv.writer(csvfile)
             writer.writerow(['group', 'owner', 'variable', 'constant'] + period_col_list)
             for v in variables:
-                if v.ndim == 0:
-                    result = [v.result] if v.is_constant else ([''] + v.result.tolist())
-                    writer.writerow([v.group, v.owner, v.name] + result)
-                else:
-                    meta_col = [v.group, v.owner]
-                    for label, result in self._proj_variable_manager.normalize_nd_result(
-                            v, dim_joiner=":", dim_bracket=("[", "]")):
-                        result = [result] if v.is_constant else ([''] + result.tolist())
-                        writer.writerow(meta_col + [label] + result)
+                meta_col = [v.group, v.owner]
+                for label, result in self._proj_variable_manager.iter_label_result(
+                        v, dim_joiner=":", dim_bracket=("[", "]")):
+                    result_ls = [result] if v.is_constant else ([''] + result.tolist())
+                    writer.writerow(meta_col + [label] + result_ls)
         self._result_files.add(output_file)
 
     def _write_stochastic_result(self) -> None:
         """Write the stochastic result."""
         if not self._run_config.stoch_result_file_mode:
             return
-        variables = self._select_variables('__stoch_variables__.json', 'none')
-        if not variables: return  # empty list
+        where = self.load_json('__stoch_variables__.json', allow_not_found=True)
+        if where is None:
+            return
+        variables = self._proj_variable_manager.select(where)
+        if not variables:
+            return  # empty list
 
         stoch_setting = self.load_json('__stoch_setting__.json', allow_not_found=True)
         noy_mres = stoch_setting.get('number_of_years_monthly_results_retained', 0) if stoch_setting else 0
@@ -298,12 +301,10 @@ class ProjModelEngine:
         periods_m = pd.period_range(
             start=self.START_DATE, end=f'{min(self.START_YEAR + noy_mres, self.END_YEAR)}-{12}', freq='M')
         periods_y = pd.period_range(start=self.START_YEAR, end=self.END_YEAR, freq='Y')
-        period_lst = list(map(lambda p: p.year * 100 + p.month, periods))
-        period_lst_m = list(map(lambda p: p.year * 100 + p.month, periods_m))
-        period_lst_y = list(map(lambda p: p.year, periods_y))
-        pos_lst_m = [period_lst.index(x) for x in period_lst_m]
-        pos_lst_y = [period_lst.index(x * 100 + 12) for x in period_lst_y]
-        period_col_list = period_lst_m + period_lst_y
+        dates = list(map(lambda p: p.year * 100 + p.month, periods))
+        dates_m = list(map(lambda p: p.year * 100 + p.month, periods_m))
+        dates_y = list(map(lambda p: p.year, periods_y))
+        indices = [dates.index(x) for x in dates_m] + [dates.index(x * 100 + 12) for x in dates_y]
 
         file_id = self._run_config.stoch_result_file_id
         file_id += '.' if file_id else ''
@@ -321,47 +322,17 @@ class ProjModelEngine:
 
         with open(output_file, output_mode, newline='', encoding='utf-8-sig') as csvfile:
             writer = csv.writer(csvfile)
+            sim = self._run_config.simulation
             if output_mode == 'w':  # write header
-                writer.writerow(['simulation', 'group', 'owner', 'variable', 'constant'] + period_col_list)
+                writer.writerow(['simulation', 'group', 'owner', 'variable', 'constant'] + dates_m + dates_y)
             for v in variables:
-                self._write_stoch_variable(v, writer, self._run_config.simulation, pos_lst_m, pos_lst_y)
+                meta_col = ([sim] if sim else []) + [v.group, v.owner]
+                for label, result in self._proj_variable_manager.iter_label_result(
+                        v, dim_joiner=":", dim_bracket=("[", "]")):
+                    result_ls = [result] if v.is_constant else ([''] + result[indices].tolist())
+                    writer.writerow(meta_col + [label] + result_ls)
+
         self._result_files.add(output_file)
-
-    @property
-    def proj_variable_manager(self) -> ProjVariableManager:
-        return self._proj_variable_manager
-
-    def attach_proj_variable(self, proj_variable: ProjVariable, /) -> None:
-        self._proj_variable_manager.attach_proj_variable(proj_variable)
-
-    def _select_variables(self, user_select: str, default_full_or_none: Literal['full', 'none']) -> list | None:
-        where = self.load_json(user_select, allow_not_found=True)
-        if where is None and default_full_or_none == 'none':
-            return None
-        return self._proj_variable_manager.select(where)
-
-    def _write_stoch_variable(self, variable: ProjVariable, writer: csv.writer, sim: int,
-                              pos_lst_m: list[int], pos_lst_y: list[int]) -> None:
-        if variable.ndim == 0:
-            result = variable.result
-            if variable.is_constant:
-                result_lst = [result]
-            else:
-                result_lst_m = result[pos_lst_m].tolist()
-                result_lst_y = result[pos_lst_y].tolist()  # to be enhanced, currently only correct for BS variable
-                result_lst = [''] + result_lst_m + result_lst_y
-            writer.writerow([sim, variable.group, variable.owner, variable.name] + result_lst)
-        else:
-            meta_col = ([sim] if sim else []) + [variable.group, variable.owner]
-            for label, result in self._proj_variable_manager.normalize_nd_result(
-                    variable, dim_joiner=":", dim_bracket=("[", "]")):
-                if variable.is_constant:
-                    result_lst = [result]
-                else:
-                    result_lst_m = result[pos_lst_m].tolist()
-                    result_lst_y = result[pos_lst_y].tolist()  # to be enhanced, currently only correct for BS variable
-                    result_lst = [''] + result_lst_m + result_lst_y
-                writer.writerow(meta_col + [label] + result_lst)
 
     @property
     def runlog(self) -> dict[str, ...] | None:
@@ -570,6 +541,13 @@ class ProjModelEngine:
         if not self.START_DATE <= value <= self.END_DATE :
             raise ValueError(f"period: value {value} is not allowed, expected {self.START_DATE}) to {self.END_DATE}.")
         self._time_synchronizer.set(period=value, time=(value - self.START_DATE).n)
+
+    @property
+    def proj_variable_manager(self) -> ProjVariableManager:
+        return self._proj_variable_manager
+
+    def attach_proj_variable(self, proj_variable: ProjVariable, /) -> None:
+        self._proj_variable_manager.attach_proj_variable(proj_variable)
 
     def append_traced_message(self, /, msg: str):
         frame = inspect.currentframe().f_back
