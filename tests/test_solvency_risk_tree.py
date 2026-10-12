@@ -143,7 +143,7 @@ class TestRiskAggregation:
         # `math.sqrt` rejects it.
         corr = np.array([[1.0, -0.9, -0.9], [-0.9, 1.0, -0.9], [-0.9, -0.9, 1.0]])
         assert float(np.ones(3) @ corr @ np.ones(3)) < 0.0  # the premise of this test
-        with pytest.raises(ValueError, match="math domain error"):
+        with pytest.raises(ValueError, match="is negative"):
             risk_aggregation(1.0, 1.0, 1.0, corr_matrix=corr)
 
 
@@ -180,8 +180,8 @@ class TestRiskNodeStructure:
         node = RiskNode("Root")
         node.add_child("1 Year", "Other")
         node.set_agg_func(agg)
-        node.get_descendant("1 Year").set_risk_capital(1.0)
-        node.get_descendant("Other").set_risk_capital(2.0)
+        node.get_descendant("1 Year").risk_capital = 1.0
+        node.get_descendant("Other").risk_capital = 2.0
         assert node.risk_capital == 3.0
 
     @pytest.mark.parametrize("identifier", [1, 0, False], ids=["int", "falsy int", "bool"])
@@ -371,8 +371,8 @@ class TestCapitalAggregation:
             return non_life + 2.0 * life
         node.add_child("Non-life", "Life")
         node.set_agg_func(_agg)
-        node.get_descendant("Non-life").set_risk_capital(1.0)
-        node.get_descendant("Life").set_risk_capital(2.0)
+        node.get_descendant("Non-life").risk_capital = 1.0
+        node.get_descendant("Life").risk_capital = 2.0
         assert node.risk_capital == 5.0
 
     def test_explicit_identifier_is_the_keyword(self):
@@ -381,8 +381,8 @@ class TestCapitalAggregation:
             return property_ + equity
         node.add_child(RiskNode("Property", identifier="property_"), "Equity")
         node.set_agg_func(_agg)
-        node.get_descendant("Property").set_risk_capital(1.0)
-        node.get_descendant("Equity").set_risk_capital(2.0)
+        node.get_descendant("Property").risk_capital = 1.0
+        node.get_descendant("Equity").risk_capital = 2.0
         assert node.risk_capital == 3.0
 
     def test_set_risk_capital_on_a_non_leaf_raises_value_error(self, tree):
@@ -428,7 +428,7 @@ class TestCapitalAggregation:
 
     def test_aggregate_does_nothing_on_a_leaf(self):
         node = RiskNode("A")
-        node.aggregate()
+        node._aggregate()
         with pytest.raises(ValueError, match="hasn't been provided"):
             node.risk_capital
 
@@ -454,11 +454,11 @@ class TestCapitalAggregation:
         node = RiskNode("P")
         node.add_child("A", "B")
         node.set_agg_func(_sum_agg)
-        node.get_descendant("A").set_risk_capital(1.0)
-        node.get_descendant("B").set_risk_capital(2.0)
+        node.get_descendant("A").risk_capital= 1.0
+        node.get_descendant("B").risk_capital= 2.0
         assert node.risk_capital == 3.0
         extra = RiskNode("C")
-        extra.set_risk_capital(10.0)
+        extra.risk_capital= 10.0
         node.add_child(extra)
         assert node.risk_capital == 13.0
 
@@ -466,11 +466,11 @@ class TestCapitalAggregation:
         # The same invalidation seen from the leaf side: the node is internal now,
         # so its old leaf value must not survive as "the" capital.
         node = RiskNode("Q")
-        node.set_risk_capital(7.0)
+        node.risk_capital = 7.0
         node.add_child("X")
         node.set_agg_func(_sum_agg)
         assert node._risk_capital is None
-        node.get_descendant("X").set_risk_capital(3.0)
+        node.get_descendant("X").risk_capital = 3.0
         assert node.risk_capital == 3.0
 
     def test_set_agg_func_twice_raises_value_error(self):
@@ -640,8 +640,19 @@ class TestRiskTree:
         tree.root.add_child("A", "B")
         tree.root.set_agg_func(lambda a, b: math.sqrt(a ** 2 + b ** 2))
         tree.batch_set_risk_capital({"A": 3.0, "B": 4.0})
-        assert tree.get_risk_diversification() == pytest.approx(2.0)  # 7 - 5
-        assert tree.get_risk_diversification("A") == 0.0  # leaf
+        assert tree.get_risk_diversification(sign="+") == pytest.approx(2.0)  # 7 - 5
+        assert tree.get_risk_diversification(sign="-") == pytest.approx(- 2.0)
+        assert tree.get_risk_diversification("A", sign="+") == 0.0  # leaf
+        assert tree.get_risk_diversification("A", sign="-") == 0.0  # leaf
+
+    @pytest.mark.parametrize("sign", ["positive", 1.0, None])
+    def test_wrong_diversification_sign_raises(self, sign):
+        tree = RiskTree("T")
+        tree.root.add_child("A", "B")
+        tree.root.set_agg_func(lambda a, b: math.sqrt(a ** 2 + b ** 2))
+        tree.batch_set_risk_capital({"A": 3.0, "B": 4.0})
+        with pytest.raises(ValueError, match="Invalid sign"):
+            tree.get_risk_diversification(sign=sign)
 
     def test_subtree_is_a_live_view(self, tree):
         subtree = tree.get_subtree("M")
@@ -970,7 +981,7 @@ class TestSolvencyModules:
         # hierarchy aggregates without any `agg_func` parameter-name mismatch.
         assert leaves and tree.get_risk_capital() == 0.0
         for leaf in leaves:
-            leaf.set_risk_capital(1_000_000.0)
+            leaf.risk_capital = 1_000_000.0
         assert tree.get_risk_capital() > 0.0
         tree.zeroize()
         assert tree.get_risk_capital() == 0.0
@@ -984,7 +995,7 @@ class TestSolvencyModules:
         assert [n.name for n in sub.get_all_nodes()] == [
             n.name for n in top.get_subtree(path).get_all_nodes()]
         leaf = sub.get_leaf_nodes()[0]
-        leaf.set_risk_capital(1.0)
+        leaf.risk_capital = 1.0
         assert leaf.risk_capital == 1.0
         top_leaf = top.get_node(f"{path}/{leaf.path}")
         assert top_leaf is not leaf

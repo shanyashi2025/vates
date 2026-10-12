@@ -53,7 +53,6 @@ to obtain an independent structure.
 """
 
 import functools
-import math
 import numbers
 import numpy as np
 from dataclasses import dataclass
@@ -101,7 +100,10 @@ def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
     corr_matrix = np.array(corr_matrix)
     if corr_matrix.shape != (n, n):
         raise ValueError(f'Correlation matrix shape: {corr_matrix.shape}, expected ({n}, {n}).')
-    return math.sqrt(risk_vector @ corr_matrix @ risk_vector.T)
+    val = risk_vector @ corr_matrix @ risk_vector.T
+    if val < 0:  # non positive semi-definite matrix
+        raise ValueError(f"X' @ corr_matrix @ X is negative: {val:.6f}; cannot calculate sqrt.")
+    return np.sqrt(val)
 
 def on_structure_locked_rejected(func):
     """Refuse a structural mutator with an ``AttributeError`` while the structure is locked."""
@@ -236,10 +238,35 @@ class RiskNode:
                 internal node whose capitals cannot be aggregated.
         """
         if self._risk_capital is None:
-            self.aggregate()
+            self._aggregate()
         if self._risk_capital is None:
             raise ValueError(f"{self._name}: risk capital hasn't been {'provided' if self.is_leaf else 'aggregated'}.")
         return self._risk_capital
+
+    @risk_capital.setter
+    def risk_capital(self, value: float, /) -> None:
+        """
+        Provide the risk capital of a leaf node.
+
+        The cached capital of all ancestors is cleared, so that they recompute on
+        their next access.
+
+        Args:
+            value (float): The risk capital to store.
+
+        Raises:
+            ValueError: If this node is not a leaf, or if ``value`` is NaN.
+            TypeError: If ``value`` is not a real number (usually expected `float`).
+        """
+        if not self.is_leaf:
+            raise ValueError(f"{self._name}: non-leaf node rejects set value for risk capital.")
+        if isinstance(value, bool) or not isinstance(value, numbers.Real):
+            raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
+        if value != value:  # finiteness guard for NaN
+            raise ValueError(f"Invalid value of risk capital: {value!r}.")
+        self._risk_capital = value
+        if self._parent is not None:
+            self._parent._clear_risk_capital_cache()  # cascade
 
     @property
     @on_structure_locked_cached("_root")
@@ -425,30 +452,6 @@ class RiskNode:
         self._agg_scope = scope or self._allowed_agg_scopes[0]
         self._clear_risk_capital_cache()
 
-    def set_risk_capital(self, value: float, /) -> None:
-        """
-        Provide the risk capital of a leaf node.
-
-        The cached capital of all ancestors is cleared, so that they recompute on
-        their next access.
-
-        Args:
-            value (float): The risk capital to store.
-
-        Raises:
-            ValueError: If this node is not a leaf, or if ``value`` is NaN.
-            TypeError: If ``value`` is not a real number (usually expected `float`).
-        """
-        if not self.is_leaf:
-            raise ValueError(f"{self._name}: non-leaf node rejects set value for risk capital.")
-        if isinstance(value, bool) or not isinstance(value, numbers.Real):
-            raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
-        if value != value:  # finiteness guard for NaN
-            raise ValueError(f"Invalid value of risk capital: {value!r}.")
-        self._risk_capital = value
-        if self._parent is not None:
-            self._parent._clear_risk_capital_cache()  # cascade
-
     def _clear_risk_capital_cache(self) -> None:
         """
         Clear the cached risk capital of this node and of all its ancestors.
@@ -460,7 +463,7 @@ class RiskNode:
         if self._parent is not None:
             self._parent._clear_risk_capital_cache()  # cascade
 
-    def aggregate(self) -> None:
+    def _aggregate(self) -> None:
         """
         Compute and cache the risk capital of this internal node.
 
@@ -626,7 +629,7 @@ class RiskNode:
         itself when it has no children -- to ``0.0``.
         """
         for node in self.leaves:
-            node.set_risk_capital(0.0)
+            node.risk_capital = 0.0
 
     def duplicate(self, *, with_value: bool = True, is_lock_structure: bool | None = None) -> Self:
         """
@@ -897,7 +900,7 @@ class RiskTree:
         """
         return self.get_node(key).risk_capital
 
-    def get_risk_diversification(self, key: str = "", /) -> float:
+    def get_risk_diversification(self, key: str = "", /, *, sign: Literal["+", "-"]) -> float:
         """
         Diversification benefit at one node of the tree.
 
@@ -914,6 +917,8 @@ class RiskTree:
         Args:
             key: Path of the node relative to the root, or ``""`` (default)
                 for the root itself.
+            sign: Reported as positive or negative, "+" gives ``sum(childeren) - self``,
+                "-" gives ``self - sum(childeren)``.
 
         Returns:
             float: The diversification benefit, ``0.0`` for a leaf node.
@@ -925,7 +930,14 @@ class RiskTree:
         node = self.get_node(key)
         if node.is_leaf:
             return 0.0
-        return sum([c.risk_capital for c in node.children]) - node.risk_capital
+
+        val = sum([c.risk_capital for c in node.children]) - node.risk_capital
+        if sign == "+":
+            return val
+        elif sign == "-":
+            return -val
+        else:
+            raise ValueError(f"Invalid {sign=}, expected ('+', '-').")
 
     def get_node(self, key: str = "", /, default: object = _MISSING) -> RiskNode | object:
         """
@@ -1001,7 +1013,7 @@ class RiskTree:
         See :meth:`RiskNode.set_risk_capital` for the conditions and the
         exceptions raised.
         """
-        self.get_node(key).set_risk_capital(value)
+        self.get_node(key).risk_capital = value
 
     def batch_set_risk_capital(self, leaf_values: dict[str, float | dict], /) -> None:
         """

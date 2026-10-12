@@ -15,9 +15,9 @@ def _floor_at_zero(*args: float) -> tuple[float, ...]:
     return tuple([max(x, 0.0) for x in args])
 
 def _pcr_agg(market: float, life_insurance: float, general_insurance: float, counterparty_default: float,
-             operational: float) -> float:
+             ) -> float:
     return risk_aggregation(market, life_insurance, general_insurance, counterparty_default,
-                            corr_matrix=CORR_MATRIX_PCR) + operational
+                            corr_matrix=CORR_MATRIX_PCR)
 
 def _market_risk_agg(interest_rate_upward: float, interest_rate_downward: float, credit_spread: float, equity: float,
                      property_: float, currency: float, **kwargs) -> float:
@@ -43,7 +43,7 @@ def _gi_risk_agg(reserve_premium: float, catastrophe: float, mortgage_insurance:
 def make_hkrbc_pcr_module(*, submodule: str | None = None) -> RiskTree:
     structure = {
         "HKRBC PCR": {
-            "children": ("Market", "Life Insurance", "General Insurance", "Counterparty Default", "Operational"),
+            "children": ("Market", "Life Insurance", "General Insurance", "Counterparty Default"),
             "agg_func": _pcr_agg},
         "HKRBC PCR/Market": {
             "children": ("Interest Rate", "Credit Spread", "Equity", "Property", "Currency"),

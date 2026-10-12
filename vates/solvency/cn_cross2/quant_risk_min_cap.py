@@ -127,7 +127,7 @@ class MinCapUnit:
         self.tdv_nonlife_mc[t] = self._risk_module.get_risk_capital("Non-life")
         self.tdv_market_mc[t] = self._risk_module.get_risk_capital("Market")
         self.tdv_credit_mc[t] = self._risk_module.get_risk_capital("Credit")
-        self.tdv_divers[t] = self._risk_module.get_risk_diversification()
+        self.tdv_divers[t] = self._risk_module.get_risk_diversification(sign="+")
         self.tdv_loss_absorb[t] = self._loss_absorbency
         self.tdv_min_cap[t] = self._risk_module.get_risk_capital() - self._loss_absorbency
         self._last_calculate = t
@@ -162,7 +162,7 @@ class MinCapUnit:
         return self._risk_module.get_risk_capital(path)
 
     def get_risk_diversification(self, path: str | None = None, /) -> float:
-        return self._risk_module.get_risk_diversification(path)
+        return self._risk_module.get_risk_diversification(path, sign="+")
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -195,7 +195,7 @@ class MinCapConsolidator:
 
     def consolidate(self) -> None:
         for node in self._risk_module.get_leaf_nodes():
-            node.set_risk_capital(sum(unit.get_risk_capital(node.path) for unit in self._units))
+            node.risk_capital = sum(unit.get_risk_capital(node.path) for unit in self._units)
 
         self._loss_absorbency = self._calculate_loss_absorbency()
 
@@ -204,7 +204,7 @@ class MinCapConsolidator:
         self.tdv_nonlife_mc[t] = self._risk_module.get_risk_capital("Non-life")
         self.tdv_market_mc[t] = self._risk_module.get_risk_capital("Market")
         self.tdv_credit_mc[t] = self._risk_module.get_risk_capital("Credit")
-        self.tdv_divers[t] = self._risk_module.get_risk_diversification()
+        self.tdv_divers[t] = self._risk_module.get_risk_diversification(sign="+")
         self.tdv_loss_absorb[t] = self._loss_absorbency
         self.tdv_min_cap[t] = self._risk_module.get_risk_capital() - self._loss_absorbency
         self._last_calculate = t
@@ -217,7 +217,7 @@ class MinCapConsolidator:
         la_risk_module = make_cross2_mc_module()
         for node in (la_risk_module.get_subtree("Market").get_leaf_nodes() +
                      la_risk_module.get_subtree("Credit").get_leaf_nodes()):
-            node.set_risk_capital(sum(unit.get_risk_capital(node.path) for unit in units))
+            node.risk_capital = sum(unit.get_risk_capital(node.path) for unit in units)
 
         return calculate_loss_absorbency(
             mc_market=la_risk_module.get_risk_capital("Market"),
@@ -240,4 +240,4 @@ class MinCapConsolidator:
         return self._risk_module.get_risk_capital(path)
 
     def get_risk_diversification(self, path: str | None = None, /) -> float:
-        return self._risk_module.get_risk_diversification(path)
+        return self._risk_module.get_risk_diversification(path, sign="+")

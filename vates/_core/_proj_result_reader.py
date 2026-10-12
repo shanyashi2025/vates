@@ -97,13 +97,13 @@ class ProjResultFileReader:
                     set_flags(allows_duplicate_labels=False)
                 )
                 cls._cache[file_path] = CacheEntry(df=df, mtime=mtime, size=size)
-                cls._clear_cache_if_needed()
+                cls._maybe_clear_cache()
             cls._cache.move_to_end(file_path)
             return cls._cache[file_path].df.copy()
         except FileNotFoundError:
             raise FileNotFoundError(f"File '{file_path}' does not exist.")
 
     @classmethod
-    def _clear_cache_if_needed(cls):
+    def _maybe_clear_cache(cls):
         if len(cls._cache) > cls.MAX_CACHE_FILES:
             cls._cache.popitem(last=False)
