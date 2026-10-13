@@ -15,7 +15,6 @@ from typing import Callable, Self, get_type_hints
 
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core._run_configuration import RunConfiguration
-from vates.global_conf import CheckLevel, CHECK_LEVEL
 
 
 class StochExecutor:
@@ -26,7 +25,7 @@ class StochExecutor:
     _run_config: RunConfiguration
     _sims_str: str
 
-    append_traced_message = ProjModelEngine.append_traced_message
+    _append_traced_message = ProjModelEngine._append_traced_message
     load_json = ProjModelEngine.load_json
     read_csv = ProjModelEngine.read_csv
     read_excel = ProjModelEngine.read_excel
@@ -113,7 +112,7 @@ class StochExecutor:
             )
         super().__setattr__('_proj_cls', proj_cls)
         super().__setattr__('_projection', func)
-        self.append_traced_message(f"INFO: Function {func} has been bound to {self}.")
+        self._append_traced_message(f"INFO: Function {func} has been bound to {self}.")
         return self
 
     def configure_run(
@@ -186,24 +185,20 @@ class StochExecutor:
         ))
 
         if len(none_items) > 0:
-            msg = f"Default configuration items: {', '.join(none_items)}."
-            self.append_traced_message(f"INFO: {msg}")
-            if CHECK_LEVEL != CheckLevel.BYPASS:
-                warnings.warn(msg)
-
+            self._append_traced_message(f"INFO: Default configuration items: {', '.join(none_items)}.")
         return self
 
     def _apply_max_workers(self, requested_workers: int) -> int:
         if not isinstance(requested_workers, int):
-            self.append_traced_message(f"max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
+            self._append_traced_message(f"max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
             return 1
         if requested_workers <= 0:
-            self.append_traced_message(f"max_workers is set to 1: request={requested_workers}, exptect positive.")
+            self._append_traced_message(f"max_workers is set to 1: request={requested_workers}, exptect positive.")
             return 1
 
         _cpu_count = cpu_count()
         if requested_workers > _cpu_count:
-            self.append_traced_message(f"max_workers is set to {_cpu_count}: requested {requested_workers} > cpu_count.")
+            self._append_traced_message(f"max_workers is set to {_cpu_count}: requested {requested_workers} > cpu_count.")
         return min(requested_workers, _cpu_count)
 
     def run(
@@ -225,7 +220,7 @@ class StochExecutor:
                 if f.endswith(remove_pattern):
                     os.remove(f)
                 else:
-                    self.append_traced_message(f"INFO: Exsiting file NOT deleted: '{f}'.")
+                    self._append_traced_message(f"INFO: Exsiting file NOT deleted: '{f}'.")
         else:
             os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
 
@@ -250,7 +245,7 @@ class StochExecutor:
         projection_args: dict[str, ...]
     ) -> tuple[bool, list, list]:
         success: bool = True
-        result: list = []
+        messages: list = []
         output_files: list = []
 
         for simulation in simulation_batch:
@@ -276,29 +271,29 @@ class StochExecutor:
                     is_delete_existing_results=False,
                     enable_write_runlog=False,
                 )
-            except Exception as e:
+            except Exception:
                 traceback.print_exc()
-                result.append(f"{simulation=}: init error:\n{traceback.format_exc()}")
+                messages.append(f"{simulation=}: `__init__()` ERROR:\n{traceback.format_exc()}")
                 success = False
                 continue # `model_instance` is not successfully initialized, skip `.run()`
 
             try:
                 model_instance.run(projection_args=projection_args)
                 runlog = model_instance.runlog
-                result.append(runlog)
+                messages.append(runlog)
                 output_files.extend(model_instance._result_files)
                 if success and not ("execution" in runlog and runlog["execution"].get("success")):
                     success = False
 
-            except Exception as e:
+            except Exception:
                 traceback.print_exc()
-                result.append(f"{simulation=}: run error:\n{traceback.format_exc()}")
+                messages.append(f"{simulation=}: `run()` error:\n{traceback.format_exc()}")
                 success = False
 
             del model_instance
             gc.collect()
 
-        return success, result, output_files
+        return success, messages, output_files
 
     def _run_simulations_multiprocess(
         self,
@@ -321,9 +316,9 @@ class StochExecutor:
             ]
 
             for future in as_completed(futures):
-                success, result, output_files = future.result()
+                success, messages, output_files = future.result()
                 exec_success = exec_success and success
-                self._sim_messages.extend(result)
+                self._sim_messages.extend(messages)
                 self._result_files.update(output_files)
 
         return exec_success
@@ -348,10 +343,7 @@ class StochExecutor:
                 stat_funcs[f"perc_{q}"] = lambda x, p=q: x.quantile(p / 100)
         agg_dict = {f"{col}:{stat}": (col, func) for col in time_cols for stat, func in stat_funcs.items()}
 
-        df = df.copy()
-        with warnings.catch_warnings():  # latest version of pandas might raise PerformanceWarning
-            warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
-            statistic = df.groupby(meta_cols).agg(**agg_dict).reset_index()
+        statistic = df.groupby(meta_cols).agg(**agg_dict).reset_index()  # pandas 3.3.x might raise PerformanceWarning
 
         output_file = self._concat_output_file_path('.stoch.stat.csv')
         statistic.to_csv(output_file, index=False)
@@ -476,5 +468,5 @@ class StochExecutor:
             elif name.startswith('_'):
                 raise AttributeError(f"Cannot add a private member (underscore-prefixed) '{name}'.")
             if not hasattr(self, name) and hasattr(self, "_messages"):
-                self.append_traced_message(f"INFO: Add member: '{name}' {type(value)}")
+                self._append_traced_message(f"INFO: Add member: '{name}' {type(value)}")
         super().__setattr__(name, value)
