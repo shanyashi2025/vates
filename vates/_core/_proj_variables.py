@@ -19,7 +19,7 @@ class ProjVariable(ABC):
     result: float | np.ndarray | None
     is_constant: bool
 
-    _cached_dims: set[tuple[tuple, ...]] = set()
+    _dims_cache: set[tuple[tuple, ...]] = set()
 
     @classmethod
     def _resolve_dims(cls, dims) -> tuple[tuple, ...] | None:
@@ -63,10 +63,10 @@ class ProjVariable(ABC):
                 raise ValueError(f"{dim}: variable dimension must be either list or enumeration.")
 
         resolved = tuple(resolved)
-        cached = next((x for x in cls._cached_dims if x == resolved), None)
-        if cached is not None:
-            return cached
-        cls._cached_dims.add(resolved)
+        cache = next((x for x in cls._dims_cache if x == resolved), None)
+        if cache is not None:
+            return cache
+        cls._dims_cache.add(resolved)
         return resolved
 
     @abstractmethod
@@ -78,9 +78,9 @@ class ProjVariable(ABC):
         ...
 
     def __matmul__(self, other) -> Self:
-        hook = getattr(other, "attach_proj_variable", None)
-        if hook is not None:
-            hook(self)
+        attach = getattr(other, "attach_proj_variable", None)
+        if attach is not None:
+            attach(self)
         return self
 
 
@@ -142,6 +142,10 @@ class ConstVariable(ProjVariable):
     def result(self):
         return self._result
 
+    @result.setter
+    def result(self, value):
+        self._result = value
+
     @property
     def is_constant(self) -> bool:
         """bool: Always True for constant variables."""
@@ -189,7 +193,7 @@ class TDimVariable(ProjVariable):
 
     __slots__ = ('__weakref__', '_meta', '_owner', '_dims', '_ndim', '_result',)
 
-    _cached_metas: set[tuple[str, str, int, pd.Period | None]] = set()
+    _meta_cache: set[tuple[str, str, int, pd.Period | None]] = set()
 
     def __init__(
         self,
@@ -244,16 +248,16 @@ class TDimVariable(ProjVariable):
     def _make_meta(cls, name: str, group: str, max_t: int, start_date: pd.Period
                    ) -> tuple[str, str, int, pd.Period | None]:
         meta = (name, group, max_t, start_date)
-        cached = next((x for x in cls._cached_metas if x == meta), None)
-        if cached is not None:
-            return cached
+        cache = next((x for x in cls._meta_cache if x == meta), None)
+        if cache is not None:
+            return cache
         if not isinstance(max_t, int):
             raise TypeError(f"Invalid type of 'max_t': {type(max_t)}, expected 'int'.")
         if max_t <= 0:
             raise ValueError(f"Invalid value of 'max_t': {max_t}, expected positive.")
         if start_date is not None and not isinstance(start_date, pd.Period):
             raise TypeError(f"Invalid type of 'start_date': {type(max_t)}, expected 'pd.Period'.")
-        cls._cached_metas.add(meta)
+        cls._meta_cache.add(meta)
         return meta
 
     @property
@@ -275,6 +279,20 @@ class TDimVariable(ProjVariable):
         """int: Number of dimensions (0-3)."""
         return self._ndim
 
+    def _resolve_time_index(self, index: int | pd.Period) -> int:
+        if isinstance(index, int):
+            t = index
+        elif isinstance(index, pd.Period):
+            if self.start_date is None:
+                raise ValueError(f"'start_date' is None, cannot index by 'pd.Period'.")
+            t = (index - self.start_date).n
+        else:
+            raise TypeError(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
+        if not (0 <= t <= self.max_t):
+            raise IndexError(f"Invalid {index=}, expected: '0 to {self.max_t}', or "
+                             f"'{self.start_date} to {self.start_date + self.max_t} .")
+        return t
+
     def __getitem__(self, index: int | pd.Period):
         """Return the result at a certain time or period.
 
@@ -285,18 +303,7 @@ class TDimVariable(ProjVariable):
             Any: Result at `t` (copied for ndim>0).
 
         """
-        if type(index) == int:
-            t = index
-        elif type(index) == pd.Period:
-            if self.start_date is None:
-                raise ValueError(f"'start_date' is None, cannot index by 'pd.Period'.")
-            t = (index - self.start_date).n
-        else:
-            raise TypeError(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
-
-        if not (0 <= t <= self.max_t):
-            raise ValueError(f"Invalid {index=}, expected t: 0 to {self.max_t}.")
-
+        t = self._resolve_time_index(index)
         return self._result[t] if self._ndim == 0 else self._result[t,].copy()
 
     def __setitem__(self, index: int | pd.Period, value):
@@ -305,18 +312,7 @@ class TDimVariable(ProjVariable):
         Args:
             value: Scalar or array whose shape matches the variable's dimensions.
         """
-        if type(index) == int:
-            t = index
-        elif type(index) == pd.Period:
-            if self.start_date is None:
-                raise ValueError(f"'start_date' is None, cannot index by 'pd.Period'.")
-            t = (index - self.start_date).n
-        else:
-            raise TypeError(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
-
-        if not (0 <= t <= self.max_t):
-            raise ValueError(f"Invalid {index=}, expected t: 0 to {self.max_t}.")
-
+        t = self._resolve_time_index(index)
         if self._ndim == 0:
             self._result[t] = value
         else:

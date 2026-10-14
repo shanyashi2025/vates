@@ -83,10 +83,10 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
             port_var['std_return'] = make_proj_variable('std_return', **cv_kwargs)
             port_var['sharp_ratio'] = make_proj_variable('sharp_ratio', **cv_kwargs)
 
-            port_var['twrr'][...] = twrr
-            port_var['mean_return'][...] = mean_return
-            port_var['std_return'][...] = std_return
-            port_var['sharp_ratio'][...] = sharp_ratio
+            port_var['twrr'].result = twrr
+            port_var['mean_return'].result = mean_return
+            port_var['std_return'].result = std_return
+            port_var['sharp_ratio'].result = sharp_ratio
 
 
 def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str,

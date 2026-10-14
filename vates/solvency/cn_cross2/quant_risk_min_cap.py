@@ -108,14 +108,14 @@ class MinCapUnit:
         self.tdv_loss_absorb: TDimVariable = create_tdv("loss_absorbency")
 
     def calculate(self, *, leaf_values: dict[str, float], la_pv_base: float = 0.0, la_pv_lower_limit = 0.0) -> None:
-        self._risk_module.batch_set_risk_capital(leaf_values)
+        self._risk_module.set_capitals(leaf_values)
 
         if self.require_loss_absorbency:
             self._la_pv_base = la_pv_base
             self._la_pv_lower_limit = la_pv_lower_limit
             self._loss_absorbency = calculate_loss_absorbency(
-                mc_market=self._risk_module.get_risk_capital("Market"),
-                mc_credit=self._risk_module.get_risk_capital("Credit"),
+                mc_market=self._risk_module.get_capital("Market"),
+                mc_credit=self._risk_module.get_capital("Credit"),
                 pv_base=self._la_pv_base,
                 pv_lower_limit=self._la_pv_lower_limit
             )
@@ -123,13 +123,13 @@ class MinCapUnit:
             self._loss_absorbency = 0.0
 
         t = self.time
-        self.tdv_life_mc[t] = self._risk_module.get_risk_capital("Life")
-        self.tdv_nonlife_mc[t] = self._risk_module.get_risk_capital("Non-life")
-        self.tdv_market_mc[t] = self._risk_module.get_risk_capital("Market")
-        self.tdv_credit_mc[t] = self._risk_module.get_risk_capital("Credit")
-        self.tdv_divers[t] = self._risk_module.get_risk_diversification(sign="+")
+        self.tdv_life_mc[t] = self._risk_module.get_capital("Life")
+        self.tdv_nonlife_mc[t] = self._risk_module.get_capital("Non-life")
+        self.tdv_market_mc[t] = self._risk_module.get_capital("Market")
+        self.tdv_credit_mc[t] = self._risk_module.get_capital("Credit")
+        self.tdv_divers[t] = self._risk_module.get_diversification(sign="+")
         self.tdv_loss_absorb[t] = self._loss_absorbency
-        self.tdv_min_cap[t] = self._risk_module.get_risk_capital() - self._loss_absorbency
+        self.tdv_min_cap[t] = self._risk_module.get_capital() - self._loss_absorbency
         self._last_calculate = t
 
     @property
@@ -159,10 +159,10 @@ class MinCapUnit:
         return self._la_pv_lower_limit
 
     def get_risk_capital(self, path: str | None = None, /) -> float:
-        return self._risk_module.get_risk_capital(path)
+        return self._risk_module.get_capital(path)
 
     def get_risk_diversification(self, path: str | None = None, /) -> float:
-        return self._risk_module.get_risk_diversification(path, sign="+")
+        return self._risk_module.get_diversification(path, sign="+")
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -195,18 +195,18 @@ class MinCapConsolidator:
 
     def consolidate(self) -> None:
         for node in self._risk_module.get_leaf_nodes():
-            node.risk_capital = sum(unit.get_risk_capital(node.path) for unit in self._units)
+            node.capital = sum(unit.get_risk_capital(node.path) for unit in self._units)
 
         self._loss_absorbency = self._calculate_loss_absorbency()
 
         t = self.time
-        self.tdv_life_mc[t] = self._risk_module.get_risk_capital("Life")
-        self.tdv_nonlife_mc[t] = self._risk_module.get_risk_capital("Non-life")
-        self.tdv_market_mc[t] = self._risk_module.get_risk_capital("Market")
-        self.tdv_credit_mc[t] = self._risk_module.get_risk_capital("Credit")
-        self.tdv_divers[t] = self._risk_module.get_risk_diversification(sign="+")
+        self.tdv_life_mc[t] = self._risk_module.get_capital("Life")
+        self.tdv_nonlife_mc[t] = self._risk_module.get_capital("Non-life")
+        self.tdv_market_mc[t] = self._risk_module.get_capital("Market")
+        self.tdv_credit_mc[t] = self._risk_module.get_capital("Credit")
+        self.tdv_divers[t] = self._risk_module.get_diversification(sign="+")
         self.tdv_loss_absorb[t] = self._loss_absorbency
-        self.tdv_min_cap[t] = self._risk_module.get_risk_capital() - self._loss_absorbency
+        self.tdv_min_cap[t] = self._risk_module.get_capital() - self._loss_absorbency
         self._last_calculate = t
 
     def _calculate_loss_absorbency(self) -> float:
@@ -217,11 +217,11 @@ class MinCapConsolidator:
         la_risk_module = make_cross2_mc_module()
         for node in (la_risk_module.get_subtree("Market").get_leaf_nodes() +
                      la_risk_module.get_subtree("Credit").get_leaf_nodes()):
-            node.risk_capital = sum(unit.get_risk_capital(node.path) for unit in units)
+            node.capital = sum(unit.get_risk_capital(node.path) for unit in units)
 
         return calculate_loss_absorbency(
-            mc_market=la_risk_module.get_risk_capital("Market"),
-            mc_credit=la_risk_module.get_risk_capital("Credit"),
+            mc_market=la_risk_module.get_capital("Market"),
+            mc_credit=la_risk_module.get_capital("Credit"),
             pv_base=sum(unit.la_pv_base for unit in units),
             pv_lower_limit=sum(unit.la_pv_lower_limit for unit in units)
         )
@@ -229,7 +229,7 @@ class MinCapConsolidator:
     @property
     def minimum_capital(self) -> float:
         maybe_raise_if_ne(self._last_calculate, self.time)
-        return self._risk_module.get_risk_capital() -  self._loss_absorbency
+        return self._risk_module.get_capital() -  self._loss_absorbency
 
     @property
     def loss_absorbency(self) -> float:
@@ -237,7 +237,7 @@ class MinCapConsolidator:
         return self._loss_absorbency
 
     def get_risk_capital(self, path: str | None = None, /) -> float:
-        return self._risk_module.get_risk_capital(path)
+        return self._risk_module.get_capital(path)
 
     def get_risk_diversification(self, path: str | None = None, /) -> float:
-        return self._risk_module.get_risk_diversification(path, sign="+")
+        return self._risk_module.get_diversification(path, sign="+")

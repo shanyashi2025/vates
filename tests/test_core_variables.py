@@ -34,6 +34,11 @@ class TestConstVariable:
         assert v.is_constant is True
         assert v.ndim == 0
         assert v.dims is None
+        v.result = 21
+        assert v.result == 21
+        assert v.is_constant is True
+        assert v.ndim == 0
+        assert v.dims is None
 
     def test_array_storage(self):
         v = ConstVariable("c", owner="o", group="g",
@@ -41,11 +46,17 @@ class TestConstVariable:
         v[...] = np.array([1.0, 2.0])
         assert v.ndim == 1
         assert v.is_constant is True
+        v.result = np.array([11.0, 12.0])
+        assert v.ndim == 1
+        assert v.is_constant is True
 
     def test_string_storage(self):
         v = ConstVariable("s", owner="o", group="g")
         v[...] = "hello"
         assert v.result == "hello"
+        assert v.is_constant is True
+        v.result = "world"
+        assert v.result == "world"
         assert v.is_constant is True
 
     def test_dims_from_enum(self):
@@ -134,7 +145,7 @@ class TestTDimVariable:
     @pytest.mark.parametrize("bad", [-1, 9999])  # 9999 is way beyond max_t=24
     def test_out_of_range_index_raises(self, configured, bad):
         v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        with pytest.raises(ValueError):
+        with pytest.raises(IndexError):
             v[bad]
 
     @pytest.mark.parametrize("bad", ["x", 1.5])
@@ -145,7 +156,7 @@ class TestTDimVariable:
 
     def test_far_period_index_raises(self, configured):
         v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        with pytest.raises(ValueError):
+        with pytest.raises(IndexError):
             v[configured.END_DATE + 1]
 
     def test_ndim_returns_copy(self, configured):
@@ -157,31 +168,31 @@ class TestTDimVariable:
         assert v[0][0] == 1.0  # read returned a copy, not a view
 
     def test_cached_meta(self, configured):
-        assert len(TDimVariable._cached_metas) == 0
+        assert len(TDimVariable._meta_cache) == 0
         v = TDimVariable("t", owner="o1", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        assert len(TDimVariable._cached_metas) == 1
+        assert len(TDimVariable._meta_cache) == 1
         v = TDimVariable("t", owner="o2", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        assert len(TDimVariable._cached_metas) == 1
+        assert len(TDimVariable._meta_cache) == 1
         v = TDimVariable("t1", owner="o1", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        assert len(TDimVariable._cached_metas) == 2
+        assert len(TDimVariable._meta_cache) == 2
         v = TDimVariable("t", owner="o1", group="g", max_t=120, start_date=configured.START_DATE)
-        assert len(TDimVariable._cached_metas) == 3
+        assert len(TDimVariable._meta_cache) == 3
         v = TDimVariable("t", owner="o1", group="g", max_t=configured.MAX_T, start_date=pd.Period("1999-12", "M"))
-        assert len(TDimVariable._cached_metas) == 4
+        assert len(TDimVariable._meta_cache) == 4
 
 
 class TestCachedDims:
     def test_cached_dims(self):
-        assert len(ConstVariable._cached_dims) == 0
-        assert len(TDimVariable._cached_dims) == 0
-        assert not (ConstVariable._cached_dims is TDimVariable._cached_dims)
+        assert len(ConstVariable._dims_cache) == 0
+        assert len(TDimVariable._dims_cache) == 0
+        assert not (ConstVariable._dims_cache is TDimVariable._dims_cache)
         v = ConstVariable("t", owner="o", group="g", dims=[["A", "B"]])
-        assert len(ConstVariable._cached_dims) == 1
+        assert len(ConstVariable._dims_cache) == 1
         v = ConstVariable("t", owner="o", group="g", dims=[["A", "B"], ("C", "D")])
-        assert len(ConstVariable._cached_dims) == 2
+        assert len(ConstVariable._dims_cache) == 2
         v = TDimVariable("t", owner="o", group="g", dims=[["A", "B"]], max_t=24, start_date = pd.Period("1999-12", "M"))
-        assert len(ConstVariable._cached_dims) == 2
-        assert len(TDimVariable._cached_dims) == 1
+        assert len(ConstVariable._dims_cache) == 2
+        assert len(TDimVariable._dims_cache) == 1
 
 
 class TestMakeVariable:

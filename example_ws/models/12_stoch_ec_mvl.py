@@ -122,7 +122,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
         for fund in model.fund_master.funds:
             fund_id = fund.fund_id
             model.bel_dict[fund_id] = make_proj_variable('BEL', variable_type="c", model_engine=model, owner=fund_id, group='fund')
-            model.bel_dict[fund_id][...] = - np.dot(fund._recorder.tdv_totliab_cf.result, model.deflators)
+            model.bel_dict[fund_id].result = - np.dot(fund._recorder.tdv_totliab_cf.result, model.deflators)
 
 
 def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str, max_workers: int,

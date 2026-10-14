@@ -91,7 +91,7 @@ def add_variables():
 
 @pytest.fixture(autouse=True)
 def clean_variable_cached():
-    ConstVariable._cached_dims = set()
-    TDimVariable._cached_dims = set()
-    TDimVariable._cached_metas = set()
+    ConstVariable._dims_cache = set()
+    TDimVariable._dims_cache = set()
+    TDimVariable._meta_cache = set()
     yield

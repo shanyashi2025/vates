@@ -9,7 +9,7 @@ provides the two building blocks of such a hierarchy:
 * :class:`RiskNode` -- one node of the hierarchy, holding its name, its
   identifier, the (cached) risk capital and the links to its parent and children.
 * :class:`RiskTree` -- a thin wrapper around a root :class:`RiskNode`, adding
-  tree-level lookups such as ``get_risk_capital`` or ``get_subtree``.
+  tree-level lookups such as ``get_capital`` or ``get_subtree``.
 
 Capitals are aggregated bottom-up.  Every internal node owns an *aggregation
 function* (``agg_func``) that receives risk capitals as keyword arguments keyed by
@@ -37,7 +37,7 @@ node (node names therefore contain no ``"/"``)::
     tree.get_node("Market").set_agg_func(market_agg, scope="descendants")
     tree.get_node("Market/Interest Rate").add_child("Interest Rate Increase", "Interest Rate Decrease")
     tree.get_node("Market/Interest Rate").set_agg_func(max_at_zero)
-    tree.set_risk_capital("Market/Interest Rate/Interest Rate Increase", 1_000.0)
+    tree.set_capital("Market/Interest Rate/Interest Rate Increase", 1_000.0)
 
 Once its hierarchy is final, a tree can be locked with
 :meth:`RiskTree.lock_structure`: structural changes then raise
@@ -164,7 +164,7 @@ class RiskNode:
     A single node of a solvency risk-module hierarchy.
 
     A node is either a *leaf* -- a risk factor whose capital is provided directly
-    through :meth:`set_risk_capital` -- or an *internal* node, whose capital is
+    through :meth:`set_capital` -- or an *internal* node, whose capital is
     computed by its aggregation function from the capitals below it: those of its
     direct children, or of all its descendants, depending on the aggregation scope
     (see :meth:`set_agg_func` and :meth:`aggregate`).
@@ -178,12 +178,12 @@ class RiskNode:
     always a valid parameter name.
 
     The aggregated capital is cached.  Setting the capital of a leaf clears the
-    cache of all its ancestors, so :attr:`risk_capital` recomputes whenever a
+    cache of all its ancestors, so :attr:`capital` recomputes whenever a
     value below it has changed.  A node belongs to at most one tree: adding a
     node that already has a parent raises, which also makes cycles impossible.
     """
 
-    __slots__ = ("_name", "_identifier", "_risk_capital", "_parent", "_children", "_agg_func", "_agg_scope",
+    __slots__ = ("_name", "_identifier", "_capital_cache", "_parent", "_children", "_agg_func", "_agg_scope",
                  "_is_structure_locked", "_root", "_siblings", "_ancestors", "_descendants", "_leaves", "_path",
                  "_path_to_descendant")
 
@@ -206,7 +206,7 @@ class RiskNode:
         """
         self._name: str = self._validate_name(name)
         self._identifier: str = self._normalize_identifier(self._name if identifier is None else identifier)
-        self._risk_capital: float | None = None
+        self._capital_cache: float | None = None
         self._parent: RiskNode | None = None
         self._children: tuple[RiskNode, ...] = ()
         self._agg_func: Callable[..., float] | None = None
@@ -225,48 +225,33 @@ class RiskNode:
         return self._identifier
 
     @property
-    def risk_capital(self) -> float:
-        """
-        Risk capital of the node.
+    def capital(self) -> float:
+        """Risk capital of the node.
 
-        For a leaf this is the value provided through :meth:`set_risk_capital`;
-        for an internal node it is the aggregation of the nodes its aggregation
-        scope selects, computed and cached on first access.
+        Setting this value is only allowed for a leaf, and raises if provided ``value``
+        is not a real number (usually expected `float`).
 
         Raises:
             ValueError: If the node is a leaf without a provided value, or an
                 internal node whose capitals cannot be aggregated.
         """
-        if self._risk_capital is None:
+        if self._capital_cache is None:
             self._aggregate()
-        if self._risk_capital is None:
+        if self._capital_cache is None:
             raise ValueError(f"{self._name}: risk capital hasn't been {'provided' if self.is_leaf else 'aggregated'}.")
-        return self._risk_capital
+        return self._capital_cache
 
-    @risk_capital.setter
-    def risk_capital(self, value: float, /) -> None:
-        """
-        Provide the risk capital of a leaf node.
-
-        The cached capital of all ancestors is cleared, so that they recompute on
-        their next access.
-
-        Args:
-            value (float): The risk capital to store.
-
-        Raises:
-            ValueError: If this node is not a leaf, or if ``value`` is NaN.
-            TypeError: If ``value`` is not a real number (usually expected `float`).
-        """
+    @capital.setter
+    def capital(self, value: float, /) -> None:
         if not self.is_leaf:
             raise ValueError(f"{self._name}: non-leaf node rejects set value for risk capital.")
         if isinstance(value, bool) or not isinstance(value, numbers.Real):
             raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
         if value != value:  # finiteness guard for NaN
             raise ValueError(f"Invalid value of risk capital: {value!r}.")
-        self._risk_capital = value
+        self._capital_cache = value
         if self._parent is not None:
-            self._parent._clear_risk_capital_cache()  # cascade
+            self._parent._clear_capital_cache()  # cascade
 
     @property
     @on_structure_locked_cached("_root")
@@ -385,7 +370,7 @@ class RiskNode:
         self._children += tuple(staged)
         for node in staged:
             node._parent = self
-            self._clear_risk_capital_cache()
+            self._clear_capital_cache()
 
     def _stage_child(self, node: Self, /, staged: list[Self]) -> None:
         """
@@ -424,7 +409,7 @@ class RiskNode:
         """
         Set the aggregation function of this node.
 
-        The function is called as ``func(**{node.identifier: node.risk_capital})``
+        The function is called as ``func(**{node.identifier: node.capital})``
         when the node aggregates, so its parameter names must match the identifiers
         of the nodes it is given: the direct children by default, or, with
         ``scope="descendants"``, every node below this one.  The latter lets a rule
@@ -450,18 +435,18 @@ class RiskNode:
             raise ValueError(f"Invalid agg scope: {scope!r}, expected {self._allowed_agg_scopes}.")
         self._agg_func = func
         self._agg_scope = scope or self._allowed_agg_scopes[0]
-        self._clear_risk_capital_cache()
+        self._clear_capital_cache()
 
-    def _clear_risk_capital_cache(self) -> None:
+    def _clear_capital_cache(self) -> None:
         """
         Clear the cached risk capital of this node and of all its ancestors.
 
         Only the cache is cleared; leaf values stay untouched and the ancestors
         recompute from their children on their next access.
         """
-        self._risk_capital = None
+        self._capital_cache = None
         if self._parent is not None:
-            self._parent._clear_risk_capital_cache()  # cascade
+            self._parent._clear_capital_cache()  # cascade
 
     def _aggregate(self) -> None:
         """
@@ -487,17 +472,17 @@ class RiskNode:
         if self._agg_func is None:
             raise ValueError(f"{self._name}: aggregation function is None.")
         if self._agg_scope == "children":
-            capitals = {x._identifier: x.risk_capital for x in self._children}
+            capitals = {x._identifier: x.capital for x in self._children}
         elif self._agg_scope == "descendants":
             descendants = self.descendants
             identifiers = [x._identifier for x in descendants]
             duplicates = sorted({i for i in identifiers if identifiers.count(i) > 1})
             if duplicates:
                 raise ValueError(f"{self._name}: duplicate identifiers among descendants: {duplicates}.")
-            capitals = {x._identifier: x.risk_capital for x in descendants}
+            capitals = {x._identifier: x.capital for x in descendants}
         else:
             raise NotImplementedError(f"agg scope: {self._agg_scope}.")
-        self._risk_capital = self._agg_func(**capitals)
+        self._capital_cache = self._agg_func(**capitals)
 
     def get_child(self, name: str, /, default: object = _MISSING) -> Self | object:
         """
@@ -629,7 +614,7 @@ class RiskNode:
         itself when it has no children -- to ``0.0``.
         """
         for node in self.leaves:
-            node.risk_capital = 0.0
+            node.capital = 0.0
 
     def duplicate(self, *, with_value: bool = True, is_lock_structure: bool | None = None) -> Self:
         """
@@ -658,7 +643,7 @@ class RiskNode:
             copied_root.lock_structure()
         if with_value:
             for node in copied_root.leaves:
-                node._risk_capital = self.get_descendant(node.path)._risk_capital
+                node._capital_cache = self.get_descendant(node.path)._capital_cache
         return copied_root
 
     @property
@@ -820,13 +805,13 @@ class RiskNode:
 
     def __str__(self) -> str:
         try:
-            risk_capital = f"{self.risk_capital:.2f}"
+            capital = f"{self.capital:.2f}"
         except ValueError:
-            risk_capital = "<uncalculated>"
+            capital = "<uncalculated>"
 
         _describe = [
             ("name", self._name),
-            ("risk_capital", risk_capital),
+            ("capital", capital),
             ("identifier", self._identifier),
             ("children", tuple((c._name for c in self._children))),
             ("parent", self._parent._name if self._parent else "None"),
@@ -845,7 +830,7 @@ class RiskTree:
     and values are shared with the tree that node belongs to.  A hierarchy level is
     built with :meth:`from_structure` (or with :meth:`RiskNode.add_child` and
     :meth: `RiskNode.set_agg_func` node-by-node), and capitals are provided with
-    :meth:`set_risk_capital` or :meth:`batch_set_risk_capital`.  Paths passed to the
+    :meth:`set_capital` or :meth:`set_capitals`.  Paths passed to the
     methods below are resolved from the root of this tree, hence for a subtree of
     a larger tree they are relative to that subtree and not to the outermost root
     (the :attr:`RiskNode.path` of a node, in contrast, is always absolute within
@@ -883,7 +868,7 @@ class RiskTree:
         """``True`` if the root node still has a parent, i.e. the tree is a subtree."""
         return not self._root.is_root
 
-    def get_risk_capital(self, key: str = "", /) -> float:
+    def get_capital(self, key: str = "", /) -> float:
         """
         Risk capital of one node of the tree.
 
@@ -898,9 +883,9 @@ class RiskTree:
             ValueError: If ``key`` does not exist, or if the capital of the node
                 is not available.
         """
-        return self.get_node(key).risk_capital
+        return self.get_node(key).capital
 
-    def get_risk_diversification(self, key: str = "", /, *, sign: Literal["+", "-"]) -> float:
+    def get_diversification(self, key: str = "", /, *, sign: Literal["+", "-"]) -> float:
         """
         Diversification benefit at one node of the tree.
 
@@ -931,7 +916,7 @@ class RiskTree:
         if node.is_leaf:
             return 0.0
 
-        val = sum([c.risk_capital for c in node.children]) - node.risk_capital
+        val = sum([c.capital for c in node.children]) - node.capital
         if sign == "+":
             return val
         elif sign == "-":
@@ -1006,16 +991,16 @@ class RiskTree:
         """All leaf nodes of the tree, in preorder."""
         return self._root.leaves
 
-    def set_risk_capital(self, key: str, /, value: float) -> None:
+    def set_capital(self, key: str, /, value: float) -> None:
         """
         Provide the risk capital of the leaf node at ``key``.
 
-        See :meth:`RiskNode.set_risk_capital` for the conditions and the
+        See :meth:`RiskNode.set_capital` for the conditions and the
         exceptions raised.
         """
-        self.get_node(key).risk_capital = value
+        self.get_node(key).capital = value
 
-    def batch_set_risk_capital(self, leaf_values: dict[str, float | dict], /) -> None:
+    def set_capitals(self, leaf_values: dict[str, float | dict], /) -> None:
         """
         Provide the risk capitals of several leaves at once.
 
@@ -1031,7 +1016,7 @@ class RiskTree:
             ValueError: If a key does not exist, or does not point to a leaf.
         """
         for key, value in self._flatten_dict(leaf_values).items():
-            self.set_risk_capital(key, value)
+            self.set_capital(key, value)
 
     @classmethod
     def _flatten_dict(cls, nested: dict[str, float | dict], /, joiner: str = "/") -> dict[str, float]:
@@ -1098,7 +1083,7 @@ class RiskTree:
         for node in all_nodes:
             prefixed_name = f"{'    ' * (node.depth - self_depth)}{node.name}"
             try:
-                val = node.risk_capital
+                val = node.capital
                 val_width = width - len(prefixed_name)
                 _describe.append(f"{prefixed_name} {val:>{val_width},.{precision}f}")
             except ValueError:
