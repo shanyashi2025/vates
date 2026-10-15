@@ -262,6 +262,7 @@ class ProjModelEngine:
             where=self.load_json('__proj_variables__.json', allow_not_found=True))
         if not variables:
             return  # empty list
+        variables.sort(key=lambda x: (x.group, x.owner, x.name))
 
         periods = pd.period_range(start=self.START_DATE, end=self.END_DATE, freq='M')
         period_col_list = list(map(lambda p: p.year * 100 + p.month, periods))
@@ -288,6 +289,7 @@ class ProjModelEngine:
         variables = self._proj_variable_manager.select(where)
         if not variables:
             return  # empty list
+        variables.sort(key=lambda x: (x.group, x.owner, x.name))
 
         stoch_setting = self.load_json('__stoch_setting__.json', allow_not_found=True)
         noy_mres = stoch_setting.get('number_of_years_monthly_results_retained', 0) if stoch_setting else 0
