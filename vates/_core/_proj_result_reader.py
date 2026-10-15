@@ -9,10 +9,6 @@ def proj_result(
     *,
     results_directory: str | Path,
     slug: str,
-    group: None = None,
-    owner: None = None,
-    variable: None = None,
-    date: None = None,
 ) -> pd.DataFrame:
     ...
 

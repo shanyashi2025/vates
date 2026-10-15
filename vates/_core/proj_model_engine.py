@@ -551,7 +551,7 @@ class ProjModelEngine:
         self._messages.append(f"{filename}:{lineno}: {msg}")
 
     @overload
-    def proj_result(self, *, group: None = None, owner: None = None, variable: None = None, date: None = None) -> pd.DataFrame:
+    def proj_result(self) -> pd.DataFrame:
         ...
 
     @overload

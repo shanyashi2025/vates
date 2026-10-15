@@ -53,9 +53,9 @@ Projection ended, END_DATE=2026-12
 The runlog can be found in `results\my_model.runlog.json` file.
 
 
-#### 2. Add Variables for Output
+#### 2. Add Variables for Model Output
 
-You can set up instances of `TDimVariable` and/or `ConstVariable`, the `@` operator tells `model` to output the 
+You can set up instances of `TDimVariable` and/or `ConstVariable`, and the `@` operator tells `model` to output the 
 projected results, which can be read by `model.proj_result`.
 
 ```python
@@ -117,7 +117,44 @@ val = proj_result(
 print(f"{val:.4f}")  # 202602.0200
 ```
 
-#### 3. Stochastic Model
+#### 3. Time Synchronization
+
+If a class needs the model's `time` and/or `period`, you can use `@time_synchronized` to decorate it. The decorator 
+wires the class to the model's `time_synchronizer` so the objects are automatically kept in sync.
+
+```python
+from vates import ProjModelEngine, time_synchronized
+
+@time_synchronized("m.time_synchronizer")
+class MyClass:
+
+    def __init__(self, m, name):
+        self.name = name
+
+    def speak(self):
+        print(f"{self.name}: my `time` and `period` are up-to-date: {self.time=}, {self.period=}")
+
+model = ProjModelEngine(slug='my_model', description='example model')
+model.configure_run(start_year=2025, end_year=2026)
+
+obj = MyClass(model, "my_obj")
+
+@model.bind_projection
+def my_projection():
+    obj.speak()
+
+model.run()
+```
+
+Following will be printed:
+```text
+my_obj: my `time` and `period` are up-to-date: self.time=0, self.period=Period('2025-12', 'M')
+my_obj: my `time` and `period` are up-to-date: self.time=1, self.period=Period('2026-01', 'M')
+...
+my_obj: my `time` and `period` are up-to-date: self.time=12, self.period=Period('2026-12', 'M')
+```
+
+#### 4. Stochastic Model
 
 The `StochExecutor` class is for stochastic model, multiprocessing is supported.
 
@@ -155,7 +192,7 @@ simulation: 2
 simulation: 10
 ```
 
-#### 4. ALM Package
+#### 5. ALM Package
 
 The `vates.alm` is the subpackage for asset-liability model.
 

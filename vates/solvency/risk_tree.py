@@ -56,7 +56,7 @@ import functools
 import numbers
 import numpy as np
 from dataclasses import dataclass
-from typing import Callable, Literal, Self
+from typing import Callable, Literal, Self, overload
 
 
 def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
@@ -484,6 +484,14 @@ class RiskNode:
             raise NotImplementedError(f"agg scope: {self._agg_scope}.")
         self._capital_cache = self._agg_func(**capitals)
 
+    @overload
+    def get_child(self, name: str) -> Self:
+        ...
+
+    @overload
+    def get_child(self, name: str, /, default: object = _MISSING) -> Self | object:
+        ...
+
     def get_child(self, name: str, /, default: object = _MISSING) -> Self | object:
         """
         Get the direct child node of a given name.
@@ -506,6 +514,14 @@ class RiskNode:
         if default is _MISSING:
             raise KeyError(f"{self._name}: has no child named '{name}'.")
         return default
+
+    @overload
+    def get_descendant(self, key: str) -> Self:
+        ...
+
+    @overload
+    def get_descendant(self, key: str, /, default: object = _MISSING) -> Self | object:
+        ...
 
     def get_descendant(self, key: str, /, default: object = _MISSING) -> Self | object:
         """
@@ -924,6 +940,14 @@ class RiskTree:
         else:
             raise ValueError(f"Invalid {sign=}, expected ('+', '-').")
 
+    @overload
+    def get_node(self, key: str = "") -> RiskNode:
+        ...
+
+    @overload
+    def get_node(self, key: str = "", /, default: object = _MISSING) -> RiskNode | object:
+        ...
+
     def get_node(self, key: str = "", /, default: object = _MISSING) -> RiskNode | object:
         """
         Node at ``key``.
@@ -956,6 +980,14 @@ class RiskTree:
                 copied.
         """
         return RiskTree(self._root.root)
+
+    @overload
+    def get_subtree(self, key: str) -> Self:
+        ...
+
+    @overload
+    def get_subtree(self, key: str, /, default: object = _MISSING) -> Self | object:
+        ...
 
     def get_subtree(self, key: str, /, default: object = _MISSING) -> Self | object:
         """
