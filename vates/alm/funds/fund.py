@@ -8,7 +8,7 @@ from vates.utils import Lifecycle, transition
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
 from vates.alm.funds._allocator import AssetAllocator, AssetAllocationGroup
-from vates.alm.funds._recorder import FundRecorder
+from vates.alm.funds._recorder import AssetRecorder, LiabRecorder, OtherRecorder
 from vates.alm.funds._utils import Connector, UninvestedProceeds, _RateOfReturnIndexer
 
 class FundPhase(Enum):
@@ -29,15 +29,20 @@ class Fund:
         fund_id (str): Fund identifier.
         _asset_conn (AssetConnector): Assets held by the fund.
         _liab_conn (LiabConnector): Liabilities held by the fund.
+        _uninvested_proceeds (UninvestedProceeds): Balance of uninvested proceeds.
         _primary_cash_asset (Cash | None): Primary cash asset used for residual cash flows.
-        _recorder (FundRecorder): Aggregation/returns calculator.
+        _asset_rec (AssetRecorder): Assets recorder (reported value, returns calculator).
+        _liab_rec (LiabRecorder): Liabilities recorder.
+        _other_rec (OtherRecorder): Other recorder.
         _allocator (AssetAllocator): Asset allocator for rebalancing.
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_lc', 'fund_id', '_asset_conn', '_liab_conn',
-                 '_uninvested_proceeds', '_primary_cash_asset', '_asset_report_bases', '_recorder', '_allocator',
+                 '_uninvested_proceeds', '_primary_cash_asset',
+                 '_asset_rec', '_liab_rec', '_other_rec',
+                 '_allocator',
                  'rate_of_return_bd', 'rate_of_return_ad', )
 
     def __init__(
@@ -72,25 +77,29 @@ class Fund:
         self._liab_conn: Connector[Liab] = Connector()
         self._uninvested_proceeds: UninvestedProceeds = UninvestedProceeds()
         self._primary_cash_asset: Cash | None = None
-        self._asset_report_bases: list[str] = asset_report_bases or []
+        asset_report_bases: list[str] = asset_report_bases or []
 
-        self._recorder: FundRecorder = FundRecorder(
-            name=fund_id, model_engine=model_engine, asset_connector=self._asset_conn, liab_connector=self._liab_conn,
-            uninvested_proceeds=self._uninvested_proceeds, asset_report_bases=self._asset_report_bases,
-            asset_categories=asset_categories, asset_category_attr=asset_category_attr,
+        self._asset_rec: AssetRecorder = AssetRecorder(
+            name=fund_id, model_engine=model_engine, asset_connector=self._asset_conn,
+            asset_report_bases=asset_report_bases, asset_categories=asset_categories, asset_category_attr=asset_category_attr,
+        )
+        self._liab_rec: LiabRecorder = LiabRecorder(
+            name=fund_id, model_engine=model_engine, liab_connector=self._liab_conn,
             output_liab_attrs_bd=output_liab_attrs_bd or [], output_liab_attrs_ad=output_liab_attrs_ad or []
         )
+        self._other_rec: OtherRecorder = OtherRecorder(name=fund_id, model_engine=model_engine)
+
         self._allocator: AssetAllocator = AssetAllocator(
             name=fund_id, model_engine=model_engine, connector=self._asset_conn,
-            uninvested_proceeds=self._uninvested_proceeds, asset_report_bases=self._asset_report_bases,
+            uninvested_proceeds=self._uninvested_proceeds, asset_report_bases=asset_report_bases,
             allocation_groups=asset_allocation_groups, allocation_group_attr= asset_allocation_group_attr,
         )
 
         # rate of return indexers
         self.rate_of_return_bd: _RateOfReturnIndexer = _RateOfReturnIndexer(
-            self._recorder.tdv_totass_ror_pc_bd, divby=100)
+            self._asset_rec.tdv_totass_ror_pc_bd, divby=100)
         self.rate_of_return_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
-            self._recorder.tdv_totass_ror_pc_ad, divby=100)
+            self._asset_rec.tdv_totass_ror_pc_ad, divby=100)
 
         self._lc: Lifecycle[FundPhase] = Lifecycle[FundPhase]()
 
@@ -105,6 +114,14 @@ class Fund:
     @property
     def liabs(self) -> list[Liab]:
         return self._liab_conn.objs
+
+    @property
+    def total_asset_cash_flow(self) -> float:
+        return self._asset_rec.total_cash_flow
+
+    @property
+    def total_liab_cash_flow(self) -> float:
+        return self._liab_rec.total_cash_flow
 
     def assemble_on_start(self, *, existing_assets: Asset | list[Asset] | None,
                           existing_liabs: Liab | list[Liab] | None = None) -> None:
@@ -152,9 +169,9 @@ class Fund:
                 warnings.warn(f"Unexpected profile asset '{asset}'")
 
         # Aggregate asset value
-        self._recorder.sum_asset_report_values("ad")
-        self._recorder.sum_liab_attrs("bd")
-        self._recorder.sum_liab_attrs("ad")
+        self._asset_rec.record_after_dealing(require_investment_return=False)
+        self._liab_rec.record_before_dealing()
+        self._liab_rec.record_after_dealing()
 
         self._lc.mark(FundPhase.CLOSED, self.time or 0)
 
@@ -172,41 +189,42 @@ class Fund:
     @transition(require_not=FundPhase.PROC_ASSET_BD, mark=FundPhase.PROC_ASSET_BD)
     def process_assets_before_dealing(self) -> None:
         """Process asset cash flows and reported values before dealing (bd)."""
-        self._recorder.record_asset_before_dealing()
-        self._uninvested_proceeds.increase(self._recorder.total_asset_cash_flow)
+        self._asset_rec.record_before_dealing()
+        self._uninvested_proceeds.increase(self._asset_rec.total_cash_flow)
 
     @transition(require_not=FundPhase.PROC_LIAB_BD, mark=FundPhase.PROC_LIAB_BD)
     def process_liabs_before_dealing(self) -> None:
         """Process liability cash flows and balance sheet variables before dealing (bd)."""
-        self._recorder.record_liab_before_dealing()
-        self._uninvested_proceeds.increase(self._recorder.total_liab_cash_flow)
+        self._liab_rec.record_before_dealing()
+        self._uninvested_proceeds.increase(self._liab_rec.total_cash_flow)
 
     @transition(require_not=FundPhase.REBALANCED, mark=FundPhase.REBALANCED)
     def no_action_on_rebalance(self) -> None:
         """Skip asset rebalance, invest free proceeds into primary cash."""
-        self._recorder.record_uninvested_proceeds(self._uninvested_proceeds.value, "bd")
+        self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "bd")
         # just invest free_estate into primary cash, no other action, free_estate is reset to zero
         self.primary_cash_asset.invest_new_money(self._uninvested_proceeds.take_out())
         for asset in self.assets:
             asset.close_dealing()
-        self._recorder.record_uninvested_proceeds(self._uninvested_proceeds.value, "ad")  # free_estate should be zero
-        self._recorder.record_asset_after_dealing()
+        self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "ad")  # free_estate should be zero
+        self._asset_rec.record_after_dealing()
 
     @transition(require_not=FundPhase.REBALANCED, mark=FundPhase.REBALANCED)
-    def rebalance_assets(self, *, total_size: float, profile_assets: list[Asset] | None = None, **kwargs) -> None:
+    def rebalance_assets(self, *, total_size: float,
+                         profile_assets: list[Asset] | None = None, **kwargs) -> None:
         """Rebalance assets per target allocation and optional profile.
 
         Args:
             total_size (float): Total size for allocation.
             profile_assets (list[Asset]): Profile assets for reference.
         """
-        self._recorder.record_uninvested_proceeds(self._uninvested_proceeds.value, "bd")
+        self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "bd")
         # process rebalance
         self._allocator.rebalance(total_size=total_size, profile_assets=profile_assets, **kwargs)
         for asset in self.assets:
             asset.close_dealing()
-        self._recorder.record_uninvested_proceeds(self._uninvested_proceeds.value, "ad")  # free_estate should be zero
-        self._recorder.record_asset_after_dealing()
+        self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "ad")  # free_estate should be zero
+        self._asset_rec.record_after_dealing()
 
     def get_total(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
                   allow_not_exist: bool = False) -> float:
@@ -255,7 +273,7 @@ class Fund:
     @transition(require_all=FundPhase.REBALANCED, require_not=FundPhase.PROC_LIAB_AD, mark=FundPhase.PROC_LIAB_AD)
     def process_liabs_after_dealing(self) -> None:
         """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""
-        self._recorder.record_liab_after_dealing()
+        self._liab_rec.record_after_dealing()
 
     def take_out_uninvested_proceeds(self, *, transfer_to: Self | None = None) -> float:
         """Transfer free estate to the other fund.
@@ -267,7 +285,7 @@ class Fund:
             raise ValueError(f"{self.fund_id}: cann't transfer to self.")
 
         amount = self._uninvested_proceeds.take_out()
-        self._recorder.record_free_proceeds_transfer(- amount)
+        self._other_rec.record_free_proceeds_transfer(- amount)
 
         if isinstance(transfer_to, Fund):
             transfer_to.receive_free_proceeds(amount)
@@ -282,7 +300,7 @@ class Fund:
             amount (float): Amount to receive (can be either positive ornegative).
         """
         self._uninvested_proceeds.increase(amount)
-        self._recorder.record_free_proceeds_transfer(amount)
+        self._other_rec.record_free_proceeds_transfer(amount)
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.fund_id}'"

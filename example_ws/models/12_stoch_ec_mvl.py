@@ -62,6 +62,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             asset_allocation_groups_df=asset_allocation_groups_df,
         )
 
+        model.liab_cf = {}
         for fund in model.fund_master.funds:
             fund_id = fund.fund_id
             existing_assets = AssetMaster.existing_from_df(
@@ -72,6 +73,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             else:
                 existing_liabs = None
             fund.assemble_on_start(existing_assets=existing_assets, existing_liabs=existing_liabs)
+            model.liab_cf[fund] = np.zeros(model.MAX_T + 1)
 
     else:  # t > 1
         model.esg_master.update_econ_data(period=p)
@@ -117,12 +119,15 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             # step 5: transfer accumulated free proceeds to shareholder fund
             _ = fund.take_out_uninvested_proceeds()  # just take out, shareholder fund is None
 
+            # step 6: store liability cash flow
+            model.liab_cf[fund][t] = fund.total_liab_cash_flow
+
     if t == model.MAX_T:
         model.bel_dict = {}
         for fund in model.fund_master.funds:
             fund_id = fund.fund_id
             model.bel_dict[fund_id] = make_proj_variable('BEL', variable_type="c", model_engine=model, owner=fund_id, group='fund')
-            model.bel_dict[fund_id].result = - np.dot(fund._recorder.tdv_totliab_cf.result, model.deflators)
+            model.bel_dict[fund_id].result = - np.dot(model.liab_cf[fund], model.deflators)
 
 
 def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str, max_workers: int,
