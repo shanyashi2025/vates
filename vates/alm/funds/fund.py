@@ -40,10 +40,8 @@ class Fund:
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_lc', 'fund_id', '_asset_conn', '_liab_conn',
-                 '_uninvested_proceeds', '_primary_cash_asset',
-                 '_asset_rec', '_liab_rec', '_other_rec',
-                 '_allocator',
-                 'rate_of_return_bd', 'rate_of_return_ad', )
+                 '_uninvested_proceeds', '_primary_cash_asset', '_allocator',
+                 '_asset_rec', '_liab_rec', '_other_rec',)
 
     def __init__(
         self,
@@ -73,8 +71,8 @@ class Fund:
         """
         self.fund_id = fund_id
         # Asset and liab collections
-        self._asset_conn: Connector[Asset] = Connector()
-        self._liab_conn: Connector[Liab] = Connector()
+        self._asset_conn: Connector[Asset] = Connector[Asset]()
+        self._liab_conn: Connector[Liab] = Connector[Liab]()
         self._uninvested_proceeds: UninvestedProceeds = UninvestedProceeds()
         self._primary_cash_asset: Cash | None = None
         asset_report_bases: list[str] = asset_report_bases or []
@@ -91,15 +89,9 @@ class Fund:
 
         self._allocator: AssetAllocator = AssetAllocator(
             name=fund_id, model_engine=model_engine, connector=self._asset_conn,
-            uninvested_proceeds=self._uninvested_proceeds, asset_report_bases=asset_report_bases,
+            uninvested_proceeds=self._uninvested_proceeds,
             allocation_groups=asset_allocation_groups, allocation_group_attr= asset_allocation_group_attr,
         )
-
-        # rate of return indexers
-        self.rate_of_return_bd: _RateOfReturnIndexer = _RateOfReturnIndexer(
-            self._asset_rec.tdv_totass_ror_pc_bd, divby=100)
-        self.rate_of_return_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
-            self._asset_rec.tdv_totass_ror_pc_ad, divby=100)
 
         self._lc: Lifecycle[FundPhase] = Lifecycle[FundPhase]()
 
@@ -122,6 +114,14 @@ class Fund:
     @property
     def total_liab_cash_flow(self) -> float:
         return self._liab_rec.total_cash_flow
+
+    @property
+    def rate_of_return_bd(self) -> _RateOfReturnIndexer:
+        return self._asset_rec.rate_of_return_bd
+
+    @property
+    def rate_of_return_ad(self) -> _RateOfReturnIndexer:
+        return self._asset_rec.rate_of_return_ad
 
     def assemble_on_start(self, *, existing_assets: Asset | list[Asset] | None,
                           existing_liabs: Liab | list[Liab] | None = None) -> None:
@@ -293,7 +293,7 @@ class Fund:
 
         return amount
 
-    def receive_free_proceeds(self, amount: float) -> None:
+    def receive_free_proceeds(self, amount: float, /) -> None:
         """Receive free proceeds.
 
         Args:
@@ -301,6 +301,30 @@ class Fund:
         """
         self._uninvested_proceeds.increase(amount)
         self._other_rec.record_free_proceeds_transfer(amount)
+
+    def pay_tax(self, amount: float, /) -> None:
+        self._uninvested_proceeds.increase(- amount)
+        self._other_rec.record_pay_tax(amount)
+
+    def receive_capital_contribution(self, amount: float, /) -> None:
+        self._uninvested_proceeds.increase(amount)
+        self._other_rec.record_receive_capital(amount)
+
+    def pay_dividends_to_shareholders(self, amount: float, /):
+        self._uninvested_proceeds.increase(- amount)
+        self._other_rec.record_pay_dividends(amount)
+
+    @property
+    def tax_paid(self) -> float:
+        return self._other_rec.tax_paid
+
+    @property
+    def capital_contribution_received(self) -> float:
+        return self._other_rec.capital_received
+
+    @property
+    def dividends_paid_to_shareholders(self) -> float:
+        return self._other_rec.dividends_paid
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.fund_id}'"

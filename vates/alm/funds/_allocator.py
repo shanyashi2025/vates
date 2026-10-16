@@ -367,7 +367,6 @@ class AssetAllocator:
             uninvested_proceeds: UninvestedProceeds,
             allocation_groups: list[AssetAllocationGroup],
             allocation_group_attr: str,
-            asset_report_bases: list[str],
     ):
         self.name: str = name
         self.conn: Connector[Asset] = connector
@@ -375,7 +374,6 @@ class AssetAllocator:
         self.alloc_groups: list[AssetAllocationGroup] = self._sequence_alloc_groups(allocation_groups)
         self.alloc_group_attr: str = allocation_group_attr
         self.alloc_group_names: list[str] = [ag.name for ag in self.alloc_groups]
-        self.asset_report_bases: list[str] = asset_report_bases
 
         tdv_kwargs = {"model_engine": model_engine, "owner": self.name, "group": 'rebalance'}
         self.tdv_fund_size = make_proj_variable("fund_size", **tdv_kwargs)

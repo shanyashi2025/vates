@@ -5,7 +5,7 @@ from enum import Enum, auto
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.global_conf import CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
-from vates.alm.funds._utils import Connector
+from vates.alm.funds._utils import Connector, _RateOfReturnIndexer
 from vates.alm.assets.asset_base import Asset, AssetPhase
 from vates.alm.liabs.liab_base import Liab
 
@@ -47,6 +47,7 @@ class AssetRecorder:
         'tdv_totass_ret_bd', 'tdv_totass_ror_pc_bd', 'tdv_totass_ret_ad', 'tdv_totass_ror_pc_ad',
         'tdv_catass_cf', 'tdv_catass_rv_bd', 'tdv_catass_rv_ad',
         'tdv_catass_ret_bd', 'tdv_catass_ror_pc_bd', 'tdv_catass_ret_ad', 'tdv_catass_ror_pc_ad',
+        'rate_of_return_bd', 'rate_of_return_ad'
     )
 
     def __init__(
@@ -84,25 +85,37 @@ class AssetRecorder:
         create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund')
         self.tdv_totass_cf: TDimVariable = create_tdv("totass_cash_flow")
 
-        # dims = asset_report_bases
-        create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund', dims=[asset_report_bases])
-        self.tdv_totass_rv_bd: TDimVariable = create_tdv("totass_rep_value_bd")
-        self.tdv_totass_rv_ad: TDimVariable = create_tdv("totass_rep_value_ad")
-        self.tdv_totass_ret_bd: TDimVariable = create_tdv("totass_inv_ret_bd")
-        self.tdv_totass_ror_pc_bd: TDimVariable = create_tdv("totass_ror_pc_bd")
-        self.tdv_totass_ret_ad: TDimVariable = create_tdv("totass_inv_ret_ad")
-        self.tdv_totass_ror_pc_ad: TDimVariable = create_tdv("totass_ror_pc_ad")
-        # dims = asset_categories
-        create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund', dims=[asset_categories])
-        self.tdv_catass_cf: TDimVariable = create_tdv("asset_cash_flow")
-        # dims = asset_categories, asset_report_bases
-        create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund', dims=[asset_categories, asset_report_bases])
-        self.tdv_catass_rv_bd: TDimVariable = create_tdv("asset_rep_value_bd")
-        self.tdv_catass_rv_ad: TDimVariable = create_tdv("asset_rep_value_ad")
-        self.tdv_catass_ret_bd: TDimVariable = create_tdv("asset_inv_ret_bd")
-        self.tdv_catass_ror_pc_bd: TDimVariable = create_tdv("asset_ror_pc_bd")
-        self.tdv_catass_ret_ad: TDimVariable = create_tdv("asset_inv_ret_ad")
-        self.tdv_catass_ror_pc_ad: TDimVariable = create_tdv("asset_ror_pc_ad")
+        if asset_report_bases:
+            # dims = asset_report_bases
+            create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund',
+                                                      dims=[asset_report_bases])
+            self.tdv_totass_rv_bd: TDimVariable = create_tdv("totass_rep_value_bd")
+            self.tdv_totass_rv_ad: TDimVariable = create_tdv("totass_rep_value_ad")
+            self.tdv_totass_ret_bd: TDimVariable = create_tdv("totass_inv_ret_bd")
+            self.tdv_totass_ror_pc_bd: TDimVariable = create_tdv("totass_ror_pc_bd")
+            self.tdv_totass_ret_ad: TDimVariable = create_tdv("totass_inv_ret_ad")
+            self.tdv_totass_ror_pc_ad: TDimVariable = create_tdv("totass_ror_pc_ad")
+        if asset_categories:
+            # dims = asset_categories
+            create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund',
+                                                      dims=[asset_categories])
+            self.tdv_catass_cf: TDimVariable = create_tdv("asset_cash_flow")
+        if asset_categories and asset_report_bases:
+            # dims = asset_categories, asset_report_bases
+            create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund',
+                                                      dims=[asset_categories, asset_report_bases])
+            self.tdv_catass_rv_bd: TDimVariable = create_tdv("asset_rep_value_bd")
+            self.tdv_catass_rv_ad: TDimVariable = create_tdv("asset_rep_value_ad")
+            self.tdv_catass_ret_bd: TDimVariable = create_tdv("asset_inv_ret_bd")
+            self.tdv_catass_ror_pc_bd: TDimVariable = create_tdv("asset_ror_pc_bd")
+            self.tdv_catass_ret_ad: TDimVariable = create_tdv("asset_inv_ret_ad")
+            self.tdv_catass_ror_pc_ad: TDimVariable = create_tdv("asset_ror_pc_ad")
+
+        # rate of return indexers
+        self.rate_of_return_bd: _RateOfReturnIndexer = _RateOfReturnIndexer(
+            self.tdv_totass_ror_pc_bd, divby=100)
+        self.rate_of_return_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
+            self.tdv_totass_ror_pc_ad, divby=100)
 
     @property
     @transition(require_all=RecorderPhase.ASSET_REC_BD)
@@ -117,11 +130,12 @@ class AssetRecorder:
 
         # Aggregate asset cash flow
         self.totass_cf = self.asset_conn.sum_attr("cash_flow")
-        val_dict = self.asset_conn.sum_attr(
-            "cash_flow", group_by=self.asset_category_attr, slice_key=self.asset_categories)
-        self.catass_cf = np.array([val_dict[cat] for cat in self.asset_categories])
-        self.tdv_catass_cf[t] = self.catass_cf
         self.tdv_totass_cf[t] = self.totass_cf
+        if self.asset_categories:
+            val_dict = self.asset_conn.sum_attr(
+                "cash_flow", group_by=self.asset_category_attr, slice_key=self.asset_categories)
+            self.catass_cf = np.array([val_dict[cat] for cat in self.asset_categories])
+            self.tdv_catass_cf[t] = self.catass_cf
 
         # Aggregate asset value and asset cash flow
         self._sum_report_values("bd")
@@ -346,19 +360,27 @@ class OtherRecorder:
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
     __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name',
+                 'tax_paid', 'capital_received', 'dividends_paid',
                  'tdv_uninvested_proceeds_bd', 'tdv_uninvested_proceeds_ad',
-                 'tdv_proceeds_tran_in', 'tdv_proceeds_tran_out')
+                 'tdv_proceeds_tran_in', 'tdv_proceeds_tran_out',
+                 'tdv_tax_paid', 'tdv_capital_received', 'tdv_dividends_paid')
 
     def __init__(self, *, name: str, model_engine: ProjModelEngine | None = None):
+        self.tax_paid: float = 0.0
+        self.capital_received: float = 0.0
+        self.dividends_paid: float = 0.0
         # Initialize time-dimensioned variables for output
         create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund')
         self.tdv_uninvested_proceeds_bd: TDimVariable = create_tdv("uninvested_proceeds_bd")
         self.tdv_uninvested_proceeds_ad: TDimVariable = create_tdv("uninvested_proceeds_ad")
         self.tdv_proceeds_tran_in: TDimVariable = create_tdv("proceeds_transferred_in")
         self.tdv_proceeds_tran_out: TDimVariable = create_tdv("proceeds_transferred_out")
+        self.tdv_tax_paid: TDimVariable = create_tdv("tax_paid")
+        self.tdv_capital_received: TDimVariable = create_tdv("capital_contribution_received")
+        self.tdv_dividends_paid: TDimVariable = create_tdv("dividends_paid_to_shareholders")
 
     def record_uninvested_proceeds(self, value: float, timing: str) -> None:
-        timing = self._validate_timing(timing)
+        timing = _validate_timing(timing)
         if timing == "bd":
             self.tdv_uninvested_proceeds_bd[self.time] = value
         else:
@@ -370,11 +392,20 @@ class OtherRecorder:
         self.tdv_proceeds_tran_in[t] += amt_in
         self.tdv_proceeds_tran_out[t] += amt_out
 
-    @staticmethod
-    def _validate_timing(val, /) -> str:
-        if not isinstance(val, str):
-            raise TypeError(f"Invalid type of 'timing': {type(val)}, expected 'str'.")
-        val = val.lower()
-        if val not in ("bd", "ad"):
-            raise ValueError(f"Invalid 'timing': {val}, expected ('bd', 'ad').")
-        return val
+    def record_pay_tax(self, amount: float) -> None:
+        self.tax_paid += amount
+        self.tdv_tax_paid[self.time] += amount
+
+    def record_receive_capital(self, amount: float) -> None:
+        self.capital_received += amount
+        self.tdv_capital_received[self.time] += amount
+
+    def record_pay_dividends(self, amount: float) -> None:
+        self.dividends_paid += amount
+        self.tdv_dividends_paid[self.time] += amount
+
+    def _on_time_change(self) -> None:
+        self.tax_paid: float = 0.0
+        self.capital_received: float = 0.0
+        self.dividends_paid: float = 0.0
+
