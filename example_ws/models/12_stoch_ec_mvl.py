@@ -115,7 +115,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             liabs_close_dealing(fund=fund)
 
             # step 5: transfer accumulated free proceeds to shareholder fund
-            fund.transfer_free_estate_to_other(None)  # shareholder fund is None
+            _ = fund.take_out_uninvested_proceeds()  # just take out, shareholder fund is None
 
     if t == model.MAX_T:
         model.bel_dict = {}

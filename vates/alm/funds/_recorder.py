@@ -5,8 +5,9 @@ from enum import Enum, auto
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.global_conf import CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
-from vates.alm.funds._connector import AssetLiabConnector
-from vates.alm.assets.asset_base import AssetPhase
+from vates.alm.funds._utils import Connector, UninvestedProceeds
+from vates.alm.assets.asset_base import Asset, AssetPhase
+from vates.alm.liabs.liab_base import Liab
 
 class RecorderPhase(Enum):
     ASSET_REC_BD = auto()
@@ -28,13 +29,13 @@ class FundRecorder:
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
-    __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name', 'connector',
+    __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name', 'asset_conn', 'liab_conn', 'uninvested_proceeds',
                  'asset_categories', 'asset_category_attr', 'asset_report_bases', 'totass_cf', 'catass_cf', 'totliab_cf',
                  'totass_mv_op', 'totass_mv_bd', 'totass_mv_ad', 'catass_mv_op', 'catass_mv_bd', 'catass_mv_ad',
                  'totass_rv_op', 'totass_rv_bd', 'totass_rv_ad', 'catass_rv_op', 'catass_rv_bd', 'catass_rv_ad',
                  'output_liab_attrs_bd', 'output_liab_attrs_ad',
                  'tdv_totass_cf', 'tdv_totliab_cf', 'tdv_totliab_attrs_bd', 'tdv_totliab_attrs_ad',
-                 'tdv_free_estate_bd', 'tdv_free_estate_ad', 'tdv_proceeds_tran_in', 'tdv_proceeds_tran_out',
+                 'tdv_uninvested_proceeds_bd', 'tdv_uninvested_proceeds_ad', 'tdv_proceeds_tran_in', 'tdv_proceeds_tran_out',
                  'tdv_totass_rv_bd', 'tdv_totass_rv_ad', 'tdv_totass_ret_bd', 'tdv_totass_ror_pc_bd',
                  'tdv_totass_ret_ad', 'tdv_totass_ror_pc_ad', 'tdv_catass_cf', 'tdv_catass_rv_bd',
                  'tdv_catass_rv_ad', 'tdv_catass_ret_bd', 'tdv_catass_ror_pc_bd', 'tdv_catass_ret_ad',
@@ -45,7 +46,9 @@ class FundRecorder:
         *,
         name: str,
         model_engine: ProjModelEngine | None = None,
-        connector: AssetLiabConnector,
+        asset_connector: Connector[Asset],
+        liab_connector: Connector[Liab],
+        uninvested_proceeds: UninvestedProceeds,
         asset_categories: list[str],
         asset_category_attr: str,
         asset_report_bases: list[str],
@@ -53,7 +56,9 @@ class FundRecorder:
         output_liab_attrs_ad: list[str],
     ):
         self.name: str = name
-        self.connector: AssetLiabConnector = connector
+        self.asset_conn: Connector[Asset] = asset_connector
+        self.liab_conn: Connector[Liab] = liab_connector
+        self.uninvested_proceeds: UninvestedProceeds = uninvested_proceeds
         self.asset_categories: list[str] = asset_categories
         self.asset_category_attr: str = asset_category_attr
         self.asset_report_bases: list[str] = asset_report_bases
@@ -86,8 +91,8 @@ class FundRecorder:
         self.tdv_totliab_attrs_ad: list[TDimVariable] = [
             create_tdv(f"totliab_{name}") for name in self.output_liab_attrs_ad]
 
-        self.tdv_free_estate_bd: TDimVariable = create_tdv("free_estate_bd")
-        self.tdv_free_estate_ad: TDimVariable = create_tdv("free_estate_ad")
+        self.tdv_uninvested_proceeds_bd: TDimVariable = create_tdv("uninvested_proceeds_bd")  # pending rename
+        self.tdv_uninvested_proceeds_ad: TDimVariable = create_tdv("uninvested_proceeds_ad")
         self.tdv_proceeds_tran_in: TDimVariable = create_tdv("proceeds_transferred_in")
         self.tdv_proceeds_tran_out: TDimVariable = create_tdv("proceeds_transferred_out")
         # dims = asset_report_bases
@@ -127,9 +132,10 @@ class FundRecorder:
         t = self.time
 
         # Aggregate asset cash flow
-        self.totass_cf = self.connector.sum_asset("cash_flow")
-        self.catass_cf = np.array(self.connector.groupby_sum_asset(
-            "cash_flow", groupby=self.asset_category_attr, in_list=self.asset_categories))
+        self.totass_cf = self.asset_conn.sum_attr("cash_flow")
+        val_dict = self.asset_conn.sum_attr(
+            "cash_flow", group_by=self.asset_category_attr, slice_key=self.asset_categories)
+        self.catass_cf = np.array([val_dict[cat] for cat in self.asset_categories])
         self.tdv_catass_cf[t] = self.catass_cf
         self.tdv_totass_cf[t] = self.totass_cf
 
@@ -193,31 +199,31 @@ class FundRecorder:
         t = self.time
         if CHECK_LEVEL != CheckLevel.BYPASS:
             phase = AssetPhase.ROLLED if timing == "bd" else AssetPhase.CLOSED
-            for asset in self.connector.assets:
+            for asset in self.asset_conn.assets:
                 asset.require_lifecycle(phase=phase)
 
         # 1. always calculate total asset market value
-        tot_mv = self.connector.sum_asset("market_value")
+        tot_mv = self.asset_conn.sum_attr("market_value")
 
         # 2. category asset market value, shape = (categories, )
         if self.asset_category_attr:
-            cat_mv = self.connector.groupby_sum_asset(
-                "market_value", groupby=self.asset_category_attr, in_list=self.asset_categories)
-            cat_mv = np.array(cat_mv)
+            val_dict = self.asset_conn.sum_attr(
+                "market_value", group_by=self.asset_category_attr, slice_key=self.asset_categories)
+            cat_mv = np.array([val_dict[cat] for cat in self.asset_categories])
         else:
             cat_mv = None
 
         # 3. total asset reported values, shape = (report_bases, )
         if self.asset_report_bases:
-            tot_rv = self.connector.sum_asset(self.asset_report_bases)
+            tot_rv = self.asset_conn.sum_attr(self.asset_report_bases)
         else:
             tot_rv = None
 
         # 4. category asset reported values, shape = (categories, report_bases)
         if self.asset_report_bases and self.asset_categories:
-            cat_rv = self.connector.groupby_sum_asset(
-                self.asset_report_bases, groupby=self.asset_category_attr, in_list=self.asset_categories)
-            cat_rv = np.array(cat_rv)
+            val_dict = self.asset_conn.sum_attr(
+                self.asset_report_bases, group_by=self.asset_category_attr, slice_key=self.asset_categories)
+            cat_rv = np.array([val_dict[cat] for cat in self.asset_categories])
         else:
             cat_rv = None
 
@@ -251,7 +257,7 @@ class FundRecorder:
         t = self.time
 
         # Aggregate liability cash flow
-        self.totliab_cf = sum(liab.cash_flow for liab in self.connector.liabs)
+        self.totliab_cf = sum(liab.cash_flow for liab in self.liab_conn)
         self.tdv_totliab_cf[t] = self.totliab_cf
 
         # Aggregate liability value
@@ -276,32 +282,23 @@ class FundRecorder:
         t = self.time
         if timing == "bd":
             for attr_name, tdv in zip(self.output_liab_attrs_bd, self.tdv_totliab_attrs_bd):
-                tdv[t] = self.connector.sum_liab(attr_name)
+                tdv[t] = self.liab_conn.sum_attr(attr_name)
         else: # "ad":
             for attr_name, tdv in zip(self.output_liab_attrs_ad, self.tdv_totliab_attrs_ad):
-                tdv[t] = self.connector.sum_liab(attr_name)
+                tdv[t] = self.liab_conn.sum_attr(attr_name)
 
-    def record_free_estate(self, timing: str) -> None:
+    def record_uninvested_proceeds(self, value: float, timing: str) -> None:
         timing = self._validate_timing(timing)
         if timing == "bd":
-            self.tdv_free_estate_bd[self.time] = self.connector.free_estate
+            self.tdv_uninvested_proceeds_bd[self.time] = self.uninvested_proceeds.value
         else:
-            self.tdv_free_estate_ad[self.time] = self.connector.free_estate
+            self.tdv_uninvested_proceeds_ad[self.time] = self.uninvested_proceeds.value
 
     def record_free_proceeds_transfer(self, amount: float) -> None:
         t = self.time
-        amt_in = max(amount, 0.0)
-        amt_out = max(- amount, 0.0)
-
-        if self.tdv_proceeds_tran_in[t] is None:
-            self.tdv_proceeds_tran_in[t] = amt_in
-        else:
-            self.tdv_proceeds_tran_in[t] += amt_in
-
-        if self.tdv_proceeds_tran_out[t] is None:
-            self.tdv_proceeds_tran_out[t] = amt_out
-        else:
-            self.tdv_proceeds_tran_out[t] += amt_out
+        amt_in, amt_out = max(amount, 0.0), max(- amount, 0.0)
+        self.tdv_proceeds_tran_in[t] += amt_in
+        self.tdv_proceeds_tran_out[t] += amt_out
 
     @staticmethod
     def _validate_timing(val, /) -> str:

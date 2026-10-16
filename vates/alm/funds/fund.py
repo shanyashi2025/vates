@@ -1,16 +1,15 @@
 import pandas as pd
 import warnings
 from enum import Enum, auto
-from typing import Callable, Optional
+from typing import Callable, Self
 
 from vates._core import ProjModelEngine, time_synchronized
 from vates.utils import Lifecycle, transition
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
 from vates.alm.funds._allocator import AssetAllocator, AssetAllocationGroup
-from vates.alm.funds._connector import AssetLiabConnector
 from vates.alm.funds._recorder import FundRecorder
-from vates.alm.funds._utils import _RateOfReturnIndexer
+from vates.alm.funds._utils import Connector, UninvestedProceeds, _RateOfReturnIndexer
 
 class FundPhase(Enum):
     PROC_ASSET_BD = auto()
@@ -28,7 +27,8 @@ class Fund:
 
     Attributes:
         fund_id (str): Fund identifier.
-        _connector (AssetLiabConnector): Assets and liabilities held by the fund.
+        _asset_conn (AssetConnector): Assets held by the fund.
+        _liab_conn (LiabConnector): Liabilities held by the fund.
         _primary_cash_asset (Cash | None): Primary cash asset used for residual cash flows.
         _recorder (FundRecorder): Aggregation/returns calculator.
         _allocator (AssetAllocator): Asset allocator for rebalancing.
@@ -36,8 +36,8 @@ class Fund:
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     
-    __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_lc',
-                 'fund_id', '_connector', '_primary_cash_asset', '_asset_report_bases', '_recorder', '_allocator',
+    __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_lc', 'fund_id', '_asset_conn', '_liab_conn',
+                 '_uninvested_proceeds', '_primary_cash_asset', '_asset_report_bases', '_recorder', '_allocator',
                  'rate_of_return_bd', 'rate_of_return_ad', )
 
     def __init__(
@@ -68,19 +68,21 @@ class Fund:
         """
         self.fund_id = fund_id
         # Asset and liab collections
-        self._connector: AssetLiabConnector = AssetLiabConnector()
+        self._asset_conn: Connector[Asset] = Connector()
+        self._liab_conn: Connector[Liab] = Connector()
+        self._uninvested_proceeds: UninvestedProceeds = UninvestedProceeds()
         self._primary_cash_asset: Cash | None = None
         self._asset_report_bases: list[str] = asset_report_bases or []
 
         self._recorder: FundRecorder = FundRecorder(
-            name=fund_id, model_engine=model_engine, connector=self._connector,
-            asset_report_bases=self._asset_report_bases,
+            name=fund_id, model_engine=model_engine, asset_connector=self._asset_conn, liab_connector=self._liab_conn,
+            uninvested_proceeds=self._uninvested_proceeds, asset_report_bases=self._asset_report_bases,
             asset_categories=asset_categories, asset_category_attr=asset_category_attr,
             output_liab_attrs_bd=output_liab_attrs_bd or [], output_liab_attrs_ad=output_liab_attrs_ad or []
         )
         self._allocator: AssetAllocator = AssetAllocator(
-            name=fund_id, model_engine=model_engine, connector=self._connector,
-            asset_report_bases=self._asset_report_bases,
+            name=fund_id, model_engine=model_engine, connector=self._asset_conn,
+            uninvested_proceeds=self._uninvested_proceeds, asset_report_bases=self._asset_report_bases,
             allocation_groups=asset_allocation_groups, allocation_group_attr= asset_allocation_group_attr,
         )
 
@@ -94,11 +96,15 @@ class Fund:
 
     @property
     def assets(self) -> list[Asset]:
-        return self._connector.assets
+        return self._asset_conn.objs
+
+    @property
+    def uninvested_proceeds(self) -> float:
+        return self._uninvested_proceeds.value
 
     @property
     def liabs(self) -> list[Liab]:
-        return self._connector.liabs
+        return self._liab_conn.objs
 
     def assemble_on_start(self, *, existing_assets: Asset | list[Asset] | None,
                           existing_liabs: Liab | list[Liab] | None = None) -> None:
@@ -117,31 +123,31 @@ class Fund:
         if existing_assets is None:
             pass
         elif isinstance(existing_assets, list):
-            self._connector.assets.extend(existing_assets)
+            self._asset_conn.extend(existing_assets)
         else:
-            self._connector.assets.append(existing_assets)
+            self._asset_conn.append(existing_assets)
 
         if existing_liabs is None:
             pass
         elif isinstance(existing_liabs, list):
-            self._connector.liabs.extend(existing_liabs)
+            self._liab_conn.extend(existing_liabs)
         else:
-            self._connector.liabs.append(existing_liabs)
+            self._liab_conn.append(existing_liabs)
 
         # validate if any duplicate asset objects
-        assets_set = set(self._connector.assets)
-        if len(self._connector.assets) != len(assets_set):
-            dup_lst = [x for x in assets_set if self._connector.assets.count(x) > 1]
+        assets_set = set(self._asset_conn.objs)
+        if len(self._asset_conn) != len(assets_set):
+            dup_lst = [x for x in assets_set if self._asset_conn.count(x) > 1]
             warnings.warn(f"{dup_lst} duplicate asset objects, including '{dup_lst[:min(5, len(dup_lst))]}'.")
 
         # validate if any duplicate liability objects
-        liabs_set = set(self._connector.liabs)
-        if len(self._connector.liabs) != len(liabs_set):
-            dup_lst = [x for x in liabs_set if self._connector.liabs.count(x) > 1]
+        liabs_set = set(self._liab_conn.objs)
+        if len(self._liab_conn) != len(liabs_set):
+            dup_lst = [x for x in liabs_set if self._liab_conn.count(x) > 1]
             warnings.warn(f"{dup_lst} duplicate liability objects, including '{dup_lst[:min(5, len(dup_lst))]}'.")
 
         # validate if any profile asset objects
-        for asset in self._connector.assets:
+        for asset in self._asset_conn:
             if asset.is_profile:
                 warnings.warn(f"Unexpected profile asset '{asset}'")
 
@@ -154,9 +160,9 @@ class Fund:
 
     @property
     def primary_cash_asset(self) -> Cash | None:
-        if self._primary_cash_asset is None:
-            for asset in self._connector.assets:
-                if isinstance(asset, Cash):
+        if self._primary_cash_asset is None or not self._primary_cash_asset.is_alive:
+            for asset in self._asset_conn:
+                if isinstance(asset, Cash) and asset.is_alive:
                     self._primary_cash_asset = asset
                     break
             if self._primary_cash_asset is None:
@@ -167,23 +173,23 @@ class Fund:
     def process_assets_before_dealing(self) -> None:
         """Process asset cash flows and reported values before dealing (bd)."""
         self._recorder.record_asset_before_dealing()
-        self._connector.accumulate_free_estate(self._recorder.total_asset_cash_flow)
+        self._uninvested_proceeds.increase(self._recorder.total_asset_cash_flow)
 
     @transition(require_not=FundPhase.PROC_LIAB_BD, mark=FundPhase.PROC_LIAB_BD)
     def process_liabs_before_dealing(self) -> None:
         """Process liability cash flows and balance sheet variables before dealing (bd)."""
         self._recorder.record_liab_before_dealing()
-        self._connector.accumulate_free_estate(self._recorder.total_liab_cash_flow)
+        self._uninvested_proceeds.increase(self._recorder.total_liab_cash_flow)
 
     @transition(require_not=FundPhase.REBALANCED, mark=FundPhase.REBALANCED)
     def no_action_on_rebalance(self) -> None:
         """Skip asset rebalance, invest free proceeds into primary cash."""
-        self._recorder.record_free_estate("bd")
+        self._recorder.record_uninvested_proceeds(self._uninvested_proceeds.value, "bd")
         # just invest free_estate into primary cash, no other action, free_estate is reset to zero
-        self.primary_cash_asset.invest_new_money(self._connector.dispose_free_estate())
+        self.primary_cash_asset.invest_new_money(self._uninvested_proceeds.take_out())
         for asset in self.assets:
             asset.close_dealing()
-        self._recorder.record_free_estate("ad")  # free_estate should be zero
+        self._recorder.record_uninvested_proceeds(self._uninvested_proceeds.value, "ad")  # free_estate should be zero
         self._recorder.record_asset_after_dealing()
 
     @transition(require_not=FundPhase.REBALANCED, mark=FundPhase.REBALANCED)
@@ -194,54 +200,80 @@ class Fund:
             total_size (float): Total size for allocation.
             profile_assets (list[Asset]): Profile assets for reference.
         """
-        self._recorder.record_free_estate("bd")
+        self._recorder.record_uninvested_proceeds(self._uninvested_proceeds.value, "bd")
         # process rebalance
         self._allocator.rebalance(total_size=total_size, profile_assets=profile_assets, **kwargs)
         for asset in self.assets:
             asset.close_dealing()
-        self._recorder.record_free_estate("ad")  # free_estate should be zero
+        self._recorder.record_uninvested_proceeds(self._uninvested_proceeds.value, "ad")  # free_estate should be zero
         self._recorder.record_asset_after_dealing()
 
-    def get_size(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
-                 treat_missing_as_zero: bool = False) -> float:
-        """ Get the fund size of the requested key
+    def get_total(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
+                  allow_not_exist: bool = False) -> float:
+        """ Get the fund total value of the requested key
 
         Args:
             func (Callable | None): Function, defaults to None.
             key (str | tuple[str, ...] | dict[str, str]): Requested key, use `asset.<attr_name>` and/or `liab.<attr_name>`
                 to indicate an attribute of assets or liabilities.
-            treat_missing_as_zero (bool): True if treat value of missing attribute as 0.0, defaults to False.
+            allow_not_exist (bool): True if allow not-exist attribute and return 0.0, defaults to False.
 
         Examples:
-            1. get_size(key="liab.math_res_if")
-            2. get_size(func=lambda x, y: max(x, y), key=("liab.surr_val_bd", "liab.math_res_if")
-            3. get_size(func=lambda x, y: max(x, y), key={"x": "liab.surr_val_bd", "y": "liab.math_res_if"})
-            4. get_size(func=lambda x, y: x + y, key=(f"asset.FAV", "free_estate"))
+            1. get_total(key="liab.math_res_if")
+            2. get_total(func=lambda x, y: max(x, y), key=("liab.surr_val_bd", "liab.math_res_if")
+            3. get_total(func=lambda x, y: max(x, y), key={"x": "liab.surr_val_bd", "y": "liab.math_res_if"})
+            4. get_total(func=lambda x, y: x + y, key=(f"asset.FAV", "uninvested_proceeds"))
 
         """
-        return self._connector.get_size(func=func, key=key, treat_missing_as_zero=treat_missing_as_zero)
+        if func is None:
+            return self._get_total(key, allow_not_exist)
+        if isinstance(key, str):
+            return func(self._get_total(key, allow_not_exist))
+        elif isinstance(key, tuple):
+            args = tuple([self._get_total(x, allow_not_exist) for x in key])
+            return func(*args)
+        elif isinstance(key, dict):
+            kwargs = {k: self._get_total(v, allow_not_exist) for k, v in key.items()}
+            return func(**kwargs)
+        raise TypeError(f"Invalid {type(key)=}, expected 'str', 'tuple', 'dict'.")
+
+    def _get_total(self, key: str, allow_not_exist: bool = False) -> float:
+        if not isinstance(key, str):
+            raise TypeError(f"Invalid {type(key)=}, expected 'str'.")
+
+        if "." not in key:
+            return getattr(self, key, 0.0 if allow_not_exist else None)
+
+        conn, name, *_ = key.split(".")
+        if conn in ("asset", "assets"):
+            return self._asset_conn.sum_attr(name, allow_not_exist=allow_not_exist)
+        elif conn in ("liab", "liabs", "liability", 'liabilities'):
+            return self._liab_conn.sum_attr(name, allow_not_exist=allow_not_exist)
+        else:
+            raise ValueError(f"Invalid '{key}', expected 'asset.attr' or 'liab.attr'.")
 
     @transition(require_all=FundPhase.REBALANCED, require_not=FundPhase.PROC_LIAB_AD, mark=FundPhase.PROC_LIAB_AD)
     def process_liabs_after_dealing(self) -> None:
         """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""
         self._recorder.record_liab_after_dealing()
 
-    def transfer_free_estate_to_other(self, other: Optional['Fund']) -> None:
+    def take_out_uninvested_proceeds(self, *, transfer_to: Self | None = None) -> float:
         """Transfer free estate to the other fund.
 
         Args:
-            other (Optional[Fund]): Fund to receive proceeds (usually shareholder fund), or None.
+            transfer_to (Self | None): Fund to receive proceeds (usually shareholder fund), defaults to None.
         """
-        if other is self:
-            raise ValueError(f"Cann\'t transfer to self.")
+        if transfer_to is self:
+            raise ValueError(f"{self.fund_id}: cann't transfer to self.")
 
-        amount = self._connector.dispose_free_estate()
+        amount = self._uninvested_proceeds.take_out()
         self._recorder.record_free_proceeds_transfer(- amount)
 
-        if isinstance(other, Fund):
-            other.receive_free_proceeds(amount)
-        else:
-            pass
+        if isinstance(transfer_to, Fund):
+            transfer_to.receive_free_proceeds(amount)
+            return 0.0
+
+        return amount
 
     def receive_free_proceeds(self, amount: float) -> None:
         """Receive free proceeds.
@@ -249,7 +281,7 @@ class Fund:
         Args:
             amount (float): Amount to receive (can be either positive ornegative).
         """
-        self._connector.accumulate_free_estate(amount)
+        self._uninvested_proceeds.increase(amount)
         self._recorder.record_free_proceeds_transfer(amount)
 
     def __str__(self) -> str:

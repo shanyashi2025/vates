@@ -9,7 +9,8 @@ from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_p
 from vates.global_conf import CheckLevel
 from vates.alm.assets import Asset, Cash
 from vates.alm.enums import AssetBuySellApproach, AssetPurchaseMethod
-from vates.alm.funds._connector import AssetLiabConnector
+from vates.alm.funds._utils import Connector, UninvestedProceeds
+from vates.alm.assets.asset_base import Asset
 
 
 @dataclass(slots=True)
@@ -84,7 +85,8 @@ class AssetAllocationGroup:
     """
 
     __slots__ = ("_name", "_sequence", "_buysell_approach", "_purchase_method", "_size_basis", "_target_weight",
-                 "_exist_conn", "_profile_conn", "_staged_conn", "_target_size", "_profile_size", "trade_decision")
+                 "_exist_conn", "_profile_conn", "_staged_conn", "_target_size", "_profile_size", "trade_decision",
+                 "_net_proceeds")
 
     def __init__(self, *, name: str, sequence: int, buysell_approach: AssetBuySellApproach | str,
                  purchase_method: AssetPurchaseMethod | str,
@@ -98,12 +100,13 @@ class AssetAllocationGroup:
         self._size_basis: str = size_basis
         self._target_weight: TargetWeight | None = target_weight
 
-        self._exist_conn: AssetLiabConnector | None = None
-        self._profile_conn: AssetLiabConnector | None = None
-        self._staged_conn: AssetLiabConnector = AssetLiabConnector()
+        self._exist_conn: Connector[Asset] | None = None
+        self._profile_conn: Connector[Asset] | None = None
+        self._staged_conn: Connector[Asset] = Connector()
         self._target_size: TargetSize | None = None
         self._profile_size: float | None = None
         self.trade_decision: TradeOrder | None = None
+        self._net_proceeds: float = 0.0
 
     @property
     def name(self) -> str:
@@ -132,29 +135,44 @@ class AssetAllocationGroup:
         self._size_basis = val
 
     @property
-    def exist_conn(self) -> AssetLiabConnector:
+    def exist_conn(self) -> Connector[Asset]:
         return self._exist_conn
 
-    @exist_conn.setter
-    def exist_conn(self, conn: AssetLiabConnector, /) -> None:
-        if not isinstance(conn, AssetLiabConnector):
-            raise TypeError(f"Invalid type of connector: {type(conn)}, expected 'AssetLiabConnector'.")
+    # @exist_conn.setter
+    # def exist_conn(self, conn: Connector[Asset], /) -> None:
+    #     if not isinstance(conn, Connector):
+    #         raise TypeError(f"Invalid type of connector: {type(conn)}, expected 'Connector'.")
+    #     self._exist_conn = conn
+
+    def set_exist_conn_from_list(self, assets: list[Asset]) -> None:
+        conn = Connector()
+        conn.extend(assets)
         self._exist_conn = conn
 
     @property
-    def profile_conn(self) -> AssetLiabConnector:
+    def profile_conn(self) -> Connector[Asset]:
         return self._profile_conn
 
-    @profile_conn.setter
-    def profile_conn(self, conn: AssetLiabConnector, /) -> None:
-        if not isinstance(conn, AssetLiabConnector):
-            raise TypeError(f"Invalid type of connector: {type(conn)}, expected 'AssetLiabConnector'.")
+    # @profile_conn.setter
+    # def profile_conn(self, conn: Connector[Asset], /) -> None:
+    #     if not isinstance(conn, Connector):
+    #         raise TypeError(f"Invalid type of connector: {type(conn)}, expected 'AssetLiabConnector'.")
+    #     self._profile_conn = conn
+    #     self._maybe_refresh_profile_size()
+
+    def set_profile_conn_from_list(self, assets: list[Asset]) -> None:
+        conn = Connector()
+        conn.extend(assets)
         self._profile_conn = conn
         self._maybe_refresh_profile_size()
 
     @property
-    def staged_conn(self) -> AssetLiabConnector:
+    def staged_conn(self) -> Connector[Asset]:
         return self._staged_conn
+
+    def take_out_net_proceeds(self) -> float:
+        amount, self._net_proceeds = self._net_proceeds, 0.0
+        return amount
 
     @property
     def current_size(self) -> float:
@@ -166,7 +184,7 @@ class AssetAllocationGroup:
             warnings.warn(f"size_basis is None, cann't compute size.")
             return 0.0
         else:
-            return self._exist_conn.sum_asset(self._size_basis)
+            return self._exist_conn.sum_attr(self._size_basis)
 
     @property
     def staged_size(self) -> float:
@@ -174,7 +192,7 @@ class AssetAllocationGroup:
             warnings.warn(f"size_basis is None, cann't compute size.")
             return 0.0
         else:
-            return self._staged_conn.sum_asset(self._size_basis)
+            return self._staged_conn.sum_attr(self._size_basis)
 
     @property
     def profile_size(self) -> float:
@@ -188,7 +206,7 @@ class AssetAllocationGroup:
             warnings.warn(f"profile_conn is None, cann't refresh exist size.")
             self._profile_size = None
         else:
-            self._profile_size = self._profile_conn.sum_asset(self._size_basis)
+            self._profile_size = self._profile_conn.sum_attr(self._size_basis)
 
     @property
     def target_weight(self) -> TargetWeight:
@@ -267,13 +285,13 @@ class AssetAllocationGroup:
         if action == BuySellAction.NO_ACTION:
             pass
         elif action == BuySellAction.SELL:
-            for asset in self.exist_conn.assets:
+            for asset in self.exist_conn:
                 mv_bd = asset.market_value
                 asset.sell_propn(propn)
                 mv_ad = asset.market_value
                 net_proceeds += mv_bd - mv_ad
         elif action == BuySellAction.BUY_SCALE_EXIST:
-            for asset in self.exist_conn.assets:
+            for asset in self.exist_conn:
                 mv_bd = asset.market_value
                 asset.buy_propn(propn)
                 mv_ad = asset.market_value
@@ -281,12 +299,12 @@ class AssetAllocationGroup:
         elif action == BuySellAction.BUY_PROFILE:
             if self.profile_conn is None:
                 raise ValueError("Can't buy assets from empty profile.")
-            for profile_asset in self.profile_conn.assets:
+            for profile_asset in self.profile_conn:
                 new_asset = profile_asset.scale_profile(scale=propn)
-                self.staged_conn.assets.append(new_asset) # append to asset list of the staged
+                self.staged_conn.append(new_asset) # append to asset list of the staged
                 net_proceeds -= new_asset.market_value
 
-        self.staged_conn.accumulate_free_estate(net_proceeds)
+        self._net_proceeds += net_proceeds
 
         if use_self_trade_decision:
             self.trade_decision = None  # reset after consumed
@@ -316,7 +334,7 @@ class AssetAllocationGroup:
     def on_finish_clear(self):
         self._exist_conn = None
         self._profile_conn = None
-        self._staged_conn = AssetLiabConnector()
+        self._staged_conn = Connector()
         self._target_size = None
         self._profile_size = None
         self.trade_decision = None
@@ -336,8 +354,8 @@ class AssetAllocator:
     period: pd.Period  # for type hint only, will be injected by decorator `time_synchronized`
     _default_alloc_check_level: CheckLevel = CheckLevel.WARN
 
-    __slots__ = ('__weakref__', 'time', 'period', 'name', 'connector', 'alloc_groups', 'alloc_group_attr',
-                 'asset_report_bases', 'alloc_group_names',
+    __slots__ = ('__weakref__', 'time', 'period', 'name', 'conn', 'uninvested_proceeds',
+                 'alloc_groups', 'alloc_group_attr', 'asset_report_bases', 'alloc_group_names',
                  'tdv_fund_size', 'tdv_ag_size_bd', 'tdv_ag_size_ad', 'tdv_ag_wgt_pc_bd', 'tdv_ag_wgt_pc_ad',)
 
     def __init__(
@@ -345,13 +363,15 @@ class AssetAllocator:
             *,
             name: str,
             model_engine: ProjModelEngine | None = None,
-            connector: AssetLiabConnector,
+            connector: Connector[Asset],
+            uninvested_proceeds: UninvestedProceeds,
             allocation_groups: list[AssetAllocationGroup],
             allocation_group_attr: str,
             asset_report_bases: list[str],
     ):
         self.name: str = name
-        self.connector: AssetLiabConnector = connector
+        self.conn: Connector[Asset] = connector
+        self.uninvested_proceeds: UninvestedProceeds = uninvested_proceeds
         self.alloc_groups: list[AssetAllocationGroup] = self._sequence_alloc_groups(allocation_groups)
         self.alloc_group_attr: str = allocation_group_attr
         self.alloc_group_names: list[str] = [ag.name for ag in self.alloc_groups]
@@ -450,10 +470,10 @@ class AssetAllocator:
                     raise ValueError(msg)
                 warnings.warn(msg)
 
-        # step 4: add the purchased assets and proceeds to `self.connector`
+        # step 4: add the purchased assets and proceeds to `self.uninvested_proceeds`
         for ag in self.alloc_groups:
-            self.connector.assets.extend(ag.staged_conn.assets)
-            self.connector.accumulate_free_estate(ag.staged_conn.free_estate)
+            self.conn.extend(ag.staged_conn)
+            self.uninvested_proceeds.increase(ag.take_out_net_proceeds())
 
         self.tdv_ag_size_ad[t] = np.array([ag.current_size for ag in self.alloc_groups])
         self.tdv_ag_wgt_pc_ad[t] = np.array([ag.current_size / total_size for ag in self.alloc_groups]) * 100
@@ -466,7 +486,7 @@ class AssetAllocator:
         target_weights = target_weights or {}
 
         exist_assets_by_name: dict[str, list] = {ag.name: [] for ag in self.alloc_groups}
-        for asset in self.connector.assets:
+        for asset in self.conn:
             name = getattr(asset, self.alloc_group_attr, None)
             if name in exist_assets_by_name:
                 exist_assets_by_name[name].append(asset)
@@ -482,14 +502,14 @@ class AssetAllocator:
                 ag.size_basis = size_basis
             maybe_new_target_weight = target_weights.get(ag.name, None)
             ag.update_target_size(total_size=total_size, new_target_weight=maybe_new_target_weight)
-            ag.exist_conn = AssetLiabConnector(exist_assets_by_name[ag.name])  # auto refresh size
-            ag.profile_conn = AssetLiabConnector(profile_assets_by_name[ag.name])  # auto refresh size
+            ag.set_exist_conn_from_list(exist_assets_by_name[ag.name])
+            ag.set_profile_conn_from_list(profile_assets_by_name[ag.name])  # auto refresh size
             # perform pre-checks
             if ag.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
-                if len(ag.exist_conn.assets) == 0:
+                if len(ag.exist_conn) == 0:
                     raise ValueError(f"'{self.name}'|'{ag.name}': SCALE_UP_EXISTING; no exsiting asset found.")
             if ag.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
-                if len(ag.profile_conn.assets) == 0:
+                if len(ag.profile_conn) == 0:
                     raise ValueError(f"'{self.name}'|'{ag.name}': PURCHASE_PROFILE;  no profile asset found.")
             if ag.buysell_approach not in (AssetBuySellApproach.NO_TRADE, AssetBuySellApproach.RESIDUAL):
                 if ag.target_weight is None:
@@ -518,7 +538,7 @@ class AssetAllocator:
             # This would be very edge case when total residual allocation group (usually cash) balance is zero.
             # Utilize cash asset to safely proceed
             _fallback_cash = None
-            for asset in self.connector.assets:
+            for asset in self.conn:
                 if isinstance(asset, Cash):
                     asset_ag = getattr(asset, self.alloc_group_attr)
                     ag = next((x for x in self.alloc_groups if x.name == asset_ag), None)

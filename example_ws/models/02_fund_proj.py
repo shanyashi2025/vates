@@ -109,7 +109,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
 
                 # step 5: transfer accumulated free proceeds to shareholder fund
                 if not is_sh_fund:
-                    fund.transfer_free_estate_to_other(fund_master.sh_fund)
+                    fund.take_out_uninvested_proceeds(transfer_to=fund_master.sh_fund)
 
         # --- output aging assets ---
         if aging_assets_output_config_df is not None and (

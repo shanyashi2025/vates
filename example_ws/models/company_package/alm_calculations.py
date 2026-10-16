@@ -135,19 +135,19 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
         size_type = rebalance_params.fund_size_type.upper()
 
         if size_type == "FUND":
-            total_size = fund.get_size(func=lambda x, y: x + y, key=(f"asset.{rebalance_params.asset_size_basis}", "free_estate"))
+            total_size = fund.get_total(func=lambda x, y: x + y, key=(f"asset.{rebalance_params.asset_size_basis}", "uninvested_proceeds"))
         elif size_type == "MATH_RES":
-            total_size = fund.get_size(key="liab.math_res_if")
+            total_size = fund.get_total(key="liab.math_res_if")
         elif size_type == "SURR_VALUE":
-            total_size = fund.get_size(key="liab.surr_val_if")
+            total_size = fund.get_total(key="liab.surr_val_if")
         elif size_type == "ACCT_VALUE":
-            total_size = fund.get_size(key="liab.acct_val_if")
+            total_size = fund.get_total(key="liab.acct_val_if")
         elif size_type == "ASSET_SHARE":
-            total_size = fund.get_size(key="liab.asset_share_if_bd")
+            total_size = fund.get_total(key="liab.asset_share_if_bd")
         elif size_type == "MAX_AS_MATH":
-            total_size = fund.get_size(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+            total_size = fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
         elif size_type == "MAX_AS_CSV":
-            total_size = fund.get_size(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+            total_size = fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
         else:
             raise ValueError(f"Invalid {size_type=}.")
 
