@@ -1,4 +1,4 @@
-﻿fund_id,allocation_group,sequence,buysell_approach,purchase_method
+﻿fund_id,allocation_group,sequence,strategy,purchase_method
 trad_fund,cash,5,residual,not_used
 trad_fund,equity,1,buy_sell,scale_up_existing
 trad_fund,private_equity,2,buy_sell,scale_up_existing

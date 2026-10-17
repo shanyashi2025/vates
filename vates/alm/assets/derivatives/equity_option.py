@@ -26,7 +26,7 @@ class EquityOption(Asset):
         _std_dev (float): Standard deviation, i.e. volatility.
         _is_pay_dividend (bool): True if paying dividend, otherwise False.
     """
-    __slots__ = ('_call_or_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
+    __slots__ = ('_units', '_call_or_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
                  '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds',
                  'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow', 'tdv_stock_price', 'tdv_price',
                  'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
@@ -72,8 +72,9 @@ class EquityOption(Asset):
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
+        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
+        self._units: float = units
         self._call_or_put: CallOrPut = CallOrPut[call_or_put.upper()] if isinstance(call_or_put, str) else call_or_put
         self._exercise_date: pd.Period = exercise_date
         self._price: float = price
@@ -117,6 +118,10 @@ class EquityOption(Asset):
         self.tdv_stock_price[t] = self._stock_price
         self.tdv_price[t] = self._price
         self.tdv_mv_ad[t] = self.market_value
+
+    @property
+    def units(self) -> float:
+        return self._units
 
     @property
     def std_dev(self) -> float:
@@ -225,7 +230,7 @@ class EquityOption(Asset):
         self._disposal_proceeds += self._price * units
 
     @transition(require_all=AssetPhase.PROFILE)
-    def scale_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
+    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the equity option profile by a factor, positive/negative scale represents long/short.
 

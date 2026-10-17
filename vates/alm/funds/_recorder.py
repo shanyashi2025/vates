@@ -5,7 +5,8 @@ from enum import Enum, auto
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.global_conf import CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
-from vates.alm.funds._utils import Connector, _RateOfReturnIndexer
+from vates.alm._utils import Connector
+from vates.alm.funds._utils import _RateOfReturnIndexer
 from vates.alm.assets.asset_base import Asset, AssetPhase
 from vates.alm.liabs.liab_base import Liab
 
@@ -123,14 +124,15 @@ class AssetRecorder:
         return self.totass_cf
 
     @transition(mark=RecorderPhase.ASSET_REC_BD)
-    def record_before_dealing(self) -> None:
+    def record_before_dealing(self, require_cash_flow: bool = True, require_investment_return: bool = True) -> None:
         """Record asset before dealing (bd).
         """
         t = self.time
 
         # Aggregate asset cash flow
-        self.totass_cf = self.asset_conn.sum_attr("cash_flow")
-        self.tdv_totass_cf[t] = self.totass_cf
+        if require_cash_flow:
+            self.totass_cf = self.asset_conn.sum_attr("cash_flow")
+            self.tdv_totass_cf[t] = self.totass_cf
         if self.asset_categories:
             val_dict = self.asset_conn.sum_attr(
                 "cash_flow", group_by=self.asset_category_attr, slice_key=self.asset_categories)
@@ -139,6 +141,9 @@ class AssetRecorder:
 
         # Aggregate asset value and asset cash flow
         self._sum_report_values("bd")
+
+        if not require_investment_return:
+            return
 
         # Calculate reported investment return
         if self.asset_report_bases:
@@ -200,7 +205,7 @@ class AssetRecorder:
         t = self.time
         if CHECK_LEVEL != CheckLevel.BYPASS:
             phase = AssetPhase.ROLLED if timing == "bd" else AssetPhase.CLOSED
-            for asset in self.asset_conn.assets:
+            for asset in self.asset_conn:
                 asset.require_lifecycle(phase=phase)
 
         # 1. always calculate total asset market value
@@ -313,14 +318,15 @@ class LiabRecorder:
         return self.totliab_cf
 
     @transition(mark=RecorderPhase.LIAB_REC_BD)
-    def record_before_dealing(self) -> None:
+    def record_before_dealing(self, require_cash_flow: bool = True) -> None:
         """Record liability before dealing (bd).
         """
         t = self.time
 
         # Aggregate liability cash flow
-        self.totliab_cf = sum(liab.cash_flow for liab in self.liab_conn)
-        self.tdv_totliab_cf[t] = self.totliab_cf
+        if require_cash_flow:
+            self.totliab_cf = sum(liab.cash_flow for liab in self.liab_conn)
+            self.tdv_totliab_cf[t] = self.totliab_cf
 
         # Aggregate liability value
         self._sum_attrs("bd")

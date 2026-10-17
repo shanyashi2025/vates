@@ -48,7 +48,7 @@ class Cash(Asset):
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False, units=1,
+        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
         self._nominal: float = nominal
         self._market_info: MarketInfo | None = market_info
@@ -136,7 +136,7 @@ class Cash(Asset):
         self._nominal -= amount
         self._disposal_proceeds += amount
 
-    def scale_profile(self, *args, **kwargs) -> Self:
+    def buy_profile(self, *args, **kwargs) -> Self:
         """
         Not applicable for cash assets.
         """

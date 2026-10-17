@@ -49,7 +49,7 @@ class Equity(Asset):
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
         """
-        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=1,
+        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, )
         self._equity_index: EquityIndex = equity_index
         self._mv: float = market_value
@@ -147,7 +147,7 @@ class Equity(Asset):
         return self._disposal_proceeds
 
     @transition(require_all=AssetPhase.PROFILE)
-    def scale_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
+    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the equity profile by a factor.
 

@@ -1,7 +1,16 @@
+from vates.alm import allocation
 from vates.alm import assets
 from vates.alm import econs
 from vates.alm import liabs
 from vates.alm import funds
+# allocation
+from vates.alm.allocation import(
+    AssetAllocationStrategy,
+    AssetPurchaseMethod,
+    AssetAllocationGroup,
+    AssetAllocationParams,
+    getRebalanceFunction,
+)
 # assets
 from vates.alm.assets import (
     create_asset,
@@ -29,20 +38,20 @@ from vates.alm.liabs import (
 # funds
 from vates.alm.funds import (
     Fund,
-    AssetAllocationGroup,
-    TargetWeight,
-)
-# enums
-from vates.alm.enums import (
-    AssetBuySellApproach,
-    AssetPurchaseMethod,
 )
 
 __all__ = [
+    'allocation',
     'assets',
     'econs',
     'liabs',
     'funds',
+    # allocation
+    'AssetAllocationStrategy',
+    'AssetPurchaseMethod',
+    'AssetAllocationGroup',
+    'AssetAllocationParams',
+    'getRebalanceFunction',
     # assets
     'create_asset',
     'Asset',
@@ -61,9 +70,4 @@ __all__ = [
     'ExtProjLiab',
     # funds
     'Fund',
-    'AssetAllocationGroup',
-    'TargetWeight',
-    # Enums
-    'AssetBuySellApproach',
-    'AssetPurchaseMethod',
 ]

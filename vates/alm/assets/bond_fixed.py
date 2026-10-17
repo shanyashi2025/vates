@@ -36,7 +36,7 @@ class BondFixed(Asset):
         pricer (BondFixedPricer): Bond pricer.
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
-    __slots__ = ('_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
+    __slots__ = ('_units', '_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
                  '_credit_band', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
                  'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
                  'tdv_interest', 'tdv_principal', 'tdv_default_recovery', 'tdv_mv_price', 'tdv_abv_price',
@@ -91,10 +91,10 @@ class BondFixed(Asset):
             purchase_date (pd.Period | None): Purchase date, default to initilization date.
             _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
-        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile, units=units,
+        super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
-
-        self._params = BondFixedParameters(
+        self._units: float = units
+        self._params: BondFixedParameters = BondFixedParameters(
             issue_date=issue_date,
             maturity_date=maturity_date,
             coupon_rate=coupon_rate,
@@ -160,6 +160,10 @@ class BondFixed(Asset):
         self.tdv_units_ad[t] = self._units
         self.tdv_mv_ad[t] = self.mv_price * self._units
         self.tdv_abv_ad[t] = self.abv_price * self._units
+
+    @property
+    def units(self) -> float:
+        return self._units
 
     @property
     def mv_price(self) -> float:
@@ -331,7 +335,7 @@ class BondFixed(Asset):
         self._disposal_proceeds += self._mv_price_dirty * units
 
     @transition(require_all=AssetPhase.PROFILE)
-    def scale_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
+    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the bond profile by a factor.
 

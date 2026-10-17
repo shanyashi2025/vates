@@ -1,7 +1,7 @@
 import pandas as pd
 
 from vates import ProjModelEngine
-from vates.alm import Fund, TargetWeight
+from vates.alm import Fund, AssetAllocationParams, getRebalanceFunction
 from vates.utils import KeyedArray
 
 from .setup_objs_alm import FundRebalanceParams
@@ -131,37 +131,50 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
         profile_assets = AssetMaster.profile_from_df(
             assets_df_dict, model_engine=model_engine, econs=econs, fund_id=fund_id
         ).all
-        target_weights = build_target_weights(asset_mix_df, fund_id, str(period.year * 100 + period.month))
         size_type = rebalance_params.fund_size_type.upper()
-
-        if size_type == "FUND":
-            total_size = fund.get_total(func=lambda x, y: x + y, key=(f"asset.{rebalance_params.asset_size_basis}", "uninvested_proceeds"))
-        elif size_type == "MATH_RES":
-            total_size = fund.get_total(key="liab.math_res_if")
-        elif size_type == "SURR_VALUE":
-            total_size = fund.get_total(key="liab.surr_val_if")
-        elif size_type == "ACCT_VALUE":
-            total_size = fund.get_total(key="liab.acct_val_if")
-        elif size_type == "ASSET_SHARE":
-            total_size = fund.get_total(key="liab.asset_share_if_bd")
-        elif size_type == "MAX_AS_MATH":
-            total_size = fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
-        elif size_type == "MAX_AS_CSV":
-            total_size = fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
-        else:
-            raise ValueError(f"Invalid {size_type=}.")
+        asset_size_basis = rebalance_params.asset_size_basis
+        total_size = get_fund_size(fund, size_type=size_type, asset_size_basis=asset_size_basis)
+        allocation_group_params: dict[str, AssetAllocationParams] = {}
+        target_weights = build_target_weights(asset_mix_df, fund_id, str(period.year * 100 + period.month))
+        for key, params in rebalance_params.allocation_params.items():
+            allocation_group_params[key] = AssetAllocationParams.create(
+                sequence=params.sequence,
+                strategy=params.strategy,
+                purchase_method=params.purchase_method,
+                target_weight=target_weights.get(key, None),
+            )
 
         fund.rebalance_assets(
+            func=getRebalanceFunction(),
+            profile_assets=profile_assets,
             total_size=total_size,
-            asset_size_basis=rebalance_params.asset_size_basis,
-            target_weights=target_weights,
-            profile_assets=profile_assets
+            asset_size_basis=asset_size_basis,
+            allocation_group_params=allocation_group_params,
         )
     else:
         fund.no_action_on_rebalance()
 
 
-def build_target_weights(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[str, 'TargetWeight']:
+def get_fund_size(fund: Fund, size_type: str, *, asset_size_basis: str) -> float:
+    if size_type == "FUND":
+        return fund.get_total(func=lambda x, y: x + y, key=(f"asset.{asset_size_basis}", "uninvested_proceeds"))
+    elif size_type == "MATH_RES":
+        return fund.get_total(key="liab.math_res_if")
+    elif size_type == "SURR_VALUE":
+        return fund.get_total(key="liab.surr_val_if")
+    elif size_type == "ACCT_VALUE":
+        return fund.get_total(key="liab.acct_val_if")
+    elif size_type == "ASSET_SHARE":
+        return fund.get_total(key="liab.asset_share_if_bd")
+    elif size_type == "MAX_AS_MATH":
+        return fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+    elif size_type == "MAX_AS_CSV":
+        return fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+    else:
+        raise ValueError(f"Invalid {size_type=}.")
+
+
+def build_target_weights(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[str, tuple[float, float, float]]:
     """
     Build a dictionary of target allocations for a fund from a DataFrame.
 
@@ -171,18 +184,19 @@ def build_target_weights(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[
         date_col (str): String date column to lookup.
 
     Returns:
-        dict: Mapping of allocation group to TargetAllocation.
+        dict[str, tuple[float, float, float]]: Mapping of allocation group to
+            a three-element tuple (floor, target, cap) of weights.
     """
-    target_weights: dict = {}
+    target_weights: dict[str, tuple[float, float, float]] = {}
 
     df_flt: pd.DataFrame = df.copy()
     if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
 
     for _, row in df_flt.iterrows():
-        allocation_group = row["allocation_group"]
+        key = row["allocation_group"]
         tgt_wgt = row[date_col] / 100
         flr_wgt = tgt_wgt + row["lower_allow_pc"] / 100
         cap_wgt = tgt_wgt + row["upper_allow_pc"] / 100
-        target_weights[allocation_group] = TargetWeight(target=tgt_wgt, floor=flr_wgt, cap=cap_wgt)
+        target_weights[key] = flr_wgt, tgt_wgt, cap_wgt
 
     return target_weights

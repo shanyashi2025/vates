@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import List, Self
+from typing import List, Self, Callable
 import pandas as pd
 
 from vates import ProjModelEngine
-from vates.alm import Currency, Liab, ExtProjLiab, Fund, AssetAllocationGroup
+from vates.alm import Currency, Liab, ExtProjLiab, Fund, AssetAllocationParams, getRebalanceFunction
 
 
 @dataclass
@@ -13,11 +13,15 @@ class FundRebalanceParams:
     Attributes:
         fund_size_type (str): Fund size type (FUND, MATH_RES, ASSET_SHARE, etc.), corresponds to Enum `alm.FundSizeType`.
         asset_size_basis (str): The basis for assets to match the fund size (usually FAV), corresponds to Enum `alm.AssetRepBasis`.
-        rebalance_freq (int): rebalance frequency (1=A, 2=H, 4=Q, 12=M, 0=No).
+        rebalance_freq (int): Rebalance frequency (1=A, 2=H, 4=Q, 12=M, 0=No).
+        allocation_params (dict[str, AssetAllocationParams]): AssetAllocationParams of each allocation group; contains
+            only static parameters, target weights is not included and will be assigned each month.
     """
     fund_size_type: str
     asset_size_basis: str
     rebalance_freq: int
+    allocation_params: dict[str, AssetAllocationParams]
+    rebalance_func: Callable | None = None
 
 
 class FundMaster:
@@ -54,7 +58,6 @@ class FundMaster:
             fund = Fund(
                 fund_id=fund_id,
                 model_engine=model_engine,
-                asset_allocation_groups=cls.build_asset_allocation_groups_from_df(asset_allocation_groups_df, fund_id=fund_id),
                 asset_categories=row["asset_categories"].split(';'),
                 asset_report_bases=row["asset_report_bases"].split(';') if row["asset_report_bases"] != 'none' else None,
                 output_liab_attrs_bd=row["output_liab_vars_bd"].split(';') if row["output_liab_vars_bd"] != 'none' else None,
@@ -68,41 +71,46 @@ class FundMaster:
                         raise ValueError("Duplicated shareholder fund.")
                     sh_fund = fund
             funds.append(fund)
+
+            allocation_params = cls.build_asset_allocation_params_from_df(asset_allocation_groups_df, fund_id=fund_id)
             rebalance_params_dict[fund_id] = FundRebalanceParams(
                 fund_size_type=row["fund_size_type"].upper(),
                 asset_size_basis=row["asset_size_basis"].upper(),
-                rebalance_freq=row["fund_rebalance_freq"]  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
+                rebalance_freq=row["fund_rebalance_freq"],  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
+                allocation_params=allocation_params,
+                rebalance_func=getRebalanceFunction(),
             )
 
         return FundMaster(funds=funds, ph_funds=ph_funds, sh_fund=sh_fund, rebalance_params_dict=rebalance_params_dict)
 
     @classmethod
-    def build_asset_allocation_groups_from_df(cls, df: pd.DataFrame, *, fund_id: str) -> list[AssetAllocationGroup]:
+    def build_asset_allocation_params_from_df(cls, df: pd.DataFrame, *, fund_id: str) -> dict[str, AssetAllocationParams]:
         """
-        Build a list of allocation groups for a fund from a DataFrame.
+        Build a dict of allocation params of each group for a fund from a DataFrame.
 
         Args:
             df (pd.DataFrame): DataFrame containing rebalance policy parameters.
             fund_id (str): Fund the rebalance policy for.
 
         Returns:
-            list[AssetAllocationGroup]: List of allocation groups.
+            dict[str, AssetAllocationParams]: Dict of allocation params of each group.
         """
-        allocation_groups: list[AssetAllocationGroup] = []
+        params: dict[str, AssetAllocationParams] = {}
 
         df_flt: pd.DataFrame = df.copy()
         df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
 
         for idx, row in df_flt.iterrows():
-            alloc_group = AssetAllocationGroup(
-                name=row["allocation_group"],
+            name = row["allocation_group"]
+            if name in params:
+                raise KeyError(f"Duplicate 'allocation_group': '{name}'; fund '{fund_id}'.")
+            params[name] = AssetAllocationParams.create(
                 sequence=row["sequence"],
-                buysell_approach=row["buysell_approach"],
+                strategy=row["strategy"],
                 purchase_method=row["purchase_method"],
             )
-            allocation_groups.append(alloc_group)
 
-        return allocation_groups
+        return params
 
 def build_liabs(model_engine: ProjModelEngine, df: pd.DataFrame, fund_id: str | None,
                 currencies: List['Currency']) -> List['Liab']:

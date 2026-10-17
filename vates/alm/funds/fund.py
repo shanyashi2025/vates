@@ -5,11 +5,12 @@ from typing import Callable, Self
 
 from vates._core import ProjModelEngine, time_synchronized
 from vates.utils import Lifecycle, transition
+from vates.alm.allocation import getRebalanceFunction
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
-from vates.alm.funds._allocator import AssetAllocator, AssetAllocationGroup
+from vates.alm._utils import Connector
 from vates.alm.funds._recorder import AssetRecorder, LiabRecorder, OtherRecorder
-from vates.alm.funds._utils import Connector, UninvestedProceeds, _RateOfReturnIndexer
+from vates.alm.funds._utils import UninvestedProceeds, _RateOfReturnIndexer
 
 class FundPhase(Enum):
     PROC_ASSET_BD = auto()
@@ -34,10 +35,10 @@ class Fund:
         _asset_rec (AssetRecorder): Assets recorder (reported value, returns calculator).
         _liab_rec (LiabRecorder): Liabilities recorder.
         _other_rec (OtherRecorder): Other recorder.
-        _allocator (AssetAllocator): Asset allocator for rebalancing.
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
+    _default_rebalance_func = getRebalanceFunction()
     
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_lc', 'fund_id', '_asset_conn', '_liab_conn',
                  '_uninvested_proceeds', '_primary_cash_asset', '_allocator',
@@ -48,24 +49,20 @@ class Fund:
         fund_id: str,
         *,
         model_engine: ProjModelEngine | None = None,
-        asset_allocation_groups: list[AssetAllocationGroup] = None,
-        asset_report_bases: list[str] = None,
-        asset_categories: list[str] = None,
+        asset_report_bases: list[str] | None = None,
+        asset_categories: list[str] | None = None,
         asset_category_attr: str = "category",
-        asset_allocation_group_attr: str = "allocation_group",
-        output_liab_attrs_bd: list[str] = None,
-        output_liab_attrs_ad: list[str] = None,
+        output_liab_attrs_bd: list[str] | None = None,
+        output_liab_attrs_ad: list[str] | None = None,
     ) -> None:
         """
         Initialize a Fund object.
 
         Args:
             fund_id (str): Fund identifier.
-            asset_allocation_groups (list[AssetAllocationGroup]): List of asset allocation groups.
             asset_report_bases (list[str]): Asset reporting bases.
             asset_categories (list[str]): Asset categories to be reported.
             asset_category_attr (str): Named attribute for asset category, defaults to "category".
-            asset_allocation_group_attr (str): Named attribute for asset allocation group, defaults to "allocation_group".
             output_liab_attrs_bd (list[str]): List of liability attributes to output.
             output_liab_attrs_ad (list[str]): List of liability attributes to output.
         """
@@ -86,12 +83,6 @@ class Fund:
             output_liab_attrs_bd=output_liab_attrs_bd or [], output_liab_attrs_ad=output_liab_attrs_ad or []
         )
         self._other_rec: OtherRecorder = OtherRecorder(name=fund_id, model_engine=model_engine)
-
-        self._allocator: AssetAllocator = AssetAllocator(
-            name=fund_id, model_engine=model_engine, connector=self._asset_conn,
-            uninvested_proceeds=self._uninvested_proceeds,
-            allocation_groups=asset_allocation_groups, allocation_group_attr= asset_allocation_group_attr,
-        )
 
         self._lc: Lifecycle[FundPhase] = Lifecycle[FundPhase]()
 
@@ -170,7 +161,7 @@ class Fund:
 
         # Aggregate asset value
         self._asset_rec.record_after_dealing(require_investment_return=False)
-        self._liab_rec.record_before_dealing()
+        self._liab_rec.record_before_dealing(require_cash_flow=False)
         self._liab_rec.record_after_dealing()
 
         self._lc.mark(FundPhase.CLOSED, self.time or 0)
@@ -210,17 +201,17 @@ class Fund:
         self._asset_rec.record_after_dealing()
 
     @transition(require_not=FundPhase.REBALANCED, mark=FundPhase.REBALANCED)
-    def rebalance_assets(self, *, total_size: float,
-                         profile_assets: list[Asset] | None = None, **kwargs) -> None:
+    def rebalance_assets(self, *, func: Callable | None = None, **kwargs) -> None:
         """Rebalance assets per target allocation and optional profile.
-
-        Args:
-            total_size (float): Total size for allocation.
-            profile_assets (list[Asset]): Profile assets for reference.
         """
         self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "bd")
         # process rebalance
-        self._allocator.rebalance(total_size=total_size, profile_assets=profile_assets, **kwargs)
+        if func is None:
+            func = self._default_rebalance_func
+        net_proceeds = func(self._asset_conn, **kwargs)
+        if net_proceeds is not None:
+            self._uninvested_proceeds.increase(net_proceeds)
+
         for asset in self.assets:
             asset.close_dealing()
         self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "ad")  # free_estate should be zero

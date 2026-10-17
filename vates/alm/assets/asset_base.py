@@ -29,7 +29,6 @@ class Asset(ABC):
         _model_ref (weakref.ref[ProjModelEngine]): Model engine reference.
         _asset_id (str): Unique identifier for the asset.
         _is_profile (bool): Ture if profile asset, False if existing asset.
-        _units (float): Number of assets
         _purchase_date (pd.Period): Purchase date.
         _currency (Currency): Currency of the asset.
         _attr_aliases (dict[str, str]): Dict of alias to named attribute, {"MV": "market_value"}
@@ -38,7 +37,7 @@ class Asset(ABC):
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     _mutable_attr_check: CheckLevel = CheckLevel.ERROR
 
-    __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', '_lc', '_asset_id', '_is_profile', '_units',
+    __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', '_lc', '_asset_id', '_is_profile',
                  '_purchase_date', '_currency', '_attr_aliases',)
 
     def __init__(
@@ -47,7 +46,6 @@ class Asset(ABC):
         model_engine: ProjModelEngine = None,  # will be referenced by decorator `time_synchronized`
         asset_id: str,
         is_profile: bool,
-        units: float,
         purchase_date: pd.Period | None,
         currency: Currency | None,
         attr_aliases: Mapping[str, str] | None,
@@ -59,7 +57,6 @@ class Asset(ABC):
             model_engine: Model engine object.
             asset_id (str): Asset identifier.
             is_profile (bool): Ture if profile asset, False if existing asset.
-            units (float): Number of assets
             purchase_date (pd.Period): Purchase date. Set to initilization date if input is None.
             currency (Currency): Asset currency.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute, {"MV": "market_value"}
@@ -67,7 +64,6 @@ class Asset(ABC):
         self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else (lambda: None)
         self._asset_id: str = asset_id or str(uuid.uuid4())
         self._is_profile: bool = is_profile
-        self._units: float = units
         self._purchase_date: pd.Period = purchase_date
         self._currency: Currency | None = currency
         self._attr_aliases: Mapping[str, str] | None = attr_aliases
@@ -85,10 +81,6 @@ class Asset(ABC):
     @property
     def is_profile(self) -> bool:
         return self._is_profile
-
-    @property
-    def units(self) -> float:
-        return self._units
 
     @property
     def currency(self) -> Currency:
@@ -158,7 +150,7 @@ class Asset(ABC):
         pass
 
     @abstractmethod
-    def scale_profile(self, *args, **kwargs) -> Self:
+    def buy_profile(self, *args, **kwargs) -> Self:
         """Return a new, non-profile asset scaled by `scale`; leave self unchanged."""
         pass
 
