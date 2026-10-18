@@ -30,22 +30,3 @@ class _RateOfReturnIndexer:
 
     def _ror(self, t: int | pd.Period, dim_index: tuple[int] | None) -> float:
         return (self._tdv[t][dim_index] if dim_index else self._tdv[t]) / self._divby
-
-
-class UninvestedProceeds:
-
-    __slots__= ('_value',)
-
-    def __init__(self):
-        self._value: float = 0.0
-
-    @property
-    def value(self) -> float:
-        return self._value
-
-    def increase(self, amount: float) -> None:
-        self._value += amount
-
-    def take_out(self) -> float:
-        amount, self._value = self._value, 0.0
-        return amount

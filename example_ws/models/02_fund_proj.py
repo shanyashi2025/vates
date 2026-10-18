@@ -107,9 +107,10 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 # step 4: liabs update after dealing (ad)
                 liabs_close_dealing(fund=fund)
 
-                # step 5: transfer accumulated free proceeds to shareholder fund
+                # step 5: transfer free proceeds to shareholder fund
                 if not is_sh_fund:
-                    fund.take_out_uninvested_proceeds(transfer_to=fund_master.sh_fund)
+                    _ = fund.take_out_free_proceeds(transfer_to=fund_master.sh_fund)
+                fund.record_free_proceeds("end")
 
         # --- output aging assets ---
         if aging_assets_output_config_df is not None and (

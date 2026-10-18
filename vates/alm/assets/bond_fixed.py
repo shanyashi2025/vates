@@ -328,8 +328,8 @@ class BondFixed(Asset):
         Raises:
             ValueError: If propn is negative.
         """
-        if propn < 0: raise ValueError(f"Can not sell negative proportion of exsiting bonds.")
-        if propn > 1: raise ValueError(f"Can not sell >100% proportion of exsiting bonds.")
+        if propn < 0: raise ValueError(f"{propn=:.6f}: can not sell negative proportion of exsiting bonds.")
+        if propn > 1: raise ValueError(f"{propn=:.6f}: can not sell >100% proportion of exsiting bonds.")
         units = self._units * propn
         self._units -= units
         self._disposal_proceeds += self._mv_price_dirty * units

@@ -1,24 +1,16 @@
 import pandas as pd
 import warnings
-from enum import Enum, auto
-from typing import Callable, Self
+import weakref
+from typing import Callable, Self, Literal
 
 from vates._core import ProjModelEngine, time_synchronized
-from vates.utils import Lifecycle, transition
-from vates.alm.allocation import getRebalanceFunction
+from vates.alm.allocator import ProceedsKeeper
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
 from vates.alm._utils import Connector
 from vates.alm.funds._recorder import AssetRecorder, LiabRecorder, OtherRecorder
-from vates.alm.funds._utils import UninvestedProceeds, _RateOfReturnIndexer
+from vates.alm.funds._utils import _RateOfReturnIndexer
 
-class FundPhase(Enum):
-    PROC_ASSET_BD = auto()
-    PROC_LIAB_BD = auto()
-    REBALANCED = auto()
-    PROC_ASSET_AD = auto()
-    PROC_LIAB_AD = auto()
-    CLOSED = auto()
 
 @time_synchronized("model_engine.time_synchronizer")
 class Fund:
@@ -30,7 +22,8 @@ class Fund:
         fund_id (str): Fund identifier.
         _asset_conn (AssetConnector): Assets held by the fund.
         _liab_conn (LiabConnector): Liabilities held by the fund.
-        _uninvested_proceeds (UninvestedProceeds): Balance of uninvested proceeds.
+        _free_proceeds_keeper (ProceedsKeeper): Free proceeds' keeper; can be used to invest, pay tax,
+            pay shareholder dividends, taken out, etc.
         _primary_cash_asset (Cash | None): Primary cash asset used for residual cash flows.
         _asset_rec (AssetRecorder): Assets recorder (reported value, returns calculator).
         _liab_rec (LiabRecorder): Liabilities recorder.
@@ -38,10 +31,9 @@ class Fund:
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
-    _default_rebalance_func = getRebalanceFunction()
-    
-    __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_lc', 'fund_id', '_asset_conn', '_liab_conn',
-                 '_uninvested_proceeds', '_primary_cash_asset', '_allocator',
+
+    __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', 'fund_id', '_asset_conn', '_liab_conn',
+                 '_free_proceeds_keeper', '_primary_cash_asset', '_allocator',
                  '_asset_rec', '_liab_rec', '_other_rec',)
 
     def __init__(
@@ -66,11 +58,12 @@ class Fund:
             output_liab_attrs_bd (list[str]): List of liability attributes to output.
             output_liab_attrs_ad (list[str]): List of liability attributes to output.
         """
+        self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else lambda: None
         self.fund_id = fund_id
         # Asset and liab collections
         self._asset_conn: Connector[Asset] = Connector[Asset]()
         self._liab_conn: Connector[Liab] = Connector[Liab]()
-        self._uninvested_proceeds: UninvestedProceeds = UninvestedProceeds()
+        self._free_proceeds_keeper: ProceedsKeeper = ProceedsKeeper()
         self._primary_cash_asset: Cash | None = None
         asset_report_bases: list[str] = asset_report_bases or []
 
@@ -84,15 +77,17 @@ class Fund:
         )
         self._other_rec: OtherRecorder = OtherRecorder(name=fund_id, model_engine=model_engine)
 
-        self._lc: Lifecycle[FundPhase] = Lifecycle[FundPhase]()
-
     @property
     def assets(self) -> list[Asset]:
         return self._asset_conn.objs
 
     @property
-    def uninvested_proceeds(self) -> float:
-        return self._uninvested_proceeds.value
+    def free_proceeds(self) -> float:
+        return self._free_proceeds_keeper.balance
+
+    @property
+    def free_proceeds_keeper(self) -> ProceedsKeeper:
+        return self._free_proceeds_keeper
 
     @property
     def liabs(self) -> list[Liab]:
@@ -125,9 +120,6 @@ class Fund:
             existing_liabs (Liab | list[Liab] | None): Existing liabilities to be included.
 
         """
-        if len(self._lc.snapshot) > 0:
-            raise ValueError(f"Fund should assemble before any action, actual: {self._lc._describe_actual()}")
-
         if existing_assets is None:
             pass
         elif isinstance(existing_assets, list):
@@ -159,63 +151,41 @@ class Fund:
             if asset.is_profile:
                 warnings.warn(f"Unexpected profile asset '{asset}'")
 
-        # Aggregate asset value
+        # record
+        self._asset_rec.record_before_dealing(require_cash_flow=False, require_investment_return=False)
         self._asset_rec.record_after_dealing(require_investment_return=False)
         self._liab_rec.record_before_dealing(require_cash_flow=False)
         self._liab_rec.record_after_dealing()
-
-        self._lc.mark(FundPhase.CLOSED, self.time or 0)
+        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"bd")
+        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"ad")
+        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"end")
 
     @property
     def primary_cash_asset(self) -> Cash | None:
         if self._primary_cash_asset is None or not self._primary_cash_asset.is_alive:
+            self._primary_cash_asset = None
             for asset in self._asset_conn:
                 if isinstance(asset, Cash) and asset.is_alive:
                     self._primary_cash_asset = asset
                     break
             if self._primary_cash_asset is None:
-                warnings.warn(f"No cash assets available.")
+                warnings.warn(f"No cash available in existing assets.")
         return self._primary_cash_asset
 
-    @transition(require_not=FundPhase.PROC_ASSET_BD, mark=FundPhase.PROC_ASSET_BD)
-    def process_assets_before_dealing(self) -> None:
-        """Process asset cash flows and reported values before dealing (bd)."""
-        self._asset_rec.record_before_dealing()
-        self._uninvested_proceeds.increase(self._asset_rec.total_cash_flow)
+    def record_before_dealing(self, scope: Literal["assets", "liabs"] | list[Literal["assets", "liabs"]]) -> None:
+        scope = scope if isinstance(scope, list) else [scope]
+        for item in scope:
+            if item == "assets":
+                self._asset_rec.record_before_dealing()
+                self._free_proceeds_keeper += self._asset_rec.total_cash_flow
+            elif item == "liabs":
+                self._liab_rec.record_before_dealing()
+                self._free_proceeds_keeper += self._liab_rec.total_cash_flow
+            else:
+                raise ValueError(f"Invalid scope '{item}', expected ('assets', 'liabs').")
 
-    @transition(require_not=FundPhase.PROC_LIAB_BD, mark=FundPhase.PROC_LIAB_BD)
-    def process_liabs_before_dealing(self) -> None:
-        """Process liability cash flows and balance sheet variables before dealing (bd)."""
-        self._liab_rec.record_before_dealing()
-        self._uninvested_proceeds.increase(self._liab_rec.total_cash_flow)
-
-    @transition(require_not=FundPhase.REBALANCED, mark=FundPhase.REBALANCED)
-    def no_action_on_rebalance(self) -> None:
-        """Skip asset rebalance, invest free proceeds into primary cash."""
-        self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "bd")
-        # just invest free_estate into primary cash, no other action, free_estate is reset to zero
-        self.primary_cash_asset.invest_new_money(self._uninvested_proceeds.take_out())
-        for asset in self.assets:
-            asset.close_dealing()
-        self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "ad")  # free_estate should be zero
-        self._asset_rec.record_after_dealing()
-
-    @transition(require_not=FundPhase.REBALANCED, mark=FundPhase.REBALANCED)
-    def rebalance_assets(self, *, func: Callable | None = None, **kwargs) -> None:
-        """Rebalance assets per target allocation and optional profile.
-        """
-        self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "bd")
-        # process rebalance
-        if func is None:
-            func = self._default_rebalance_func
-        net_proceeds = func(self._asset_conn, **kwargs)
-        if net_proceeds is not None:
-            self._uninvested_proceeds.increase(net_proceeds)
-
-        for asset in self.assets:
-            asset.close_dealing()
-        self._other_rec.record_uninvested_proceeds(self._uninvested_proceeds.value, "ad")  # free_estate should be zero
-        self._asset_rec.record_after_dealing()
+    def record_free_proceeds(self, timing: Literal["bd", "ad", "end"]):
+        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance, timing)
 
     def get_total(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
                   allow_not_exist: bool = False) -> float:
@@ -261,21 +231,36 @@ class Fund:
         else:
             raise ValueError(f"Invalid '{key}', expected 'asset.attr' or 'liab.attr'.")
 
-    @transition(require_all=FundPhase.REBALANCED, require_not=FundPhase.PROC_LIAB_AD, mark=FundPhase.PROC_LIAB_AD)
-    def process_liabs_after_dealing(self) -> None:
-        """Process liability values after dealing (ad). Note: liab.update_ad() is NOT automatically called here."""
-        self._liab_rec.record_after_dealing()
+    def record_after_dealing(self, scope: Literal["assets", "liabs"] | list[Literal["assets", "liabs"]]) -> None:
+        scope = scope if isinstance(scope, list) else [scope]
+        for item in scope:
+            if item == "assets":
+                self._asset_rec.record_after_dealing()
+            elif item == "liabs":
+                self._liab_rec.record_after_dealing()
+            else:
+                raise ValueError(f"Invalid scope '{item}', expected ('assets', 'liabs').")
 
-    def take_out_uninvested_proceeds(self, *, transfer_to: Self | None = None) -> float:
-        """Transfer free estate to the other fund.
+    def invest_free_proceeds_to_cash(self, cash: Cash | None = None) -> None:
+        cash = cash or self.primary_cash_asset
+        if cash is not None:
+            cash.invest_new_money(self.free_proceeds_keeper.take_out())
+        else:
+            warnings.warn(f"Cash asset is neither provided nor found in existing assets.")
+
+    def take_out_free_proceeds(self, *, transfer_to: Self | None = None) -> float:
+        """Transfer free proceeds to the other fund.
 
         Args:
             transfer_to (Self | None): Fund to receive proceeds (usually shareholder fund), defaults to None.
+
+        Returns:
+            float: The free proceeds taken out; return 0.0 if a `transfer_to` is provided.
         """
         if transfer_to is self:
             raise ValueError(f"{self.fund_id}: cann't transfer to self.")
 
-        amount = self._uninvested_proceeds.take_out()
+        amount = self._free_proceeds_keeper.take_out()
         self._other_rec.record_free_proceeds_transfer(- amount)
 
         if isinstance(transfer_to, Fund):
@@ -290,19 +275,19 @@ class Fund:
         Args:
             amount (float): Amount to receive (can be either positive ornegative).
         """
-        self._uninvested_proceeds.increase(amount)
+        self._free_proceeds_keeper += amount
         self._other_rec.record_free_proceeds_transfer(amount)
 
     def pay_tax(self, amount: float, /) -> None:
-        self._uninvested_proceeds.increase(- amount)
+        self._free_proceeds_keeper -= amount
         self._other_rec.record_pay_tax(amount)
 
     def receive_capital_contribution(self, amount: float, /) -> None:
-        self._uninvested_proceeds.increase(amount)
+        self._free_proceeds_keeper += amount
         self._other_rec.record_receive_capital(amount)
 
     def pay_dividends_to_shareholders(self, amount: float, /):
-        self._uninvested_proceeds.increase(- amount)
+        self._free_proceeds_keeper -= amount
         self._other_rec.record_pay_dividends(amount)
 
     @property

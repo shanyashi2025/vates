@@ -116,8 +116,9 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             # step 4: liabs update after dealing (ad)
             liabs_close_dealing(fund=fund)
 
-            # step 5: transfer accumulated free proceeds to shareholder fund
-            _ = fund.take_out_uninvested_proceeds()  # just take out, shareholder fund is None
+            # step 5: transfer free proceeds to shareholder fund
+            _ = fund.take_out_free_proceeds()  # just take out, shareholder fund is None
+            fund.record_free_proceeds("end")
 
             # step 6: store liability cash flow
             model.liab_cf[fund][t] = fund.total_liab_cash_flow

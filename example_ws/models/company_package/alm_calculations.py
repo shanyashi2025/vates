@@ -1,7 +1,8 @@
 import pandas as pd
+from dataclasses import replace
 
 from vates import ProjModelEngine
-from vates.alm import Fund, AssetAllocationParams, getRebalanceFunction
+from vates.alm import Fund, AssetAllocationParams
 from vates.utils import KeyedArray
 
 from .setup_objs_alm import FundRebalanceParams
@@ -30,12 +31,12 @@ def fund_assets_roll_forward(fund: Fund, **kwargs) -> None:
     for asset in fund.assets:
         asset.roll_forward(**kwargs)
 
-    fund.process_assets_before_dealing()
+    fund.record_before_dealing(scope="assets")
 
 
 def fund_liabs_roll_forward(fund: Fund, epl: KeyedArray | None = None, **kwargs) -> None:
     if fund.liabs is None or len(fund.liabs) == 0:
-        fund.process_liabs_before_dealing()
+        fund.record_before_dealing(scope="liabs")
         return
 
     t, p = fund.time, fund.period
@@ -105,7 +106,7 @@ def fund_liabs_roll_forward(fund: Fund, epl: KeyedArray | None = None, **kwargs)
                 asset_share_if_bd=0,
             )
 
-    fund.process_liabs_before_dealing()
+    fund.record_before_dealing(scope="liabs")
 
 
 def liabs_close_dealing(fund: Fund) -> None:
@@ -119,13 +120,15 @@ def liabs_close_dealing(fund: Fund) -> None:
             else:
                 liab.close_dealing(asset_share_if_ad=0.0)
 
-    fund.process_liabs_after_dealing()
+    fund.record_after_dealing(scope="liabs")
 
 
 def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance_params: FundRebalanceParams,
                             assets_df_dict: dict, econs: dict | EsgMaster, asset_mix_df: pd.DataFrame):
     fund_id = fund.fund_id
     period = fund.period
+
+    fund.record_free_proceeds("bd")
 
     if rebalance_this_month(period.month, rebalance_params.rebalance_freq):
         profile_assets = AssetMaster.profile_from_df(
@@ -137,27 +140,30 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
         allocation_group_params: dict[str, AssetAllocationParams] = {}
         target_weights = build_target_weights(asset_mix_df, fund_id, str(period.year * 100 + period.month))
         for key, params in rebalance_params.allocation_params.items():
-            allocation_group_params[key] = AssetAllocationParams.create(
-                sequence=params.sequence,
-                strategy=params.strategy,
-                purchase_method=params.purchase_method,
-                target_weight=target_weights.get(key, None),
-            )
+            allocation_group_params[key] = replace(params, target_weight=target_weights.get(key, None))
 
-        fund.rebalance_assets(
-            func=getRebalanceFunction(),
+        _ = rebalance_params.rebalance_func(
+            exist_assets=fund.assets,
+            free_proceeds_keeper=fund.free_proceeds_keeper,
             profile_assets=profile_assets,
             total_size=total_size,
             asset_size_basis=asset_size_basis,
             allocation_group_params=allocation_group_params,
         )
-    else:
-        fund.no_action_on_rebalance()
 
+    else:
+        fund.invest_free_proceeds_to_cash()
+
+    for asset in fund.assets:
+        asset.close_dealing()
+
+    fund.record_free_proceeds("ad")
+    fund.record_after_dealing(scope="assets")
 
 def get_fund_size(fund: Fund, size_type: str, *, asset_size_basis: str) -> float:
     if size_type == "FUND":
-        return fund.get_total(func=lambda x, y: x + y, key=(f"asset.{asset_size_basis}", "uninvested_proceeds"))
+        return fund.get_total(key=f"asset.{asset_size_basis}") + fund.free_proceeds
+        # return fund.get_total(func=lambda x, y: x + y, key=(f"asset.{asset_size_basis}", "uninvested_proceeds"))
     elif size_type == "MATH_RES":
         return fund.get_total(key="liab.math_res_if")
     elif size_type == "SURR_VALUE":

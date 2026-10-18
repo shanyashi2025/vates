@@ -4,7 +4,7 @@ from typing import Self
 
 from vates.alm.assets import Asset
 from vates.alm._utils import Connector
-from vates.alm.allocation._enums import AssetAllocationStrategy, AssetPurchaseMethod
+from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod
 
 
 class BuySellAction(Enum):
@@ -81,7 +81,7 @@ class AssetAllocationParams:
             raise TypeError(f"Invalid type of 'target_weight': {type(self.target_weight)}, expected 'tuple'.")
 
 
-class AssetAllocationGroup:
+class _AssetAllocationGroup:
     """Asset allocation group.
 
     Attributes:
@@ -94,7 +94,7 @@ class AssetAllocationGroup:
     """
 
     __slots__ = ("_name", "_params", "_exist", "_profile", "_staged", "_size_basis", "_target_size",
-                 "_profile_size", "_trade_decision", "_net_proceeds")
+                 "_profile_size", "_trade_decision", "_free_proceeds")
 
     def __init__(
         self,
@@ -133,7 +133,7 @@ class AssetAllocationGroup:
 
         self._staged: Connector[Asset] = Connector[Asset]()
         self._trade_decision: TradeOrder = TradeOrder(action=BuySellAction.NOOP)
-        self._net_proceeds: float = 0.0
+        self._free_proceeds: float = 0.0
 
     @property
     def name(self) -> str:
@@ -167,8 +167,8 @@ class AssetAllocationGroup:
     def staged_conn(self) -> Connector[Asset]:
         return self._staged
 
-    def take_out_net_proceeds(self) -> float:
-        amount, self._net_proceeds = self._net_proceeds, 0.0
+    def take_out_free_proceeds(self) -> float:
+        amount, self._free_proceeds = self._free_proceeds, 0.0
         return amount
 
     @property
@@ -281,7 +281,7 @@ class AssetAllocationGroup:
                 self.staged_conn.append(new_asset) # append to asset list of the staged
                 net_proceeds -= new_asset.market_value
 
-        self._net_proceeds += net_proceeds
+        self._free_proceeds += net_proceeds
 
         if consume_self_trade_decision:
             self._trade_decision = TradeOrder(action=BuySellAction.NOOP)  # reset after consumed

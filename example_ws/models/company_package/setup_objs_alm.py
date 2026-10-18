@@ -3,7 +3,7 @@ from typing import List, Self, Callable
 import pandas as pd
 
 from vates import ProjModelEngine
-from vates.alm import Currency, Liab, ExtProjLiab, Fund, AssetAllocationParams, getRebalanceFunction
+from vates.alm import Currency, Liab, ExtProjLiab, Fund, AssetAllocationParams, Rebalancer
 
 
 @dataclass
@@ -21,7 +21,7 @@ class FundRebalanceParams:
     asset_size_basis: str
     rebalance_freq: int
     allocation_params: dict[str, AssetAllocationParams]
-    rebalance_func: Callable | None = None
+    rebalance_func: Callable
 
 
 class FundMaster:
@@ -73,12 +73,14 @@ class FundMaster:
             funds.append(fund)
 
             allocation_params = cls.build_asset_allocation_params_from_df(asset_allocation_groups_df, fund_id=fund_id)
+            allocation_group_names = list(allocation_params.keys())
+            allocation_group_names.sort(key=lambda x: allocation_params[x].sequence)  # sorted by sequence
             rebalance_params_dict[fund_id] = FundRebalanceParams(
                 fund_size_type=row["fund_size_type"].upper(),
                 asset_size_basis=row["asset_size_basis"].upper(),
                 rebalance_freq=row["fund_rebalance_freq"],  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
                 allocation_params=allocation_params,
-                rebalance_func=getRebalanceFunction(),
+                rebalance_func=Rebalancer(name=fund_id, model_engine=model_engine, allocation_group_names=allocation_group_names)
             )
 
         return FundMaster(funds=funds, ph_funds=ph_funds, sh_fund=sh_fund, rebalance_params_dict=rebalance_params_dict)

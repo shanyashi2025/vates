@@ -152,8 +152,8 @@ class ConstVariable(ProjVariable):
         return True
 
     @property
-    def dims(self) -> list | None:
-        """list | None: Dimension labels or None if scalar."""
+    def dims(self) -> tuple[tuple[str]] | None:
+        """tuple[tuple[str]] | None: Dimension labels or None if scalar."""
         return self._dims
 
     @property
@@ -270,8 +270,8 @@ class TDimVariable(ProjVariable):
         return False
 
     @property
-    def dims(self) -> list | None:
-        """list | None: Dimension labels or None if scalar."""
+    def dims(self) -> tuple[tuple[str]] | None:
+        """tuple[tuple[str]] | None: Dimension labels or None if scalar."""
         return self._dims
 
     @property

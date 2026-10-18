@@ -1,15 +1,14 @@
-from vates.alm import allocation
+from vates.alm import allocator
 from vates.alm import assets
 from vates.alm import econs
 from vates.alm import liabs
 from vates.alm import funds
 # allocation
-from vates.alm.allocation import(
+from vates.alm.allocator import(
     AssetAllocationStrategy,
     AssetPurchaseMethod,
-    AssetAllocationGroup,
+    Rebalancer,
     AssetAllocationParams,
-    getRebalanceFunction,
 )
 # assets
 from vates.alm.assets import (
@@ -41,7 +40,7 @@ from vates.alm.funds import (
 )
 
 __all__ = [
-    'allocation',
+    'allocator',
     'assets',
     'econs',
     'liabs',
@@ -49,9 +48,8 @@ __all__ = [
     # allocation
     'AssetAllocationStrategy',
     'AssetPurchaseMethod',
-    'AssetAllocationGroup',
     'AssetAllocationParams',
-    'getRebalanceFunction',
+    'Rebalancer',
     # assets
     'create_asset',
     'Asset',

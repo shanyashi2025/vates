@@ -44,7 +44,7 @@ class AssetRecorder:
         'totass_cf', 'catass_cf',
         'totass_mv_op', 'totass_mv_bd', 'totass_mv_ad', 'catass_mv_op', 'catass_mv_bd', 'catass_mv_ad',
         'totass_rv_op', 'totass_rv_bd', 'totass_rv_ad', 'catass_rv_op', 'catass_rv_bd', 'catass_rv_ad',
-        'tdv_totass_cf', 'tdv_totass_rv_bd', 'tdv_totass_rv_ad',
+        'tdv_totass_cf', 'tdv_totass_mv_bd', 'tdv_totass_mv_ad', 'tdv_totass_rv_bd', 'tdv_totass_rv_ad',
         'tdv_totass_ret_bd', 'tdv_totass_ror_pc_bd', 'tdv_totass_ret_ad', 'tdv_totass_ror_pc_ad',
         'tdv_catass_cf', 'tdv_catass_rv_bd', 'tdv_catass_rv_ad',
         'tdv_catass_ret_bd', 'tdv_catass_ror_pc_bd', 'tdv_catass_ret_ad', 'tdv_catass_ror_pc_ad',
@@ -85,6 +85,8 @@ class AssetRecorder:
         # dims = None
         create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund')
         self.tdv_totass_cf: TDimVariable = create_tdv("totass_cash_flow")
+        self.tdv_totass_mv_bd: TDimVariable = create_tdv("totass_mv_bd")
+        self.tdv_totass_mv_ad: TDimVariable = create_tdv("totass_mv_ad")
 
         if asset_report_bases:
             # dims = asset_report_bases
@@ -123,7 +125,7 @@ class AssetRecorder:
     def total_cash_flow(self) -> float:
         return self.totass_cf
 
-    @transition(mark=RecorderPhase.ASSET_REC_BD)
+    @transition(require_not=RecorderPhase.ASSET_REC_BD, mark=RecorderPhase.ASSET_REC_BD)
     def record_before_dealing(self, require_cash_flow: bool = True, require_investment_return: bool = True) -> None:
         """Record asset before dealing (bd).
         """
@@ -162,7 +164,7 @@ class AssetRecorder:
             self.tdv_catass_ret_bd[t] = ret
             self.tdv_catass_ror_pc_bd[t] = ror * 100
 
-    @transition(mark=RecorderPhase.ASSET_REC_AD)
+    @transition(require_not=RecorderPhase.ASSET_REC_AD, mark=RecorderPhase.ASSET_REC_AD)
     def record_after_dealing(self, require_investment_return: bool = True) -> None:
         """Record asset after dealing (ad).
         """
@@ -210,53 +212,44 @@ class AssetRecorder:
 
         # 1. always calculate total asset market value
         tot_mv = self.asset_conn.sum_attr("market_value")
+        if timing == "bd":
+            self.totass_mv_bd, self.tdv_totass_mv_bd[t] = tot_mv, tot_mv
+        else: # timing == "ad"
+            self.totass_mv_ad, self.tdv_totass_mv_ad[t] = tot_mv, tot_mv
 
         # 2. category asset market value, shape = (categories, )
         if self.asset_category_attr:
             val_dict = self.asset_conn.sum_attr(
                 "market_value", group_by=self.asset_category_attr, slice_key=self.asset_categories)
             cat_mv = np.array([val_dict[cat] for cat in self.asset_categories])
-        else:
-            cat_mv = None
+            if timing == "bd":
+                self.catass_mv_bd = cat_mv
+            else:  # timing == "ad"
+                self.catass_mv_ad = cat_mv
 
         # 3. total asset reported values, shape = (report_bases, )
         if self.asset_report_bases:
             tot_rv = self.asset_conn.sum_attr(self.asset_report_bases)
-        else:
-            tot_rv = None
+            if timing == "bd":
+                self.totass_rv_bd, self.tdv_totass_rv_bd[t] = tot_rv, tot_rv
+            else:  # timing == "ad"
+                self.totass_rv_ad, self.tdv_totass_rv_ad[t] = tot_rv, tot_rv
 
         # 4. category asset reported values, shape = (categories, report_bases)
         if self.asset_report_bases and self.asset_categories:
             val_dict = self.asset_conn.sum_attr(
                 self.asset_report_bases, group_by=self.asset_category_attr, slice_key=self.asset_categories)
             cat_rv = np.array([val_dict[cat] for cat in self.asset_categories])
-        else:
-            cat_rv = None
-
-        if timing == "bd":
-            self.totass_mv_bd = tot_mv
-            self.catass_mv_bd = cat_mv
-            self.totass_rv_bd = tot_rv
-            self.catass_rv_bd = cat_rv
-            self.tdv_totass_rv_bd[t] = self.totass_rv_bd
-            self.tdv_catass_rv_bd[t] = self.catass_rv_bd
-        else: # timing == "ad"
-            self.totass_mv_ad = tot_mv
-            self.catass_mv_ad = cat_mv
-            self.totass_rv_ad = tot_rv
-            self.catass_rv_ad = cat_rv
-            self.tdv_totass_rv_ad[t] = self.totass_rv_ad
-            self.tdv_catass_rv_ad[t] = self.catass_rv_ad
+            if timing == "bd":
+                self.catass_rv_bd, self.tdv_catass_rv_bd[t] = cat_rv, cat_rv
+            else:  # timing == "ad"
+                self.catass_rv_ad, self.tdv_catass_rv_ad[t] = cat_rv, cat_rv
 
     def _on_time_change(self) -> None:
-        self.totass_mv_op = self.totass_mv_ad
-        self.catass_mv_op = self.catass_mv_ad
-        self.totass_mv_ad = None
-        self.catass_mv_ad = None
-        self.totass_rv_op = self.totass_rv_ad
-        self.catass_rv_op = self.catass_rv_ad
-        self.totass_rv_ad = None
-        self.catass_rv_ad = None
+        self.totass_mv_op, self.totass_mv_ad = self.totass_mv_ad, None
+        self.catass_mv_op, self.catass_mv_ad = self.catass_mv_ad, None
+        self.totass_rv_op, self.totass_rv_ad = self.totass_rv_ad, None
+        self.catass_rv_op, self.catass_rv_ad = self.catass_rv_ad, None
         self.totass_cf = None
         self.catass_cf = None
 
@@ -317,7 +310,7 @@ class LiabRecorder:
     def total_cash_flow(self) -> float:
         return self.totliab_cf
 
-    @transition(mark=RecorderPhase.LIAB_REC_BD)
+    @transition(require_not=RecorderPhase.LIAB_REC_BD, mark=RecorderPhase.LIAB_REC_BD)
     def record_before_dealing(self, require_cash_flow: bool = True) -> None:
         """Record liability before dealing (bd).
         """
@@ -331,7 +324,7 @@ class LiabRecorder:
         # Aggregate liability value
         self._sum_attrs("bd")
 
-    @transition(mark=RecorderPhase.LIAB_REC_AD)
+    @transition(require_not=RecorderPhase.LIAB_REC_AD, mark=RecorderPhase.LIAB_REC_AD)
     def record_after_dealing(self) -> None:
         """Process liability values and cash flows after dealing (ad).
         """
@@ -367,8 +360,8 @@ class OtherRecorder:
 
     __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name',
                  'tax_paid', 'capital_received', 'dividends_paid',
-                 'tdv_uninvested_proceeds_bd', 'tdv_uninvested_proceeds_ad',
-                 'tdv_proceeds_tran_in', 'tdv_proceeds_tran_out',
+                 'tdv_free_proceeds_bd', 'tdv_free_proceeds_ad', 'tdv_free_proceeds_end',
+                 'tdv_proceeds_tran_in', 'tdv_proceeds_tran_out', 'tdv_proceeds_tran_net',
                  'tdv_tax_paid', 'tdv_capital_received', 'tdv_dividends_paid')
 
     def __init__(self, *, name: str, model_engine: ProjModelEngine | None = None):
@@ -377,26 +370,32 @@ class OtherRecorder:
         self.dividends_paid: float = 0.0
         # Initialize time-dimensioned variables for output
         create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund')
-        self.tdv_uninvested_proceeds_bd: TDimVariable = create_tdv("uninvested_proceeds_bd")
-        self.tdv_uninvested_proceeds_ad: TDimVariable = create_tdv("uninvested_proceeds_ad")
+        self.tdv_free_proceeds_bd: TDimVariable = create_tdv("free_proceeds_bd")
+        self.tdv_free_proceeds_ad: TDimVariable = create_tdv("free_proceeds_ad")
+        self.tdv_free_proceeds_end: TDimVariable = create_tdv("free_proceeds_end")
         self.tdv_proceeds_tran_in: TDimVariable = create_tdv("proceeds_transferred_in")
         self.tdv_proceeds_tran_out: TDimVariable = create_tdv("proceeds_transferred_out")
+        self.tdv_proceeds_tran_net: TDimVariable = create_tdv("proceeds_transferred_net")
         self.tdv_tax_paid: TDimVariable = create_tdv("tax_paid")
         self.tdv_capital_received: TDimVariable = create_tdv("capital_contribution_received")
         self.tdv_dividends_paid: TDimVariable = create_tdv("dividends_paid_to_shareholders")
 
-    def record_uninvested_proceeds(self, value: float, timing: str) -> None:
-        timing = _validate_timing(timing)
+    def record_free_proceeds(self, value: float, timing: str) -> None:
         if timing == "bd":
-            self.tdv_uninvested_proceeds_bd[self.time] = value
+            self.tdv_free_proceeds_bd[self.time] = value
+        elif timing == "ad":
+            self.tdv_free_proceeds_ad[self.time] = value
+        elif timing == "end":
+            self.tdv_free_proceeds_end[self.time] = value
         else:
-            self.tdv_uninvested_proceeds_ad[self.time] = value
+            raise ValueError(f"Invalid timing {timing}, expected ('bd', 'ad', 'end').")
 
     def record_free_proceeds_transfer(self, amount: float) -> None:
         t = self.time
         amt_in, amt_out = max(amount, 0.0), max(- amount, 0.0)
         self.tdv_proceeds_tran_in[t] += amt_in
         self.tdv_proceeds_tran_out[t] += amt_out
+        self.tdv_proceeds_tran_net[t] += amount
 
     def record_pay_tax(self, amount: float) -> None:
         self.tax_paid += amount
@@ -414,4 +413,7 @@ class OtherRecorder:
         self.tax_paid: float = 0.0
         self.capital_received: float = 0.0
         self.dividends_paid: float = 0.0
-
+        t = self.time
+        self.tdv_free_proceeds_bd[t] = None  # set value to None, unless `record_free_proceeds` is actively called
+        self.tdv_free_proceeds_ad[t] = None
+        self.tdv_free_proceeds_end[t] = None

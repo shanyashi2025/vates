@@ -128,7 +128,7 @@ class Equity(Asset):
             propn (float): Proportion to sell.
         """
         if not (0 < propn <=1):
-            warnings.warn(f"Buying proportion {propn:.4f} of an exsiting equity '{self._asset_id}', "
+            warnings.warn(f"Selling proportion {propn:.4f} of an exsiting equity '{self._asset_id}', "
                           f"normally expected: 0 < proportion <=1.")
         amount = self._mv * propn
         self._mv -= amount

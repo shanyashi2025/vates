@@ -1,0 +1,261 @@
+import numpy as np
+import pandas as pd
+import uuid
+import warnings
+from typing import Literal
+
+from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
+from vates.global_conf import CheckLevel
+from vates.alm.assets import Asset, Cash
+from vates.alm._utils import Connector
+from vates.alm.allocator._allocation_group import _AssetAllocationGroup, AssetAllocationParams, TradeOrder, BuySellAction
+from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod
+from vates.alm.allocator.proceeds_keeper import ProceedsKeeper
+
+
+def _rebalance_allocation_groups(
+    groups: list[_AssetAllocationGroup],
+    total_size: float,
+    check_level: CheckLevel | None = CheckLevel.WARN,
+) -> None:
+    """Rebalance assets in the fund to match the target allocation.
+
+    Args:
+        total_size (float): Total size for allocation, shall correspond to `asset_size_basis`.
+        check_level (CheckLevel): Check level for validation against allocation, defaults to None.
+
+    """
+    res_groups: list[_AssetAllocationGroup] = [ag for ag in groups if ag.strategy == AssetAllocationStrategy.RESIDUAL]
+
+    # --- step 2: process non-residual groups in sequence ---
+    for ag in groups:
+        if ag.strategy != AssetAllocationStrategy.RESIDUAL:
+            ag.make_trade_decision()
+            ag.execute_trade()
+
+    # --- step 3: process residual groups ---
+    size_gap = total_size - sum(ag.current_size for ag in groups)
+    _process_residual_groups(residual_groups=res_groups, size_gap=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
+
+    # --- step 4: validate if target allocations is satisfied ---
+    for ag in groups:
+        if not ag.is_allocation_satisfied():
+            msg = (
+                f"{ag.name}: allocation is not satisfied, {ag.current_size/total_size:.4%}; strategy: {ag.strategy.name}; "
+                f"(floor, cap): ({ag.target_weight[0]:.4%}, {ag.target_weight[2]:.4%}); "
+                f"purchase method: {ag.purchase_method.name}.")
+            if check_level == CheckLevel.ERROR:
+                raise ValueError(msg)
+            warnings.warn(msg)
+
+
+def _make_sorted_alloc_groups(
+    *,
+    exist_assets: Connector[Asset] | list[Asset],
+    profile_assets: list[Asset] | None,
+    total_size: float,
+    asset_size_basis: str,
+    allocation_group_attr_name: str,
+    allocation_group_params: dict[str, AssetAllocationParams],
+    require_validate: bool = True
+) -> list[_AssetAllocationGroup]:
+    ag_kwargs: dict[str, dict[str, ...]] = {}
+    for name, params in allocation_group_params.items():
+        if name in ag_kwargs:
+            raise KeyError(f"Duplicate allocation group name: '{name}'.")
+        ag_kwargs[name] = {
+            "params": params,
+            "total_size": total_size,
+            "size_basis": asset_size_basis,
+            "exist_assets": [],
+            "profile_assets": [],
+        }
+
+    for asset in exist_assets:
+        name = getattr(asset, allocation_group_attr_name, None)
+        ag = ag_kwargs.get(name, None)
+        if ag is not None:
+            ag["exist_assets"].append(asset)
+
+    for asset in profile_assets or []:
+        name = getattr(asset, allocation_group_attr_name, None)
+        ag = ag_kwargs.get(name, None)
+        if ag is not None:
+            ag["profile_assets"].append(asset)
+
+    alloc_groups: list[_AssetAllocationGroup] = [_AssetAllocationGroup(name=key, **val) for key, val in ag_kwargs.items()]
+    alloc_groups.sort(key=lambda x: x.sequence)
+
+    if require_validate:
+        seen_residual = []
+        for i, ag in enumerate(alloc_groups):
+            if ag.strategy is AssetAllocationStrategy.RESIDUAL:
+                seen_residual.append(i)
+            if ag.strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
+                if ag.target_weight is None:
+                    raise ValueError(f"'{ag.name}': '{ag.strategy.value}'; 'target_weight' is 'None'.")
+                if ag.purchase_method is None:
+                    raise ValueError(f"'{ag.name}': '{ag.strategy.value}'; 'purchase_method' is 'None'.")
+                if ag.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and len(ag.exist_conn) == 0:
+                    raise ValueError(f"'{ag.name}': 'SCALE_UP_EXISTING'; no exsiting asset.")
+                if ag.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and len(ag.profile_conn) == 0:
+                    raise ValueError(f"'{ag.name}': 'PURCHASE_PROFILE';  no profile asset.")
+
+        if len(seen_residual) == 0:
+            pass
+        else:
+            if seen_residual[-1] + 1 != len(alloc_groups):
+                raise ValueError(f"Last allocation group must be 'RESIDUAL'.")
+            if seen_residual[-1] - seen_residual[0] + 1 != len(seen_residual):
+                raise ValueError(f"All 'RESIDUAL' allocation groups must be after non-'RESIDUAL'.")
+
+    return alloc_groups
+
+
+def _process_residual_groups(residual_groups: list[_AssetAllocationGroup], size_gap: float, tolerance: float) -> None:
+    if abs(size_gap) <= tolerance:
+        return
+
+    if len(residual_groups) == 0:
+        warnings.warn(f"Target allocation is not met but no residual allocation group to process.")
+        return
+
+    current_residual_size: float = sum([ag.current_size for ag in residual_groups])
+
+    if current_residual_size == 0:
+        # This would be very edge case when total residual allocation group (usually cash) balance happens to be zero.
+        # Utilize cash asset to safely proceed
+        _fallback_cash = None
+        for asset in [ag.exist_conn for ag in residual_groups]:
+            if isinstance(asset, Cash):
+                _fallback_cash = asset
+                break
+        if _fallback_cash is not None:
+            _fallback_cash.invest_new_money(size_gap)
+        else:
+            warnings.warn(f"No cash asset in 'RESIDUAL' group is available for sclaing.")
+        return
+
+    # scale residual allocation_group
+    if size_gap > 0:
+        trade_decn = TradeOrder(action=BuySellAction.BUY_EXIST, arg=size_gap / current_residual_size)
+    elif size_gap < 0:
+        trade_decn = TradeOrder(action=BuySellAction.SELL, arg=- size_gap / current_residual_size)
+    else:
+        raise ValueError("Should never get here.")
+
+    for ag in residual_groups:
+        ag.execute_trade(trade_decn)
+
+
+@time_synchronized("model_engine.time_synchronizer")
+class Rebalancer:
+    """Manages asset allocation and rebalancing for a fund.
+
+    Groups assets by allocation group and applies rebalance policy to sell/buy
+    or scale exposure to meet target allocations with tolerances.
+
+    """
+    time: int          # for type hint only, will be injected by decorator `time_synchronized`
+    period: pd.Period  # for type hint only, will be injected by decorator `time_synchronized`
+
+    __slots__ = ('__weakref__', 'time', 'period', 'name', 'group_names',
+                 'tdv_fund_size', 'tdv_ag_size_bd', 'tdv_ag_size_ad', 'tdv_ag_wgt_pc_bd', 'tdv_ag_wgt_pc_ad',)
+
+    def __init__(
+        self,
+        name: str | None = None,
+        *,
+        model_engine: ProjModelEngine | None = None,
+        allocation_group_names: list[str]
+    ):
+        self.name: str = name or str(uuid.uuid4())
+        self.group_names: tuple[str, ...] = tuple(allocation_group_names)
+
+        tdv_kwargs = {"model_engine": model_engine, "owner": self.name, "group": 'rebalance'}
+        self.tdv_fund_size = make_proj_variable("fund_size", **tdv_kwargs)
+        tdv_kwargs = {"model_engine": model_engine, "owner": self.name, "group": 'rebalance', 'dims': [self.group_names]}
+        self.tdv_ag_size_bd = make_proj_variable("size_bd", **tdv_kwargs)
+        self.tdv_ag_size_ad = make_proj_variable("size_ad", **tdv_kwargs)
+        self.tdv_ag_wgt_pc_bd = make_proj_variable("weight_pc_bd", **tdv_kwargs)
+        self.tdv_ag_wgt_pc_ad = make_proj_variable("weight_pc_ad", **tdv_kwargs)
+
+    def __call__(
+        self,
+        exist_assets: Connector[Asset] | list[Asset],
+        *,
+        free_proceeds_keeper: ProceedsKeeper | None = None,
+        profile_assets: list[Asset] | None = None,
+        total_size: float,
+        asset_size_basis: str,
+        allocation_group_attr_name: str = "allocation_group",
+        allocation_group_params: dict[str, AssetAllocationParams],
+        min_size_tol: float = 0.0001,
+        on_negative_size: Literal["zero", "pass", "as_is"] = "zero",
+        check_level: CheckLevel | None = CheckLevel.WARN,
+        **kwargs
+    ) -> float:
+        """Rebalance assets in the fund to match the target allocation.
+
+        Args:
+            exist_assets (Connector[Asset] | list[Asset]): Connector of list of assets to be rebalanced.
+            free_proceeds_keeper (ProceedsKeeper | None): Free proceeds' keeper.
+            profile_assets (list[Asset] | None): Profile assets for reference.
+            total_size (float): Total size for allocation, shall correspond to `asset_size_basis`.
+            asset_size_basis (str): Asset reporting basis for sizing (e.g. FAV or BSV).
+            allocation_group_attr_name (str): Named attribute for asset allocation group, defaults to "allocation_group".
+            allocation_group_params (dict[str, AssetAllocationGroupParams]): Parameters for each allocation group.
+            min_size_tol (float): Tolerance of minimum size, normally to prevent ZeroDivisionError; defaults to 0.0001.
+            on_negative_size (Literal["zero", "pass", "as_is"]): When size is negative; defaults to "zero".
+            check_level (CheckLevel): Check level for validation against allocation, defaults to None.
+
+        Returns:
+            float: Free proceeds after the reblancing: proceeds received from disposal (sell), minus proceeds spent
+                to purchase (buy); if a `free_proceeds_keeper` provided, return 0.0.
+
+        """
+        t, p = self.time, self.period
+        if total_size < 0.0:
+            if on_negative_size == "pass":
+                return 0.0
+            elif on_negative_size == "as_is":
+                pass
+            else:  # on_negative_size == "zero":
+                warnings.warn(f'{p} {self.name}: negative fund size ({total_size:.2f}) will be treated as zero, and '
+                              'all existing assets will be sold to reblance.')
+                total_size = max(total_size, min_size_tol)
+        total_size = -max(total_size, min_size_tol) if total_size < 0.0 else max(total_size, min_size_tol)  # to prevent ZeroDivisionError
+
+        groups: list[_AssetAllocationGroup] = _make_sorted_alloc_groups(
+            exist_assets=exist_assets,
+            profile_assets=profile_assets,
+            total_size=total_size,
+            asset_size_basis=asset_size_basis,
+            allocation_group_attr_name=allocation_group_attr_name,
+            allocation_group_params=allocation_group_params,
+        )
+
+        if set([ag.name for ag in groups]) != set(self.group_names):
+            warnings.warn(f"Keys in 'allocation_group_params' don't match 'allocation_group_names'.")
+
+        tdv_index: list[int] = [len(self.group_names) + 1] * len(self.group_names)
+        for i, ag in enumerate(groups):
+            tdv_index[self.group_names.index(ag.name)] = i
+
+        self.tdv_fund_size[t] = total_size
+        current_sizes = [groups[i].current_size for i in tdv_index]
+        self.tdv_ag_size_bd[t] = np.array(current_sizes)
+        self.tdv_ag_wgt_pc_bd[t] = np.array([v / total_size for v in current_sizes]) * 100
+
+        _rebalance_allocation_groups(groups=groups, total_size=total_size, check_level=check_level)
+
+        _free_proceeds_keeper = free_proceeds_keeper or ProceedsKeeper()
+        for ag in groups:
+            exist_assets.extend(ag.staged_conn)
+            _free_proceeds_keeper += ag.take_out_free_proceeds()
+
+        current_sizes = [groups[i].current_size for i in tdv_index]
+        self.tdv_ag_size_ad[t] = np.array(current_sizes)
+        self.tdv_ag_wgt_pc_ad[t] = np.array([v / total_size for v in current_sizes]) * 100
+
+        return 0.0 if free_proceeds_keeper is not None else _free_proceeds_keeper.take_out()
