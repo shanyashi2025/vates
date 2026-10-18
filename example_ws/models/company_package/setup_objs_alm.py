@@ -110,6 +110,9 @@ class FundMaster:
                 priority=row["priority"],
                 strategy=row["strategy"],
                 purchase_method=row["purchase_method"],
+                below_range_desire_direct=row["below_range_desire_direct"],
+                within_range_desire_direct=row["within_range_desire_direct"],
+                above_range_desire_direct=row["above_range_desire_direct"],
             )
 
         return params

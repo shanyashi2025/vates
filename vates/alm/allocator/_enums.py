@@ -12,3 +12,11 @@ class AssetPurchaseMethod(Enum):
     SCALE_UP_EXISTING = auto()
     PURCHASE_PROFILE = auto()
     NOT_USED = auto()
+
+class AssetTradeDirection(Enum):
+    """Enum for asset trade direction."""
+    NOT_USED = auto()
+    NO_ACTION = auto()
+    TO_TARGET_WEIGHT = auto()
+    TO_LOWER_WEIGHT = auto()
+    TO_UPPER_WEIGHT = auto()

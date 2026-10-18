@@ -1,10 +1,11 @@
+import warnings
 from dataclasses import dataclass
 from enum import Enum
-from typing import Self
+from typing import Literal, Self
 
 from vates.alm.assets import Asset
 from vates.alm._utils import Connector
-from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod
+from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, AssetTradeDirection
 
 
 class BuySellAction(Enum):
@@ -22,28 +23,65 @@ class TradeOrder:
 
 
 @dataclass(slots=True, frozen=True)
+class DesireTradeDirection:
+    below_range: AssetTradeDirection
+    within_range: AssetTradeDirection
+    above_range: AssetTradeDirection
+
+    @classmethod
+    def create(cls, below_range: AssetTradeDirection | str | None, within_range: AssetTradeDirection | str | None,
+               above_range: AssetTradeDirection | str | None) -> Self:
+        if below_range is None:
+            below_range = AssetTradeDirection.NOT_USED
+        elif isinstance(below_range, str):
+            below_range = AssetTradeDirection[below_range.upper()]
+        if within_range is None:
+            within_range = AssetTradeDirection.NOT_USED
+        elif isinstance(within_range, str):
+            within_range = AssetTradeDirection[within_range.upper()]
+        if above_range is None:
+            above_range = AssetTradeDirection.NOT_USED
+        elif isinstance(above_range, str):
+            above_range = AssetTradeDirection[above_range.upper()]
+        return DesireTradeDirection(below_range=below_range, within_range=within_range, above_range=above_range)
+
+    def __post_init__(self):
+        if not isinstance(self.below_range, AssetTradeDirection):
+            raise TypeError(f"Invalid type of 'below_range': {type(self.below_range)}, expected 'AssetTradeDirection'")
+        if not isinstance(self.within_range, AssetTradeDirection):
+            raise TypeError(f"Invalid type of 'within_range': {type(self.within_range)}, expected 'AssetTradeDirection'")
+        if not isinstance(self.above_range, AssetTradeDirection):
+            raise TypeError(f"Invalid type of 'above_range': {type(self.above_range)}, expected 'AssetTradeDirection'")
+
+
+@dataclass(slots=True, frozen=True)
 class AssetAllocationParams:
     """Allocation parameters for an allocation group.
 
     Attributes:
 
         strategy (AssetAllocationStrategy): Allocation strategy for this allocation group.
-        weight_range: (float | tuple[float, float, float]): Target weight for the allocation group; either a single
+        weight_range (float | tuple[float, float, float]): Target weight for the allocation group; either a single
             float, or a three-element tuple representing (lower, target, upper).
+        desire_direct (DesireTradeDirection): Desired trade direction.
         purchase_method (AssetPurchaseMethod): Method to purchase new asset for this allocation group.
         priority (int): The priority in which the allocation group will be processed, smaller integer represents
             higher priority.
     """
     strategy: AssetAllocationStrategy
-    weight_range: tuple[float, float, float] | None = None
-    purchase_method: AssetPurchaseMethod = AssetPurchaseMethod.NOT_USED
-    priority: int = 999
+    weight_range: tuple[float, float, float] | None
+    desire_direct: DesireTradeDirection
+    purchase_method: AssetPurchaseMethod
+    priority: int
 
     @classmethod
     def create(
         cls,
         strategy: AssetAllocationStrategy | str,
         weight_range: float | tuple[float, float, float] | None = None,
+        below_range_desire_direct: Literal['NOT_USED', 'NO_ACTION', 'TO_TARGET_WEIGHT', 'TO_LOWER_WEIGHT', 'TO_UPPER_WEIGHT'] | AssetTradeDirection | None = None,
+        within_range_desire_direct: Literal['NOT_USED', 'NO_ACTION', 'TO_TARGET_WEIGHT', 'TO_LOWER_WEIGHT', 'TO_UPPER_WEIGHT'] | AssetTradeDirection | None = None,
+        above_range_desire_direct: Literal['NOT_USED', 'NO_ACTION', 'TO_TARGET_WEIGHT', 'TO_LOWER_WEIGHT', 'TO_UPPER_WEIGHT'] | AssetTradeDirection | None = None,
         purchase_method: AssetPurchaseMethod | str | None = None,
         priority: int = 999
     ) -> Self:
@@ -55,9 +93,13 @@ class AssetAllocationParams:
             purchase_method = AssetPurchaseMethod.NOT_USED
         elif isinstance(purchase_method, str):
             purchase_method = AssetPurchaseMethod[purchase_method.upper()]
+        desire_direct = DesireTradeDirection.create(below_range=below_range_desire_direct,
+                                                    within_range=within_range_desire_direct,
+                                                    above_range=above_range_desire_direct)
         return AssetAllocationParams(
             strategy=strategy,
             weight_range=weight_range,
+            desire_direct=desire_direct,
             purchase_method=purchase_method,
             priority=priority,
         )
@@ -81,13 +123,15 @@ class AssetAllocationParams:
         else:
             raise TypeError(f"Invalid type of 'weight_range': {type(self.weight_range)}, expected 'tuple'.")
 
+        if not isinstance(self.desire_direct, DesireTradeDirection):
+            raise TypeError(f"Invalid type of 'desire_direct': {type(self.desire_direct)}, expected 'PreferTradeDirection'.")
 
 class _AllocationGroup:
     """Asset allocation group.
     """
 
-    __slots__ = ("name", "strategy", "weight_range", "purchase_method", "purchase_method", "priority",
-                 "exist_conn", "profile_conn", "staged_conn", "size_basis", "size_range",
+    __slots__ = ("name", "strategy", "weight_range", "desire_direct", "purchase_method", "purchase_method", "priority",
+                 "exist_conn", "profile_conn", "staged_conn", "total_size", "size_basis", "size_range",
                  "profile_size", "_trade_orders", "_free_proceeds")
 
     def __init__(
@@ -97,6 +141,7 @@ class _AllocationGroup:
         exist_assets: Connector[Asset] | list[Asset],
         strategy: AssetAllocationStrategy,
         weight_range: tuple[float, float, float] | None,
+        desire_direct: DesireTradeDirection,
         purchase_method: AssetPurchaseMethod,
         priority: int,
         total_size: float,
@@ -112,6 +157,7 @@ class _AllocationGroup:
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('Connector', 'list').")
         self.strategy: AssetAllocationStrategy = strategy
         self.weight_range: tuple[float, float, float] | None = weight_range
+        self.desire_direct: DesireTradeDirection = desire_direct
         self.purchase_method: AssetPurchaseMethod = purchase_method
         self.priority: int = priority
 
@@ -136,6 +182,15 @@ class _AllocationGroup:
         self._trade_orders: list[TradeOrder] = []
         self._free_proceeds: float = 0.0
 
+        # intial validation
+        if self.strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
+            if self.purchase_method == AssetPurchaseMethod.NOT_USED:
+                raise ValueError(f"'{self.name}': '{self.strategy.name}'; 'purchase_method' is 'NOT_USED'.")
+            if self.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and len(self.exist_conn) == 0:
+                raise ValueError(f"'{self.name}': 'SCALE_UP_EXISTING'; no exsiting asset.")
+            if self.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and len(self.profile_conn) == 0:
+                raise ValueError(f"'{self.name}': 'PURCHASE_PROFILE';  no profile asset.")
+
     def take_out_free_proceeds(self) -> float:
         amount, self._free_proceeds = self._free_proceeds, 0.0
         return amount
@@ -151,6 +206,68 @@ class _AllocationGroup:
     @property
     def staged_size(self) -> float:
         return self.staged_conn.sum_attr(self.size_basis)
+
+    @property
+    def desired_size(self) -> float | None:
+        if self.strategy == AssetAllocationStrategy.UNCONSTRAINED:
+            return None
+
+        current_size = self.current_size
+        if self.strategy == AssetAllocationStrategy.NO_TRADE:
+            return current_size
+
+        lower_size, target_size, upper_size = self.size_range
+        if self.strategy == AssetAllocationStrategy.BUY_HOLD:
+            if current_size >= lower_size:
+                return current_size
+            direct = self.desire_direct.below_range
+            if direct == AssetTradeDirection.TO_LOWER_WEIGHT:
+                return lower_size
+            elif direct == AssetTradeDirection.TO_TARGET_WEIGHT:
+                return target_size
+            elif direct == AssetTradeDirection.TO_UPPER_WEIGHT:
+                return upper_size
+            else:
+                warnings.warn(f"strategy 'BUY_HOLD', below range desire: {direct.name}, cannot determine desired size.")
+                return current_size
+
+        if self.strategy == AssetAllocationStrategy.BUY_SELL:
+            if current_size < lower_size:
+                direct = self.desire_direct.below_range
+                if direct == AssetTradeDirection.TO_LOWER_WEIGHT:
+                    return lower_size
+                elif direct == AssetTradeDirection.TO_TARGET_WEIGHT:
+                    return target_size
+                elif direct == AssetTradeDirection.TO_UPPER_WEIGHT:
+                    return upper_size
+                else:
+                    warnings.warn(f"strategy 'BUY_SELL', below range desire: {direct.name}, cannot determine desired size.")
+                    return current_size
+            elif current_size > lower_size:
+                direct = self.desire_direct.above_range
+                if direct == AssetTradeDirection.TO_LOWER_WEIGHT:
+                    return lower_size
+                elif direct == AssetTradeDirection.TO_TARGET_WEIGHT:
+                    return target_size
+                elif direct == AssetTradeDirection.TO_UPPER_WEIGHT:
+                    return upper_size
+                else:
+                    warnings.warn(f"strategy 'BUY_SELL', above range desire: {direct.name}, cannot determine desired size.")
+                    return current_size
+            else:  # lower_size <= current_size <= upper_size
+                direct = self.desire_direct.within_range
+                if direct == AssetTradeDirection.NO_ACTION:
+                    return current_size
+                elif direct == AssetTradeDirection.TO_LOWER_WEIGHT:
+                    return lower_size
+                elif direct == AssetTradeDirection.TO_TARGET_WEIGHT:
+                    return target_size
+                elif direct == AssetTradeDirection.TO_UPPER_WEIGHT:
+                    return upper_size
+                else:
+                    warnings.warn(f"strategy 'BUY_SELL', within range desire: {direct.name}, cannot determine desired size.")
+                    return current_size
+        raise ValueError("Should never get here")
 
     @property
     def trade_orders(self) -> list[TradeOrder]:
