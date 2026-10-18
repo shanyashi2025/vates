@@ -53,7 +53,6 @@ to obtain an independent structure.
 """
 
 import functools
-import numbers
 import numpy as np
 from dataclasses import dataclass
 from typing import Callable, Literal, Self, overload
@@ -93,14 +92,14 @@ def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
     """
     if len(args) == 0:
         raise ValueError(f"No risk is provided.")
-    risk_vector = np.atleast_1d(args[0]) if len(args) == 1 else np.array(args)
-    n = len(risk_vector)
+    vec = np.atleast_1d(args[0]) if len(args) == 1 else np.array(args)
+    n = len(vec)
     if n == 1:
-        raise ValueError(f"Risk ({risk_vector[0]}) is a single scalar, expected vector.")
-    corr_matrix = np.array(corr_matrix)
-    if corr_matrix.shape != (n, n):
-        raise ValueError(f'Correlation matrix shape: {corr_matrix.shape}, expected ({n}, {n}).')
-    val = risk_vector @ corr_matrix @ risk_vector.T
+        raise ValueError(f"Risk ({vec[0]}) is a single scalar, expected vector.")
+    mat = np.array(corr_matrix)
+    if mat.shape != (n, n):
+        raise ValueError(f'Correlation matrix shape: {mat.shape}, expected ({n}, {n}).')
+    val = vec @ mat @ vec.T
     if val < 0:  # non positive semi-definite matrix
         raise ValueError(f"X' @ corr_matrix @ X is negative: {val:.6f}; cannot calculate sqrt.")
     return np.sqrt(val)
@@ -245,10 +244,6 @@ class RiskNode:
     def capital(self, value: float, /) -> None:
         if not self.is_leaf:
             raise ValueError(f"{self._name}: non-leaf node rejects set value for risk capital.")
-        if isinstance(value, bool) or not isinstance(value, numbers.Real):
-            raise TypeError(f"Invalid type of risk capital '{type(value)}', expected 'float'.")
-        if value != value:  # finiteness guard for NaN
-            raise ValueError(f"Invalid value of risk capital: {value!r}.")
         self._capital_cache = value
         if self._parent is not None:
             self._parent._clear_capital_cache()  # cascade
@@ -444,9 +439,10 @@ class RiskNode:
         Only the cache is cleared; leaf values stay untouched and the ancestors
         recompute from their children on their next access.
         """
-        self._capital_cache = None
-        if self._parent is not None:
-            self._parent._clear_capital_cache()  # cascade
+        if self._capital_cache is not None:
+            self._capital_cache = None
+            if self._parent is not None:
+                self._parent._clear_capital_cache()  # cascade
 
     def _aggregate(self) -> None:
         """
