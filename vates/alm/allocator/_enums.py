@@ -5,7 +5,7 @@ class AssetAllocationStrategy(Enum):
     NO_TRADE = auto()
     BUY_HOLD = auto()
     BUY_SELL = auto()
-    RESIDUAL = auto()
+    UNCONSTRAINED = auto()
 
 class AssetPurchaseMethod(Enum):
     """Enum for asset purchase method."""

@@ -5,7 +5,7 @@ import warnings
 from typing import Literal
 
 from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
-from vates.global_conf import CheckLevel
+from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
 from vates.alm.assets import Asset, Cash
 from vates.alm._utils import Connector
 from vates.alm.allocator._allocation_group import _AssetAllocationGroup, AssetAllocationParams, TradeOrder, BuySellAction
@@ -16,26 +16,26 @@ from vates.alm.allocator.proceeds_keeper import ProceedsKeeper
 def _rebalance_allocation_groups(
     groups: list[_AssetAllocationGroup],
     total_size: float,
-    check_level: CheckLevel | None = CheckLevel.WARN,
+    check_level: CheckLevel,
 ) -> None:
     """Rebalance assets in the fund to match the target allocation.
 
     Args:
         total_size (float): Total size for allocation, shall correspond to `asset_size_basis`.
-        check_level (CheckLevel): Check level for validation against allocation, defaults to None.
+        check_level (CheckLevel): Check level for validation against allocation.
 
     """
-    res_groups: list[_AssetAllocationGroup] = [ag for ag in groups if ag.strategy == AssetAllocationStrategy.RESIDUAL]
+    res_groups: list[_AssetAllocationGroup] = [ag for ag in groups if ag.strategy == AssetAllocationStrategy.UNCONSTRAINED]
 
-    # --- step 2: process non-residual groups in sequence ---
+    # --- step 2: process non-unconstrained groups in sequence ---
     for ag in groups:
-        if ag.strategy != AssetAllocationStrategy.RESIDUAL:
-            ag.make_trade_decision()
-            ag.execute_trade()
+        if ag.strategy != AssetAllocationStrategy.UNCONSTRAINED:
+            trade_order = _make_trade_decision(ag)
+            ag.execute_trade(trade_order)
 
-    # --- step 3: process residual groups ---
+    # --- step 3: process unconstrained groups ---
     size_gap = total_size - sum(ag.current_size for ag in groups)
-    _process_residual_groups(residual_groups=res_groups, size_gap=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
+    _process_unconstrained_groups(groups=res_groups, size_gap=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
 
     # --- step 4: validate if target allocations is satisfied ---
     for ag in groups:
@@ -49,6 +49,52 @@ def _rebalance_allocation_groups(
             warnings.warn(msg)
 
 
+def _make_trade_decision(group: _AssetAllocationGroup) -> TradeOrder:
+    """Make the trade decision for an allocation group.
+
+    Raises:
+        ValueError: If an invalid asset buy/sell approach is provided.
+    """
+    strategy = group.strategy
+    purchase_method = group.purchase_method
+    if strategy == AssetAllocationStrategy.NO_TRADE:
+        return TradeOrder(action=BuySellAction.NOOP)
+    elif strategy == AssetAllocationStrategy.BUY_HOLD:
+        if group.current_size < group.target_size[0]:
+            if purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
+                return TradeOrder(
+                    action=BuySellAction.BUY_EXIST,
+                    arg=(group.target_size[1] - group.current_size) / group.current_size)
+            elif purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
+                return TradeOrder(
+                    action=BuySellAction.BUY_PROFILE,
+                    arg=(group.target_size[1] - group.current_size) / group.profile_size)
+            else:
+                raise ValueError(f"{group.name}: invalid purchase method {purchase_method} for 'BUY_HOLD'.")
+        else:
+            return TradeOrder(action=BuySellAction.NOOP)
+    elif strategy == AssetAllocationStrategy.BUY_SELL:
+        if group.current_size < group.target_size[0]:
+            if purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
+                return TradeOrder(
+                    action=BuySellAction.BUY_EXIST,
+                    arg=(group.target_size[1] - group.current_size) / group.current_size)
+            elif purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
+                return TradeOrder(
+                    action=BuySellAction.BUY_PROFILE,
+                    arg=(group.target_size[1] - group.current_size) / group.profile_size)
+            else:
+                raise ValueError(f"{group.name}: invalid purchase method {purchase_method} for 'BUY_SELL'.")
+        elif group.current_size > group.target_size[2]:
+            return TradeOrder(
+                action=BuySellAction.SELL,
+                arg=(group.current_size - group.target_size[1]) / group.current_size)
+        else:
+            return TradeOrder(action=BuySellAction.NOOP)
+    else:
+        raise ValueError(f"{group.name}: invalid allocation strategy: {strategy}")
+
+
 def _make_sorted_alloc_groups(
     *,
     exist_assets: Connector[Asset] | list[Asset],
@@ -57,14 +103,17 @@ def _make_sorted_alloc_groups(
     asset_size_basis: str,
     allocation_group_attr_name: str,
     allocation_group_params: dict[str, AssetAllocationParams],
-    require_validate: bool = True
+    require_validate: bool
 ) -> list[_AssetAllocationGroup]:
     ag_kwargs: dict[str, dict[str, ...]] = {}
     for name, params in allocation_group_params.items():
         if name in ag_kwargs:
             raise KeyError(f"Duplicate allocation group name: '{name}'.")
         ag_kwargs[name] = {
-            "params": params,
+            "strategy": params.strategy,
+            "target_weight": params.target_weight,
+            "purchase_method": params.purchase_method,
+            "sequence": params.sequence,
             "total_size": total_size,
             "size_basis": asset_size_basis,
             "exist_assets": [],
@@ -87,10 +136,10 @@ def _make_sorted_alloc_groups(
     alloc_groups.sort(key=lambda x: x.sequence)
 
     if require_validate:
-        seen_residual = []
+        seen_unconstrained = []
         for i, ag in enumerate(alloc_groups):
-            if ag.strategy is AssetAllocationStrategy.RESIDUAL:
-                seen_residual.append(i)
+            if ag.strategy is AssetAllocationStrategy.UNCONSTRAINED:
+                seen_unconstrained.append(i)
             if ag.strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
                 if ag.target_weight is None:
                     raise ValueError(f"'{ag.name}': '{ag.strategy.value}'; 'target_weight' is 'None'.")
@@ -101,51 +150,51 @@ def _make_sorted_alloc_groups(
                 if ag.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and len(ag.profile_conn) == 0:
                     raise ValueError(f"'{ag.name}': 'PURCHASE_PROFILE';  no profile asset.")
 
-        if len(seen_residual) == 0:
+        if len(seen_unconstrained) == 0:
             pass
         else:
-            if seen_residual[-1] + 1 != len(alloc_groups):
-                raise ValueError(f"Last allocation group must be 'RESIDUAL'.")
-            if seen_residual[-1] - seen_residual[0] + 1 != len(seen_residual):
-                raise ValueError(f"All 'RESIDUAL' allocation groups must be after non-'RESIDUAL'.")
+            if seen_unconstrained[-1] + 1 != len(alloc_groups):
+                raise ValueError(f"Last allocation group must be 'UNCONSTRAINED'.")
+            if seen_unconstrained[-1] - seen_unconstrained[0] + 1 != len(seen_unconstrained):
+                raise ValueError(f"All 'UNCONSTRAINED' allocation groups must be after other groups.")
 
     return alloc_groups
 
 
-def _process_residual_groups(residual_groups: list[_AssetAllocationGroup], size_gap: float, tolerance: float) -> None:
+def _process_unconstrained_groups(groups: list[_AssetAllocationGroup], size_gap: float, tolerance: float) -> None:
     if abs(size_gap) <= tolerance:
         return
 
-    if len(residual_groups) == 0:
-        warnings.warn(f"Target allocation is not met but no residual allocation group to process.")
+    if len(groups) == 0:
+        warnings.warn(f"Target allocation is not met but no unconstrained allocation group to process.")
         return
 
-    current_residual_size: float = sum([ag.current_size for ag in residual_groups])
+    current_size: float = sum([ag.current_size for ag in groups])
 
-    if current_residual_size == 0:
-        # This would be very edge case when total residual allocation group (usually cash) balance happens to be zero.
+    if current_size == 0:
+        # This would be very edge case when total unconstrained allocation group (usually cash) balance happens to be zero.
         # Utilize cash asset to safely proceed
         _fallback_cash = None
-        for asset in [ag.exist_conn for ag in residual_groups]:
+        for asset in [ag.exist_conn for ag in groups]:
             if isinstance(asset, Cash):
                 _fallback_cash = asset
                 break
         if _fallback_cash is not None:
             _fallback_cash.invest_new_money(size_gap)
         else:
-            warnings.warn(f"No cash asset in 'RESIDUAL' group is available for sclaing.")
+            warnings.warn(f"No cash asset in 'UNCONSTRAINED' group is available for sclaing.")
         return
 
-    # scale residual allocation_group
+    # scale unconstrained allocation_group
     if size_gap > 0:
-        trade_decn = TradeOrder(action=BuySellAction.BUY_EXIST, arg=size_gap / current_residual_size)
+        trade_order = TradeOrder(action=BuySellAction.BUY_EXIST, arg=size_gap / current_size)
     elif size_gap < 0:
-        trade_decn = TradeOrder(action=BuySellAction.SELL, arg=- size_gap / current_residual_size)
+        trade_order = TradeOrder(action=BuySellAction.SELL, arg=- size_gap / current_size)
     else:
         raise ValueError("Should never get here.")
 
-    for ag in residual_groups:
-        ag.execute_trade(trade_decn)
+    for ag in groups:
+        ag.execute_trade(trade_order)
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -192,7 +241,7 @@ class Rebalancer:
         allocation_group_params: dict[str, AssetAllocationParams],
         min_size_tol: float = 0.0001,
         on_negative_size: Literal["zero", "pass", "as_is"] = "zero",
-        check_level: CheckLevel | None = CheckLevel.WARN,
+        check_level: CheckLevel = GLOBAL_CHECK_LEVEL,
         **kwargs
     ) -> float:
         """Rebalance assets in the fund to match the target allocation.
@@ -207,7 +256,7 @@ class Rebalancer:
             allocation_group_params (dict[str, AssetAllocationGroupParams]): Parameters for each allocation group.
             min_size_tol (float): Tolerance of minimum size, normally to prevent ZeroDivisionError; defaults to 0.0001.
             on_negative_size (Literal["zero", "pass", "as_is"]): When size is negative; defaults to "zero".
-            check_level (CheckLevel): Check level for validation against allocation, defaults to None.
+            check_level (CheckLevel): Check level for validation against allocation, defaults to `GLOBAL_CHECK_LEVEL`.
 
         Returns:
             float: Free proceeds after the reblancing: proceeds received from disposal (sell), minus proceeds spent
@@ -233,6 +282,7 @@ class Rebalancer:
             asset_size_basis=asset_size_basis,
             allocation_group_attr_name=allocation_group_attr_name,
             allocation_group_params=allocation_group_params,
+            require_validate=(check_level != CheckLevel.BYPASS),
         )
 
         if set([ag.name for ag in groups]) != set(self.group_names):

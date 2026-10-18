@@ -3,7 +3,7 @@ import pandas as pd
 from enum import Enum, auto
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
-from vates.global_conf import CHECK_LEVEL, CheckLevel
+from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
 from vates.alm._utils import Connector
 from vates.alm.funds._utils import _RateOfReturnIndexer
@@ -205,7 +205,7 @@ class AssetRecorder:
         timing = _validate_timing(timing)
 
         t = self.time
-        if CHECK_LEVEL != CheckLevel.BYPASS:
+        if GLOBAL_CHECK_LEVEL != CheckLevel.BYPASS:
             phase = AssetPhase.ROLLED if timing == "bd" else AssetPhase.CLOSED
             for asset in self.asset_conn:
                 asset.require_lifecycle(phase=phase)

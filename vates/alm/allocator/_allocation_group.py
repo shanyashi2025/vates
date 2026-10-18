@@ -83,89 +83,57 @@ class AssetAllocationParams:
 
 class _AssetAllocationGroup:
     """Asset allocation group.
-
-    Attributes:
-        _name (str): Name of the allocation group.
-        _params (AssetAllocationParams): Static allocation parameters:
-            - strategy: AssetAllocationStrategy
-            - target_weight: tuple[float, float, float]
-            - purchase_method: AssetPurchaseMethod | None
-            - sequence: int
     """
 
-    __slots__ = ("_name", "_params", "_exist", "_profile", "_staged", "_size_basis", "_target_size",
-                 "_profile_size", "_trade_decision", "_free_proceeds")
+    __slots__ = ("name", "strategy", "target_weight", "purchase_method", "purchase_method", "sequence",
+                 "exist_conn", "profile_conn", "staged_conn", "size_basis", "target_size",
+                 "profile_size", "_trade_orders", "_free_proceeds")
 
     def __init__(
         self,
         *,
         name: str,
         exist_assets: Connector[Asset] | list[Asset],
-        params: AssetAllocationParams,
+        strategy: AssetAllocationStrategy,
+        target_weight: tuple[float, float, float] | None,
+        purchase_method: AssetPurchaseMethod,
+        sequence: int,
         total_size: float,
         size_basis: str,
         profile_assets: Connector[Asset] | list[Asset] | None,
     ):
-        self._name: str = name
+        self.name: str = name
         if isinstance(exist_assets, Connector):
-            self._exist: Connector[Asset] = exist_assets
+            self.exist_conn: Connector[Asset] = exist_assets
         elif isinstance(exist_assets, list):
-            self._exist: Connector[Asset] = Connector(exist_assets)
+            self.exist_conn: Connector[Asset] = Connector(exist_assets)
         else:
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('Connector', 'list').")
-        self._params: AssetAllocationParams = params
-        self._size_basis: str = size_basis
+        self.strategy: AssetAllocationStrategy = strategy
+        self.target_weight: tuple[float, float, float] | None = target_weight
+        self.purchase_method: AssetPurchaseMethod = purchase_method
+        self.sequence: int = sequence
+
+        self.size_basis: str = size_basis
         if isinstance(profile_assets, Connector):
-            self._profile: Connector[Asset] = profile_assets
+            self.profile_conn: Connector[Asset] = profile_assets
         elif isinstance(profile_assets, list):
-            self._profile: Connector[Asset] = Connector(profile_assets)
+            self.profile_conn: Connector[Asset] = Connector(profile_assets)
         elif profile_assets is None:
-            self._profile: Connector[Asset] = Connector()
+            self.profile_conn: Connector[Asset] = Connector()
         else:
             raise TypeError(f"Invalid type of 'profile_assets': {type(profile_assets)}, expected ('Connector', 'list').")
 
-        self._target_size: tuple[float, float, float] | None = None
-        if self._params.target_weight is not None:
-            self._target_size = (total_size * self._params.target_weight[0],
-                                 total_size * self._params.target_weight[1],
-                                 total_size * self._params.target_weight[2])
-        self._profile_size: float = self._profile.sum_attr(self._size_basis) if self._profile is not None else 0.0
+        self.target_size: tuple[float, float, float] | None = None
+        if self.target_weight is not None:
+            self.target_size = (total_size * self.target_weight[0],
+                                total_size * self.target_weight[1],
+                                total_size * self.target_weight[2])
+        self.profile_size: float = self.profile_conn.sum_attr(self.size_basis) if self.profile_conn is not None else 0.0
 
-        self._staged: Connector[Asset] = Connector[Asset]()
-        self._trade_decision: TradeOrder = TradeOrder(action=BuySellAction.NOOP)
+        self.staged_conn: Connector[Asset] = Connector[Asset]()
+        self._trade_orders: list[TradeOrder] = []
         self._free_proceeds: float = 0.0
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def sequence(self) -> int:
-        return self._params.sequence
-
-    @property
-    def strategy(self) -> AssetAllocationStrategy:
-        return self._params.strategy
-
-    @property
-    def purchase_method(self) -> AssetPurchaseMethod:
-        return self._params.purchase_method
-
-    @property
-    def size_basis(self) -> str:
-        return self._size_basis
-
-    @property
-    def exist_conn(self) -> Connector[Asset]:
-        return self._exist
-
-    @property
-    def profile_conn(self) -> Connector[Asset]:
-        return self._profile
-
-    @property
-    def staged_conn(self) -> Connector[Asset]:
-        return self._staged
 
     def take_out_free_proceeds(self) -> float:
         amount, self._free_proceeds = self._free_proceeds, 0.0
@@ -177,82 +145,55 @@ class _AssetAllocationGroup:
 
     @property
     def exist_size(self) -> float:
-        return self._exist.sum_attr(self.size_basis)
+        return self.exist_conn.sum_attr(self.size_basis)
 
     @property
     def staged_size(self) -> float:
-        return self._staged.sum_attr(self.size_basis)
+        return self.staged_conn.sum_attr(self.size_basis)
 
     @property
-    def profile_size(self) -> float:
-        return self._profile_size
+    def trade_orders(self) -> list[TradeOrder]:
+        return self._trade_orders
 
-    @property
-    def target_weight(self) -> tuple[float, float, float] | None:
-        return self._params.target_weight
+    def append_trade_order(self, trade_order: TradeOrder) -> None:
+        if not isinstance(trade_order, TradeOrder):
+            raise TypeError(f"Invalid type of 'trade_order': '{type(trade_order)}', expected 'TradeOrder'.")
+        self._trade_orders.append(trade_order)
 
-    @property
-    def target_size(self) -> tuple[float, float, float] | None:
-        return self._target_size
+    def clear_trade_orders(self) -> None:
+        self._trade_orders = []
 
-    @property
-    def trade_decision(self) -> TradeOrder:
-        return self._trade_decision
+    @classmethod
+    def merge_trade_orders(cls, trade_orders: list[TradeOrder]) -> list[TradeOrder]:
+        if len(trade_orders) == 1:
+            return trade_orders
+        tmp_dict = {x: 0.0 for x in BuySellAction}
+        for order in trade_orders:
+            tmp_dict[order.action] += order.arg
+        merged: list[TradeOrder] = []
+        for act, arg in tmp_dict.items():
+            if act != BuySellAction.NOOP and abs(arg) > 0.0:
+                merged.append(TradeOrder(action=act, arg=arg))
+        return merged
 
-    def make_trade_decision(self) -> None:
-        """Make the trade decision for an allocation group.
-
-        Raises:
-            ValueError: If an invalid asset buy/sell approach is provided.
-        """
-        strategy = self._params.strategy
-        purchase_method = self._params.purchase_method
-        if strategy == AssetAllocationStrategy.NO_TRADE:
-            self._trade_decision = TradeOrder(action=BuySellAction.NOOP)
-        elif strategy == AssetAllocationStrategy.BUY_HOLD:
-            if self.current_size < self._target_size[0]:
-                if purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
-                    self._trade_decision = TradeOrder(
-                        action=BuySellAction.BUY_EXIST,
-                        arg=(self._target_size[1] - self.current_size) / self.current_size)
-                elif purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
-                    self._trade_decision = TradeOrder(
-                        action=BuySellAction.BUY_PROFILE,
-                        arg=(self._target_size[1] - self.current_size) / self.profile_size)
-                else:
-                    raise ValueError(f"{self.name}: invalid purchase method {purchase_method} for 'BUY_HOLD'.")
-            else:
-                self._trade_decision = TradeOrder(action=BuySellAction.NOOP)
-        elif strategy == AssetAllocationStrategy.BUY_SELL:
-            if self.current_size < self._target_size[0]:
-                if purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
-                    self._trade_decision = TradeOrder(
-                        action=BuySellAction.BUY_EXIST,
-                        arg=(self._target_size[1] - self.current_size) / self.current_size)
-                elif purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
-                    self._trade_decision = TradeOrder(
-                        action=BuySellAction.BUY_PROFILE,
-                        arg=(self._target_size[1] - self.current_size) / self.profile_size)
-                else:
-                    raise ValueError(f"{self.name}: invalid purchase method {purchase_method} for 'BUY_SELL'.")
-            elif self.current_size > self._target_size[2]:
-                self._trade_decision = TradeOrder(
-                    action=BuySellAction.SELL,
-                    arg=(self.current_size - self._target_size[1]) / self.current_size)
-            else:
-                self._trade_decision = TradeOrder(action=BuySellAction.NOOP)
+    def execute_trades(self, trade_orders: TradeOrder | list[TradeOrder] | None = None) -> None:
+        if trade_orders is None:
+            trade_orders = self._trade_orders
+            consume_self_trade_orders = True
         else:
-            raise ValueError(f"{self.name}: invalid allocation strategy: {strategy}")
+            consume_self_trade_orders = False
+        trade_orders = trade_orders if isinstance(trade_orders, list) else [trade_orders]
+        if len(trade_orders) == 0:
+            return
 
-    def execute_trade(self, trade_order: TradeOrder | None = None) -> None:
+        for order in self.merge_trade_orders(trade_orders):
+            self.execute_trade(order)
+        if consume_self_trade_orders:
+            self._trade_orders = []  # reset after consumed
+
+    def execute_trade(self, trade_order: TradeOrder) -> None:
         """Execute a trade.
         """
-        if trade_order is None:
-            trade_order = self._trade_decision
-            consume_self_trade_decision = True
-        else:
-            consume_self_trade_decision = False
-
         net_proceeds: float = 0.0  # proceeds received from disposal (sell), minus proceeds spent to purchase (buy)
         action, arg = trade_order.action, trade_order.arg
 
@@ -283,9 +224,6 @@ class _AssetAllocationGroup:
 
         self._free_proceeds += net_proceeds
 
-        if consume_self_trade_decision:
-            self._trade_decision = TradeOrder(action=BuySellAction.NOOP)  # reset after consumed
-
     def is_allocation_satisfied(self, rel_tol: float = 1e-4) -> bool:
         """Validate if the allocation for a group is satisfied.
 
@@ -295,10 +233,10 @@ class _AssetAllocationGroup:
         Returns:
             bool: True if the allocation is satisfied, False otherwise.
         """
-        if self.strategy in (AssetAllocationStrategy.RESIDUAL, AssetAllocationStrategy.NO_TRADE):
+        if self.strategy in (AssetAllocationStrategy.UNCONSTRAINED, AssetAllocationStrategy.NO_TRADE):
             return True
 
-        flr, tgt, cap = self._target_size
+        flr, tgt, cap = self.target_size
 
         if self.strategy == AssetAllocationStrategy.BUY_HOLD:
             return flr - rel_tol * tgt <= self.current_size

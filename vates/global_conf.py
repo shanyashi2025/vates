@@ -9,4 +9,4 @@ class CheckLevel(Enum):
     WARN = auto()
     ERROR = auto()
 
-CHECK_LEVEL = CheckLevel[os.getenv("VATES_CHECK_LEVEL", "BYPASS").upper()]
+GLOBAL_CHECK_LEVEL = CheckLevel[os.getenv("VATES_GLOBAL_CHECK_LEVEL", "BYPASS").upper()]

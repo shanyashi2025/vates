@@ -43,7 +43,7 @@ import warnings
 from enum import Enum
 from typing import Generic, Iterable, TypeVar
 
-from vates.global_conf import CHECK_LEVEL, CheckLevel
+from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 
 __all__ = ["Lifecycle", "transition"]
 
@@ -173,7 +173,7 @@ class Lifecycle(Generic[T]):
 
     @staticmethod
     def _resolve_level(check_level: CheckLevel | None) -> CheckLevel:
-        level = CHECK_LEVEL if check_level is None else check_level
+        level = GLOBAL_CHECK_LEVEL if check_level is None else check_level
         if not isinstance(level, CheckLevel):
             raise TypeError(f"Invalid type of 'check_level': {type(level).__name__}, "
                             f"expected 'CheckLevel'.")

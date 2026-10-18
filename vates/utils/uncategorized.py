@@ -1,7 +1,7 @@
 import numpy as np
 import warnings
 
-from vates.global_conf import CHECK_LEVEL,CheckLevel
+from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 
 def new_business_convolve(nb_profile: np.ndarray, nb_premium: float, sales_file: np.ndarray,
                           output_len: int | None = None) -> np.ndarray:
@@ -9,7 +9,7 @@ def new_business_convolve(nb_profile: np.ndarray, nb_premium: float, sales_file:
     conv = np.array([np.convolve(a, v, mode='full') for a in nb_profile])
     return conv if output_len is None else conv[:, :output_len]
 
-def maybe_raise_if_ne(a, b, /, *, check_level: CheckLevel = CHECK_LEVEL) -> None:
+def maybe_raise_if_ne(a, b, /, *, check_level: CheckLevel = GLOBAL_CHECK_LEVEL) -> None:
     if check_level == CheckLevel.BYPASS:
         return
 
