@@ -3,7 +3,7 @@ from vates.alm import assets
 from vates.alm import econs
 from vates.alm import liabs
 from vates.alm import funds
-# allocation
+# allocator
 from vates.alm.allocator import(
     AssetAllocationStrategy,
     AssetPurchaseMethod,
@@ -45,7 +45,7 @@ __all__ = [
     'econs',
     'liabs',
     'funds',
-    # allocation
+    # allocator
     'AssetAllocationStrategy',
     'AssetPurchaseMethod',
     'AssetAllocationParams',

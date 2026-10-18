@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Literal, Self
 
+from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
 from vates.alm.assets import Asset
 from vates.alm._utils import Connector
 from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, AssetTradeDirection
@@ -171,11 +172,7 @@ class _AllocationGroup:
         else:
             raise TypeError(f"Invalid type of 'profile_assets': {type(profile_assets)}, expected ('Connector', 'list').")
 
-        self.size_range: tuple[float, float, float] | None = None
-        if self.weight_range is not None:
-            self.size_range = (total_size * self.weight_range[0],
-                               total_size * self.weight_range[1],
-                               total_size * self.weight_range[2])
+        self.size_range: tuple[float, float, float] = self._compute_size_range(total_size, weight_range)
         self.profile_size: float = self.profile_conn.sum_attr(self.size_basis) if self.profile_conn is not None else 0.0
 
         self.staged_conn: Connector[Asset] = Connector[Asset]()
@@ -190,6 +187,17 @@ class _AllocationGroup:
                 raise ValueError(f"'{self.name}': 'SCALE_UP_EXISTING'; no exsiting asset.")
             if self.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and len(self.profile_conn) == 0:
                 raise ValueError(f"'{self.name}': 'PURCHASE_PROFILE';  no profile asset.")
+
+    def _compute_size_range(self, total_size: float, weight_range: tuple[float, float, float] | None
+                            ) -> tuple[float, float, float]:
+        if self.strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
+            return total_size * weight_range[0], total_size * weight_range[1], total_size * weight_range[2]
+        if self.strategy == AssetAllocationStrategy.NO_TRADE:
+            exist_size = self.exist_size
+            return exist_size, exist_size, exist_size
+        if self.strategy == AssetAllocationStrategy.UNCONSTRAINED:
+            return float("-inf"), 0.0, float("inf")
+        raise ValueError("Should never get here.")
 
     def take_out_free_proceeds(self) -> float:
         amount, self._free_proceeds = self._free_proceeds, 0.0
@@ -209,17 +217,18 @@ class _AllocationGroup:
 
     @property
     def desired_size(self) -> float | None:
-        if self.strategy == AssetAllocationStrategy.UNCONSTRAINED:
-            return None
-
-        current_size = self.current_size
-        if self.strategy == AssetAllocationStrategy.NO_TRADE:
-            return current_size
-
+        strategy = self.strategy
+        exist_size = self.exist_size
         lower_size, target_size, upper_size = self.size_range
-        if self.strategy == AssetAllocationStrategy.BUY_HOLD:
-            if current_size >= lower_size:
-                return current_size
+
+        if strategy == AssetAllocationStrategy.UNCONSTRAINED:
+            return None
+        if strategy == AssetAllocationStrategy.NO_TRADE:
+            return exist_size
+
+        if strategy == AssetAllocationStrategy.BUY_HOLD:
+            if exist_size >= lower_size:
+                return exist_size
             direct = self.desire_direct.below_range
             if direct == AssetTradeDirection.TO_LOWER_WEIGHT:
                 return lower_size
@@ -229,10 +238,10 @@ class _AllocationGroup:
                 return upper_size
             else:
                 warnings.warn(f"strategy 'BUY_HOLD', below range desire: {direct.name}, cannot determine desired size.")
-                return current_size
+                return exist_size
 
-        if self.strategy == AssetAllocationStrategy.BUY_SELL:
-            if current_size < lower_size:
+        if strategy == AssetAllocationStrategy.BUY_SELL:
+            if exist_size < lower_size:
                 direct = self.desire_direct.below_range
                 if direct == AssetTradeDirection.TO_LOWER_WEIGHT:
                     return lower_size
@@ -242,8 +251,8 @@ class _AllocationGroup:
                     return upper_size
                 else:
                     warnings.warn(f"strategy 'BUY_SELL', below range desire: {direct.name}, cannot determine desired size.")
-                    return current_size
-            elif current_size > lower_size:
+                    return exist_size
+            elif exist_size > upper_size:
                 direct = self.desire_direct.above_range
                 if direct == AssetTradeDirection.TO_LOWER_WEIGHT:
                     return lower_size
@@ -253,11 +262,11 @@ class _AllocationGroup:
                     return upper_size
                 else:
                     warnings.warn(f"strategy 'BUY_SELL', above range desire: {direct.name}, cannot determine desired size.")
-                    return current_size
-            else:  # lower_size <= current_size <= upper_size
+                    return exist_size
+            else:  # lower_size <= exist_size <= upper_size
                 direct = self.desire_direct.within_range
                 if direct == AssetTradeDirection.NO_ACTION:
-                    return current_size
+                    return exist_size
                 elif direct == AssetTradeDirection.TO_LOWER_WEIGHT:
                     return lower_size
                 elif direct == AssetTradeDirection.TO_TARGET_WEIGHT:
@@ -266,7 +275,7 @@ class _AllocationGroup:
                     return upper_size
                 else:
                     warnings.warn(f"strategy 'BUY_SELL', within range desire: {direct.name}, cannot determine desired size.")
-                    return current_size
+                    return exist_size
         raise ValueError("Should never get here")
 
     @property
@@ -309,7 +318,7 @@ class _AllocationGroup:
         if consume_self_trade_orders:
             self._trade_orders = []  # reset after consumed
 
-    def execute_trade(self, trade_order: TradeOrder) -> None:
+    def execute_trade(self, trade_order: TradeOrder, check_level: CheckLevel = GLOBAL_CHECK_LEVEL) -> None:
         """Execute a trade.
         """
         net_proceeds: float = 0.0  # proceeds received from disposal (sell), minus proceeds spent to purchase (buy)
@@ -325,6 +334,12 @@ class _AllocationGroup:
                 mv_ad = asset.market_value
                 net_proceeds += mv_bd - mv_ad
         elif action == BuySellAction.BUY_EXIST:
+            if abs(self.exist_size) < 1e-8:
+                msg = f"'{self.name}': 'BUY_EXIST', but exist_size is zero {self.exist_size:.4f}."
+                if check_level == CheckLevel.ERROR:
+                    raise msg
+                warnings.warn(msg + " Trade is not executed.")
+                return
             for asset in self.exist_conn:
                 mv_bd = asset.market_value
                 func = getattr(asset, action.value)
@@ -332,8 +347,6 @@ class _AllocationGroup:
                 mv_ad = asset.market_value
                 net_proceeds += mv_bd - mv_ad
         elif action == BuySellAction.BUY_PROFILE:
-            if self.profile_conn is None:
-                raise ValueError("Can't buy assets from empty profile.")
             for profile_asset in self.profile_conn:
                 func = getattr(profile_asset, action.value)
                 new_asset = func(scale=arg)

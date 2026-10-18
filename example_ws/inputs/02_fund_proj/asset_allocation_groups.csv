@@ -1,5 +1,5 @@
 ﻿fund_id,allocation_group,priority,strategy,purchase_method,below_range_desire_direct,within_range_desire_direct,above_range_desire_direct
-trad_fund,cash,5,unconstrained,scale_up_existing,not_used,not_used,not_used
+trad_fund,cash,5,unconstrained,scale_up_existing,to_target_weight,no_action,to_target_weight
 trad_fund,equity,1,buy_sell,scale_up_existing,to_target_weight,no_action,to_target_weight
 trad_fund,private_equity,2,buy_sell,scale_up_existing,to_target_weight,no_action,to_target_weight
 trad_fund,govt_bond,3,buy_hold,purchase_profile,to_target_weight,no_action,no_action
