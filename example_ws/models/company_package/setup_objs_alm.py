@@ -74,7 +74,7 @@ class FundMaster:
 
             allocation_params = cls.build_asset_allocation_params_from_df(asset_allocation_groups_df, fund_id=fund_id)
             allocation_group_names = list(allocation_params.keys())
-            allocation_group_names.sort(key=lambda x: allocation_params[x].sequence)  # sorted by sequence
+            allocation_group_names.sort(key=lambda x: allocation_params[x].priority)  # sorted by priority
             rebalance_params_dict[fund_id] = FundRebalanceParams(
                 fund_size_type=row["fund_size_type"].upper(),
                 asset_size_basis=row["asset_size_basis"].upper(),
@@ -107,7 +107,7 @@ class FundMaster:
             if name in params:
                 raise KeyError(f"Duplicate 'allocation_group': '{name}'; fund '{fund_id}'.")
             params[name] = AssetAllocationParams.create(
-                sequence=row["sequence"],
+                priority=row["priority"],
                 strategy=row["strategy"],
                 purchase_method=row["purchase_method"],
             )

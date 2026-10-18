@@ -31,20 +31,21 @@ class AssetAllocationParams:
         target_weight: (float | tuple[float, float, float]): Target weight for the allocation group; either a single
             float, or a three-element tuple representing (floor, target, cap).
         purchase_method (AssetPurchaseMethod): Method to purchase new asset for this allocation group.
-        sequence (int): The sequence in which the allocation group will be processed, must be unique and consecutive
-            integer starting from 1.
+        priority (int): The priority in which the allocation group will be processed, smaller integer represents
+            higher priority.
     """
     strategy: AssetAllocationStrategy
     target_weight: tuple[float, float, float] | None = None
     purchase_method: AssetPurchaseMethod = AssetPurchaseMethod.NOT_USED
-    sequence: int = 999
+    priority: int = 999
 
     @classmethod
-    def create(cls,
+    def create(
+        cls,
         strategy: AssetAllocationStrategy | str,
         target_weight: float | tuple[float, float, float] | None = None,
         purchase_method: AssetPurchaseMethod | str | None = None,
-        sequence: int = 999
+        priority: int = 999
     ) -> Self:
         if isinstance(strategy, str):
             strategy = AssetAllocationStrategy[strategy.upper()]
@@ -58,7 +59,7 @@ class AssetAllocationParams:
             strategy=strategy,
             target_weight=target_weight,
             purchase_method=purchase_method,
-            sequence=sequence,
+            priority=priority,
         )
 
     def __post_init__(self):
@@ -81,11 +82,11 @@ class AssetAllocationParams:
             raise TypeError(f"Invalid type of 'target_weight': {type(self.target_weight)}, expected 'tuple'.")
 
 
-class _AssetAllocationGroup:
+class _AllocationGroup:
     """Asset allocation group.
     """
 
-    __slots__ = ("name", "strategy", "target_weight", "purchase_method", "purchase_method", "sequence",
+    __slots__ = ("name", "strategy", "target_weight", "purchase_method", "purchase_method", "priority",
                  "exist_conn", "profile_conn", "staged_conn", "size_basis", "target_size",
                  "profile_size", "_trade_orders", "_free_proceeds")
 
@@ -97,7 +98,7 @@ class _AssetAllocationGroup:
         strategy: AssetAllocationStrategy,
         target_weight: tuple[float, float, float] | None,
         purchase_method: AssetPurchaseMethod,
-        sequence: int,
+        priority: int,
         total_size: float,
         size_basis: str,
         profile_assets: Connector[Asset] | list[Asset] | None,
@@ -112,7 +113,7 @@ class _AssetAllocationGroup:
         self.strategy: AssetAllocationStrategy = strategy
         self.target_weight: tuple[float, float, float] | None = target_weight
         self.purchase_method: AssetPurchaseMethod = purchase_method
-        self.sequence: int = sequence
+        self.priority: int = priority
 
         self.size_basis: str = size_basis
         if isinstance(profile_assets, Connector):

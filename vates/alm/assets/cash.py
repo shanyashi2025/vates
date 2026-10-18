@@ -110,7 +110,10 @@ class Cash(Asset):
             amount (float): Amount to invest.
         """
         self._nominal += amount
-        self._purchase_proceeds += amount
+        if amount > 0.0:
+            self._purchase_proceeds += amount
+        else:
+            self._disposal_proceeds += -amount
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def buy_propn(self, propn: float) -> None:
@@ -120,9 +123,7 @@ class Cash(Asset):
         Args:
             propn (float): Proportion to buy.
         """
-        amount = self._nominal * propn
-        self._nominal += amount
-        self._purchase_proceeds += amount
+        self.invest_new_money(self._nominal * propn)
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
@@ -132,9 +133,7 @@ class Cash(Asset):
         Args:
             propn (float): Proportion to sell.
         """
-        amount = self._nominal * propn
-        self._nominal -= amount
-        self._disposal_proceeds += amount
+        self.invest_new_money(self._nominal * -propn)
 
     def buy_profile(self, *args, **kwargs) -> Self:
         """

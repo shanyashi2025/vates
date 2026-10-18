@@ -8,36 +8,35 @@ from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
 from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
 from vates.alm.assets import Asset, Cash
 from vates.alm._utils import Connector
-from vates.alm.allocator._allocation_group import _AssetAllocationGroup, AssetAllocationParams, TradeOrder, BuySellAction
+from vates.alm.allocator._allocation_group import _AllocationGroup, AssetAllocationParams, TradeOrder, BuySellAction
 from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod
 from vates.alm.allocator.proceeds_keeper import ProceedsKeeper
 
 
-def _rebalance_allocation_groups(
-    groups: list[_AssetAllocationGroup],
+def _rebalance_alloc_groups(
+    groups: list[_AllocationGroup],
     total_size: float,
     check_level: CheckLevel,
 ) -> None:
-    """Rebalance assets in the fund to match the target allocation.
+    """Rebalance assets to match the target allocation.
 
     Args:
         total_size (float): Total size for allocation, shall correspond to `asset_size_basis`.
         check_level (CheckLevel): Check level for validation against allocation.
 
     """
-    res_groups: list[_AssetAllocationGroup] = [ag for ag in groups if ag.strategy == AssetAllocationStrategy.UNCONSTRAINED]
-
-    # --- step 2: process non-unconstrained groups in sequence ---
+    # --- step 1: process non-unconstrained groups in priority ---
     for ag in groups:
         if ag.strategy != AssetAllocationStrategy.UNCONSTRAINED:
             trade_order = _make_trade_decision(ag)
             ag.execute_trade(trade_order)
 
-    # --- step 3: process unconstrained groups ---
+    # --- step 2: process unconstrained groups ---
     size_gap = total_size - sum(ag.current_size for ag in groups)
-    _process_unconstrained_groups(groups=res_groups, size_gap=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
+    _process_unconstrained_groups(groups=[ag for ag in groups if ag.strategy == AssetAllocationStrategy.UNCONSTRAINED],
+                                  size_gap=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
 
-    # --- step 4: validate if target allocations is satisfied ---
+    # --- step 3: validate if target allocations is satisfied ---
     for ag in groups:
         if not ag.is_allocation_satisfied():
             msg = (
@@ -49,7 +48,7 @@ def _rebalance_allocation_groups(
             warnings.warn(msg)
 
 
-def _make_trade_decision(group: _AssetAllocationGroup) -> TradeOrder:
+def _make_trade_decision(group: _AllocationGroup) -> TradeOrder:
     """Make the trade decision for an allocation group.
 
     Raises:
@@ -104,7 +103,7 @@ def _make_sorted_alloc_groups(
     allocation_group_attr_name: str,
     allocation_group_params: dict[str, AssetAllocationParams],
     require_validate: bool
-) -> list[_AssetAllocationGroup]:
+) -> list[_AllocationGroup]:
     ag_kwargs: dict[str, dict[str, ...]] = {}
     for name, params in allocation_group_params.items():
         if name in ag_kwargs:
@@ -113,7 +112,7 @@ def _make_sorted_alloc_groups(
             "strategy": params.strategy,
             "target_weight": params.target_weight,
             "purchase_method": params.purchase_method,
-            "sequence": params.sequence,
+            "priority": params.priority,
             "total_size": total_size,
             "size_basis": asset_size_basis,
             "exist_assets": [],
@@ -132,8 +131,8 @@ def _make_sorted_alloc_groups(
         if ag is not None:
             ag["profile_assets"].append(asset)
 
-    alloc_groups: list[_AssetAllocationGroup] = [_AssetAllocationGroup(name=key, **val) for key, val in ag_kwargs.items()]
-    alloc_groups.sort(key=lambda x: x.sequence)
+    alloc_groups: list[_AllocationGroup] = [_AllocationGroup(name=key, **val) for key, val in ag_kwargs.items()]
+    alloc_groups.sort(key=lambda x: x.priority)
 
     if require_validate:
         seen_unconstrained = []
@@ -161,7 +160,7 @@ def _make_sorted_alloc_groups(
     return alloc_groups
 
 
-def _process_unconstrained_groups(groups: list[_AssetAllocationGroup], size_gap: float, tolerance: float) -> None:
+def _process_unconstrained_groups(groups: list[_AllocationGroup], size_gap: float, tolerance: float) -> None:
     if abs(size_gap) <= tolerance:
         return
 
@@ -275,7 +274,7 @@ class Rebalancer:
                 total_size = max(total_size, min_size_tol)
         total_size = -max(total_size, min_size_tol) if total_size < 0.0 else max(total_size, min_size_tol)  # to prevent ZeroDivisionError
 
-        groups: list[_AssetAllocationGroup] = _make_sorted_alloc_groups(
+        groups: list[_AllocationGroup] = _make_sorted_alloc_groups(
             exist_assets=exist_assets,
             profile_assets=profile_assets,
             total_size=total_size,
@@ -297,7 +296,7 @@ class Rebalancer:
         self.tdv_ag_size_bd[t] = np.array(current_sizes)
         self.tdv_ag_wgt_pc_bd[t] = np.array([v / total_size for v in current_sizes]) * 100
 
-        _rebalance_allocation_groups(groups=groups, total_size=total_size, check_level=check_level)
+        _rebalance_alloc_groups(groups=groups, total_size=total_size, check_level=check_level)
 
         _free_proceeds_keeper = free_proceeds_keeper or ProceedsKeeper()
         for ag in groups:

@@ -112,7 +112,7 @@ class Equity(Asset):
             propn (float): Proportion to buy.
         """
         if propn < 0:
-            warnings.warn(f"Buying negative proportion ({propn:.4f}) of an exsiting equity '{self._asset_id}'.")
+            warnings.warn(f"Buying equity '{self._asset_id}' with a negative proportion: {propn:.4f}.")
         amount = self._mv * propn
         self._mv += amount
         if self._purchase_cost is not None:
@@ -128,7 +128,7 @@ class Equity(Asset):
             propn (float): Proportion to sell.
         """
         if not (0 < propn <=1):
-            warnings.warn(f"Selling proportion {propn:.4f} of an exsiting equity '{self._asset_id}', "
+            warnings.warn(f"Selling equity '{self._asset_id}' with a proportion: {propn:.4f}, "
                           f"normally expected: 0 < proportion <=1.")
         amount = self._mv * propn
         self._mv -= amount
@@ -158,7 +158,7 @@ class Equity(Asset):
         if not self._is_profile:
             raise ValueError("This equity object is not a profile.")
         if scale < 0:
-            warnings.warn(f"Scaling equity profile '{self._asset_id}' by a negative number ({scale:.4f}).")
+            warnings.warn(f"Buying equity profile '{self._asset_id}' with a negative scale: {scale:.4f}.")
 
         if new_asset_id is None:
             new_asset_id = self.asset_id + ("" if self._n_clone == 0 else f"_{self._n_clone}")
