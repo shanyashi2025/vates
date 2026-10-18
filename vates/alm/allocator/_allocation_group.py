@@ -28,14 +28,14 @@ class AssetAllocationParams:
     Attributes:
 
         strategy (AssetAllocationStrategy): Allocation strategy for this allocation group.
-        target_weight: (float | tuple[float, float, float]): Target weight for the allocation group; either a single
-            float, or a three-element tuple representing (floor, target, cap).
+        weight_range: (float | tuple[float, float, float]): Target weight for the allocation group; either a single
+            float, or a three-element tuple representing (lower, target, upper).
         purchase_method (AssetPurchaseMethod): Method to purchase new asset for this allocation group.
         priority (int): The priority in which the allocation group will be processed, smaller integer represents
             higher priority.
     """
     strategy: AssetAllocationStrategy
-    target_weight: tuple[float, float, float] | None = None
+    weight_range: tuple[float, float, float] | None = None
     purchase_method: AssetPurchaseMethod = AssetPurchaseMethod.NOT_USED
     priority: int = 999
 
@@ -43,21 +43,21 @@ class AssetAllocationParams:
     def create(
         cls,
         strategy: AssetAllocationStrategy | str,
-        target_weight: float | tuple[float, float, float] | None = None,
+        weight_range: float | tuple[float, float, float] | None = None,
         purchase_method: AssetPurchaseMethod | str | None = None,
         priority: int = 999
     ) -> Self:
         if isinstance(strategy, str):
             strategy = AssetAllocationStrategy[strategy.upper()]
-        if isinstance(target_weight, float):
-            target_weight = (target_weight, target_weight, target_weight)
+        if isinstance(weight_range, float):
+            weight_range = (weight_range, weight_range, weight_range)
         if purchase_method is None:
             purchase_method = AssetPurchaseMethod.NOT_USED
         elif isinstance(purchase_method, str):
             purchase_method = AssetPurchaseMethod[purchase_method.upper()]
         return AssetAllocationParams(
             strategy=strategy,
-            target_weight=target_weight,
+            weight_range=weight_range,
             purchase_method=purchase_method,
             priority=priority,
         )
@@ -69,25 +69,25 @@ class AssetAllocationParams:
         if not isinstance(self.purchase_method, AssetPurchaseMethod):
             raise TypeError(f"Invalid type of 'purchase_method': {type(self.purchase_method)}, expected 'AssetPurchaseMethod'.")
 
-        if self.target_weight is None:
+        if self.weight_range is None:
             pass
-        elif isinstance(self.target_weight, tuple):
-            if len(self.target_weight) != 3:
-                raise ValueError(f"Invalid len of 'target_weight': {len(self.target_weight)}, expected 3.")
-            if not all(isinstance(x, float) for x in self.target_weight):
-                raise TypeError(f"Invalid element type of 'target_weight' ({self.target_weight}), expected 'float'.")
-            if not self.target_weight[0] <= self.target_weight[1] <= self.target_weight[2]:
-                raise ValueError(f"Invalid 'target_weight' values: {self.target_weight}.")
+        elif isinstance(self.weight_range, tuple):
+            if len(self.weight_range) != 3:
+                raise ValueError(f"Invalid len of 'weight_range': {len(self.weight_range)}, expected 3.")
+            if not all(isinstance(x, float) for x in self.weight_range):
+                raise TypeError(f"Invalid element type of 'weight_range' ({self.weight_range}), expected 'float'.")
+            if not self.weight_range[0] <= self.weight_range[1] <= self.weight_range[2]:
+                raise ValueError(f"Invalid 'weight_range' values: {self.weight_range}.")
         else:
-            raise TypeError(f"Invalid type of 'target_weight': {type(self.target_weight)}, expected 'tuple'.")
+            raise TypeError(f"Invalid type of 'weight_range': {type(self.weight_range)}, expected 'tuple'.")
 
 
 class _AllocationGroup:
     """Asset allocation group.
     """
 
-    __slots__ = ("name", "strategy", "target_weight", "purchase_method", "purchase_method", "priority",
-                 "exist_conn", "profile_conn", "staged_conn", "size_basis", "target_size",
+    __slots__ = ("name", "strategy", "weight_range", "purchase_method", "purchase_method", "priority",
+                 "exist_conn", "profile_conn", "staged_conn", "size_basis", "size_range",
                  "profile_size", "_trade_orders", "_free_proceeds")
 
     def __init__(
@@ -96,7 +96,7 @@ class _AllocationGroup:
         name: str,
         exist_assets: Connector[Asset] | list[Asset],
         strategy: AssetAllocationStrategy,
-        target_weight: tuple[float, float, float] | None,
+        weight_range: tuple[float, float, float] | None,
         purchase_method: AssetPurchaseMethod,
         priority: int,
         total_size: float,
@@ -111,7 +111,7 @@ class _AllocationGroup:
         else:
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('Connector', 'list').")
         self.strategy: AssetAllocationStrategy = strategy
-        self.target_weight: tuple[float, float, float] | None = target_weight
+        self.weight_range: tuple[float, float, float] | None = weight_range
         self.purchase_method: AssetPurchaseMethod = purchase_method
         self.priority: int = priority
 
@@ -125,11 +125,11 @@ class _AllocationGroup:
         else:
             raise TypeError(f"Invalid type of 'profile_assets': {type(profile_assets)}, expected ('Connector', 'list').")
 
-        self.target_size: tuple[float, float, float] | None = None
-        if self.target_weight is not None:
-            self.target_size = (total_size * self.target_weight[0],
-                                total_size * self.target_weight[1],
-                                total_size * self.target_weight[2])
+        self.size_range: tuple[float, float, float] | None = None
+        if self.weight_range is not None:
+            self.size_range = (total_size * self.weight_range[0],
+                               total_size * self.weight_range[1],
+                               total_size * self.weight_range[2])
         self.profile_size: float = self.profile_conn.sum_attr(self.size_basis) if self.profile_conn is not None else 0.0
 
         self.staged_conn: Connector[Asset] = Connector[Asset]()
@@ -237,11 +237,11 @@ class _AllocationGroup:
         if self.strategy in (AssetAllocationStrategy.UNCONSTRAINED, AssetAllocationStrategy.NO_TRADE):
             return True
 
-        flr, tgt, cap = self.target_size
+        lower, target, upper = self.size_range
 
         if self.strategy == AssetAllocationStrategy.BUY_HOLD:
-            return flr - rel_tol * tgt <= self.current_size
+            return lower - rel_tol * target <= self.current_size
         elif self.strategy == AssetAllocationStrategy.BUY_SELL:
-            return flr - rel_tol * tgt <= self.current_size <= cap + rel_tol * tgt
+            return lower - rel_tol * target <= self.current_size <= upper + rel_tol * target
         else:
             raise ValueError(f"{self.name}: invalid asset allocation strategy {self.strategy}.")

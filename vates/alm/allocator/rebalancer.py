@@ -41,7 +41,7 @@ def _rebalance_alloc_groups(
         if not ag.is_allocation_satisfied():
             msg = (
                 f"{ag.name}: allocation is not satisfied, {ag.current_size/total_size:.4%}; strategy: {ag.strategy.name}; "
-                f"(floor, cap): ({ag.target_weight[0]:.4%}, {ag.target_weight[2]:.4%}); "
+                f"(lower, upper): ({ag.weight_range[0]:.4%}, {ag.weight_range[2]:.4%}); "
                 f"purchase method: {ag.purchase_method.name}.")
             if check_level == CheckLevel.ERROR:
                 raise ValueError(msg)
@@ -59,35 +59,35 @@ def _make_trade_decision(group: _AllocationGroup) -> TradeOrder:
     if strategy == AssetAllocationStrategy.NO_TRADE:
         return TradeOrder(action=BuySellAction.NOOP)
     elif strategy == AssetAllocationStrategy.BUY_HOLD:
-        if group.current_size < group.target_size[0]:
+        if group.current_size < group.size_range[0]:
             if purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
                 return TradeOrder(
                     action=BuySellAction.BUY_EXIST,
-                    arg=(group.target_size[1] - group.current_size) / group.current_size)
+                    arg=(group.size_range[1] - group.current_size) / group.current_size)
             elif purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
                 return TradeOrder(
                     action=BuySellAction.BUY_PROFILE,
-                    arg=(group.target_size[1] - group.current_size) / group.profile_size)
+                    arg=(group.size_range[1] - group.current_size) / group.profile_size)
             else:
                 raise ValueError(f"{group.name}: invalid purchase method {purchase_method} for 'BUY_HOLD'.")
         else:
             return TradeOrder(action=BuySellAction.NOOP)
     elif strategy == AssetAllocationStrategy.BUY_SELL:
-        if group.current_size < group.target_size[0]:
+        if group.current_size < group.size_range[0]:
             if purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
                 return TradeOrder(
                     action=BuySellAction.BUY_EXIST,
-                    arg=(group.target_size[1] - group.current_size) / group.current_size)
+                    arg=(group.size_range[1] - group.current_size) / group.current_size)
             elif purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
                 return TradeOrder(
                     action=BuySellAction.BUY_PROFILE,
-                    arg=(group.target_size[1] - group.current_size) / group.profile_size)
+                    arg=(group.size_range[1] - group.current_size) / group.profile_size)
             else:
                 raise ValueError(f"{group.name}: invalid purchase method {purchase_method} for 'BUY_SELL'.")
-        elif group.current_size > group.target_size[2]:
+        elif group.current_size > group.size_range[2]:
             return TradeOrder(
                 action=BuySellAction.SELL,
-                arg=(group.current_size - group.target_size[1]) / group.current_size)
+                arg=(group.current_size - group.size_range[1]) / group.current_size)
         else:
             return TradeOrder(action=BuySellAction.NOOP)
     else:
@@ -110,7 +110,7 @@ def _make_sorted_alloc_groups(
             raise KeyError(f"Duplicate allocation group name: '{name}'.")
         ag_kwargs[name] = {
             "strategy": params.strategy,
-            "target_weight": params.target_weight,
+            "weight_range": params.weight_range,
             "purchase_method": params.purchase_method,
             "priority": params.priority,
             "total_size": total_size,
@@ -140,8 +140,8 @@ def _make_sorted_alloc_groups(
             if ag.strategy is AssetAllocationStrategy.UNCONSTRAINED:
                 seen_unconstrained.append(i)
             if ag.strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
-                if ag.target_weight is None:
-                    raise ValueError(f"'{ag.name}': '{ag.strategy.value}'; 'target_weight' is 'None'.")
+                if ag.weight_range is None:
+                    raise ValueError(f"'{ag.name}': '{ag.strategy.value}'; 'weight_range' is 'None'.")
                 if ag.purchase_method is None:
                     raise ValueError(f"'{ag.name}': '{ag.strategy.value}'; 'purchase_method' is 'None'.")
                 if ag.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and len(ag.exist_conn) == 0:
