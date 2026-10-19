@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Self, Callable
+from typing import List, Callable
 import pandas as pd
 
 from vates import ProjModelEngine
@@ -47,7 +47,7 @@ class FundMaster:
         *,
         model_engine: ProjModelEngine,
         asset_allocation_groups_df: pd.DataFrame
-    ) -> Self:
+    ) -> 'FundMaster':
         funds = []
         ph_funds = []
         sh_fund = None
@@ -110,9 +110,9 @@ class FundMaster:
                 priority=row["priority"],
                 strategy=row["strategy"],
                 purchase_method=row["purchase_method"],
-                below_range_desire_direct=row["below_range_desire_direct"],
-                within_range_desire_direct=row["within_range_desire_direct"],
-                above_range_desire_direct=row["above_range_desire_direct"],
+                below_range_primary_objective=row["below_range_primary_objective"],
+                within_range_primary_objective=row["within_range_primary_objective"],
+                above_range_primary_objective=row["above_range_primary_objective"],
             )
 
         return params

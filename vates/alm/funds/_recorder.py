@@ -57,14 +57,14 @@ class AssetRecorder:
         name: str,
         model_engine: ProjModelEngine | None = None,
         asset_connector: Connector[Asset],
-        asset_categories: list[str],
+        asset_categories: list[str] | None,
         asset_category_attr: str,
-        asset_report_bases: list[str],
+        asset_report_bases: list[str] | None,
     ):
         self.asset_conn: Connector[Asset] = asset_connector
-        self.asset_categories: list[str] = asset_categories
+        self.asset_categories: list[str] | None = asset_categories
         self.asset_category_attr: str = asset_category_attr
-        self.asset_report_bases: list[str] = asset_report_bases
+        self.asset_report_bases: list[str] | None = asset_report_bases
         self.totass_cf: float | None = None
         self.catass_cf: np.ndarray | None = None  # shape = (categories, )
         self.totass_mv_op: float | None = None

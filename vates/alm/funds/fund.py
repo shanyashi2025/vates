@@ -32,7 +32,7 @@ class Fund:
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
-    __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', 'fund_id', '_asset_conn', '_liab_conn',
+    __slots__ = ('__dict__', '__weakref__', 'time', 'period', 'fund_id', '_asset_conn', '_liab_conn',
                  '_free_proceeds_keeper', '_primary_cash_asset', '_allocator',
                  '_asset_rec', '_liab_rec', '_other_rec',)
 
@@ -58,7 +58,6 @@ class Fund:
             output_liab_attrs_bd (list[str]): List of liability attributes to output.
             output_liab_attrs_ad (list[str]): List of liability attributes to output.
         """
-        self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else lambda: None
         self.fund_id = fund_id
         # Asset and liab collections
         self._asset_conn: Connector[Asset] = Connector[Asset]()
@@ -160,8 +159,7 @@ class Fund:
         self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"ad")
         self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"end")
 
-    @property
-    def primary_cash_asset(self) -> Cash | None:
+    def _get_primary_cash_asset(self) -> Cash | None:
         if self._primary_cash_asset is None or not self._primary_cash_asset.is_alive:
             self._primary_cash_asset = None
             for asset in self._asset_conn:
@@ -242,7 +240,7 @@ class Fund:
                 raise ValueError(f"Invalid scope '{item}', expected ('assets', 'liabs').")
 
     def invest_free_proceeds_to_cash(self, cash: Cash | None = None) -> None:
-        cash = cash or self.primary_cash_asset
+        cash = cash or self._get_primary_cash_asset()
         if cash is not None:
             cash.invest_new_money(self.free_proceeds_keeper.take_out())
         else:

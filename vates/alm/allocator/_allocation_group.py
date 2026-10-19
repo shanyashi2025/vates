@@ -1,12 +1,11 @@
 import warnings
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal, Self
 
 from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
 from vates.alm.assets import Asset
 from vates.alm._utils import Connector
-from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, AssetTradeDirection
+from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, AssetRebalanceObjective
 
 
 class BuySellAction(Enum):
@@ -24,34 +23,34 @@ class TradeOrder:
 
 
 @dataclass(slots=True, frozen=True)
-class DesireTradeDirection:
-    below_range: AssetTradeDirection
-    within_range: AssetTradeDirection
-    above_range: AssetTradeDirection
+class PrimaryRebalanceObjective:
+    below_range: AssetRebalanceObjective
+    within_range: AssetRebalanceObjective
+    above_range: AssetRebalanceObjective
 
     @classmethod
-    def create(cls, below_range: AssetTradeDirection | str | None, within_range: AssetTradeDirection | str | None,
-               above_range: AssetTradeDirection | str | None) -> Self:
+    def create(cls, below_range: AssetRebalanceObjective | str | None, within_range: AssetRebalanceObjective | str | None,
+               above_range: AssetRebalanceObjective | str | None) -> 'PrimaryRebalanceObjective':
         if below_range is None:
-            below_range = AssetTradeDirection.NOT_USED
+            below_range = AssetRebalanceObjective.NOT_USED
         elif isinstance(below_range, str):
-            below_range = AssetTradeDirection[below_range.upper()]
+            below_range = AssetRebalanceObjective[below_range.upper()]
         if within_range is None:
-            within_range = AssetTradeDirection.NOT_USED
+            within_range = AssetRebalanceObjective.NOT_USED
         elif isinstance(within_range, str):
-            within_range = AssetTradeDirection[within_range.upper()]
+            within_range = AssetRebalanceObjective[within_range.upper()]
         if above_range is None:
-            above_range = AssetTradeDirection.NOT_USED
+            above_range = AssetRebalanceObjective.NOT_USED
         elif isinstance(above_range, str):
-            above_range = AssetTradeDirection[above_range.upper()]
-        return DesireTradeDirection(below_range=below_range, within_range=within_range, above_range=above_range)
+            above_range = AssetRebalanceObjective[above_range.upper()]
+        return PrimaryRebalanceObjective(below_range=below_range, within_range=within_range, above_range=above_range)
 
     def __post_init__(self):
-        if not isinstance(self.below_range, AssetTradeDirection):
+        if not isinstance(self.below_range, AssetRebalanceObjective):
             raise TypeError(f"Invalid type of 'below_range': {type(self.below_range)}, expected 'AssetTradeDirection'")
-        if not isinstance(self.within_range, AssetTradeDirection):
+        if not isinstance(self.within_range, AssetRebalanceObjective):
             raise TypeError(f"Invalid type of 'within_range': {type(self.within_range)}, expected 'AssetTradeDirection'")
-        if not isinstance(self.above_range, AssetTradeDirection):
+        if not isinstance(self.above_range, AssetRebalanceObjective):
             raise TypeError(f"Invalid type of 'above_range': {type(self.above_range)}, expected 'AssetTradeDirection'")
 
 
@@ -64,14 +63,14 @@ class AssetAllocationParams:
         strategy (AssetAllocationStrategy): Allocation strategy for this allocation group.
         weight_range (float | tuple[float, float, float]): Target weight for the allocation group; either a single
             float, or a three-element tuple representing (lower, target, upper).
-        desire_direct (DesireTradeDirection): Desired trade direction.
+        primary_objective (PrimaryRebalanceObjective): Primary rebalance objective.
         purchase_method (AssetPurchaseMethod): Method to purchase new asset for this allocation group.
         priority (int): The priority in which the allocation group will be processed, smaller integer represents
             higher priority.
     """
     strategy: AssetAllocationStrategy
     weight_range: tuple[float, float, float] | None
-    desire_direct: DesireTradeDirection
+    primary_objective: PrimaryRebalanceObjective
     purchase_method: AssetPurchaseMethod
     priority: int
 
@@ -80,27 +79,54 @@ class AssetAllocationParams:
         cls,
         strategy: AssetAllocationStrategy | str,
         weight_range: float | tuple[float, float, float] | None = None,
-        below_range_desire_direct: Literal['NOT_USED', 'NO_ACTION', 'TO_TARGET_WEIGHT', 'TO_LOWER_WEIGHT', 'TO_UPPER_WEIGHT'] | AssetTradeDirection | None = None,
-        within_range_desire_direct: Literal['NOT_USED', 'NO_ACTION', 'TO_TARGET_WEIGHT', 'TO_LOWER_WEIGHT', 'TO_UPPER_WEIGHT'] | AssetTradeDirection | None = None,
-        above_range_desire_direct: Literal['NOT_USED', 'NO_ACTION', 'TO_TARGET_WEIGHT', 'TO_LOWER_WEIGHT', 'TO_UPPER_WEIGHT'] | AssetTradeDirection | None = None,
+        below_range_primary_objective: str | AssetRebalanceObjective | None = None,
+        within_range_primary_objective: str | AssetRebalanceObjective | None = None,
+        above_range_primary_objective: str | AssetRebalanceObjective | None = None,
         purchase_method: AssetPurchaseMethod | str | None = None,
         priority: int = 999
-    ) -> Self:
+    ) -> 'AssetAllocationParams':
+        """
+        Args:
+            strategy (AssetAllocationStrategy | str): Allocation strategy for this allocation group:
+               - NO_TRADE
+               - BUY_HOLD
+               - BUY_SELL
+               - UNCONSTRAINED
+            weight_range: (float | tuple[float, float, float] | None): Target weight for the allocation group;
+                either a single float, or a three-element tuple representing (lower, target, upper).
+            below_range_primary_objective (str | AssetRebalanceObjective): Primary rebalance objective below range:
+                - NOT_USED ('None' is concerted to 'NOT_USED')
+                - NO_ACTION
+                - TO_TARGET_WEIGHT
+                - TO_LOWER_WEIGHT
+                - TO_UPPER_WEIGHT
+            within_range_primary_objective (str | AssetRebalanceObjective): Primary rebalance objective within range:
+            above_range_primary_objective (str | AssetRebalanceObjective): Primary rebalance objective above range:
+            purchase_method (AssetPurchaseMethod | str): Method to purchase new asset for this allocation group:
+                - SCALE_UP_EXISTING
+                - PURCHASE_PROFILE
+                - NOT_USED ('None' is concerted to 'NOT_USED')
+            priority (int): The priority in which the allocation group will be processed, smaller integer represents
+            higher priority.
+
+        Returns:
+            AssetAllocationParams
+        """
         if isinstance(strategy, str):
             strategy = AssetAllocationStrategy[strategy.upper()]
-        if isinstance(weight_range, float):
+        if isinstance(weight_range, (float, int)):
             weight_range = (weight_range, weight_range, weight_range)
         if purchase_method is None:
             purchase_method = AssetPurchaseMethod.NOT_USED
         elif isinstance(purchase_method, str):
             purchase_method = AssetPurchaseMethod[purchase_method.upper()]
-        desire_direct = DesireTradeDirection.create(below_range=below_range_desire_direct,
-                                                    within_range=within_range_desire_direct,
-                                                    above_range=above_range_desire_direct)
+        primary_objective = PrimaryRebalanceObjective.create(below_range=below_range_primary_objective,
+                                                             within_range=within_range_primary_objective,
+                                                             above_range=above_range_primary_objective)
         return AssetAllocationParams(
             strategy=strategy,
             weight_range=weight_range,
-            desire_direct=desire_direct,
+            primary_objective=primary_objective,
             purchase_method=purchase_method,
             priority=priority,
         )
@@ -124,14 +150,14 @@ class AssetAllocationParams:
         else:
             raise TypeError(f"Invalid type of 'weight_range': {type(self.weight_range)}, expected 'tuple'.")
 
-        if not isinstance(self.desire_direct, DesireTradeDirection):
-            raise TypeError(f"Invalid type of 'desire_direct': {type(self.desire_direct)}, expected 'PreferTradeDirection'.")
+        if not isinstance(self.primary_objective, PrimaryRebalanceObjective):
+            raise TypeError(f"Invalid type of 'primary_objective': {type(self.primary_objective)}, expected 'PrimaryRebalanceObjective'.")
 
 class _AllocationGroup:
     """Asset allocation group.
     """
 
-    __slots__ = ("name", "strategy", "weight_range", "desire_direct", "purchase_method", "purchase_method", "priority",
+    __slots__ = ("name", "strategy", "weight_range", "primary_objective", "purchase_method", "purchase_method", "priority",
                  "exist_conn", "profile_conn", "staged_conn", "total_size", "size_basis", "size_range",
                  "profile_size", "_trade_orders", "_free_proceeds")
 
@@ -142,7 +168,7 @@ class _AllocationGroup:
         exist_assets: Connector[Asset] | list[Asset],
         strategy: AssetAllocationStrategy,
         weight_range: tuple[float, float, float] | None,
-        desire_direct: DesireTradeDirection,
+        primary_objective: PrimaryRebalanceObjective,
         purchase_method: AssetPurchaseMethod,
         priority: int,
         total_size: float,
@@ -158,7 +184,7 @@ class _AllocationGroup:
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('Connector', 'list').")
         self.strategy: AssetAllocationStrategy = strategy
         self.weight_range: tuple[float, float, float] | None = weight_range
-        self.desire_direct: DesireTradeDirection = desire_direct
+        self.primary_objective: PrimaryRebalanceObjective = primary_objective
         self.purchase_method: AssetPurchaseMethod = purchase_method
         self.priority: int = priority
 
@@ -179,23 +205,26 @@ class _AllocationGroup:
         self._trade_orders: list[TradeOrder] = []
         self._free_proceeds: float = 0.0
 
-        # intial validation
+        # initial validation
         if self.strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
             if self.purchase_method == AssetPurchaseMethod.NOT_USED:
                 raise ValueError(f"'{self.name}': '{self.strategy.name}'; 'purchase_method' is 'NOT_USED'.")
             if self.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and len(self.exist_conn) == 0:
-                raise ValueError(f"'{self.name}': 'SCALE_UP_EXISTING'; no exsiting asset.")
+                raise ValueError(f"'{self.name}': 'SCALE_UP_EXISTING'; no existing asset.")
             if self.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and len(self.profile_conn) == 0:
                 raise ValueError(f"'{self.name}': 'PURCHASE_PROFILE';  no profile asset.")
 
     def _compute_size_range(self, total_size: float, weight_range: tuple[float, float, float] | None
                             ) -> tuple[float, float, float]:
-        if self.strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
+        strategy = self.strategy
+        if strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
+            if weight_range is None:
+                raise ValueError(f"'{self.name}': strategy '{strategy}': 'weight_range' is None.")
             return total_size * weight_range[0], total_size * weight_range[1], total_size * weight_range[2]
-        if self.strategy == AssetAllocationStrategy.NO_TRADE:
+        if strategy == AssetAllocationStrategy.NO_TRADE:
             exist_size = self.exist_size
             return exist_size, exist_size, exist_size
-        if self.strategy == AssetAllocationStrategy.UNCONSTRAINED:
+        if strategy == AssetAllocationStrategy.UNCONSTRAINED:
             return float("-inf"), 0.0, float("inf")
         raise ValueError("Should never get here.")
 
@@ -216,7 +245,7 @@ class _AllocationGroup:
         return self.staged_conn.sum_attr(self.size_basis)
 
     @property
-    def desired_size(self) -> float | None:
+    def primary_objective_size(self) -> float | None:
         strategy = self.strategy
         exist_size = self.exist_size
         lower_size, target_size, upper_size = self.size_range
@@ -229,52 +258,56 @@ class _AllocationGroup:
         if strategy == AssetAllocationStrategy.BUY_HOLD:
             if exist_size >= lower_size:
                 return exist_size
-            direct = self.desire_direct.below_range
-            if direct == AssetTradeDirection.TO_LOWER_WEIGHT:
+            prim_obj = self.primary_objective.below_range
+            if prim_obj == AssetRebalanceObjective.TO_LOWER_WEIGHT:
                 return lower_size
-            elif direct == AssetTradeDirection.TO_TARGET_WEIGHT:
+            elif prim_obj == AssetRebalanceObjective.TO_TARGET_WEIGHT:
                 return target_size
-            elif direct == AssetTradeDirection.TO_UPPER_WEIGHT:
+            elif prim_obj == AssetRebalanceObjective.TO_UPPER_WEIGHT:
                 return upper_size
             else:
-                warnings.warn(f"strategy 'BUY_HOLD', below range desire: {direct.name}, cannot determine desired size.")
+                warnings.warn(f"strategy 'BUY_HOLD', below range, primary objective: {prim_obj.name}, "
+                              f"cannot determine size.")
                 return exist_size
 
         if strategy == AssetAllocationStrategy.BUY_SELL:
             if exist_size < lower_size:
-                direct = self.desire_direct.below_range
-                if direct == AssetTradeDirection.TO_LOWER_WEIGHT:
+                prim_obj = self.primary_objective.below_range
+                if prim_obj == AssetRebalanceObjective.TO_LOWER_WEIGHT:
                     return lower_size
-                elif direct == AssetTradeDirection.TO_TARGET_WEIGHT:
+                elif prim_obj == AssetRebalanceObjective.TO_TARGET_WEIGHT:
                     return target_size
-                elif direct == AssetTradeDirection.TO_UPPER_WEIGHT:
+                elif prim_obj == AssetRebalanceObjective.TO_UPPER_WEIGHT:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', below range desire: {direct.name}, cannot determine desired size.")
+                    warnings.warn(f"strategy 'BUY_SELL', below range, primary objective: {prim_obj.name}, "
+                                  f"cannot determine size.")
                     return exist_size
             elif exist_size > upper_size:
-                direct = self.desire_direct.above_range
-                if direct == AssetTradeDirection.TO_LOWER_WEIGHT:
+                prim_obj = self.primary_objective.above_range
+                if prim_obj == AssetRebalanceObjective.TO_LOWER_WEIGHT:
                     return lower_size
-                elif direct == AssetTradeDirection.TO_TARGET_WEIGHT:
+                elif prim_obj == AssetRebalanceObjective.TO_TARGET_WEIGHT:
                     return target_size
-                elif direct == AssetTradeDirection.TO_UPPER_WEIGHT:
+                elif prim_obj == AssetRebalanceObjective.TO_UPPER_WEIGHT:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', above range desire: {direct.name}, cannot determine desired size.")
+                    warnings.warn(f"strategy 'BUY_SELL', above range primary objective: {prim_obj.name}, "
+                                  f"cannot determine size.")
                     return exist_size
             else:  # lower_size <= exist_size <= upper_size
-                direct = self.desire_direct.within_range
-                if direct == AssetTradeDirection.NO_ACTION:
+                prim_obj = self.primary_objective.within_range
+                if prim_obj == AssetRebalanceObjective.NO_ACTION:
                     return exist_size
-                elif direct == AssetTradeDirection.TO_LOWER_WEIGHT:
+                elif prim_obj == AssetRebalanceObjective.TO_LOWER_WEIGHT:
                     return lower_size
-                elif direct == AssetTradeDirection.TO_TARGET_WEIGHT:
+                elif prim_obj == AssetRebalanceObjective.TO_TARGET_WEIGHT:
                     return target_size
-                elif direct == AssetTradeDirection.TO_UPPER_WEIGHT:
+                elif prim_obj == AssetRebalanceObjective.TO_UPPER_WEIGHT:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', within range desire: {direct.name}, cannot determine desired size.")
+                    warnings.warn(f"strategy 'BUY_SELL', within range, primary objective: {prim_obj.name}, "
+                                  f"cannot determine size.")
                     return exist_size
         raise ValueError("Should never get here")
 

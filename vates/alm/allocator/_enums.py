@@ -13,8 +13,8 @@ class AssetPurchaseMethod(Enum):
     PURCHASE_PROFILE = auto()
     NOT_USED = auto()
 
-class AssetTradeDirection(Enum):
-    """Enum for asset trade direction."""
+class AssetRebalanceObjective(Enum):
+    """Enum for asset rebalance objective."""
     NOT_USED = auto()
     NO_ACTION = auto()
     TO_TARGET_WEIGHT = auto()
