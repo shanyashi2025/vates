@@ -35,7 +35,7 @@ def _rebalance_alloc_groups(
                 ag.execute_trade(trade_order)
         # --- step 2: process unconstrained groups ---
         size_gap = total_size - sum(ag.current_size for ag in groups)
-        _process_unconstrained_groups(groups=uc_groups, size_gap=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
+        _process_unconstrained_groups(groups=uc_groups, incremental_size=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
     else:  # best effort
         trade_orders = _make_trade_orders_on_best_effort(groups=groups, total_size=total_size)
         for ag, trade_order in zip(groups, trade_orders):
@@ -209,9 +209,6 @@ def _make_sorted_alloc_groups(
         for i, ag in enumerate(groups):
             if ag.strategy is AssetAllocationStrategy.UNCONSTRAINED:
                 seen_uc.append(i)
-                if ag.purchase_method != AssetPurchaseMethod.SCALE_UP_EXISTING:
-                    warnings.warn(f"'{ag.name}': 'UNCONSTRAINED'; 'purchase_method' is '{ag.purchase_method.name}' "
-                                  f"but 'SCALE_UP_EXISTING' will be forcibly used.")
         if len(seen_uc) == 0:
             pass
         else:
@@ -223,8 +220,8 @@ def _make_sorted_alloc_groups(
     return groups
 
 
-def _process_unconstrained_groups(groups: list[_AllocationGroup], size_gap: float, tolerance: float) -> None:
-    if abs(size_gap) <= tolerance:
+def _process_unconstrained_groups(groups: list[_AllocationGroup], incremental_size: float, tolerance: float) -> None:
+    if abs(incremental_size) <= tolerance:
         return
 
     if len(groups) == 0:
@@ -245,20 +242,23 @@ def _process_unconstrained_groups(groups: list[_AllocationGroup], size_gap: floa
                 _fallback_cash = asset
                 break
         if _fallback_cash is not None:
-            _fallback_cash.invest_new_money(size_gap)
+            _fallback_cash.invest_new_money(incremental_size)
         else:
             warnings.warn(f"No cash asset in 'UNCONSTRAINED' group is available for scaling.")
         return
 
-    # scale unconstrained allocation_group, currently NOT support 'BuySellAction.BUY_PROFILE'
-    if size_gap > 0:
-        trade_order = TradeOrder(action=BuySellAction.BUY_EXIST, arg=size_gap / exist_size)
-    elif size_gap < 0:
-        trade_order = TradeOrder(action=BuySellAction.SELL, arg=- size_gap / exist_size)
-    else:
-        raise ValueError("Should never get here.")
+    ratio = incremental_size / exist_size
 
     for ag in groups:
+        if ratio > 0:  # buy
+            if ag.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
+                trade_order = TradeOrder(action=BuySellAction.BUY_EXIST, arg=ratio)
+            elif ag.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
+                trade_order = TradeOrder(action=BuySellAction.BUY_PROFILE, arg=ag.exist_size * ratio / ag.profile_size)
+            else:
+                raise ValueError(f"{ag.name}: invalid purchase method {ag.purchase_method} for 'UNCONSTRAINED'.")
+        else:  # sell
+            trade_order = TradeOrder(action=BuySellAction.SELL, arg=-ratio)
         ag.execute_trade(trade_order)
 
 

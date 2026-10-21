@@ -241,6 +241,10 @@ class _AllocationGroup:
         return self.exist_conn.sum_attr(self.size_basis)
 
     @property
+    def exist_market_value(self) -> float:
+        return self.exist_conn.sum_attr("market_value")
+
+    @property
     def staged_size(self) -> float:
         return self.staged_conn.sum_attr(self.size_basis)
 
