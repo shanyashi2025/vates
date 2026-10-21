@@ -14,7 +14,7 @@ class BlackScholesCalculator:
             from scipy.stats import norm
             return norm
         except ImportError:
-            raise ImportError("Need to install 'scipy' library (`pip install scipy`).")
+            raise ImportError("Need to install 'scipy' library (`pip install scipy`).") from None
 
     @classmethod
     def price(cls, *, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float

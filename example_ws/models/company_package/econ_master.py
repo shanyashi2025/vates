@@ -178,11 +178,11 @@ class EsgMaster:
         if var.measure == "PRICE":
             from_what = "discount_factors"
             rates = np.insert(arr=rates, obj=0, values=1)  # let discount_factor = 1 at term 0
-            value = interpolate_interest_rates(term, rates, method=var.interp_method)
+            value = interpolate_interest_rates(term, rates, interp_method=var.interp_method)
         elif var.measure == "SPOT":
             from_what = "spot_rates"
             rates = np.insert(arr=rates, obj=0, values=0)  # let spot_rate = 0 at term 0
-            value = interpolate_interest_rates(term, rates, method=var.interp_method)
+            value = interpolate_interest_rates(term, rates, interp_method=var.interp_method)
         else:
             raise ValueError(f"{var.descr}: invalid {var.measure=}")
         yield_curve_obj.update(from_what=from_what, value=value)
