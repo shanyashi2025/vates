@@ -25,17 +25,21 @@ def _rebalance_alloc_groups(
         check_level (CheckLevel): Check level for validation against allocation.
 
     """
-    uc_groups: list[_AllocationGroup] = [ag for ag in groups if ag.strategy == AssetAllocationStrategy.UNCONSTRAINED]
+    for ag in groups[:-1]:
+        if ag.strategy is AssetAllocationStrategy.UNCONSTRAIN:
+            raise ValueError(f"'UNCONSTRAINED' allocation groups must be the last.")
+    ag = groups[-1]
+    uc_group: _AllocationGroup | None = ag if ag.strategy is AssetAllocationStrategy.UNCONSTRAIN else None
 
-    if len(uc_groups) >= 1:  # has unconstrained group
+    if uc_group is not None:  # has unconstrained group
         # --- step 1: process non-unconstrained groups in priority ---
         for ag in groups:
-            if ag.strategy != AssetAllocationStrategy.UNCONSTRAINED:
+            if ag.strategy != AssetAllocationStrategy.UNCONSTRAIN:
                 trade_order = _make_trade_order_on_primary_objective(ag)
                 ag.execute_trade(trade_order)
         # --- step 2: process unconstrained groups ---
         size_gap = total_size - sum(ag.current_size for ag in groups)
-        _process_unconstrained_groups(groups=uc_groups, incremental_size=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
+        _process_unconstrained_group(group=uc_group, incremental_size=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
     else:  # best effort
         trade_orders = _make_trade_orders_on_best_effort(groups=groups, total_size=total_size)
         for ag, trade_order in zip(groups, trade_orders):
@@ -57,7 +61,7 @@ def _rebalance_alloc_groups(
 def _make_trade_order_on_primary_objective(group: _AllocationGroup) -> TradeOrder:
     strategy = group.strategy
     if strategy == AssetAllocationStrategy.NO_TRADE:
-        return TradeOrder(action=BuySellAction.NOOP)
+        return TradeOrder(action=BuySellAction.PASS)
     else:
         prim_obj_size = group.primary_objective_size
         if prim_obj_size is None:
@@ -74,7 +78,7 @@ def _make_trade_orders_on_best_effort(groups: list[_AllocationGroup], total_size
         prim_obj_size = g.primary_objective_size
         lower, _, upper = g.size_range
 
-        if strategy == AssetAllocationStrategy.UNCONSTRAINED:
+        if strategy == AssetAllocationStrategy.UNCONSTRAIN:
             raise ValueError(f"'{g.name}': unexpected 'UNCONSTRAINED'.")
 
         if strategy == AssetAllocationStrategy.NO_TRADE:
@@ -127,7 +131,7 @@ def _make_trade_order_on_demand(group: _AllocationGroup, demanded_size: float) -
         if abs(demanded_size - current_size) > 0.001:
             warnings.warn(f"'{group.name}': strategy 'NO_TRADE', can not rebalance to another size; "
                           f"demanded={demanded_size:,.2f}; current={current_size:,.2f}.")
-        return TradeOrder(action=BuySellAction.NOOP)
+        return TradeOrder(action=BuySellAction.PASS)
 
     def _make_buy_order(_purchase_method: AssetPurchaseMethod, _demanded_size: float, _current_size: float,
                         _exist_size: float, _profile_size: float) -> TradeOrder | None:
@@ -143,7 +147,7 @@ def _make_trade_order_on_demand(group: _AllocationGroup, demanded_size: float) -
             if abs(demanded_size - current_size) > 0.001:
                 warnings.warn(f"'{group.name}': strategy 'BUY_HOLD', can not sell; "
                               f"demanded={demanded_size:,.2f}; current={current_size:,.2f}.")
-            return TradeOrder(action=BuySellAction.NOOP)
+            return TradeOrder(action=BuySellAction.PASS)
         else:
             trade_order = _make_buy_order(_purchase_method=purchase_method, _demanded_size=demanded_size,
                                           _current_size=current_size, _exist_size=exist_size, _profile_size=profile_size)
@@ -152,7 +156,7 @@ def _make_trade_order_on_demand(group: _AllocationGroup, demanded_size: float) -
             return trade_order
     elif strategy == AssetAllocationStrategy.BUY_SELL:
         if demanded_size == current_size:
-            return TradeOrder(action=BuySellAction.NOOP)
+            return TradeOrder(action=BuySellAction.PASS)
         elif demanded_size < current_size:
             return TradeOrder(action=BuySellAction.SELL, arg=(current_size - demanded_size) / exist_size)
         else:
@@ -173,7 +177,6 @@ def _make_sorted_alloc_groups(
     asset_size_basis: str,
     allocation_group_attr_name: str,
     allocation_group_params: dict[str, AssetAllocationParams],
-    require_validate: bool
 ) -> list[_AllocationGroup]:
     ag_kwargs: dict[str, dict[str, Any]] = {}
     for name, params in allocation_group_params.items():
@@ -204,40 +207,18 @@ def _make_sorted_alloc_groups(
     groups: list[_AllocationGroup] = [_AllocationGroup(name=key, **val) for key, val in ag_kwargs.items()]
     groups.sort(key=lambda x: x.priority)
 
-    if require_validate:
-        seen_uc = []
-        for i, ag in enumerate(groups):
-            if ag.strategy is AssetAllocationStrategy.UNCONSTRAINED:
-                seen_uc.append(i)
-        if len(seen_uc) == 0:
-            pass
-        else:
-            if seen_uc[-1] + 1 != len(groups):
-                raise ValueError(f"Last allocation group must be 'UNCONSTRAINED'.")
-            if seen_uc[-1] - seen_uc[0] + 1 != len(seen_uc):
-                raise ValueError(f"All 'UNCONSTRAINED' allocation groups must be after other groups.")
-
     return groups
 
 
-def _process_unconstrained_groups(groups: list[_AllocationGroup], incremental_size: float, tolerance: float) -> None:
+def _process_unconstrained_group(group: _AllocationGroup, incremental_size: float, tolerance: float) -> None:
     if abs(incremental_size) <= tolerance:
         return
 
-    if len(groups) == 0:
-        warnings.warn(f"Target allocation is not met but no unconstrained allocation group to process.")
-        return
-
-    exist_size: float = sum([ag.exist_size for ag in groups])
-
-    if exist_size == 0:
-        # This would be very edge case when total unconstrained allocation group (usually cash) balance happens to be zero.
+    if group.exist_size == 0:
+        # This would be very edge case when unconstrained group (usually cash) total balance happens to be zero.
         # Utilize cash asset to safely proceed
         _fallback_cash: Cash | None = None
-        _assets_to_search: list[Asset] = []
-        for ag in groups:
-            _assets_to_search.extend(ag.exist_conn.objs)
-        for asset in _assets_to_search:
+        for asset in group.exist_conn:
             if isinstance(asset, Cash) and asset.is_alive:
                 _fallback_cash = asset
                 break
@@ -247,19 +228,18 @@ def _process_unconstrained_groups(groups: list[_AllocationGroup], incremental_si
             warnings.warn(f"No cash asset in 'UNCONSTRAINED' group is available for scaling.")
         return
 
-    ratio = incremental_size / exist_size
+    ratio = incremental_size / group.exist_size
 
-    for ag in groups:
-        if ratio > 0:  # buy
-            if ag.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
-                trade_order = TradeOrder(action=BuySellAction.BUY_EXIST, arg=ratio)
-            elif ag.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
-                trade_order = TradeOrder(action=BuySellAction.BUY_PROFILE, arg=ag.exist_size * ratio / ag.profile_size)
-            else:
-                raise ValueError(f"{ag.name}: invalid purchase method {ag.purchase_method} for 'UNCONSTRAINED'.")
-        else:  # sell
-            trade_order = TradeOrder(action=BuySellAction.SELL, arg=-ratio)
-        ag.execute_trade(trade_order)
+    if ratio > 0:  # buy
+        if group.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
+            trade_order = TradeOrder(action=BuySellAction.BUY_EXIST, arg=ratio)
+        elif group.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
+            trade_order = TradeOrder(action=BuySellAction.BUY_PROFILE, arg=group.exist_size * ratio / group.profile_size)
+        else:
+            raise ValueError(f"{group.name}: invalid purchase method {group.purchase_method} for 'UNCONSTRAINED'.")
+    else:  # sell
+        trade_order = TradeOrder(action=BuySellAction.SELL, arg=-ratio)
+    group.execute_trade(trade_order)
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -347,7 +327,6 @@ class Rebalancer:
             asset_size_basis=asset_size_basis,
             allocation_group_attr_name=allocation_group_attr_name,
             allocation_group_params=allocation_group_params,
-            require_validate=(check_level != CheckLevel.BYPASS),
         )
 
         self.tdv_fund_size[t] = total_size

@@ -10,7 +10,7 @@ from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMet
 
 class BuySellAction(Enum):
     """Enum for asset buy/sell action. Must correspond to methods of asset classes"""
-    NOOP = "NOOP"
+    PASS = "PASS"
     BUY_EXIST = "buy_propn"
     BUY_PROFILE = "buy_profile"
     SELL = "sell_propn"
@@ -224,7 +224,7 @@ class _AllocationGroup:
         if strategy == AssetAllocationStrategy.NO_TRADE:
             exist_size = self.exist_size
             return exist_size, exist_size, exist_size
-        if strategy == AssetAllocationStrategy.UNCONSTRAINED:
+        if strategy == AssetAllocationStrategy.UNCONSTRAIN:
             return float("-inf"), 0.0, float("inf")
         raise ValueError("Should never get here.")
 
@@ -254,7 +254,7 @@ class _AllocationGroup:
         exist_size = self.exist_size
         lower_size, target_size, upper_size = self.size_range
 
-        if strategy == AssetAllocationStrategy.UNCONSTRAINED:
+        if strategy == AssetAllocationStrategy.UNCONSTRAIN:
             return None
         if strategy == AssetAllocationStrategy.NO_TRADE:
             return exist_size
@@ -336,7 +336,7 @@ class _AllocationGroup:
             tmp_dict[order.action] += order.arg
         merged: list[TradeOrder] = []
         for act, arg in tmp_dict.items():
-            if act != BuySellAction.NOOP and abs(arg) > 0.0:
+            if act != BuySellAction.PASS and abs(arg) > 0.0:
                 merged.append(TradeOrder(action=act, arg=arg))
         return merged
 
@@ -361,7 +361,7 @@ class _AllocationGroup:
         net_proceeds: float = 0.0  # proceeds received from disposal (sell), minus proceeds spent to purchase (buy)
         action, arg = trade_order.action, trade_order.arg
 
-        if action == BuySellAction.NOOP:
+        if action == BuySellAction.PASS:
             pass
         elif action == BuySellAction.SELL:
             for asset in self.exist_conn:
@@ -401,7 +401,7 @@ class _AllocationGroup:
         Returns:
             bool: True if the allocation is satisfied, False otherwise.
         """
-        if self.strategy in (AssetAllocationStrategy.UNCONSTRAINED, AssetAllocationStrategy.NO_TRADE):
+        if self.strategy in (AssetAllocationStrategy.UNCONSTRAIN, AssetAllocationStrategy.NO_TRADE):
             return True
 
         lower, target, upper = self.size_range

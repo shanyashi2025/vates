@@ -201,8 +201,8 @@ def build_weight_range(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[st
     for _, row in df_flt.iterrows():
         key = row["allocation_group"]
         target = row[date_col] / 100
-        lower = target + row["lower_drift_pc"] / 100
-        upper = target + row["upper_drift_pc"] / 100
+        lower = target + row["drift_lower_pc"] / 100
+        upper = target + row["drift_upper_pc"] / 100
         weight_range[key] = lower, target, upper
 
     return weight_range
