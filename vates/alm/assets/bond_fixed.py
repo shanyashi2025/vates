@@ -88,7 +88,7 @@ class BondFixed(Asset):
             amort_rate (float): Amortization rate.
             rf_curve (YieldCurve): Risk-free yield curve.
             credit_band (CreditBand | None): Credit band (to provide assumptions, e.g. default and spread).
-            purchase_date (pd.Period | None): Purchase date, default to initilization date.
+            purchase_date (pd.Period | None): Purchase date, default to initialization date.
             _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
@@ -328,8 +328,8 @@ class BondFixed(Asset):
         Raises:
             ValueError: If propn is negative.
         """
-        if propn < 0: raise ValueError(f"{propn=:.6f}: can not sell negative proportion of exsiting bonds.")
-        if propn > 1: raise ValueError(f"{propn=:.6f}: can not sell >100% proportion of exsiting bonds.")
+        if propn < 0: raise ValueError(f"{propn=:.6f}: can not sell negative proportion of existing bonds.")
+        if propn > 1: raise ValueError(f"{propn=:.6f}: can not sell >100% proportion of existing bonds.")
         units = self._units * propn
         self._units -= units
         self._disposal_proceeds += self._mv_price_dirty * units
