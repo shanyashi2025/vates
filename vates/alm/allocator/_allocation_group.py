@@ -2,7 +2,6 @@ import warnings
 from dataclasses import dataclass
 from enum import Enum
 
-from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
 from vates.alm.assets import Asset
 from vates.alm._utils import Connector
 from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, AssetRebalanceObjective
@@ -10,6 +9,7 @@ from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMet
 
 class BuySellAction(Enum):
     """Enum for asset buy/sell action. Must correspond to methods of asset classes"""
+    EXCEPTION = "EXCEPTION"
     PASS = "PASS"
     BUY_EXIST = "buy_propn"
     BUY_PROFILE = "buy_profile"
@@ -91,7 +91,7 @@ class AssetAllocationParams:
                - NO_TRADE
                - BUY_HOLD
                - BUY_SELL
-               - UNCONSTRAINED
+               - UNCONSTRAIN
             weight_range: (float | tuple[float, float, float] | None): Target weight for the allocation group;
                 either a single float, or a three-element tuple representing (lower, target, upper).
             below_range_primary_objective (str | AssetRebalanceObjective): Primary rebalance objective below range:
@@ -157,8 +157,8 @@ class _AllocationGroup:
     """Asset allocation group.
     """
 
-    __slots__ = ("name", "strategy", "weight_range", "primary_objective", "purchase_method", "purchase_method", "priority",
-                 "exist_conn", "profile_conn", "staged_conn", "total_size", "size_basis", "size_range",
+    __slots__ = ("name", "strategy", "primary_objective", "purchase_method", "purchase_method", "priority",
+                 "exist_conn", "profile_conn", "staged_conn", "size_basis", "size_range",
                  "profile_size", "_trade_orders", "_free_proceeds")
 
     def __init__(
@@ -183,7 +183,6 @@ class _AllocationGroup:
         else:
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('Connector', 'list').")
         self.strategy: AssetAllocationStrategy = strategy
-        self.weight_range: tuple[float, float, float] | None = weight_range
         self.primary_objective: PrimaryRebalanceObjective = primary_objective
         self.purchase_method: AssetPurchaseMethod = purchase_method
         self.priority: int = priority
@@ -217,15 +216,17 @@ class _AllocationGroup:
     def _compute_size_range(self, total_size: float, weight_range: tuple[float, float, float] | None
                             ) -> tuple[float, float, float]:
         strategy = self.strategy
-        if strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
-            if weight_range is None:
-                raise ValueError(f"'{self.name}': strategy '{strategy}': 'weight_range' is None.")
-            return total_size * weight_range[0], total_size * weight_range[1], total_size * weight_range[2]
-        if strategy == AssetAllocationStrategy.NO_TRADE:
-            exist_size = self.exist_size
-            return exist_size, exist_size, exist_size
         if strategy == AssetAllocationStrategy.UNCONSTRAIN:
             return float("-inf"), 0.0, float("inf")
+        if strategy == AssetAllocationStrategy.NO_TRADE:
+            exist_size = self.exist_size
+            return float("-inf"), exist_size, float("inf")
+        if weight_range is None:
+            raise ValueError(f"'{self.name}': strategy '{strategy}': 'weight_range' is None.")
+        if strategy == AssetAllocationStrategy.BUY_HOLD:
+            return total_size * weight_range[0], total_size * weight_range[1], float("inf")
+        if strategy == AssetAllocationStrategy.BUY_SELL:
+            return total_size * weight_range[0], total_size * weight_range[1], total_size * weight_range[2]
         raise ValueError("Should never get here.")
 
     def take_out_free_proceeds(self) -> float:
@@ -267,10 +268,8 @@ class _AllocationGroup:
                 return lower_size
             elif prim_obj == AssetRebalanceObjective.TO_TARGET_WEIGHT:
                 return target_size
-            elif prim_obj == AssetRebalanceObjective.TO_UPPER_WEIGHT:
-                return upper_size
             else:
-                warnings.warn(f"strategy 'BUY_HOLD', below range, primary objective: {prim_obj.name}, "
+                warnings.warn(f"strategy 'BUY_HOLD', below lower, primary objective: {prim_obj.name}, "
                               f"cannot determine size.")
                 return exist_size
 
@@ -328,7 +327,7 @@ class _AllocationGroup:
         self._trade_orders = []
 
     @classmethod
-    def merge_trade_orders(cls, trade_orders: list[TradeOrder]) -> list[TradeOrder]:
+    def merge_trade_orders(cls, trade_orders: list[TradeOrder], *, on_exception_raise: bool) -> list[TradeOrder]:
         if len(trade_orders) == 1:
             return trade_orders
         tmp_dict = {x: 0.0 for x in BuySellAction}
@@ -336,11 +335,18 @@ class _AllocationGroup:
             tmp_dict[order.action] += order.arg
         merged: list[TradeOrder] = []
         for act, arg in tmp_dict.items():
-            if act != BuySellAction.PASS and abs(arg) > 0.0:
+            if act == BuySellAction.PASS:
+                pass
+            elif act == BuySellAction.EXCEPTION:
+                if on_exception_raise:
+                    raise ValueError("BuySellAction is EXCEPTION.")
+                warnings.warn("BuySellAction is EXCEPTION.")
+                pass
+            elif abs(arg) > 0.0:
                 merged.append(TradeOrder(action=act, arg=arg))
         return merged
 
-    def execute_trades(self, trade_orders: TradeOrder | list[TradeOrder] | None = None) -> None:
+    def execute_trades(self, trade_orders: TradeOrder | list[TradeOrder] | None = None, *, on_exception_raise: bool) -> None:
         if trade_orders is None:
             trade_orders = self._trade_orders
             consume_self_trade_orders = True
@@ -350,18 +356,23 @@ class _AllocationGroup:
         if len(trade_orders) == 0:
             return
 
-        for order in self.merge_trade_orders(trade_orders):
-            self.execute_trade(order)
+        for order in self.merge_trade_orders(trade_orders, on_exception_raise=on_exception_raise):
+            self.execute_trade(order, on_exception_raise=on_exception_raise)
         if consume_self_trade_orders:
             self._trade_orders = []  # reset after consumed
 
-    def execute_trade(self, trade_order: TradeOrder, check_level: CheckLevel = GLOBAL_CHECK_LEVEL) -> None:
+    def execute_trade(self, trade_order: TradeOrder, *, on_exception_raise: bool) -> None:
         """Execute a trade.
         """
         net_proceeds: float = 0.0  # proceeds received from disposal (sell), minus proceeds spent to purchase (buy)
         action, arg = trade_order.action, trade_order.arg
 
         if action == BuySellAction.PASS:
+            pass
+        elif action == BuySellAction.EXCEPTION:
+            if on_exception_raise:
+                raise ValueError("BuySellAction is EXCEPTION.")
+            warnings.warn("BuySellAction is EXCEPTION.")
             pass
         elif action == BuySellAction.SELL:
             for asset in self.exist_conn:
@@ -371,12 +382,6 @@ class _AllocationGroup:
                 mv_ad = asset.market_value
                 net_proceeds += mv_bd - mv_ad
         elif action == BuySellAction.BUY_EXIST:
-            if abs(self.exist_size) < 1e-8:
-                msg = f"'{self.name}': 'BUY_EXIST', but exist_size is zero {self.exist_size:.4f}."
-                if check_level == CheckLevel.ERROR:
-                    raise msg
-                warnings.warn(msg + " Trade is not executed.")
-                return
             for asset in self.exist_conn:
                 mv_bd = asset.market_value
                 func = getattr(asset, action.value)
@@ -392,7 +397,7 @@ class _AllocationGroup:
 
         self._free_proceeds += net_proceeds
 
-    def is_allocation_satisfied(self, rel_tol: float = 1e-4) -> bool:
+    def is_allocation_satisfied(self, rel_tol: float = 1e-4) -> tuple[bool, tuple[float, float]]:
         """Validate if the allocation for a group is satisfied.
 
         Args:
@@ -400,15 +405,17 @@ class _AllocationGroup:
 
         Returns:
             bool: True if the allocation is satisfied, False otherwise.
+            tuple[float, float]: Reference size range (lower, upper)
         """
-        if self.strategy in (AssetAllocationStrategy.UNCONSTRAIN, AssetAllocationStrategy.NO_TRADE):
-            return True
-
         lower, target, upper = self.size_range
 
-        if self.strategy == AssetAllocationStrategy.BUY_HOLD:
-            return lower - rel_tol * target <= self.current_size
+        if self.strategy in (AssetAllocationStrategy.UNCONSTRAIN, AssetAllocationStrategy.NO_TRADE):
+            satisfied = True
+        elif self.strategy == AssetAllocationStrategy.BUY_HOLD:
+            satisfied = lower - rel_tol * target <= self.current_size
         elif self.strategy == AssetAllocationStrategy.BUY_SELL:
-            return lower - rel_tol * target <= self.current_size <= upper + rel_tol * target
+            satisfied = lower - rel_tol * target <= self.current_size <= upper + rel_tol * target
         else:
             raise ValueError(f"{self.name}: invalid asset allocation strategy {self.strategy}.")
+
+        return satisfied, (lower, upper)

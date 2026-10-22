@@ -28,31 +28,32 @@ def _rebalance_alloc_groups(
     for ag in groups[:-1]:
         if ag.strategy is AssetAllocationStrategy.UNCONSTRAIN:
             raise ValueError(f"'UNCONSTRAIN' allocation groups must be the last.")
-    ag = groups[-1]
-    uc_group: _AllocationGroup | None = ag if ag.strategy is AssetAllocationStrategy.UNCONSTRAIN else None
+    has_uc_group: bool = groups[-1].strategy is AssetAllocationStrategy.UNCONSTRAIN
 
-    if uc_group is not None:  # has unconstrained group
+    if has_uc_group:  # has unconstrained group
         # --- step 1: process non-unconstrained groups in priority ---
         for ag in groups:
             if ag.strategy != AssetAllocationStrategy.UNCONSTRAIN:
                 trade_order = _make_trade_order_on_primary_objective(ag)
-                ag.execute_trade(trade_order)
+                ag.execute_trade(trade_order, on_exception_raise=True)
         # --- step 2: process unconstrained groups ---
-        size_gap = total_size - sum(ag.current_size for ag in groups)
-        _process_unconstrain_group(group=uc_group, incremental_size=size_gap, tolerance=max(abs(total_size * 1e-6), 0.01))
+        _process_unconstrain_group(group=groups[-1],
+                                   incremental_size=total_size - sum(ag.current_size for ag in groups),
+                                   tolerance=max(abs(total_size * 1e-6), 0.01))
     else:  # best effort
         trade_orders = _make_trade_orders_on_best_effort(groups=groups, total_size=total_size)
         for ag, trade_order in zip(groups, trade_orders):
-            ag.execute_trade(trade_order)
+            ag.execute_trade(trade_order, on_exception_raise=True)
 
     # --- validate if target allocations is satisfied ---
     for ag in groups:
-        if not ag.is_allocation_satisfied():
-            weight_range = ag.weight_range
-            lower, _, upper = weight_range if weight_range is not None else (None, None, None)
-            msg = (
-                f"{ag.name}: allocation is not satisfied, {ag.current_size/total_size:.4%}; strategy: {ag.strategy.name}; "
-                f"(lower, upper): ({lower:.4%}, {upper:.4%}); purchase method: {ag.purchase_method.name}.")
+        satisfied, range_size = ag.is_allocation_satisfied()
+        if not satisfied:
+            msg = (f"{ag.name}: allocation is not satisfied; strategy: {ag.strategy.name}; "
+                   f"purchase method: {ag.purchase_method.name}.")
+            if abs(total_size) > 1e-8:
+                curr, lower, upper = ag.current_size/total_size, range_size[0]/total_size, range_size[1]/total_size
+                msg += f" {ag.current_size/total_size:.4%}; (lower, upper): ({lower:.4%}, {upper:.4%})"
             if check_level == CheckLevel.ERROR:
                 raise ValueError(msg)
             warnings.warn(msg)
@@ -60,13 +61,25 @@ def _rebalance_alloc_groups(
 
 def _make_trade_order_on_primary_objective(group: _AllocationGroup) -> TradeOrder:
     strategy = group.strategy
+    exist_size = group.exist_size
+    prim_obj_size = group.primary_objective_size
+    if prim_obj_size is None:
+        raise ValueError(f"'{group.name}': 'primary_objective_size' is None.")
     if strategy == AssetAllocationStrategy.NO_TRADE:
+        if abs(prim_obj_size - exist_size) > 1e-8:
+            raise ValueError(f"'{group.name}': 'NO_TRADE'; primary_objective_size: {prim_obj_size:.2f} != "
+                             f"exist_size: {exist_size:.2f}.")
         return TradeOrder(action=BuySellAction.PASS)
-    else:
-        prim_obj_size = group.primary_objective_size
-        if prim_obj_size is None:
-            raise ValueError(f"'{group.name}': 'primary_objective_size' is None.")
-        return _make_trade_order_on_require(group=group, require_size=prim_obj_size)
+    if strategy == AssetAllocationStrategy.BUY_HOLD:
+        if prim_obj_size < exist_size and abs(prim_obj_size - exist_size) > 1e-8:
+            raise ValueError(f"'{group.name}': 'BUY_HOLD'; primary_objective_size: {prim_obj_size:.2f} < "
+                             f"exist_size: {exist_size:.2f}.")
+    if prim_obj_size > group.current_size:  # buy
+        if group.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and abs(group.exist_size) < 1e-8:
+            return TradeOrder(action=BuySellAction.PASS)
+        if group.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and abs(group.profile_size) < 1e-8:
+            return TradeOrder(action=BuySellAction.PASS)
+    return _make_trade_order_on_require_size(group=group, require_size=prim_obj_size)
 
 
 def _make_trade_orders_on_best_effort(groups: list[_AllocationGroup], total_size: float) -> list[TradeOrder]:
@@ -120,53 +133,56 @@ def _make_trade_orders_on_best_effort(groups: list[_AllocationGroup], total_size
             require_sizes[-i] = total_size - size_excl_self
             break  # size_excl_self + trial_sizes[-i] == total_size
 
-    return [_make_trade_order_on_require(group=g, require_size=s) for g, s in zip(groups, require_sizes)]
+    return [_make_trade_order_on_require_size(group=g, require_size=s) for g, s in zip(groups, require_sizes)]
 
-def _make_trade_order_on_require(group: _AllocationGroup, require_size: float) -> TradeOrder:
+def _make_trade_order_on_require_size(group: _AllocationGroup, require_size: float) -> TradeOrder:
 
     strategy = group.strategy
     purchase_method = group.purchase_method
     current_size, exist_size, profile_size = group.current_size, group.exist_size, group.profile_size
     if strategy == AssetAllocationStrategy.NO_TRADE:
-        if abs(require_size - current_size) > 0.001:
+        if abs(require_size - exist_size) > 1e-8:
             warnings.warn(f"'{group.name}': strategy 'NO_TRADE', can not rebalance to another size; "
-                          f"require={require_size:,.2f}; current={current_size:,.2f}.")
+                          f"require={require_size:,.2f}; exist={exist_size:,.2f}.")
+            return TradeOrder(action=BuySellAction.EXCEPTION)
         return TradeOrder(action=BuySellAction.PASS)
 
-    def _make_buy_order(_purchase_method: AssetPurchaseMethod, _require_size: float, _current_size: float,
-                        _exist_size: float, _profile_size: float) -> TradeOrder | None:
+    def _make_buy_order(_name: str, _purchase_method: AssetPurchaseMethod, _require_size: float, _current_size: float,
+                        _exist_size: float, _profile_size: float) -> TradeOrder:
         if _purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
+            if abs(_exist_size) < 1e-8:
+                warnings.warn(f"'{_name}': 'SCALE_UP_EXISTING', exist_size = 0.")
+                return TradeOrder(action=BuySellAction.EXCEPTION)
             return TradeOrder(action=BuySellAction.BUY_EXIST, arg=(_require_size - _current_size) / _exist_size)
         elif _purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
+            if abs(_profile_size) < 1e-8:
+                warnings.warn(f"'{_name}': 'PURCHASE_PROFILE', profile_size = 0.")
+                return TradeOrder(action=BuySellAction.EXCEPTION)
             return TradeOrder(action=BuySellAction.BUY_PROFILE, arg=(_require_size - _current_size) / _profile_size)
         else:
-            return None
+            warnings.warn(f"'{_name}': invalid purchase method '{_purchase_method}'.")
+            return TradeOrder(action=BuySellAction.EXCEPTION)
 
     if strategy == AssetAllocationStrategy.BUY_HOLD:
-        if require_size <= current_size:
-            if abs(require_size - current_size) > 0.001:
+        if require_size <= exist_size:
+            if abs(require_size - exist_size) > 1e-8:
                 warnings.warn(f"'{group.name}': strategy 'BUY_HOLD', can not sell; "
-                              f"require={require_size:,.2f}; current={current_size:,.2f}.")
+                              f"require={require_size:,.2f}; exist={exist_size:,.2f}.")
+                return TradeOrder(action=BuySellAction.EXCEPTION)
             return TradeOrder(action=BuySellAction.PASS)
-        else:
-            trade_order = _make_buy_order(_purchase_method=purchase_method, _require_size=require_size,
-                                          _current_size=current_size, _exist_size=exist_size, _profile_size=profile_size)
-            if trade_order is None:
-                raise ValueError(f"{group.name}: invalid purchase method {purchase_method} for 'BUY_HOLD'.")
-            return trade_order
+        return _make_buy_order(_name=group.name, _purchase_method=purchase_method, _require_size=require_size,
+                               _current_size=current_size, _exist_size=exist_size, _profile_size=profile_size)
     elif strategy == AssetAllocationStrategy.BUY_SELL:
         if require_size == current_size:
             return TradeOrder(action=BuySellAction.PASS)
         elif require_size < current_size:
             return TradeOrder(action=BuySellAction.SELL, arg=(current_size - require_size) / exist_size)
         else:
-            trade_order = _make_buy_order(_purchase_method=purchase_method, _require_size=require_size,
-                                          _current_size=current_size, _exist_size=exist_size, _profile_size=profile_size)
-            if trade_order is None:
-                raise ValueError(f"{group.name}: invalid purchase method {purchase_method} for 'BUY_SELL'.")
-            return trade_order
+            return _make_buy_order(_name=group.name, _purchase_method=purchase_method, _require_size=require_size,
+                                   _current_size=current_size, _exist_size=exist_size, _profile_size=profile_size)
     else:
-        raise ValueError(f"{group.name}: invalid allocation strategy: {strategy}")
+        warnings.warn(f"{group.name}: invalid allocation strategy: {strategy}")
+        return TradeOrder(action=BuySellAction.EXCEPTION)
 
 
 def _make_sorted_alloc_groups(
@@ -211,13 +227,15 @@ def _make_sorted_alloc_groups(
 
 
 def _process_unconstrain_group(group: _AllocationGroup, incremental_size: float, tolerance: float) -> None:
-    if abs(incremental_size) <= tolerance:
-        return
-
     if group.strategy != AssetAllocationStrategy.UNCONSTRAIN:
         raise ValueError(f"'{group.name}': invalid strategy '{group.strategy}', expected 'UNCONSTRAIN'.")
 
-    if group.exist_size == 0:
+    if abs(incremental_size) <= tolerance:
+        return
+
+    if incremental_size > 0 and group.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
+        trade_order = TradeOrder(action=BuySellAction.BUY_PROFILE, arg=incremental_size / group.profile_size)
+    elif group.exist_size == 0:
         # This would be very edge case when unconstrained group (usually cash) total balance happens to be zero.
         # Utilize cash asset to safely proceed
         _fallback_cash: Cash | None = None
@@ -229,20 +247,15 @@ def _process_unconstrain_group(group: _AllocationGroup, incremental_size: float,
             _fallback_cash.invest_new_money(incremental_size)
         else:
             warnings.warn(f"No cash asset in 'UNCONSTRAIN' group is available for scaling.")
-        return
-
-    ratio = incremental_size / group.exist_size
-
-    if ratio > 0:  # buy
+        return  # early return
+    elif incremental_size > 0:  # buy
         if group.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
-            trade_order = TradeOrder(action=BuySellAction.BUY_EXIST, arg=ratio)
-        elif group.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
-            trade_order = TradeOrder(action=BuySellAction.BUY_PROFILE, arg=group.exist_size * ratio / group.profile_size)
-        else:
+            trade_order = TradeOrder(action=BuySellAction.BUY_EXIST, arg=incremental_size / group.exist_size)
+        else:  # PURCHASE_PROFILE is processed above
             raise ValueError(f"{group.name}: invalid purchase method {group.purchase_method} for 'UNCONSTRAIN'.")
     else:  # sell
-        trade_order = TradeOrder(action=BuySellAction.SELL, arg=-ratio)
-    group.execute_trade(trade_order)
+        trade_order = TradeOrder(action=BuySellAction.SELL, arg=-incremental_size / group.exist_size)
+    group.execute_trade(trade_order, on_exception_raise=True)
 
 
 @time_synchronized("model_engine.time_synchronizer")
