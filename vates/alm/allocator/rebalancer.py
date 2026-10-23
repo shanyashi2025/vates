@@ -243,7 +243,7 @@ def _process_unconstrain_group(group: _AllocationGroup, fill_size: float, tolera
                 _fallback_cash = asset
                 break
         if _fallback_cash is not None:
-            _fallback_cash.invest_new_money(fill_size)
+            _fallback_cash.buy_amount(fill_size)
         else:
             warnings.warn(f"No cash asset in 'UNCONSTRAIN' group is available for scaling.")
         return  # early return

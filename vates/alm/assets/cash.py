@@ -102,7 +102,7 @@ class Cash(Asset):
         self.tdv_cash_flow[t] = 0.0
         self.tdv_mv_bd[t] = self._nominal
 
-    def invest_new_money(self, amount: float) -> None:
+    def buy_amount(self, amount: float) -> None:
         """
         Invest new money into the cash asset.
 
@@ -123,7 +123,7 @@ class Cash(Asset):
         Args:
             propn (float): Proportion to buy.
         """
-        self.invest_new_money(self._nominal * propn)
+        self.buy_amount(self._nominal * propn)
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
@@ -133,7 +133,7 @@ class Cash(Asset):
         Args:
             propn (float): Proportion to sell.
         """
-        self.invest_new_money(self._nominal * -propn)
+        self.buy_amount(self._nominal * -propn)
 
     def buy_profile(self, *args, **kwargs) -> Self:
         """

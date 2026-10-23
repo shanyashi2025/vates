@@ -242,7 +242,7 @@ class Fund:
     def invest_free_proceeds_to_cash(self, cash: Cash | None = None) -> None:
         cash = cash or self._get_primary_cash_asset()
         if cash is not None:
-            cash.invest_new_money(self.free_proceeds_keeper.take_out())
+            cash.buy_amount(self.free_proceeds_keeper.take_out())
         else:
             warnings.warn(f"Cash asset is neither provided nor found in existing assets.")
 
