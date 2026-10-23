@@ -1,6 +1,7 @@
+import json
+import pandas as pd
 from dataclasses import dataclass
 from typing import List, Callable
-import pandas as pd
 
 from vates import ProjModelEngine
 from vates.alm import Currency, Liab, ExtProjLiab, Fund, AssetAllocationParams, Rebalancer
@@ -110,9 +111,7 @@ class FundMaster:
                 priority=row["priority"],
                 strategy=row["strategy"],
                 purchase_method=row["purchase_method"],
-                below_range_primary_objective=row["below_range_primary_objective"],
-                within_range_primary_objective=row["within_range_primary_objective"],
-                above_range_primary_objective=row["above_range_primary_objective"],
+                primary_objective=json.loads(row["primary_objective"]),
             )
 
         return params

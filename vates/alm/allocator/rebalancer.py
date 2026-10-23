@@ -37,8 +37,7 @@ def _rebalance_alloc_groups(
                 trade_order = _make_trade_order_on_primary_objective(ag)
                 ag.execute_trade(trade_order, on_exception_raise=True)
         # --- step 2: process unconstrained groups ---
-        _process_unconstrain_group(group=groups[-1],
-                                   incremental_size=total_size - sum(ag.current_size for ag in groups),
+        _process_unconstrain_group(group=groups[-1], fill_size=total_size - sum(ag.current_size for ag in groups),
                                    tolerance=max(abs(total_size * 1e-6), 0.01))
     else:  # best effort
         trade_orders = _make_trade_orders_on_best_effort(groups=groups, total_size=total_size)
@@ -47,13 +46,13 @@ def _rebalance_alloc_groups(
 
     # --- validate if target allocations is satisfied ---
     for ag in groups:
-        satisfied, range_size = ag.is_allocation_satisfied()
+        satisfied, ref_sizes = ag.is_allocation_satisfied()
         if not satisfied:
             msg = (f"{ag.name}: allocation is not satisfied; strategy: {ag.strategy.name}; "
                    f"purchase method: {ag.purchase_method.name}.")
             if abs(total_size) > 1e-8:
-                curr, lower, upper = ag.current_size/total_size, range_size[0]/total_size, range_size[1]/total_size
-                msg += f" {ag.current_size/total_size:.4%}; (lower, upper): ({lower:.4%}, {upper:.4%})"
+                curr, lower, upper = ag.current_size/total_size, ref_sizes[0]/total_size, ref_sizes[1]/total_size
+                msg += f" actual: {ag.current_size/total_size:.4%}; (lower, upper): ({lower:.4%}, {upper:.4%})"
             if check_level == CheckLevel.ERROR:
                 raise ValueError(msg)
             warnings.warn(msg)
@@ -89,7 +88,7 @@ def _make_trade_orders_on_best_effort(groups: list[_AllocationGroup], total_size
         strategy = g.strategy
         exist_size = g.exist_size
         prim_obj_size = g.primary_objective_size
-        lower, _, upper = g.size_range
+        lower, _, upper = g.size_box
 
         if strategy == AssetAllocationStrategy.UNCONSTRAIN:
             raise ValueError(f"'{g.name}': unexpected 'UNCONSTRAIN'.")
@@ -200,7 +199,7 @@ def _make_sorted_alloc_groups(
             raise KeyError(f"Duplicate allocation group name: '{name}'.")
         ag_kwargs[name] = {
             "strategy": params.strategy,
-            "weight_range": params.weight_range,
+            "weight_box": params.weight_box,
             "primary_objective": params.primary_objective,
             "purchase_method": params.purchase_method,
             "priority": params.priority,
@@ -226,15 +225,15 @@ def _make_sorted_alloc_groups(
     return groups
 
 
-def _process_unconstrain_group(group: _AllocationGroup, incremental_size: float, tolerance: float) -> None:
+def _process_unconstrain_group(group: _AllocationGroup, fill_size: float, tolerance: float) -> None:
     if group.strategy != AssetAllocationStrategy.UNCONSTRAIN:
         raise ValueError(f"'{group.name}': invalid strategy '{group.strategy}', expected 'UNCONSTRAIN'.")
 
-    if abs(incremental_size) <= tolerance:
+    if abs(fill_size) <= tolerance:
         return
 
-    if incremental_size > 0 and group.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
-        trade_order = TradeOrder(action=BuySellAction.BUY_PROFILE, arg=incremental_size / group.profile_size)
+    if fill_size > 0 and group.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE:
+        trade_order = TradeOrder(action=BuySellAction.BUY_PROFILE, arg=fill_size / group.profile_size)
     elif group.exist_size == 0:
         # This would be very edge case when unconstrained group (usually cash) total balance happens to be zero.
         # Utilize cash asset to safely proceed
@@ -244,17 +243,17 @@ def _process_unconstrain_group(group: _AllocationGroup, incremental_size: float,
                 _fallback_cash = asset
                 break
         if _fallback_cash is not None:
-            _fallback_cash.invest_new_money(incremental_size)
+            _fallback_cash.invest_new_money(fill_size)
         else:
             warnings.warn(f"No cash asset in 'UNCONSTRAIN' group is available for scaling.")
         return  # early return
-    elif incremental_size > 0:  # buy
+    elif fill_size > 0:  # buy
         if group.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING:
-            trade_order = TradeOrder(action=BuySellAction.BUY_EXIST, arg=incremental_size / group.exist_size)
+            trade_order = TradeOrder(action=BuySellAction.BUY_EXIST, arg=fill_size / group.exist_size)
         else:  # PURCHASE_PROFILE is processed above
             raise ValueError(f"{group.name}: invalid purchase method {group.purchase_method} for 'UNCONSTRAIN'.")
     else:  # sell
-        trade_order = TradeOrder(action=BuySellAction.SELL, arg=-incremental_size / group.exist_size)
+        trade_order = TradeOrder(action=BuySellAction.SELL, arg=-fill_size / group.exist_size)
     group.execute_trade(trade_order, on_exception_raise=True)
 
 

@@ -1,5 +1,6 @@
-﻿fund_id,allocation_group,priority,strategy,purchase_method,below_range_primary_objective,within_range_primary_objective,above_range_primary_objective
-cd_fund,cash,4,unconstrain,scale_up_existing,not_used,not_used,not_used
-cd_fund,equity,1,buy_sell,scale_up_existing,to_target_weight,no_action,to_target_weight
-cd_fund,govt_bond,2,buy_hold,purchase_profile,to_target_weight,no_action,no_action
-cd_fund,corp_bond,3,buy_sell,purchase_profile,to_target_weight,no_action,to_target_weight
+﻿fund_id,allocation_group,priority,strategy,purchase_method,primary_objective
+cd_fund,cash,4,unconstrain,scale_up_existing,{}
+cd_fund,equity,1,buy_sell,scale_up_existing,"{""below_range"": ""to_target_weight"", ""within_range"": ""no_action"", ""above_range"": ""to_target_weight""}"
+cd_fund,govt_bond,2,buy_hold,purchase_profile,"{""below_range"": ""to_target_weight""}"
+cd_fund,corp_bond,3,buy_sell,purchase_profile,"{""below_range"": ""to_target_weight"", ""within_range"": ""no_action"", ""above_range"": ""to_target_weight""}"
+,,,,,

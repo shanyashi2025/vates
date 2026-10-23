@@ -138,9 +138,9 @@ def fund_reblance_if_needed(model_engine: ProjModelEngine, fund: Fund, rebalance
         asset_size_basis = rebalance_params.asset_size_basis
         total_size = get_fund_size(fund, size_type=size_type, asset_size_basis=asset_size_basis)
         allocation_group_params: dict[str, AssetAllocationParams] = {}
-        weight_range = build_weight_range(asset_mix_df, fund_id, str(period.year * 100 + period.month))
+        weight_box = build_weight_box(asset_mix_df, fund_id, str(period.year * 100 + period.month))
         for key, params in rebalance_params.allocation_params.items():
-            allocation_group_params[key] = replace(params, weight_range=weight_range.get(key, None))
+            allocation_group_params[key] = replace(params, weight_box=weight_box.get(key, None))
 
         _ = rebalance_params.rebalance_func(
             exist_assets=fund.assets,
@@ -180,7 +180,7 @@ def get_fund_size(fund: Fund, size_type: str, *, asset_size_basis: str) -> float
         raise ValueError(f"Invalid {size_type=}.")
 
 
-def build_weight_range(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[str, tuple[float, float, float]]:
+def build_weight_box(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[str, tuple[float, float, float]]:
     """
     Build a dictionary of target allocations for a fund from a DataFrame.
 
@@ -193,7 +193,7 @@ def build_weight_range(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[st
         dict[str, tuple[float, float, float]]: Mapping of allocation group to
             a three-element tuple (lower, target, upper) of weights.
     """
-    weight_range: dict[str, tuple[float, float, float]] = {}
+    weight_box: dict[str, tuple[float, float, float]] = {}
 
     df_flt: pd.DataFrame = df.copy()
     if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
@@ -201,8 +201,8 @@ def build_weight_range(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[st
     for _, row in df_flt.iterrows():
         key = row["allocation_group"]
         target = row[date_col] / 100
-        lower = target + row["drift_lower_pc"] / 100
-        upper = target + row["drift_upper_pc"] / 100
-        weight_range[key] = lower, target, upper
+        lower = target - abs(row["allow_downward_drift_pc"]) / 100
+        upper = target + row["allow_upward_drift_pc"] / 100
+        weight_box[key] = lower, target, upper
 
-    return weight_range
+    return weight_box

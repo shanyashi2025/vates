@@ -137,8 +137,8 @@ class AssetRecorder:
             self.tdv_totass_cf[t] = self.totass_cf
         if self.asset_categories:
             val_dict = self.asset_conn.sum_attr(
-                "cash_flow", group_by=self.asset_category_attr, slice_key=self.asset_categories)
-            self.catass_cf = np.array([val_dict[cat] for cat in self.asset_categories])
+                "cash_flow", group_by=self.asset_category_attr, filter_in=self.asset_categories)
+            self.catass_cf = np.array([val_dict.get(cat, 0.0) for cat in self.asset_categories])
             self.tdv_catass_cf[t] = self.catass_cf
 
         # Aggregate asset value and asset cash flow
@@ -220,8 +220,8 @@ class AssetRecorder:
         # 2. category asset market value, shape = (categories, )
         if self.asset_category_attr:
             val_dict = self.asset_conn.sum_attr(
-                "market_value", group_by=self.asset_category_attr, slice_key=self.asset_categories)
-            cat_mv = np.array([val_dict[cat] for cat in self.asset_categories])
+                "market_value", group_by=self.asset_category_attr, filter_in=self.asset_categories)
+            cat_mv = np.array([val_dict.get(cat, 0.0) for cat in self.asset_categories])
             if timing == "bd":
                 self.catass_mv_bd = cat_mv
             else:  # timing == "ad"
@@ -238,8 +238,8 @@ class AssetRecorder:
         # 4. category asset reported values, shape = (categories, report_bases)
         if self.asset_report_bases and self.asset_categories:
             val_dict = self.asset_conn.sum_attr(
-                self.asset_report_bases, group_by=self.asset_category_attr, slice_key=self.asset_categories)
-            cat_rv = np.array([val_dict[cat] for cat in self.asset_categories])
+                self.asset_report_bases, group_by=self.asset_category_attr, filter_in=self.asset_categories)
+            cat_rv = np.array([val_dict.get(cat, np.zeros(len(self.asset_report_bases))) for cat in self.asset_categories])
             if timing == "bd":
                 self.catass_rv_bd, self.tdv_catass_rv_bd[t] = cat_rv, cat_rv
             else:  # timing == "ad"
