@@ -24,33 +24,27 @@ class TradeOrder:
 
 @dataclass(slots=True, frozen=True)
 class RequestRebalanceOutcome:
-    below_range: AssetSizeKind
-    within_range: AssetSizeKind
-    above_range: AssetSizeKind
+    below_range: AssetSizeKind | None
+    within_range: AssetSizeKind | None
+    above_range: AssetSizeKind | None
 
     @classmethod
-    def create(cls, below_range: AssetSizeKind | str | None, within_range: AssetSizeKind | str | None,
-               above_range: AssetSizeKind | str | None) -> 'RequestRebalanceOutcome':
-        if below_range is None:
-            below_range = AssetSizeKind.NOT_USED
-        elif isinstance(below_range, str):
+    def create(cls, *, below_range: AssetSizeKind | str | None = None, within_range: AssetSizeKind | str | None = None,
+               above_range: AssetSizeKind | str | None = None) -> 'RequestRebalanceOutcome':
+        if isinstance(below_range, str):
             below_range = AssetSizeKind[below_range.upper()]
-        if within_range is None:
-            within_range = AssetSizeKind.NOT_USED
-        elif isinstance(within_range, str):
+        if isinstance(within_range, str):
             within_range = AssetSizeKind[within_range.upper()]
-        if above_range is None:
-            above_range = AssetSizeKind.NOT_USED
-        elif isinstance(above_range, str):
+        if isinstance(above_range, str):
             above_range = AssetSizeKind[above_range.upper()]
         return RequestRebalanceOutcome(below_range=below_range, within_range=within_range, above_range=above_range)
 
     def __post_init__(self):
-        if not isinstance(self.below_range, AssetSizeKind):
+        if self.below_range is not None and not isinstance(self.below_range, AssetSizeKind):
             raise TypeError(f"Invalid type of 'below_range': {type(self.below_range)}, expected 'AssetSizeKind'")
-        if not isinstance(self.within_range, AssetSizeKind):
+        if self.within_range is not None and not isinstance(self.within_range, AssetSizeKind):
             raise TypeError(f"Invalid type of 'within_range': {type(self.within_range)}, expected 'AssetSizeKind'")
-        if not isinstance(self.above_range, AssetSizeKind):
+        if self.above_range is not None and not isinstance(self.above_range, AssetSizeKind):
             raise TypeError(f"Invalid type of 'above_range': {type(self.above_range)}, expected 'AssetSizeKind'")
 
 
@@ -99,7 +93,6 @@ class AssetAllocationParams:
                     - within_range
                     - above_range
                 possible dict values (str | AssetSizeKind):
-                    - NOT_USED ('None' is converted to 'NOT_USED')
                     - CURRENT
                     - TARGET
                     - LOWER
@@ -121,15 +114,8 @@ class AssetAllocationParams:
         elif isinstance(purchase_method, str):
             purchase_method = AssetPurchaseMethod[purchase_method.upper()]
         if request_rebalance_outcome is None:
-            request_rebalance_outcome = RequestRebalanceOutcome(below_range=AssetSizeKind.NOT_USED,
-                                                                within_range=AssetSizeKind.NOT_USED,
-                                                                above_range=AssetSizeKind.NOT_USED)
-        elif isinstance(request_rebalance_outcome, RequestRebalanceOutcome):
-            pass
-        else: # dict
-            for key in ("below_range", "within_range", "above_range"):
-                if key not in request_rebalance_outcome:
-                    request_rebalance_outcome[key] = AssetSizeKind.NOT_USED
+            request_rebalance_outcome = RequestRebalanceOutcome.create()
+        elif isinstance(request_rebalance_outcome, dict):
             request_rebalance_outcome = RequestRebalanceOutcome.create(**request_rebalance_outcome)
 
         return AssetAllocationParams(
@@ -279,7 +265,7 @@ class _AllocationGroup:
             elif request == AssetSizeKind.TARGET:
                 return target_size
             else:
-                warnings.warn(f"strategy 'BUY_HOLD', below lower, requested rebalance outcome: {request.name}, "
+                warnings.warn(f"strategy 'BUY_HOLD', below lower, requested rebalance outcome: {request}, "
                               f"cannot determine size.")
                 return exist_size
 
@@ -293,7 +279,7 @@ class _AllocationGroup:
                 elif request == AssetSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', below range, requested rebalance outcome: {request.name}, "
+                    warnings.warn(f"strategy 'BUY_SELL', below range, requested rebalance outcome: {request}, "
                                   f"cannot determine size.")
                     return exist_size
             elif exist_size > upper_size:
@@ -305,7 +291,7 @@ class _AllocationGroup:
                 elif request == AssetSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', above range, requested rebalance outcome: {request.name}, "
+                    warnings.warn(f"strategy 'BUY_SELL', above range, requested rebalance outcome: {request}, "
                                   f"cannot determine size.")
                     return exist_size
             else:  # lower_size <= exist_size <= upper_size
@@ -319,7 +305,7 @@ class _AllocationGroup:
                 elif request == AssetSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', within range, requested rebalance outcome: {request.name}, "
+                    warnings.warn(f"strategy 'BUY_SELL', within range, requested rebalance outcome: {request}, "
                                   f"cannot determine size.")
                     return exist_size
         raise ValueError("Should never get here")

@@ -15,7 +15,6 @@ class AssetPurchaseMethod(Enum):
 
 class AssetSizeKind(Enum):
     """Enum for asset sizes."""
-    NOT_USED = auto()
     CURRENT = auto()
     TARGET = auto()
     LOWER = auto()
