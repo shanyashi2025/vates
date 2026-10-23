@@ -260,7 +260,7 @@ class _AllocationGroup:
         return self.staged_conn.sum_attr(self.size_basis)
 
     @property
-    def requested_size(self) -> float | None:
+    def request_size(self) -> float | None:
         strategy = self.strategy
         exist_size = self.exist_size
         lower_size, target_size, upper_size = self.size_box

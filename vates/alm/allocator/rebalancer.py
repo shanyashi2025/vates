@@ -61,17 +61,17 @@ def _rebalance_alloc_groups(
 def _make_trade_order_on_request(group: _AllocationGroup) -> TradeOrder:
     strategy = group.strategy
     exist_size = group.exist_size
-    request_size = group.requested_size
+    request_size = group.request_size
     if request_size is None:
-        raise ValueError(f"'{group.name}': 'requested_size' is None.")
+        raise ValueError(f"'{group.name}': 'request_size' is None.")
     if strategy == AssetAllocationStrategy.NO_TRADE:
         if abs(request_size - exist_size) > 1e-8:
-            raise ValueError(f"'{group.name}': 'NO_TRADE'; requested_size: {request_size:.2f} != "
+            raise ValueError(f"'{group.name}': strategy 'NO_TRADE' cannot buy/sell; request_size: {request_size:.2f} != "
                              f"exist_size: {exist_size:.2f}.")
         return TradeOrder(action=BuySellAction.PASS)
     if strategy == AssetAllocationStrategy.BUY_HOLD:
         if request_size < exist_size and abs(request_size - exist_size) > 1e-8:
-            raise ValueError(f"'{group.name}': 'BUY_HOLD'; requested_size: {request_size:.2f} < "
+            raise ValueError(f"'{group.name}': strategy 'BUY_HOLD' cannot sell; request_size: {request_size:.2f} < "
                              f"exist_size: {exist_size:.2f}.")
     if request_size > group.current_size:  # buy
         if group.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and abs(group.exist_size) < 1e-8:
@@ -87,7 +87,7 @@ def _make_trade_orders_on_best_effort(groups: list[_AllocationGroup], total_size
     for g in groups:
         strategy = g.strategy
         exist_size = g.exist_size
-        request_size = g.requested_size
+        request_size = g.request_size
         lower, _, upper = g.size_box
 
         if strategy == AssetAllocationStrategy.UNCONSTRAIN:
