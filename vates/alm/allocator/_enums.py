@@ -13,10 +13,10 @@ class AssetPurchaseMethod(Enum):
     PURCHASE_PROFILE = auto()
     NOT_USED = auto()
 
-class AssetRebalanceObjective(Enum):
-    """Enum for asset rebalance objective."""
+class AssetSizeKind(Enum):
+    """Enum for asset sizes."""
     NOT_USED = auto()
-    NO_ACTION = auto()
-    TO_TARGET_WEIGHT = auto()
-    TO_LOWER_WEIGHT = auto()
-    TO_UPPER_WEIGHT = auto()
+    CURRENT = auto()
+    TARGET = auto()
+    LOWER = auto()
+    UPPER = auto()

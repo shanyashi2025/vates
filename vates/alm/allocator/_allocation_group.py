@@ -4,7 +4,7 @@ from enum import Enum
 
 from vates.alm.assets import Asset
 from vates.alm._utils import Connector
-from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, AssetRebalanceObjective
+from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, AssetSizeKind
 
 
 class BuySellAction(Enum):
@@ -23,35 +23,35 @@ class TradeOrder:
 
 
 @dataclass(slots=True, frozen=True)
-class PrimaryRebalanceObjective:
-    below_range: AssetRebalanceObjective
-    within_range: AssetRebalanceObjective
-    above_range: AssetRebalanceObjective
+class RequestRebalanceOutcome:
+    below_range: AssetSizeKind
+    within_range: AssetSizeKind
+    above_range: AssetSizeKind
 
     @classmethod
-    def create(cls, below_range: AssetRebalanceObjective | str | None, within_range: AssetRebalanceObjective | str | None,
-               above_range: AssetRebalanceObjective | str | None) -> 'PrimaryRebalanceObjective':
+    def create(cls, below_range: AssetSizeKind | str | None, within_range: AssetSizeKind | str | None,
+               above_range: AssetSizeKind | str | None) -> 'RequestRebalanceOutcome':
         if below_range is None:
-            below_range = AssetRebalanceObjective.NOT_USED
+            below_range = AssetSizeKind.NOT_USED
         elif isinstance(below_range, str):
-            below_range = AssetRebalanceObjective[below_range.upper()]
+            below_range = AssetSizeKind[below_range.upper()]
         if within_range is None:
-            within_range = AssetRebalanceObjective.NOT_USED
+            within_range = AssetSizeKind.NOT_USED
         elif isinstance(within_range, str):
-            within_range = AssetRebalanceObjective[within_range.upper()]
+            within_range = AssetSizeKind[within_range.upper()]
         if above_range is None:
-            above_range = AssetRebalanceObjective.NOT_USED
+            above_range = AssetSizeKind.NOT_USED
         elif isinstance(above_range, str):
-            above_range = AssetRebalanceObjective[above_range.upper()]
-        return PrimaryRebalanceObjective(below_range=below_range, within_range=within_range, above_range=above_range)
+            above_range = AssetSizeKind[above_range.upper()]
+        return RequestRebalanceOutcome(below_range=below_range, within_range=within_range, above_range=above_range)
 
     def __post_init__(self):
-        if not isinstance(self.below_range, AssetRebalanceObjective):
-            raise TypeError(f"Invalid type of 'below_range': {type(self.below_range)}, expected 'AssetTradeDirection'")
-        if not isinstance(self.within_range, AssetRebalanceObjective):
-            raise TypeError(f"Invalid type of 'within_range': {type(self.within_range)}, expected 'AssetTradeDirection'")
-        if not isinstance(self.above_range, AssetRebalanceObjective):
-            raise TypeError(f"Invalid type of 'above_range': {type(self.above_range)}, expected 'AssetTradeDirection'")
+        if not isinstance(self.below_range, AssetSizeKind):
+            raise TypeError(f"Invalid type of 'below_range': {type(self.below_range)}, expected 'AssetSizeKind'")
+        if not isinstance(self.within_range, AssetSizeKind):
+            raise TypeError(f"Invalid type of 'within_range': {type(self.within_range)}, expected 'AssetSizeKind'")
+        if not isinstance(self.above_range, AssetSizeKind):
+            raise TypeError(f"Invalid type of 'above_range': {type(self.above_range)}, expected 'AssetSizeKind'")
 
 
 @dataclass(slots=True, frozen=True)
@@ -63,14 +63,14 @@ class AssetAllocationParams:
         strategy (AssetAllocationStrategy): Allocation strategy for this allocation group.
         weight_box (tuple[float, float, float]): Target weight for the allocation group,
             a three-element tuple representing (lower, target, upper).
-        primary_objective (PrimaryRebalanceObjective): Primary rebalance objective.
+        request_rebalance_outcome (RequestRebalanceOutcome): Requested rebalance outcome.
         purchase_method (AssetPurchaseMethod): Method to purchase new asset for this allocation group.
         priority (int): The priority in which the allocation group will be processed, smaller integer represents
             higher priority.
     """
     strategy: AssetAllocationStrategy
     weight_box: tuple[float, float, float] | None
-    primary_objective: PrimaryRebalanceObjective
+    request_rebalance_outcome: RequestRebalanceOutcome
     purchase_method: AssetPurchaseMethod
     priority: int
 
@@ -79,7 +79,7 @@ class AssetAllocationParams:
         cls,
         strategy: AssetAllocationStrategy | str,
         weight_box: tuple[float, float, float] | None = None,
-        primary_objective: dict[str, str | AssetRebalanceObjective | None] | PrimaryRebalanceObjective | None = None,
+        request_rebalance_outcome: dict[str, str | AssetSizeKind | None] | RequestRebalanceOutcome | None = None,
         purchase_method: AssetPurchaseMethod | str | None = None,
         priority: int = 999
     ) -> 'AssetAllocationParams':
@@ -92,18 +92,18 @@ class AssetAllocationParams:
                - UNCONSTRAIN
             weight_box (tuple[float, float, float] | None): Target weight for the allocation group;
                 a three-element tuple representing (lower, target, upper).
-            primary_objective (dict[str, str | AssetRebalanceObjective | None] | PrimaryRebalanceObjective | None):
-                Primary rebalance objectives;
+            request_rebalance_outcome (dict[str, str | AssetSizeKind | None] | RequestRebalanceOutcome | None):
+                Requested rebalance outcome;
                 possible dict keys (str):
                     - below_range
                     - within_range
                     - above_range
-                possible dict values (str | AssetRebalanceObjective):
-                    - NOT_USED ('None' is concerted to 'NOT_USED')
-                    - NO_ACTION
-                    - TO_TARGET_WEIGHT
-                    - TO_LOWER_WEIGHT
-                    - TO_UPPER_WEIGHT
+                possible dict values (str | AssetSizeKind):
+                    - NOT_USED ('None' is converted to 'NOT_USED')
+                    - CURRENT
+                    - TARGET
+                    - LOWER
+                    - UPPER
             purchase_method (AssetPurchaseMethod | str): Method to purchase new asset for this allocation group:
                 - SCALE_UP_EXISTING
                 - PURCHASE_PROFILE
@@ -120,22 +120,22 @@ class AssetAllocationParams:
             purchase_method = AssetPurchaseMethod.NOT_USED
         elif isinstance(purchase_method, str):
             purchase_method = AssetPurchaseMethod[purchase_method.upper()]
-        if primary_objective is None:
-            primary_objective = PrimaryRebalanceObjective(below_range=AssetRebalanceObjective.NOT_USED,
-                                                          within_range=AssetRebalanceObjective.NOT_USED,
-                                                          above_range=AssetRebalanceObjective.NOT_USED)
-        elif isinstance(primary_objective, PrimaryRebalanceObjective):
+        if request_rebalance_outcome is None:
+            request_rebalance_outcome = RequestRebalanceOutcome(below_range=AssetSizeKind.NOT_USED,
+                                                                within_range=AssetSizeKind.NOT_USED,
+                                                                above_range=AssetSizeKind.NOT_USED)
+        elif isinstance(request_rebalance_outcome, RequestRebalanceOutcome):
             pass
         else: # dict
             for key in ("below_range", "within_range", "above_range"):
-                if key not in primary_objective:
-                    primary_objective[key] = AssetRebalanceObjective.NOT_USED
-            primary_objective = PrimaryRebalanceObjective.create(**primary_objective)
+                if key not in request_rebalance_outcome:
+                    request_rebalance_outcome[key] = AssetSizeKind.NOT_USED
+            request_rebalance_outcome = RequestRebalanceOutcome.create(**request_rebalance_outcome)
 
         return AssetAllocationParams(
             strategy=strategy,
             weight_box=weight_box,
-            primary_objective=primary_objective,
+            request_rebalance_outcome=request_rebalance_outcome,
             purchase_method=purchase_method,
             priority=priority,
         )
@@ -159,14 +159,15 @@ class AssetAllocationParams:
         else:
             raise TypeError(f"Invalid type of 'weight_box': {type(self.weight_box)}, expected 'tuple'.")
 
-        if not isinstance(self.primary_objective, PrimaryRebalanceObjective):
-            raise TypeError(f"Invalid type of 'primary_objective': {type(self.primary_objective)}, expected 'PrimaryRebalanceObjective'.")
+        if not isinstance(self.request_rebalance_outcome, RequestRebalanceOutcome):
+            raise TypeError(f"Invalid type of 'request_rebalance_outcome': {type(self.request_rebalance_outcome)}, "
+                            f"expected 'RequestRebalanceOutcome'.")
 
 class _AllocationGroup:
     """Asset allocation group.
     """
 
-    __slots__ = ("name", "strategy", "primary_objective", "purchase_method", "purchase_method", "priority",
+    __slots__ = ("name", "strategy", "request_rebalance_outcome", "purchase_method", "purchase_method", "priority",
                  "exist_conn", "profile_conn", "staged_conn", "size_basis", "size_box",
                  "profile_size", "_trade_orders", "_free_proceeds")
 
@@ -177,7 +178,7 @@ class _AllocationGroup:
         exist_assets: Connector[Asset] | list[Asset],
         strategy: AssetAllocationStrategy,
         weight_box: tuple[float, float, float] | None,
-        primary_objective: PrimaryRebalanceObjective,
+        request_rebalance_outcome: RequestRebalanceOutcome,
         purchase_method: AssetPurchaseMethod,
         priority: int,
         total_size: float,
@@ -192,7 +193,7 @@ class _AllocationGroup:
         else:
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('Connector', 'list').")
         self.strategy: AssetAllocationStrategy = strategy
-        self.primary_objective: PrimaryRebalanceObjective = primary_objective
+        self.request_rebalance_outcome: RequestRebalanceOutcome = request_rebalance_outcome
         self.purchase_method: AssetPurchaseMethod = purchase_method
         self.priority: int = priority
 
@@ -259,7 +260,7 @@ class _AllocationGroup:
         return self.staged_conn.sum_attr(self.size_basis)
 
     @property
-    def primary_objective_size(self) -> float | None:
+    def requested_size(self) -> float | None:
         strategy = self.strategy
         exist_size = self.exist_size
         lower_size, target_size, upper_size = self.size_box
@@ -272,53 +273,53 @@ class _AllocationGroup:
         if strategy == AssetAllocationStrategy.BUY_HOLD:
             if exist_size >= lower_size:
                 return exist_size
-            prim_obj = self.primary_objective.below_range
-            if prim_obj == AssetRebalanceObjective.TO_LOWER_WEIGHT:
+            request = self.request_rebalance_outcome.below_range
+            if request == AssetSizeKind.LOWER:
                 return lower_size
-            elif prim_obj == AssetRebalanceObjective.TO_TARGET_WEIGHT:
+            elif request == AssetSizeKind.TARGET:
                 return target_size
             else:
-                warnings.warn(f"strategy 'BUY_HOLD', below lower, primary objective: {prim_obj.name}, "
+                warnings.warn(f"strategy 'BUY_HOLD', below lower, requested rebalance outcome: {request.name}, "
                               f"cannot determine size.")
                 return exist_size
 
         if strategy == AssetAllocationStrategy.BUY_SELL:
             if exist_size < lower_size:
-                prim_obj = self.primary_objective.below_range
-                if prim_obj == AssetRebalanceObjective.TO_LOWER_WEIGHT:
+                request = self.request_rebalance_outcome.below_range
+                if request == AssetSizeKind.LOWER:
                     return lower_size
-                elif prim_obj == AssetRebalanceObjective.TO_TARGET_WEIGHT:
+                elif request == AssetSizeKind.TARGET:
                     return target_size
-                elif prim_obj == AssetRebalanceObjective.TO_UPPER_WEIGHT:
+                elif request == AssetSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', below range, primary objective: {prim_obj.name}, "
+                    warnings.warn(f"strategy 'BUY_SELL', below range, requested rebalance outcome: {request.name}, "
                                   f"cannot determine size.")
                     return exist_size
             elif exist_size > upper_size:
-                prim_obj = self.primary_objective.above_range
-                if prim_obj == AssetRebalanceObjective.TO_LOWER_WEIGHT:
+                request = self.request_rebalance_outcome.above_range
+                if request == AssetSizeKind.LOWER:
                     return lower_size
-                elif prim_obj == AssetRebalanceObjective.TO_TARGET_WEIGHT:
+                elif request == AssetSizeKind.TARGET:
                     return target_size
-                elif prim_obj == AssetRebalanceObjective.TO_UPPER_WEIGHT:
+                elif request == AssetSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', above range primary objective: {prim_obj.name}, "
+                    warnings.warn(f"strategy 'BUY_SELL', above range, requested rebalance outcome: {request.name}, "
                                   f"cannot determine size.")
                     return exist_size
             else:  # lower_size <= exist_size <= upper_size
-                prim_obj = self.primary_objective.within_range
-                if prim_obj == AssetRebalanceObjective.NO_ACTION:
+                request = self.request_rebalance_outcome.within_range
+                if request == AssetSizeKind.CURRENT:
                     return exist_size
-                elif prim_obj == AssetRebalanceObjective.TO_LOWER_WEIGHT:
+                elif request == AssetSizeKind.LOWER:
                     return lower_size
-                elif prim_obj == AssetRebalanceObjective.TO_TARGET_WEIGHT:
+                elif request == AssetSizeKind.TARGET:
                     return target_size
-                elif prim_obj == AssetRebalanceObjective.TO_UPPER_WEIGHT:
+                elif request == AssetSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', within range, primary objective: {prim_obj.name}, "
+                    warnings.warn(f"strategy 'BUY_SELL', within range, requested rebalance outcome: {request.name}, "
                                   f"cannot determine size.")
                     return exist_size
         raise ValueError("Should never get here")

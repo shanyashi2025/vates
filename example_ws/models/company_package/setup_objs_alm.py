@@ -111,7 +111,7 @@ class FundMaster:
                 priority=row["priority"],
                 strategy=row["strategy"],
                 purchase_method=row["purchase_method"],
-                primary_objective=json.loads(row["primary_objective"]),
+                request_rebalance_outcome=json.loads(row["request_rebalance_outcome"]),
             )
 
         return params
