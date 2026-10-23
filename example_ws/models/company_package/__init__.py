@@ -3,7 +3,7 @@ from .alm_calculations import (
     fund_assets_roll_forward,
     fund_liabs_roll_forward,
     liabs_close_dealing,
-    fund_reblance_if_needed,
+    fund_rebalance,
 )
 from .asset_master import AssetMaster
 from .econ_master import EsgMaster
@@ -30,7 +30,7 @@ __all__ = [
 
     'FundRebalanceParams',
     'rebalance_this_month',
-    'fund_reblance_if_needed',
+    'fund_rebalance',
 
     # calculations
     'fund_assets_roll_forward',

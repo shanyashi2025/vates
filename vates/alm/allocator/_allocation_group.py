@@ -4,7 +4,7 @@ from enum import Enum
 
 from vates.alm.assets import Asset
 from vates.alm._utils import Connector
-from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, AssetSizeKind
+from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, RebalanceSizeKind
 
 
 class BuySellAction(Enum):
@@ -23,29 +23,27 @@ class TradeOrder:
 
 
 @dataclass(slots=True, frozen=True)
-class AskRebalanceOutcome:
-    below_range: AssetSizeKind | None
-    within_range: AssetSizeKind | None
-    above_range: AssetSizeKind | None
+class RebalancePreference:
+    below_range: RebalanceSizeKind | None
+    within_range: RebalanceSizeKind | None
+    above_range: RebalanceSizeKind | None
 
     @classmethod
-    def create(cls, *, below_range: AssetSizeKind | str | None = None, within_range: AssetSizeKind | str | None = None,
-               above_range: AssetSizeKind | str | None = None) -> 'AskRebalanceOutcome':
+    def create(cls, *, below_range: RebalanceSizeKind | str | None = None, within_range: RebalanceSizeKind | str | None = None,
+               above_range: RebalanceSizeKind | str | None = None) -> 'RebalancePreference':
         if isinstance(below_range, str):
-            below_range = AssetSizeKind[below_range.upper()]
+            below_range = RebalanceSizeKind[below_range.upper()]
         if isinstance(within_range, str):
-            within_range = AssetSizeKind[within_range.upper()]
+            within_range = RebalanceSizeKind[within_range.upper()]
         if isinstance(above_range, str):
-            above_range = AssetSizeKind[above_range.upper()]
-        return AskRebalanceOutcome(below_range=below_range, within_range=within_range, above_range=above_range)
+            above_range = RebalanceSizeKind[above_range.upper()]
+        return RebalancePreference(below_range=below_range, within_range=within_range, above_range=above_range)
 
     def __post_init__(self):
-        if self.below_range is not None and not isinstance(self.below_range, AssetSizeKind):
-            raise TypeError(f"Invalid type of 'below_range': {type(self.below_range)}, expected 'AssetSizeKind'")
-        if self.within_range is not None and not isinstance(self.within_range, AssetSizeKind):
-            raise TypeError(f"Invalid type of 'within_range': {type(self.within_range)}, expected 'AssetSizeKind'")
-        if self.above_range is not None and not isinstance(self.above_range, AssetSizeKind):
-            raise TypeError(f"Invalid type of 'above_range': {type(self.above_range)}, expected 'AssetSizeKind'")
+        for name in ("below_range", "within_range", "above_range"):
+            field = getattr(self, name)
+            if field is not None and not isinstance(field, RebalanceSizeKind):
+                raise TypeError(f"Invalid type of '{name}': {type(field)}, expected 'RebalanceSizeKind'")
 
 
 @dataclass(slots=True, frozen=True)
@@ -55,16 +53,16 @@ class AssetAllocationParams:
     Attributes:
 
         strategy (AssetAllocationStrategy): Allocation strategy for this allocation group.
-        weight_box (tuple[float, float, float]): Target weight for the allocation group,
+        weight_triplet (tuple[float, float, float]): Target weight for the allocation group,
             a three-element tuple representing (lower, target, upper).
-        ask_rebalance_outcome (AskRebalanceOutcome): Ask rebalance outcome.
+        rebalance_preference (RebalancePreference): Rebalance preference.
         purchase_method (AssetPurchaseMethod): Method to purchase new asset for this allocation group.
         priority (int): The priority in which the allocation group will be processed, smaller integer represents
             higher priority.
     """
     strategy: AssetAllocationStrategy
-    weight_box: tuple[float, float, float] | None
-    ask_rebalance_outcome: AskRebalanceOutcome
+    weight_triplet: tuple[float, float, float] | None
+    rebalance_preference: RebalancePreference
     purchase_method: AssetPurchaseMethod
     priority: int
 
@@ -72,8 +70,8 @@ class AssetAllocationParams:
     def create(
         cls,
         strategy: AssetAllocationStrategy | str,
-        weight_box: tuple[float, float, float] | None = None,
-        ask_rebalance_outcome: dict[str, str | AssetSizeKind | None] | AskRebalanceOutcome | None = None,
+        weight_triplet: tuple[float, float, float] | None = None,
+        rebalance_preference: dict[str, str | RebalanceSizeKind | None] | RebalancePreference | None = None,
         purchase_method: AssetPurchaseMethod | str | None = None,
         priority: int = 999
     ) -> 'AssetAllocationParams':
@@ -84,15 +82,15 @@ class AssetAllocationParams:
                - BUY_HOLD
                - BUY_SELL
                - UNCONSTRAIN
-            weight_box (tuple[float, float, float] | None): Target weight for the allocation group;
+            weight_triplet (tuple[float, float, float] | None): Target weight for the allocation group;
                 a three-element tuple representing (lower, target, upper).
-            ask_rebalance_outcome (dict[str, str | AssetSizeKind | None] | AskRebalanceOutcome | None):
-                Ask rebalance outcome;
+            rebalance_preference (dict[str, str | RebalanceSizeKind | None] | RebalancePreference | None):
+                Rebalance preference;
                 possible dict keys (str):
                     - below_range
                     - within_range
                     - above_range
-                possible dict values (str | AssetSizeKind):
+                possible dict values (str | RebalanceSizeKind):
                     - CURRENT
                     - TARGET
                     - LOWER
@@ -113,15 +111,15 @@ class AssetAllocationParams:
             purchase_method = AssetPurchaseMethod.NOT_USED
         elif isinstance(purchase_method, str):
             purchase_method = AssetPurchaseMethod[purchase_method.upper()]
-        if ask_rebalance_outcome is None:
-            ask_rebalance_outcome = AskRebalanceOutcome.create()
-        elif isinstance(ask_rebalance_outcome, dict):
-            ask_rebalance_outcome = AskRebalanceOutcome.create(**ask_rebalance_outcome)
+        if rebalance_preference is None:
+            rebalance_preference = RebalancePreference.create()
+        elif isinstance(rebalance_preference, dict):
+            rebalance_preference = RebalancePreference.create(**rebalance_preference)
 
         return AssetAllocationParams(
             strategy=strategy,
-            weight_box=weight_box,
-            ask_rebalance_outcome=ask_rebalance_outcome,
+            weight_triplet=weight_triplet,
+            rebalance_preference=rebalance_preference,
             purchase_method=purchase_method,
             priority=priority,
         )
@@ -133,28 +131,28 @@ class AssetAllocationParams:
         if not isinstance(self.purchase_method, AssetPurchaseMethod):
             raise TypeError(f"Invalid type of 'purchase_method': {type(self.purchase_method)}, expected 'AssetPurchaseMethod'.")
 
-        if self.weight_box is None:
+        if self.weight_triplet is None:
             pass
-        elif isinstance(self.weight_box, tuple):
-            if len(self.weight_box) != 3:
-                raise ValueError(f"Invalid len of 'weight_box': {len(self.weight_box)}, expected 3.")
-            if not all(isinstance(x, float) for x in self.weight_box):
-                raise TypeError(f"Invalid element type of 'weight_box' ({self.weight_box}), expected 'float'.")
-            if not self.weight_box[0] <= self.weight_box[1] <= self.weight_box[2]:
-                raise ValueError(f"Invalid 'weight_box' values: {self.weight_box}.")
+        elif isinstance(self.weight_triplet, tuple):
+            if len(self.weight_triplet) != 3:
+                raise ValueError(f"Invalid len of 'weight_triplet': {len(self.weight_triplet)}, expected 3.")
+            if not all(isinstance(x, float) for x in self.weight_triplet):
+                raise TypeError(f"Invalid element type of 'weight_triplet' ({self.weight_triplet}), expected 'float'.")
+            if not self.weight_triplet[0] <= self.weight_triplet[1] <= self.weight_triplet[2]:
+                raise ValueError(f"Invalid 'weight_triplet' values: {self.weight_triplet}.")
         else:
-            raise TypeError(f"Invalid type of 'weight_box': {type(self.weight_box)}, expected 'tuple'.")
+            raise TypeError(f"Invalid type of 'weight_triplet': {type(self.weight_triplet)}, expected 'tuple'.")
 
-        if not isinstance(self.ask_rebalance_outcome, AskRebalanceOutcome):
-            raise TypeError(f"Invalid type of 'ask_rebalance_outcome': {type(self.ask_rebalance_outcome)}, "
-                            f"expected 'AskRebalanceOutcome'.")
+        if not isinstance(self.rebalance_preference, RebalancePreference):
+            raise TypeError(f"Invalid type of 'rebalance_preference': {type(self.rebalance_preference)}, "
+                            f"expected 'RebalancePreference'.")
 
 class _AllocationGroup:
     """Asset allocation group.
     """
 
-    __slots__ = ("name", "strategy", "ask_rebalance_outcome", "purchase_method", "purchase_method", "priority",
-                 "exist_conn", "profile_conn", "staged_conn", "size_basis", "size_box",
+    __slots__ = ("name", "strategy", "rebalance_preference", "purchase_method", "purchase_method", "priority",
+                 "exist_conn", "profile_conn", "staged_conn", "size_basis", "size_triplet",
                  "profile_size", "_trade_orders", "_free_proceeds")
 
     def __init__(
@@ -163,8 +161,8 @@ class _AllocationGroup:
         name: str,
         exist_assets: Connector[Asset] | list[Asset],
         strategy: AssetAllocationStrategy,
-        weight_box: tuple[float, float, float] | None,
-        ask_rebalance_outcome: AskRebalanceOutcome,
+        weight_triplet: tuple[float, float, float] | None,
+        rebalance_preference: RebalancePreference,
         purchase_method: AssetPurchaseMethod,
         priority: int,
         total_size: float,
@@ -179,7 +177,7 @@ class _AllocationGroup:
         else:
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('Connector', 'list').")
         self.strategy: AssetAllocationStrategy = strategy
-        self.ask_rebalance_outcome: AskRebalanceOutcome = ask_rebalance_outcome
+        self.rebalance_preference: RebalancePreference = rebalance_preference
         self.purchase_method: AssetPurchaseMethod = purchase_method
         self.priority: int = priority
 
@@ -193,7 +191,7 @@ class _AllocationGroup:
         else:
             raise TypeError(f"Invalid type of 'profile_assets': {type(profile_assets)}, expected ('Connector', 'list').")
 
-        self.size_box: tuple[float, float, float] = self._compute_size_box(total_size, weight_box)
+        self.size_triplet: tuple[float, float, float] = self._compute_size_triplet(total_size, weight_triplet)
         self.profile_size: float = self.profile_conn.sum_attr(self.size_basis) if self.profile_conn is not None else 0.0
 
         self.staged_conn: Connector[Asset] = Connector[Asset]()
@@ -209,20 +207,20 @@ class _AllocationGroup:
             if self.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and len(self.profile_conn) == 0:
                 raise ValueError(f"'{self.name}': 'PURCHASE_PROFILE';  no profile asset.")
 
-    def _compute_size_box(self, total_size: float, weight_box: tuple[float, float, float] | None
-                          ) -> tuple[float, float, float]:
+    def _compute_size_triplet(self, total_size: float, weight_triplet: tuple[float, float, float] | None
+                              ) -> tuple[float, float, float]:
         strategy = self.strategy
         if strategy == AssetAllocationStrategy.UNCONSTRAIN:
             return float("-inf"), 0.0, float("inf")
         if strategy == AssetAllocationStrategy.NO_TRADE:
             exist_size = self.exist_size
             return float("-inf"), exist_size, float("inf")
-        if weight_box is None:
-            raise ValueError(f"'{self.name}': strategy '{strategy}': 'weight_box' is None.")
+        if weight_triplet is None:
+            raise ValueError(f"'{self.name}': strategy '{strategy}': 'weight_triplet' is None.")
         if strategy == AssetAllocationStrategy.BUY_HOLD:
-            return total_size * weight_box[0], total_size * weight_box[1], float("inf")
+            return total_size * weight_triplet[0], total_size * weight_triplet[1], float("inf")
         if strategy == AssetAllocationStrategy.BUY_SELL:
-            return total_size * weight_box[0], total_size * weight_box[1], total_size * weight_box[2]
+            return total_size * weight_triplet[0], total_size * weight_triplet[1], total_size * weight_triplet[2]
         raise ValueError("Should never get here.")
 
     def take_out_free_proceeds(self) -> float:
@@ -246,10 +244,10 @@ class _AllocationGroup:
         return self.staged_conn.sum_attr(self.size_basis)
 
     @property
-    def ask_size(self) -> float | None:
+    def preferred_size(self) -> float | None:
         strategy = self.strategy
         exist_size = self.exist_size
-        lower_size, target_size, upper_size = self.size_box
+        lower_size, target_size, upper_size = self.size_triplet
 
         if strategy == AssetAllocationStrategy.UNCONSTRAIN:
             return None
@@ -259,53 +257,53 @@ class _AllocationGroup:
         if strategy == AssetAllocationStrategy.BUY_HOLD:
             if exist_size >= lower_size:
                 return exist_size
-            ask = self.ask_rebalance_outcome.below_range
-            if ask == AssetSizeKind.LOWER:
+            prefer = self.rebalance_preference.below_range
+            if prefer == RebalanceSizeKind.LOWER:
                 return lower_size
-            elif ask == AssetSizeKind.TARGET:
+            elif prefer == RebalanceSizeKind.TARGET:
                 return target_size
             else:
-                warnings.warn(f"strategy 'BUY_HOLD', below lower, ask rebalance outcome: {ask}, "
+                warnings.warn(f"strategy 'BUY_HOLD', below lower, rebalance preference: {prefer}, "
                               f"cannot determine size.")
                 return exist_size
 
         if strategy == AssetAllocationStrategy.BUY_SELL:
             if exist_size < lower_size:
-                ask = self.ask_rebalance_outcome.below_range
-                if ask == AssetSizeKind.LOWER:
+                prefer = self.rebalance_preference.below_range
+                if prefer == RebalanceSizeKind.LOWER:
                     return lower_size
-                elif ask == AssetSizeKind.TARGET:
+                elif prefer == RebalanceSizeKind.TARGET:
                     return target_size
-                elif ask == AssetSizeKind.UPPER:
+                elif prefer == RebalanceSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', below range, ask rebalance outcome: {ask}, "
+                    warnings.warn(f"strategy 'BUY_SELL', below range, rebalance preference: {prefer}, "
                                   f"cannot determine size.")
                     return exist_size
             elif exist_size > upper_size:
-                ask = self.ask_rebalance_outcome.above_range
-                if ask == AssetSizeKind.LOWER:
+                prefer = self.rebalance_preference.above_range
+                if prefer == RebalanceSizeKind.LOWER:
                     return lower_size
-                elif ask == AssetSizeKind.TARGET:
+                elif prefer == RebalanceSizeKind.TARGET:
                     return target_size
-                elif ask == AssetSizeKind.UPPER:
+                elif prefer == RebalanceSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', above range, ask rebalance outcome: {ask}, "
+                    warnings.warn(f"strategy 'BUY_SELL', above range, rebalance preference: {prefer}, "
                                   f"cannot determine size.")
                     return exist_size
             else:  # lower_size <= exist_size <= upper_size
-                ask = self.ask_rebalance_outcome.within_range
-                if ask == AssetSizeKind.CURRENT:
+                prefer = self.rebalance_preference.within_range
+                if prefer == RebalanceSizeKind.CURRENT:
                     return exist_size
-                elif ask == AssetSizeKind.LOWER:
+                elif prefer == RebalanceSizeKind.LOWER:
                     return lower_size
-                elif ask == AssetSizeKind.TARGET:
+                elif prefer == RebalanceSizeKind.TARGET:
                     return target_size
-                elif ask == AssetSizeKind.UPPER:
+                elif prefer == RebalanceSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', within range, ask rebalance outcome: {ask}, "
+                    warnings.warn(f"strategy 'BUY_SELL', within range, rebalance preference: {prefer}, "
                                   f"cannot determine size.")
                     return exist_size
         raise ValueError("Should never get here")
@@ -403,7 +401,7 @@ class _AllocationGroup:
             bool: True if the allocation is satisfied, False otherwise.
             tuple[float, float]: Reference sizes (lower, upper)
         """
-        lower, target, upper = self.size_box
+        lower, target, upper = self.size_triplet
 
         if self.strategy in (AssetAllocationStrategy.UNCONSTRAIN, AssetAllocationStrategy.NO_TRADE):
             satisfied = True

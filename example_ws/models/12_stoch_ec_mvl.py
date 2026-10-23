@@ -12,7 +12,7 @@ from company_package import (
     build_liabs,
     fund_assets_roll_forward,
     fund_liabs_roll_forward,
-    fund_reblance_if_needed,
+    fund_rebalance,
     liabs_close_dealing,
 )
 
@@ -104,7 +104,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             )
 
             # step 3: rebalance if needed
-            fund_reblance_if_needed(
+            fund_rebalance(
                 model_engine=model,
                 fund=fund,
                 rebalance_params=rebalance_params,

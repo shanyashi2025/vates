@@ -9,7 +9,7 @@ from company_package import (
     build_liabs,
     fund_assets_roll_forward,
     fund_liabs_roll_forward,
-    fund_reblance_if_needed,
+    fund_rebalance,
     liabs_close_dealing,
     output_aging_assets,
 )
@@ -95,7 +95,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                     fund_liabs_roll_forward(fund)
 
                 # step 3: rebalance if needed
-                fund_reblance_if_needed(
+                fund_rebalance(
                     model_engine=model,
                     fund=fund,
                     rebalance_params=rebalance_params,

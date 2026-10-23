@@ -1,4 +1,4 @@
-﻿fund_id,allocation_group,priority,strategy,purchase_method,ask_rebalance_outcome
+﻿fund_id,allocation_group,priority,strategy,purchase_method,rebalance_preference
 cd_fund,cash,4,unconstrain,scale_up_existing,{}
 cd_fund,equity,1,buy_sell,scale_up_existing,"{""below_range"": ""target"", ""within_range"": ""current"", ""above_range"": ""target""}"
 cd_fund,govt_bond,2,buy_hold,purchase_profile,"{""below_range"": ""target""}"
