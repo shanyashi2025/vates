@@ -23,21 +23,21 @@ class TradeOrder:
 
 
 @dataclass(slots=True, frozen=True)
-class RequestRebalanceOutcome:
+class AskRebalanceOutcome:
     below_range: AssetSizeKind | None
     within_range: AssetSizeKind | None
     above_range: AssetSizeKind | None
 
     @classmethod
     def create(cls, *, below_range: AssetSizeKind | str | None = None, within_range: AssetSizeKind | str | None = None,
-               above_range: AssetSizeKind | str | None = None) -> 'RequestRebalanceOutcome':
+               above_range: AssetSizeKind | str | None = None) -> 'AskRebalanceOutcome':
         if isinstance(below_range, str):
             below_range = AssetSizeKind[below_range.upper()]
         if isinstance(within_range, str):
             within_range = AssetSizeKind[within_range.upper()]
         if isinstance(above_range, str):
             above_range = AssetSizeKind[above_range.upper()]
-        return RequestRebalanceOutcome(below_range=below_range, within_range=within_range, above_range=above_range)
+        return AskRebalanceOutcome(below_range=below_range, within_range=within_range, above_range=above_range)
 
     def __post_init__(self):
         if self.below_range is not None and not isinstance(self.below_range, AssetSizeKind):
@@ -57,14 +57,14 @@ class AssetAllocationParams:
         strategy (AssetAllocationStrategy): Allocation strategy for this allocation group.
         weight_box (tuple[float, float, float]): Target weight for the allocation group,
             a three-element tuple representing (lower, target, upper).
-        request_rebalance_outcome (RequestRebalanceOutcome): Requested rebalance outcome.
+        ask_rebalance_outcome (AskRebalanceOutcome): Ask rebalance outcome.
         purchase_method (AssetPurchaseMethod): Method to purchase new asset for this allocation group.
         priority (int): The priority in which the allocation group will be processed, smaller integer represents
             higher priority.
     """
     strategy: AssetAllocationStrategy
     weight_box: tuple[float, float, float] | None
-    request_rebalance_outcome: RequestRebalanceOutcome
+    ask_rebalance_outcome: AskRebalanceOutcome
     purchase_method: AssetPurchaseMethod
     priority: int
 
@@ -73,7 +73,7 @@ class AssetAllocationParams:
         cls,
         strategy: AssetAllocationStrategy | str,
         weight_box: tuple[float, float, float] | None = None,
-        request_rebalance_outcome: dict[str, str | AssetSizeKind | None] | RequestRebalanceOutcome | None = None,
+        ask_rebalance_outcome: dict[str, str | AssetSizeKind | None] | AskRebalanceOutcome | None = None,
         purchase_method: AssetPurchaseMethod | str | None = None,
         priority: int = 999
     ) -> 'AssetAllocationParams':
@@ -86,8 +86,8 @@ class AssetAllocationParams:
                - UNCONSTRAIN
             weight_box (tuple[float, float, float] | None): Target weight for the allocation group;
                 a three-element tuple representing (lower, target, upper).
-            request_rebalance_outcome (dict[str, str | AssetSizeKind | None] | RequestRebalanceOutcome | None):
-                Requested rebalance outcome;
+            ask_rebalance_outcome (dict[str, str | AssetSizeKind | None] | AskRebalanceOutcome | None):
+                Ask rebalance outcome;
                 possible dict keys (str):
                     - below_range
                     - within_range
@@ -113,15 +113,15 @@ class AssetAllocationParams:
             purchase_method = AssetPurchaseMethod.NOT_USED
         elif isinstance(purchase_method, str):
             purchase_method = AssetPurchaseMethod[purchase_method.upper()]
-        if request_rebalance_outcome is None:
-            request_rebalance_outcome = RequestRebalanceOutcome.create()
-        elif isinstance(request_rebalance_outcome, dict):
-            request_rebalance_outcome = RequestRebalanceOutcome.create(**request_rebalance_outcome)
+        if ask_rebalance_outcome is None:
+            ask_rebalance_outcome = AskRebalanceOutcome.create()
+        elif isinstance(ask_rebalance_outcome, dict):
+            ask_rebalance_outcome = AskRebalanceOutcome.create(**ask_rebalance_outcome)
 
         return AssetAllocationParams(
             strategy=strategy,
             weight_box=weight_box,
-            request_rebalance_outcome=request_rebalance_outcome,
+            ask_rebalance_outcome=ask_rebalance_outcome,
             purchase_method=purchase_method,
             priority=priority,
         )
@@ -145,15 +145,15 @@ class AssetAllocationParams:
         else:
             raise TypeError(f"Invalid type of 'weight_box': {type(self.weight_box)}, expected 'tuple'.")
 
-        if not isinstance(self.request_rebalance_outcome, RequestRebalanceOutcome):
-            raise TypeError(f"Invalid type of 'request_rebalance_outcome': {type(self.request_rebalance_outcome)}, "
-                            f"expected 'RequestRebalanceOutcome'.")
+        if not isinstance(self.ask_rebalance_outcome, AskRebalanceOutcome):
+            raise TypeError(f"Invalid type of 'ask_rebalance_outcome': {type(self.ask_rebalance_outcome)}, "
+                            f"expected 'AskRebalanceOutcome'.")
 
 class _AllocationGroup:
     """Asset allocation group.
     """
 
-    __slots__ = ("name", "strategy", "request_rebalance_outcome", "purchase_method", "purchase_method", "priority",
+    __slots__ = ("name", "strategy", "ask_rebalance_outcome", "purchase_method", "purchase_method", "priority",
                  "exist_conn", "profile_conn", "staged_conn", "size_basis", "size_box",
                  "profile_size", "_trade_orders", "_free_proceeds")
 
@@ -164,7 +164,7 @@ class _AllocationGroup:
         exist_assets: Connector[Asset] | list[Asset],
         strategy: AssetAllocationStrategy,
         weight_box: tuple[float, float, float] | None,
-        request_rebalance_outcome: RequestRebalanceOutcome,
+        ask_rebalance_outcome: AskRebalanceOutcome,
         purchase_method: AssetPurchaseMethod,
         priority: int,
         total_size: float,
@@ -179,7 +179,7 @@ class _AllocationGroup:
         else:
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('Connector', 'list').")
         self.strategy: AssetAllocationStrategy = strategy
-        self.request_rebalance_outcome: RequestRebalanceOutcome = request_rebalance_outcome
+        self.ask_rebalance_outcome: AskRebalanceOutcome = ask_rebalance_outcome
         self.purchase_method: AssetPurchaseMethod = purchase_method
         self.priority: int = priority
 
@@ -246,7 +246,7 @@ class _AllocationGroup:
         return self.staged_conn.sum_attr(self.size_basis)
 
     @property
-    def request_size(self) -> float | None:
+    def ask_size(self) -> float | None:
         strategy = self.strategy
         exist_size = self.exist_size
         lower_size, target_size, upper_size = self.size_box
@@ -259,53 +259,53 @@ class _AllocationGroup:
         if strategy == AssetAllocationStrategy.BUY_HOLD:
             if exist_size >= lower_size:
                 return exist_size
-            request = self.request_rebalance_outcome.below_range
-            if request == AssetSizeKind.LOWER:
+            ask = self.ask_rebalance_outcome.below_range
+            if ask == AssetSizeKind.LOWER:
                 return lower_size
-            elif request == AssetSizeKind.TARGET:
+            elif ask == AssetSizeKind.TARGET:
                 return target_size
             else:
-                warnings.warn(f"strategy 'BUY_HOLD', below lower, requested rebalance outcome: {request}, "
+                warnings.warn(f"strategy 'BUY_HOLD', below lower, ask rebalance outcome: {ask}, "
                               f"cannot determine size.")
                 return exist_size
 
         if strategy == AssetAllocationStrategy.BUY_SELL:
             if exist_size < lower_size:
-                request = self.request_rebalance_outcome.below_range
-                if request == AssetSizeKind.LOWER:
+                ask = self.ask_rebalance_outcome.below_range
+                if ask == AssetSizeKind.LOWER:
                     return lower_size
-                elif request == AssetSizeKind.TARGET:
+                elif ask == AssetSizeKind.TARGET:
                     return target_size
-                elif request == AssetSizeKind.UPPER:
+                elif ask == AssetSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', below range, requested rebalance outcome: {request}, "
+                    warnings.warn(f"strategy 'BUY_SELL', below range, ask rebalance outcome: {ask}, "
                                   f"cannot determine size.")
                     return exist_size
             elif exist_size > upper_size:
-                request = self.request_rebalance_outcome.above_range
-                if request == AssetSizeKind.LOWER:
+                ask = self.ask_rebalance_outcome.above_range
+                if ask == AssetSizeKind.LOWER:
                     return lower_size
-                elif request == AssetSizeKind.TARGET:
+                elif ask == AssetSizeKind.TARGET:
                     return target_size
-                elif request == AssetSizeKind.UPPER:
+                elif ask == AssetSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', above range, requested rebalance outcome: {request}, "
+                    warnings.warn(f"strategy 'BUY_SELL', above range, ask rebalance outcome: {ask}, "
                                   f"cannot determine size.")
                     return exist_size
             else:  # lower_size <= exist_size <= upper_size
-                request = self.request_rebalance_outcome.within_range
-                if request == AssetSizeKind.CURRENT:
+                ask = self.ask_rebalance_outcome.within_range
+                if ask == AssetSizeKind.CURRENT:
                     return exist_size
-                elif request == AssetSizeKind.LOWER:
+                elif ask == AssetSizeKind.LOWER:
                     return lower_size
-                elif request == AssetSizeKind.TARGET:
+                elif ask == AssetSizeKind.TARGET:
                     return target_size
-                elif request == AssetSizeKind.UPPER:
+                elif ask == AssetSizeKind.UPPER:
                     return upper_size
                 else:
-                    warnings.warn(f"strategy 'BUY_SELL', within range, requested rebalance outcome: {request}, "
+                    warnings.warn(f"strategy 'BUY_SELL', within range, ask rebalance outcome: {ask}, "
                                   f"cannot determine size.")
                     return exist_size
         raise ValueError("Should never get here")
