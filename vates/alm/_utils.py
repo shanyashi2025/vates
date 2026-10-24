@@ -1,37 +1,11 @@
 import numpy as np
 from collections import defaultdict
-from typing import Self, overload
+from typing import overload
 
 
-class Connector[T]:
-    """A wrapper of a list, convenience for get attr.
+class ObjList[T](list[T]):
+    """A subclass of list, implement convenience methods for sum attr.
     """
-    __slots__ = ('_objs', )
-
-    def __init__(self, objs: list[T] | None = None):
-        self._objs: list[T] = objs or []
-
-    @property
-    def objs(self) -> list[T]:
-        return self._objs
-
-    def append(self, item: T, /) -> None:
-        self._objs.append(item)
-
-    def extend(self, item: list[T] | Self, /) -> None:
-        if isinstance(item, list):
-            self._objs.extend(item)
-        elif isinstance(item, Connector):
-            self._objs.extend(item._objs)
-
-    def count(self, value) -> int:
-        return self._objs.count(value)
-
-    def __len__(self) -> int:
-        return len(self._objs)
-
-    def __getattr__(self, item):
-        return getattr(self._objs, item)
 
     @overload
     def sum_attr(self, name: str, /, *, allow_not_exist: bool = False) -> float:
@@ -61,16 +35,10 @@ class Connector[T]:
         allow_not_exist: bool = False,
     ) -> float | np.ndarray | dict[str, float | np.ndarray]:
         if group_by is None:
-            return sum_attr(self.objs, attr_name=name, allow_not_exist=allow_not_exist)
+            return sum_attr(list(self), attr_name=name, allow_not_exist=allow_not_exist)
         else:
-            return sum_attr_group_by(self.objs, attr_name=name, group_by=group_by, filter_in=filter_in,
+            return sum_attr_group_by(list(self), attr_name=name, group_by=group_by, filter_in=filter_in,
                                      allow_not_exist=allow_not_exist)
-
-    def __contains__(self, item) -> bool:
-        return item in self.objs
-
-    def __iter__(self):
-        return iter(self.objs)
 
 
 @overload

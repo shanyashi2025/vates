@@ -5,7 +5,7 @@ from enum import Enum, auto
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
 from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
-from vates.alm._utils import Connector
+from vates.alm._utils import ObjList
 from vates.alm.funds._utils import _RateOfReturnIndexer
 from vates.alm.assets.asset_base import Asset, AssetPhase
 from vates.alm.liabs.liab_base import Liab
@@ -39,7 +39,7 @@ class AssetRecorder:
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
     __slots__ = (
-        '__weakref__', 'time', 'period', '_lc', 'asset_conn',
+        '__weakref__', 'time', 'period', '_lc', '_assets',
         'asset_categories', 'asset_category_attr', 'asset_report_bases',
         'totass_cf', 'catass_cf',
         'totass_mv_op', 'totass_mv_bd', 'totass_mv_ad', 'catass_mv_op', 'catass_mv_bd', 'catass_mv_ad',
@@ -56,12 +56,12 @@ class AssetRecorder:
         *,
         name: str,
         model_engine: ProjModelEngine | None = None,
-        asset_connector: Connector[Asset],
+        assets: ObjList[Asset],
         asset_categories: list[str] | None,
         asset_category_attr: str,
         asset_report_bases: list[str] | None,
     ):
-        self.asset_conn: Connector[Asset] = asset_connector
+        self._assets: ObjList[Asset] = assets
         self.asset_categories: list[str] | None = asset_categories
         self.asset_category_attr: str = asset_category_attr
         self.asset_report_bases: list[str] | None = asset_report_bases
@@ -133,10 +133,10 @@ class AssetRecorder:
 
         # Aggregate asset cash flow
         if require_cash_flow:
-            self.totass_cf = self.asset_conn.sum_attr("cash_flow")
+            self.totass_cf = self._assets.sum_attr("cash_flow")
             self.tdv_totass_cf[t] = self.totass_cf
         if self.asset_categories:
-            val_dict = self.asset_conn.sum_attr(
+            val_dict = self._assets.sum_attr(
                 "cash_flow", group_by=self.asset_category_attr, filter_in=self.asset_categories)
             self.catass_cf = np.array([val_dict.get(cat, 0.0) for cat in self.asset_categories])
             self.tdv_catass_cf[t] = self.catass_cf
@@ -207,11 +207,11 @@ class AssetRecorder:
         t = self.time
         if GLOBAL_CHECK_LEVEL != CheckLevel.BYPASS:
             phase = AssetPhase.ROLLED if timing == "bd" else AssetPhase.CLOSED
-            for asset in self.asset_conn:
+            for asset in self._assets:
                 asset.require_lifecycle(phase=phase)
 
         # 1. always calculate total asset market value
-        tot_mv = self.asset_conn.sum_attr("market_value")
+        tot_mv = self._assets.sum_attr("market_value")
         if timing == "bd":
             self.totass_mv_bd, self.tdv_totass_mv_bd[t] = tot_mv, tot_mv
         else: # timing == "ad"
@@ -219,7 +219,7 @@ class AssetRecorder:
 
         # 2. category asset market value, shape = (categories, )
         if self.asset_category_attr:
-            val_dict = self.asset_conn.sum_attr(
+            val_dict = self._assets.sum_attr(
                 "market_value", group_by=self.asset_category_attr, filter_in=self.asset_categories)
             cat_mv = np.array([val_dict.get(cat, 0.0) for cat in self.asset_categories])
             if timing == "bd":
@@ -229,7 +229,7 @@ class AssetRecorder:
 
         # 3. total asset reported values, shape = (report_bases, )
         if self.asset_report_bases:
-            tot_rv = self.asset_conn.sum_attr(self.asset_report_bases)
+            tot_rv = self._assets.sum_attr(self.asset_report_bases)
             if timing == "bd":
                 self.totass_rv_bd, self.tdv_totass_rv_bd[t] = tot_rv, tot_rv
             else:  # timing == "ad"
@@ -237,7 +237,7 @@ class AssetRecorder:
 
         # 4. category asset reported values, shape = (categories, report_bases)
         if self.asset_report_bases and self.asset_categories:
-            val_dict = self.asset_conn.sum_attr(
+            val_dict = self._assets.sum_attr(
                 self.asset_report_bases, group_by=self.asset_category_attr, filter_in=self.asset_categories)
             cat_rv = np.array([val_dict.get(cat, np.zeros(len(self.asset_report_bases))) for cat in self.asset_categories])
             if timing == "bd":
@@ -277,7 +277,7 @@ class LiabRecorder:
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
-    __slots__ = ('__weakref__', 'time', 'period', '_lc', 'liab_conn',
+    __slots__ = ('__weakref__', 'time', 'period', '_lc', '_liabs',
                  'totliab_cf', 'output_liab_attrs_bd', 'output_liab_attrs_ad',
                  'tdv_totliab_cf', 'tdv_totliab_attrs_bd', 'tdv_totliab_attrs_ad',)
 
@@ -286,11 +286,11 @@ class LiabRecorder:
         *,
         name: str,
         model_engine: ProjModelEngine | None = None,
-        liab_connector: Connector[Liab],
+        liabs: ObjList[Liab],
         output_liab_attrs_bd: list[str],
         output_liab_attrs_ad: list[str],
     ):
-        self.liab_conn: Connector[Liab] = liab_connector
+        self._liabs: ObjList[Liab] = liabs
         self.output_liab_attrs_bd: list[str] = output_liab_attrs_bd
         self.output_liab_attrs_ad: list[str] = output_liab_attrs_ad
         self.totliab_cf: float | None = None
@@ -318,7 +318,7 @@ class LiabRecorder:
 
         # Aggregate liability cash flow
         if require_cash_flow:
-            self.totliab_cf = sum(liab.cash_flow for liab in self.liab_conn)
+            self.totliab_cf = sum(liab.cash_flow for liab in self._liabs)
             self.tdv_totliab_cf[t] = self.totliab_cf
 
         # Aggregate liability value
@@ -344,7 +344,7 @@ class LiabRecorder:
             self.output_liab_attrs_ad, self.tdv_totliab_attrs_ad)
         t = self.time
         for attr_name, tdv in pairs:
-            tdv[t] = self.liab_conn.sum_attr(attr_name)
+            tdv[t] = self._liabs.sum_attr(attr_name)
 
     def _on_time_change(self) -> None:
         self.totliab_cf = None

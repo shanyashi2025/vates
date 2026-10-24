@@ -1,13 +1,12 @@
 import pandas as pd
 import warnings
-import weakref
 from typing import Callable, Self, Literal
 
 from vates._core import ProjModelEngine, time_synchronized
 from vates.alm.allocator import ProceedsKeeper
 from vates.alm.assets import Asset, Cash
 from vates.alm.liabs import Liab
-from vates.alm._utils import Connector
+from vates.alm._utils import ObjList
 from vates.alm.funds._recorder import AssetRecorder, LiabRecorder, OtherRecorder
 from vates.alm.funds._utils import _RateOfReturnIndexer
 
@@ -20,8 +19,8 @@ class Fund:
 
     Attributes:
         fund_id (str): Fund identifier.
-        _asset_conn (AssetConnector): Assets held by the fund.
-        _liab_conn (LiabConnector): Liabilities held by the fund.
+        _assets (ObjList): Assets held by the fund.
+        _liabs (ObjList): Liabilities held by the fund.
         _free_proceeds_keeper (ProceedsKeeper): Free proceeds' keeper; can be used to invest, pay tax,
             pay shareholder dividends, taken out, etc.
         _primary_cash_asset (Cash | None): Primary cash asset used for residual cash flows.
@@ -32,7 +31,7 @@ class Fund:
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
-    __slots__ = ('__dict__', '__weakref__', 'time', 'period', 'fund_id', '_asset_conn', '_liab_conn',
+    __slots__ = ('__dict__', '__weakref__', 'time', 'period', 'fund_id', '_assets', '_liabs',
                  '_free_proceeds_keeper', '_primary_cash_asset', '_allocator',
                  '_asset_rec', '_liab_rec', '_other_rec',)
 
@@ -60,25 +59,25 @@ class Fund:
         """
         self.fund_id = fund_id
         # Asset and liab collections
-        self._asset_conn: Connector[Asset] = Connector[Asset]()
-        self._liab_conn: Connector[Liab] = Connector[Liab]()
+        self._assets: ObjList[Asset] = ObjList[Asset]()
+        self._liabs: ObjList[Liab] = ObjList[Liab]()
         self._free_proceeds_keeper: ProceedsKeeper = ProceedsKeeper()
         self._primary_cash_asset: Cash | None = None
         asset_report_bases: list[str] = asset_report_bases or []
 
         self._asset_rec: AssetRecorder = AssetRecorder(
-            name=fund_id, model_engine=model_engine, asset_connector=self._asset_conn,
+            name=fund_id, model_engine=model_engine, assets=self._assets,
             asset_report_bases=asset_report_bases, asset_categories=asset_categories, asset_category_attr=asset_category_attr,
         )
         self._liab_rec: LiabRecorder = LiabRecorder(
-            name=fund_id, model_engine=model_engine, liab_connector=self._liab_conn,
+            name=fund_id, model_engine=model_engine, liabs=self._liabs,
             output_liab_attrs_bd=output_liab_attrs_bd or [], output_liab_attrs_ad=output_liab_attrs_ad or []
         )
         self._other_rec: OtherRecorder = OtherRecorder(name=fund_id, model_engine=model_engine)
 
     @property
-    def assets(self) -> list[Asset]:
-        return self._asset_conn.objs
+    def assets(self) -> ObjList[Asset]:
+        return self._assets
 
     @property
     def free_proceeds(self) -> float:
@@ -89,8 +88,8 @@ class Fund:
         return self._free_proceeds_keeper
 
     @property
-    def liabs(self) -> list[Liab]:
-        return self._liab_conn.objs
+    def liabs(self) -> ObjList[Liab]:
+        return self._liabs
 
     @property
     def total_asset_cash_flow(self) -> float:
@@ -122,31 +121,31 @@ class Fund:
         if existing_assets is None:
             pass
         elif isinstance(existing_assets, list):
-            self._asset_conn.extend(existing_assets)
+            self._assets.extend(existing_assets)
         else:
-            self._asset_conn.append(existing_assets)
+            self._assets.append(existing_assets)
 
         if existing_liabs is None:
             pass
         elif isinstance(existing_liabs, list):
-            self._liab_conn.extend(existing_liabs)
+            self._liabs.extend(existing_liabs)
         else:
-            self._liab_conn.append(existing_liabs)
+            self._liabs.append(existing_liabs)
 
         # validate if any duplicate asset objects
-        assets_set = set(self._asset_conn.objs)
-        if len(self._asset_conn) != len(assets_set):
-            dup_lst = [x for x in assets_set if self._asset_conn.count(x) > 1]
+        assets_set = set(self._assets)
+        if len(self._assets) != len(assets_set):
+            dup_lst = [x for x in assets_set if self._assets.count(x) > 1]
             warnings.warn(f"{dup_lst} duplicate asset objects, including '{dup_lst[:min(5, len(dup_lst))]}'.")
 
         # validate if any duplicate liability objects
-        liabs_set = set(self._liab_conn.objs)
-        if len(self._liab_conn) != len(liabs_set):
-            dup_lst = [x for x in liabs_set if self._liab_conn.count(x) > 1]
+        liabs_set = set(self._liabs)
+        if len(self._liabs) != len(liabs_set):
+            dup_lst = [x for x in liabs_set if self._liabs.count(x) > 1]
             warnings.warn(f"{dup_lst} duplicate liability objects, including '{dup_lst[:min(5, len(dup_lst))]}'.")
 
         # validate if any profile asset objects
-        for asset in self._asset_conn:
+        for asset in self._assets:
             if asset.is_profile:
                 warnings.warn(f"Unexpected profile asset '{asset}'")
 
@@ -162,7 +161,7 @@ class Fund:
     def _get_primary_cash_asset(self) -> Cash | None:
         if self._primary_cash_asset is None or not self._primary_cash_asset.is_alive:
             self._primary_cash_asset = None
-            for asset in self._asset_conn:
+            for asset in self._assets:
                 if isinstance(asset, Cash) and asset.is_alive:
                     self._primary_cash_asset = asset
                     break
@@ -221,11 +220,11 @@ class Fund:
         if "." not in key:
             return getattr(self, key, 0.0 if allow_not_exist else None)
 
-        conn, name, *_ = key.split(".")
-        if conn in ("asset", "assets"):
-            return self._asset_conn.sum_attr(name, allow_not_exist=allow_not_exist)
-        elif conn in ("liab", "liabs", "liability", 'liabilities'):
-            return self._liab_conn.sum_attr(name, allow_not_exist=allow_not_exist)
+        obj_name, attr_name, *_ = key.split(".")
+        if obj_name in ("asset", "assets"):
+            return self._assets.sum_attr(attr_name, allow_not_exist=allow_not_exist)
+        elif obj_name in ("liab", "liabs", "liability", 'liabilities'):
+            return self._liabs.sum_attr(attr_name, allow_not_exist=allow_not_exist)
         else:
             raise ValueError(f"Invalid '{key}', expected 'asset.attr' or 'liab.attr'.")
 

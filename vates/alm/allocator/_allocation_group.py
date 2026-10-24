@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from vates.alm.assets import Asset
-from vates.alm._utils import Connector
+from vates.alm._utils import ObjList
 from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, RebalanceSizeKind
 
 
@@ -151,15 +151,15 @@ class _AllocationGroup:
     """Asset allocation group.
     """
 
-    __slots__ = ("name", "strategy", "rebalance_preference", "purchase_method", "purchase_method", "priority",
-                 "exist_conn", "profile_conn", "staged_conn", "size_basis", "size_triplet",
+    __slots__ = ("name", "strategy", "rebalance_preference", "purchase_method", "priority",
+                 "exist", "profile", "staged", "size_basis", "size_triplet",
                  "profile_size", "_trade_orders", "_free_proceeds")
 
     def __init__(
         self,
         *,
         name: str,
-        exist_assets: Connector[Asset] | list[Asset],
+        exist_assets: ObjList[Asset],
         strategy: AssetAllocationStrategy,
         weight_triplet: tuple[float, float, float] | None,
         rebalance_preference: RebalancePreference,
@@ -167,34 +167,26 @@ class _AllocationGroup:
         priority: int,
         total_size: float,
         size_basis: str,
-        profile_assets: Connector[Asset] | list[Asset] | None,
+        profile_assets: ObjList[Asset] | None,
     ):
         self.name: str = name
-        if isinstance(exist_assets, Connector):
-            self.exist_conn: Connector[Asset] = exist_assets
-        elif isinstance(exist_assets, list):
-            self.exist_conn: Connector[Asset] = Connector(exist_assets)
-        else:
-            raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('Connector', 'list').")
+        if not isinstance(exist_assets, list):
+            raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('ObjList', 'list').")
+        self.exist: ObjList[Asset] = ObjList[Asset](exist_assets)
         self.strategy: AssetAllocationStrategy = strategy
         self.rebalance_preference: RebalancePreference = rebalance_preference
         self.purchase_method: AssetPurchaseMethod = purchase_method
         self.priority: int = priority
 
         self.size_basis: str = size_basis
-        if isinstance(profile_assets, Connector):
-            self.profile_conn: Connector[Asset] = profile_assets
-        elif isinstance(profile_assets, list):
-            self.profile_conn: Connector[Asset] = Connector(profile_assets)
-        elif profile_assets is None:
-            self.profile_conn: Connector[Asset] = Connector()
-        else:
-            raise TypeError(f"Invalid type of 'profile_assets': {type(profile_assets)}, expected ('Connector', 'list').")
+        if profile_assets is not None and not isinstance(profile_assets, list):
+            raise TypeError(f"Invalid type of 'profile_assets': {type(profile_assets)}, expected ('ObjList', 'list').")
+        self.profile: ObjList[Asset] = ObjList[Asset](profile_assets or [])
 
         self.size_triplet: tuple[float, float, float] = self._compute_size_triplet(total_size, weight_triplet)
-        self.profile_size: float = self.profile_conn.sum_attr(self.size_basis) if self.profile_conn is not None else 0.0
+        self.profile_size: float = self.profile.sum_attr(self.size_basis)
 
-        self.staged_conn: Connector[Asset] = Connector[Asset]()
+        self.staged: ObjList[Asset] = ObjList[Asset]()
         self._trade_orders: list[TradeOrder] = []
         self._free_proceeds: float = 0.0
 
@@ -202,9 +194,9 @@ class _AllocationGroup:
         if self.strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
             if self.purchase_method == AssetPurchaseMethod.NOT_USED:
                 raise ValueError(f"'{self.name}': '{self.strategy.name}'; 'purchase_method' is 'NOT_USED'.")
-            if self.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and len(self.exist_conn) == 0:
+            if self.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and len(self.exist) == 0:
                 raise ValueError(f"'{self.name}': 'SCALE_UP_EXISTING'; no existing asset.")
-            if self.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and len(self.profile_conn) == 0:
+            if self.purchase_method == AssetPurchaseMethod.PURCHASE_PROFILE and len(self.profile) == 0:
                 raise ValueError(f"'{self.name}': 'PURCHASE_PROFILE';  no profile asset.")
 
     def _compute_size_triplet(self, total_size: float, weight_triplet: tuple[float, float, float] | None
@@ -233,15 +225,15 @@ class _AllocationGroup:
 
     @property
     def exist_size(self) -> float:
-        return self.exist_conn.sum_attr(self.size_basis)
+        return self.exist.sum_attr(self.size_basis)
 
     @property
     def exist_market_value(self) -> float:
-        return self.exist_conn.sum_attr("market_value")
+        return self.exist.sum_attr("market_value")
 
     @property
     def staged_size(self) -> float:
-        return self.staged_conn.sum_attr(self.size_basis)
+        return self.staged.sum_attr(self.size_basis)
 
     @property
     def preferred_size(self) -> float | None:
@@ -369,24 +361,24 @@ class _AllocationGroup:
             warnings.warn("BuySellAction is EXCEPTION.")
             pass
         elif action == BuySellAction.SELL:
-            for asset in self.exist_conn:
+            for asset in self.exist:
                 mv_bd = asset.market_value
                 func = getattr(asset, action.value)
                 func(propn=arg)
                 mv_ad = asset.market_value
                 net_proceeds += mv_bd - mv_ad
         elif action == BuySellAction.BUY_EXIST:
-            for asset in self.exist_conn:
+            for asset in self.exist:
                 mv_bd = asset.market_value
                 func = getattr(asset, action.value)
                 func(propn=arg)
                 mv_ad = asset.market_value
                 net_proceeds += mv_bd - mv_ad
         elif action == BuySellAction.BUY_PROFILE:
-            for profile_asset in self.profile_conn:
+            for profile_asset in self.profile:
                 func = getattr(profile_asset, action.value)
                 new_asset = func(scale=arg)
-                self.staged_conn.append(new_asset) # append to asset list of the staged
+                self.staged.append(new_asset) # append to asset list of the staged
                 net_proceeds -= new_asset.market_value
 
         self._free_proceeds += net_proceeds
