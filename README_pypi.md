@@ -73,7 +73,7 @@ def my_projection(m: ProjModelEngine):
     t = m.time
     p = m.period
     if t == 0:
-        const_var[...] = m.START_YEAR * 100 + m.START_MONTH
+        const_var.result = m.START_YEAR * 100 + m.START_MONTH
     tdim_var[t] = p.year * 100 + p.month + t / 100
 
 model.run()

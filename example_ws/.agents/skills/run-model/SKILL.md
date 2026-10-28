@@ -1,6 +1,7 @@
 ---
 name: run-model
-description: Run an actuarial model. Use when asked to run, execute, simulate, or perform a projection with an actuarial model in this workspace.
+description: Run an actuarial model. Use when asked to run, execute, or perform a projection with an actuarial model in this workspace.
+user-invocable: true
 ---
 
 # Run an actuarial model
@@ -21,7 +22,7 @@ For the selected model, resolve `script_path` as absolute or relative to `<WORKS
 
 ### Step 2: Collect run configuration
 
-Use the selected model's `run_config_json_schema` in `MANIFEST`. Resolve every property as follows: for a required property, ask the user to provide a value, present `default` to the user for reference if it has; for an optional property, ask whether they want to provide it or omit it.
+Use the selected model's `run_config_json_schema` in `MANIFEST`. Resolve every property as follows: for a required property, ask the user to provide a value, present `default` to the user for reference when it has; for an optional property, ask whether they want to provide it or omit it.
 
 Collect required values first, then discuss optional values. Two properties require special handling: if `properties` includes `workspace_directory`, set it to `<WORKSPACE>` without asking; if `properties` includes `results_directory` and the user provides a value, conventionally the value is expected to start with `results/` (i.e. a sub-directory inside `results/`), if not so ask the user whether `results/` should be prefixed. Validate supplied values against the declared types and constraints, including `minimum`, `maximum`, `enum`, and `items`; do not silently coerce invalid values. If a value is invalid, explain why and ask the user to correct it before proceeding.
 

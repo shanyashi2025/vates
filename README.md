@@ -9,10 +9,11 @@ Open-source Python packages and example implementations for actuarial models.
 ├── vates/                  # The core package
 ├── docs/                   # Project documentation
 ├── example_ws/             # Example workspace
+│   ├── .agents/skills      # Agent skills             
 │   ├── models/             # Source code of example models and bespoke package(s)
 │   ├── inputs/             # Example input data (tables) associated with the models
 │   ├── runs/               # Example run configurations (json file)
-│   └── manifest.json       # Workspace manifest file for use with Agents and GUI (`gui/core/workspace.py`) 
+│   └── manifest.json       # Workspace manifest file for use with Agent skills and GUI (`gui/core/workspace.py`) 
 ├── lite_use_cases/         # Example lite use cases
 ├── tests/                  # Test-suite
 └── gui/                    # GUI built on streamlit
@@ -120,7 +121,7 @@ def my_projection(m: ProjModelEngine):
     t = m.time
     p = m.period
     if t == 0:
-        const_var[...] = m.START_YEAR * 100 + m.START_MONTH
+        const_var.result = m.START_YEAR * 100 + m.START_MONTH
     tdim_var[t] = p.year * 100 + p.month + t / 100
 
 model.run()
@@ -336,3 +337,16 @@ cd path\to\example_ws
 - If `start.bat` reports Python is missing, install Python and tick **Add python.exe to PATH**.
 - If the page shows an old version error, delete the `.venv` folder and run `start.bat` again
   to reinstall dependencies.
+
+
+### **E. Agent Skills**
+
+Work from the **<example_ws>**.
+
+Currently, the `.agents/skills` has a skill `run-model`. The agent can assist you with setting 
+up the virtual environment (if no existing), preparing the run configuration, and executing 
+the PowerShell command to run the model.
+
+Ask your AI assistant to run a model, the agent will dynamically detect and load the skill; 
+you can also invoke it directly from the chat box or command menu (for example, by typing 
+`/` or `$`, or referencing the skill name).
