@@ -3,6 +3,7 @@ import glob
 import inspect
 import json
 import os
+import sys
 import pandas as pd
 import traceback
 import warnings
@@ -400,7 +401,7 @@ class StochExecutor:
             "COMPUTERNAME": os.getenv("COMPUTERNAME"),
             "USERNAME": os.getenv("USERNAME"),
             "USERDOMAIN": os.getenv("USERDOMAIN"),
-            "VIRTUAL_ENV": os.getenv("VIRTUAL_ENV"),
+            "INTERPRETER": sys.executable,
         }
 
     @property
