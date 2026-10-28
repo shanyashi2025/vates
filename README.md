@@ -12,8 +12,8 @@ Open-source Python packages and example implementations for actuarial models.
 │   ├── models/             # Source code of example models and bespoke package(s)
 │   ├── inputs/             # Example input data (tables) associated with the models
 │   ├── runs/               # Example run configurations (json file)
-│   ├── simple_use_cases/   # Example use cases
-│   └── manifest.json       # Workspace manifest file for use with GUI (specifically, `gui/core/workspace.py`)
+│   └── manifest.json       # Workspace manifest file for use with Agents and GUI (`gui/core/workspace.py`) 
+├── lite_use_cases/         # Example lite use cases
 ├── tests/                  # Test-suite
 └── gui/                    # GUI built on streamlit
 ```

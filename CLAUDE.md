@@ -23,7 +23,7 @@ stochastic (Monte Carlo) solvency capital measurement. Depends on `numpy` and `p
   consumed by `main()` via `json.load(sys.argv[1])` (function `run_with_json_config`). 
   Other example models: `01_asset_proj_top`, `02_fund_proj`, `03_cross_proj`, `11_monte_carlo`, `12_stoch_ec_mvl`.
 
-- **Other use cases:** standalone scripts under `lite_use_cases`
+- **Lite use cases:** standalone scripts under `lite_use_cases`
   (`02_Black_Scholes_Option_Pricing_Model`, `01_efficient_frontier`, `03_interest_rate_term_structure`),
   each with its own `main.py`.
 
