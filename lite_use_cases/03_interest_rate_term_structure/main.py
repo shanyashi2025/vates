@@ -22,7 +22,7 @@ def main():
         params_dict = json.load(file)
 
     for key, params in params_dict.items():
-        method = params["method"]
+        method = params["extrap_method"]
         if method == "eiopa_alternative":
             params["llfr_weight"] = {(item["x"], item["y"]): item["w"] for item in params["llfr_weight"]}
         rates_out = extrapolate_interest_rates(rates_in, **params)
@@ -52,7 +52,7 @@ def main():
             plt.yticks(fontsize=6)
             plt.xlabel("Maturity (Years)", fontsize=7)
             plt.ylabel("Interest Rate (%)", fontsize=7)
-            plt.title(f"Interest Rate Extrapolation - {params["method"]} : {key}", fontsize=8)
+            plt.title(f"Interest Rate Extrapolation - {params["extrap_method"]} : {key}", fontsize=8)
 
             plt.legend()
             plt.grid(True, alpha=0.3)

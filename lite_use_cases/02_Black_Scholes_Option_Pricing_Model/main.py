@@ -41,7 +41,7 @@ def main():
     ax.set_xlabel('Spot Price (S)', labelpad=10)
     ax.set_ylabel('Time to Expiry (T)', labelpad=10)
     ax.set_zlabel('Call Option Value', labelpad=10)
-    ax.set_title(f'Call Option Value (Black-Scholes)\n(K={K:.2f}, r={r:.2%}, $\sigma$={sigma:.2%})', fontsize=13, pad=15)
+    ax.set_title(f'Call Option Value (Black-Scholes)\n(K={K:.2f}, r={r:.2%}, $\\sigma$={sigma:.2%})', fontsize=13, pad=15)
 
     ax.set_xlim(80, 120)
     ax.set_ylim(0, 1)
