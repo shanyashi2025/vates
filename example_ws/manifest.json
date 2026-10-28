@@ -15,8 +15,7 @@
                     "start_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2099,
-                        "default": 2024
+                        "maximum": 2099
                     },
                     "start_month": {
                         "type": "integer",
@@ -25,8 +24,7 @@
                     "end_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2599,
-                        "default": 2026
+                        "maximum": 2599
                     },
                     "scenario": {
                         "type": "string",
@@ -49,7 +47,7 @@
             "notes": ""
         },
         {
-            "name": "Asset Model (v2)",
+            "name": "Asset Model (alternative)",
             "description": "Asset projection model - top-level wrapper",
             "script_path": "models/01_asset_proj-top.py",
             "run_config_json_schema": {
@@ -63,8 +61,7 @@
                     "start_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2099,
-                        "default": 2024
+                        "maximum": 2099
                     },
                     "start_month": {
                         "type": "integer",
@@ -73,8 +70,7 @@
                     "end_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2599,
-                        "default": 2026
+                        "maximum": 2599
                     },
                     "scenario": {
                         "type": "string",
@@ -111,8 +107,7 @@
                     "start_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2099,
-                        "default": 2024
+                        "maximum": 2099
                     },
                     "start_month": {
                         "type": "integer",
@@ -121,8 +116,7 @@
                     "end_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2599,
-                        "default": 2026
+                        "maximum": 2599
                     },
                     "scenario": {
                         "type": "string",
@@ -159,8 +153,7 @@
                     "start_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2099,
-                        "default": 2024
+                        "maximum": 2099
                     },
                     "start_month": {
                         "type": "integer",
@@ -169,8 +162,7 @@
                     "end_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2599,
-                        "default": 2026
+                        "maximum": 2599
                     },
                     "scenario": {
                         "type": "string",
@@ -207,8 +199,7 @@
                     "start_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2099,
-                        "default": 2024
+                        "maximum": 2099
                     },
                     "start_month": {
                         "type": "integer",
@@ -217,8 +208,7 @@
                     "end_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2599,
-                        "default": 2026
+                        "maximum": 2599
                     },
                     "scenario": {
                         "type": "string",
@@ -265,8 +255,7 @@
                     "start_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2099,
-                        "default": 2024
+                        "maximum": 2099
                     },
                     "start_month": {
                         "type": "integer",
@@ -275,8 +264,7 @@
                     "end_year": {
                         "type": "integer",
                         "minimum": 1999,
-                        "maximum": 2599,
-                        "default": 2026
+                        "maximum": 2599
                     },
                     "scenario": {
                         "type": "string",
@@ -289,7 +277,6 @@
                     "max_workers": {
                         "type": "integer",
                         "minimum": 1,
-                        "default": 1,
                         "description": "Max number of workers (CPU)"
                     },
                     "input_directories": {
