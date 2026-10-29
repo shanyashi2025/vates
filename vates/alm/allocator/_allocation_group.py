@@ -2,6 +2,7 @@ import warnings
 from dataclasses import dataclass
 from enum import Enum
 
+from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 from vates.alm.assets import Asset
 from vates.alm._utils import ObjList
 from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, RebalanceSizeKind
@@ -184,7 +185,7 @@ class _AllocationGroup:
         self.profile: ObjList[Asset] = ObjList[Asset](profile_assets or [])
 
         self.size_triplet: tuple[float, float, float] = self._compute_size_triplet(total_size, weight_triplet)
-        self.profile_size: float = self.profile.sum_attr(self.size_basis)
+        self.profile_size: float = self.profile.sum_attr(self.size_basis, allow_not_exist=GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS)
 
         self.staged: ObjList[Asset] = ObjList[Asset]()
         self._trade_orders: list[TradeOrder] = []
@@ -225,15 +226,15 @@ class _AllocationGroup:
 
     @property
     def exist_size(self) -> float:
-        return self.exist.sum_attr(self.size_basis)
+        return self.exist.sum_attr(self.size_basis, allow_not_exist=GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS)
 
     @property
     def exist_market_value(self) -> float:
-        return self.exist.sum_attr("market_value")
+        return self.exist.sum_attr("market_value", allow_not_exist=GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS)
 
     @property
     def staged_size(self) -> float:
-        return self.staged.sum_attr(self.size_basis)
+        return self.staged.sum_attr(self.size_basis, allow_not_exist=GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS)
 
     @property
     def preferred_size(self) -> float | None:

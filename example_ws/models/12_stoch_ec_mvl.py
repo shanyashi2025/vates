@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from packaging import version
 from vates import StochExecutor, ProjModelEngine, make_proj_variable
 from vates.utils import KeyedArray
 from company_package import (
@@ -21,9 +20,6 @@ try:
 except ImportError as e:
     raise ImportError(f"need to install `pyarrow` library (pip install pyarrow)") from e
 
-if version.parse(pd.__version__) >= version.parse("3.0.0"):
-    print(f"pandas version is {pd.__version__}, scalar access (e.g. `df.at`, `df.loc`) might be slower compared to "
-          f"2.3.x. To install a specific version, use `pip install pandas==2.3.3`.")
 
 def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str, assets_df_dict: dict,
                     liabs_df: pd.DataFrame, funds_df: pd.DataFrame, asset_allocation_groups_df: pd.DataFrame,
