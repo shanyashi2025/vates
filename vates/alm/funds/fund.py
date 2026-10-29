@@ -245,35 +245,32 @@ class Fund:
         else:
             warnings.warn(f"Cash asset is neither provided nor found in existing assets.")
 
-    def take_out_free_proceeds(self, *, transfer_to: Self | None = None) -> float:
-        """Transfer free proceeds to the other fund.
-
-        Args:
-            transfer_to (Self | None): Fund to receive proceeds (usually shareholder fund), defaults to None.
+    def take_out_free_proceeds(self) -> float:
+        """Take out all the free proceeds.
 
         Returns:
-            float: The free proceeds taken out; return 0.0 if a `transfer_to` is provided.
+            float: The free proceeds taken out.
         """
-        if transfer_to is self:
-            raise ValueError(f"{self.fund_id}: cann't transfer to self.")
-
         amount = self._free_proceeds_keeper.take_out()
-        self._other_rec.record_free_proceeds_transfer(- amount)
-
-        if isinstance(transfer_to, Fund):
-            transfer_to.receive_free_proceeds(amount)
-            return 0.0
-
+        self._other_rec.record_free_proceeds_transfer(-amount)
         return amount
 
     def receive_free_proceeds(self, amount: float, /) -> None:
         """Receive free proceeds.
 
         Args:
-            amount (float): Amount to receive (can be either positive ornegative).
+            amount (float): Amount to receive, usually positive but negative is acceptable.
         """
         self._free_proceeds_keeper += amount
         self._other_rec.record_free_proceeds_transfer(amount)
+
+    def consume_free_proceeds(self, amount: float, /) -> None:
+        """Consume free proceeds.
+
+        Args:
+            amount (float): Amount to consume, usually positive but negative is acceptable.
+        """
+        self.receive_free_proceeds(-amount)
 
     def pay_tax(self, amount: float, /) -> None:
         self._free_proceeds_keeper -= amount
