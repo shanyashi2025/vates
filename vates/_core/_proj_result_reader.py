@@ -2,7 +2,7 @@ import pandas as pd
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import overload
+from typing import Any, overload
 
 @overload
 def proj_result(
@@ -32,7 +32,7 @@ def proj_result(
     owner: str | None = None,
     variable: str | None = None,
     date: str | int | pd.Period | None = None,
-) -> pd.DataFrame | float:
+) -> pd.DataFrame | Any:
 
     df = ProjResultFileReader.load_proj_result(Path(results_directory) / f"{slug}.proj.csv")
 

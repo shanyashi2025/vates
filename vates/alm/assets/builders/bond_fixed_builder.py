@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import pandas as pd
 import warnings
@@ -11,8 +12,10 @@ from vates.alm.assets.bond_fixed import BondFixed
 from vates.alm.assets._bond_fixed_component import (
     BondFixedParameters, BondFixedCashFlowGenerator, BondFixedCashFlowProvider, BondFixedPricer
 )
-from vates.alm.assets._utils import calculate_risk_adj_spot
+from vates.alm.assets._utils import calculate_risk_adjusted_spot_rates
 
+
+_MISSING: object = object()
 
 @time_synchronized("model_engine.time_synchronizer")
 class BondFixedBuilder:
@@ -33,7 +36,7 @@ class BondFixedBuilder:
         maturity_date: pd.Period,
         coupon_freq: int,
         face_value: float,
-        rf_curve: YieldCurve | None,
+        rf_curve: YieldCurve,
         credit_band: CreditBand | None,
         is_profile: bool,
         attr_aliases: Mapping[str, str] | None = None,
@@ -71,7 +74,7 @@ class BondFixedBuilder:
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
-        self.attr_aliases: Mapping[str, str] = attr_aliases
+        self.attr_aliases: Mapping[str, str] | None = attr_aliases
         self.currency: Currency = currency
         self.units: float = units
         self.issue_date: pd.Period = issue_date
@@ -91,33 +94,76 @@ class BondFixedBuilder:
         self.mv_price: float | None = mv_price
         self.market_spread: float | None = market_spread
 
+    @property
+    def _params(self) -> BondFixedParameters:
+        if self.coupon_rate is None:
+            raise ValueError(f'{self.asset_id}: coupon_rate not specified.')
+        return BondFixedParameters(
+            issue_date=self.issue_date,
+            maturity_date=self.maturity_date,
+            coupon_rate=self.coupon_rate,
+            coupon_freq=self.coupon_freq,
+            face_value=self.face_value,
+        )
+
+    def _make_cash_flow_gen(self, params: BondFixedParameters | object = _MISSING
+                            ) -> BondFixedCashFlowGenerator | BondFixedCashFlowProvider:
+        if params is _MISSING:
+            params = self._params
+        if self.provided_cash_flow_dict is None:
+            return BondFixedCashFlowGenerator(params)
+        else:
+            return BondFixedCashFlowProvider(params, self.provided_cash_flow_dict)
+
+    def _make_cash_flow(self, params: BondFixedParameters | object = _MISSING) -> np.ndarray:
+        if params is _MISSING:
+            params = self._params
+        cash_flow_gen = self._make_cash_flow_gen(params=params)
+        cash_flows = cash_flow_gen.get_future_cash_flows(self.period)
+        if cash_flows is None:
+            raise ValueError(f'{self.asset_id}: cash_flows (future) is None, bond has already matured.')
+        return cash_flows
+
+    def _make_pricer(self, params: BondFixedParameters | object = _MISSING) -> BondFixedPricer:
+        if params is _MISSING:
+            params = self._params
+        return BondFixedPricer(cash_flow_generator=self._make_cash_flow_gen(params=params))
+
+    @property
+    def _rf_spot_rates(self) -> np.ndarray:
+        return self.rf_curve.spot_rates
+
+    def _make_ra_spot_rates(self, credit_band: CreditBand | object = _MISSING,
+                            market_spread: float | object = _MISSING) -> np.ndarray:
+        if credit_band is _MISSING:
+            credit_band = self.credit_band
+        if market_spread is _MISSING:
+            market_spread = self.market_spread
+        if market_spread is None:
+            raise ValueError(f'{self.asset_id}: market_spread not specified.')
+        if credit_band:
+            return calculate_risk_adjusted_spot_rates(rf_spots=self._rf_spot_rates, mult=credit_band.credit_spotmult,
+                                                      add=credit_band.credit_spread + market_spread)
+        else:
+            return self._rf_spot_rates + market_spread
+
     def derive_coupon_rate(self) -> Self:
         """
         Derive coupon rate based on yields at the point of purchase, assuming bond is purchased at par.
         """
-        if self.coupon_freq != 0:
-            if self.market_spread is None:
-                self.market_spread = 0
-                warnings.warn(f'{self.asset_id}: market_spread not specified, set to 0.')
-
-            rf_spots = self.rf_curve.spot_rates
-
-            if self.credit_band:
-                spots = calculate_risk_adj_spot(
-                    rf_spots=rf_spots,
-                    mult=self.credit_band.credit_spotmult,
-                    add=self.credit_band.credit_spread + self.market_spread
-                )
-            else:
-                spots = rf_spots + self.market_spread
-
-            n_months = (self.maturity_date - self.issue_date).n
-            par_yield = convert_interest_rates(
-                spots, interval_unit="M", from_what="spot", to_what="par", coupon_frequency=self.coupon_freq)[n_months]
-            self.coupon_rate = float(par_yield)
-
-        else:  # coupon_freq == 0
+        if self.coupon_freq == 0:
             self.coupon_rate = 0.0
+            return self
+
+        if self.market_spread is None:
+            self.market_spread = 0.0
+            warnings.warn(f'{self.asset_id}: market_spread not specified, set to 0.')
+
+        spots = self._make_ra_spot_rates()
+        n_months = (self.maturity_date - self.issue_date).n
+        par_yield = convert_interest_rates(
+            spots, interval_unit="M", from_what="spot", to_what="par", coupon_frequency=self.coupon_freq)[n_months]
+        self.coupon_rate = float(par_yield)
 
         return self
 
@@ -127,28 +173,12 @@ class BondFixedBuilder:
         """
         if self.abv_price is None:
             raise ValueError('abv_price need to be set first.')
-
-        bond_params = BondFixedParameters(
-            issue_date=self.issue_date,
-            maturity_date=self.maturity_date,
-            coupon_rate=self.coupon_rate,
-            coupon_freq=self.coupon_freq,
-            face_value=self.face_value,
-        )
-
-        if self.provided_cash_flow_dict is None:
-            cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
-        else:
-            cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
-
-        freq = 1 if self.coupon_freq == 0 else self.coupon_freq  # 1 for zero coupon bond
         self.amort_rate = solve_ytm(
             target_pv=self.abv_price,
-            cash_flows=cash_flow_gen.get_future_cash_flows(self.period),
-            freq=freq,
-            initial_guess=self.coupon_rate
+            cash_flows=self._make_cash_flow(),
+            freq=1 if self.coupon_freq == 0 else self.coupon_freq,  # 1 for zero coupon bond
+            initial_guess=self.coupon_rate or 0.0
         )
-
         return self
 
     def calibrate_market_spread(self) -> Self:
@@ -157,104 +187,37 @@ class BondFixedBuilder:
         """
         if self.mv_price is None:
             raise ValueError('mv_price need to be set first.')
-        rf_spots = self.rf_curve.spot_rates
-
-        if self.credit_band:
-            spots = calculate_risk_adj_spot(
-                rf_spots=rf_spots,
-                mult=self.credit_band.credit_spotmult,
-                add=self.credit_band.credit_spread
-            )
-        else:
-            spots = rf_spots
-
-        bond_params = BondFixedParameters(
-            issue_date=self.issue_date,
-            maturity_date=self.maturity_date,
-            coupon_rate=self.coupon_rate,
-            coupon_freq=self.coupon_freq,
-            face_value=self.face_value,
-        )
-
-        if self.provided_cash_flow_dict is None:
-            cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
-        else:
-            cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
-
         self.market_spread = solve_z_spread(
             target_pv=self.mv_price,
-            cash_flows=cash_flow_gen.get_future_cash_flows(self.period),
-            spots=spots
+            cash_flows=self._make_cash_flow(),
+            spots=self._make_ra_spot_rates(market_spread=0.0)
         )
-
         return self
 
     def calculate_market_price(self) -> Self:
         """
         Calculate the market price using the set market spread.
         """
-        if self.market_spread is None: raise ValueError('market_spread need to be set first.')
-
-        rf_spots = self.rf_curve.spot_rates
-        if self.credit_band:
-            spots = calculate_risk_adj_spot(
-                rf_spots=rf_spots,
-                mult=self.credit_band.credit_spotmult,
-                add=self.credit_band.credit_spread + self.market_spread
-            )
-        else:
-            spots = rf_spots + self.market_spread
-
-        bond_params = BondFixedParameters(
-            issue_date=self.issue_date,
-            maturity_date=self.maturity_date,
-            coupon_rate=self.coupon_rate,
-            coupon_freq=self.coupon_freq,
-            face_value=self.face_value,
-        )
-        if self.provided_cash_flow_dict is None:
-            cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
-        else:
-            cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
-        pricer = BondFixedPricer(cash_flow_gen)
-
-        self.mv_price = pricer.calculate_market_price(self.period, spots)
-
+        pricer = self._make_pricer()
+        self.mv_price = pricer.calculate_market_price(self.period, spots=self._make_ra_spot_rates())
         return self
 
-    def risk_neutralization(self) -> Self:
+    def risk_neutralize(self) -> Self:
         """
         Set market spread to zero and goal seek the face value that gives market price.
         """
-        if self.mv_price is None: raise ValueError('mv_price need to be set first.')
+        self.market_spread = 0.0
+        return self.calibrate_face_value()
 
-        self.market_spread = 0
-        rf_spots = self.rf_curve.spot_rates
-        if self.credit_band:
-            spots = calculate_risk_adj_spot(
-                rf_spots=rf_spots,
-                mult=self.credit_band.credit_spotmult,
-                add=self.credit_band.credit_spread
-            )
-        else:
-            spots = rf_spots
-
-        bond_params = BondFixedParameters(
-            issue_date=self.issue_date,
-            maturity_date=self.maturity_date,
-            coupon_rate=self.coupon_rate,
-            coupon_freq=self.coupon_freq,
-            face_value=self.face_value,
-        )
-        if self.provided_cash_flow_dict is None:
-            cash_flow_gen = BondFixedCashFlowGenerator(bond_params)
-        else:
-            cash_flow_gen = BondFixedCashFlowProvider(bond_params, self.provided_cash_flow_dict)
-        pricer = BondFixedPricer(cash_flow_gen)
-
-        calc_price = pricer.calculate_market_price(self.period, spots)  # typically > mv_price if market_spread > 0
-        self.face_value *= self.mv_price / calc_price  # scale face_value that gives mv_price
-
+    def calibrate_face_value(self) -> Self:
+        """
+        Goal seek the face value that makes the market price.
+        """
+        if self.mv_price is None:
+            raise ValueError('mv_price need to be set first.')
+        pricer = self._make_pricer()
+        calc_price = pricer.calculate_market_price(self.period, spots=self._make_ra_spot_rates())
+        self.face_value *= self.mv_price / calc_price  # scale face_value that makes mv_price
         return self
 
     def build(self, pipeline: str | list[str] | None = None, pipe_operator: str = "|>") -> BondFixed:
@@ -284,21 +247,23 @@ class BondFixedBuilder:
                 elif step in ('derive_coupon_rate', 'calculate_coupon_rate', 'coupon_rate'):
                     self.derive_coupon_rate()
                 elif step in ('risk_neutralization', 'risk_neutralize'):
-                    self.risk_neutralization()
+                    self.risk_neutralize()
+                elif step in ('calibrate_face_value', 'face_value'):
+                    self.calibrate_face_value()
                 else:
                     warnings.warn(f"{type(self).__name__}: '{step}' is ignored as no method matches.")
 
         # Validate required data
+        if self.coupon_rate is None: raise ValueError("coupon_rate is not yet set.")
         if self.mv_price is None: raise ValueError("mv_price is not yet set.")
         if self.market_spread is None: raise ValueError("market_spread is not yet set.")
         if self.abv_price is None: raise ValueError("abv_price is not yet set.")
         if self.amort_rate is None: self.calculate_amort_rate()
 
         # Validate initial price
-        tolerance = max(self.mv_price * 1e-6, self.abv_price * 1e-6, 1e-8)
-        if self.is_profile and abs(self.abv_price - self.mv_price) > tolerance:
+        if self.is_profile and not math.isclose(self.abv_price, self.mv_price, rel_tol=1e-6, abs_tol=1e-8):
             raise ValueError(f'Bond {self.asset_id} at {self.period}: abv_price != mv_price at purchase, '
-                             f'abv={self.abv_price:.4f}, mv={self.mv_price:.4f}')
+                             f'abv={self.abv_price}, mv={self.mv_price}')
 
         # Validate timing constraints
         if not self.is_profile and self.issue_date > self.period:

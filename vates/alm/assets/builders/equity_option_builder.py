@@ -61,7 +61,7 @@ class EquityOptionBuilder:
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
-        self.attr_aliases: Mapping[str, str] = attr_aliases
+        self.attr_aliases: Mapping[str, str] | None = attr_aliases
         self.currency: Currency = currency
         self.is_profile: bool = is_profile
         self.call_or_put: CallOrPut = call_or_put
@@ -85,6 +85,8 @@ class EquityOptionBuilder:
         """
         Calculate the market price using the volatility (standard deviation).
         """
+        if self.std_dev is None:
+            raise ValueError('std_dev is not yet set.')
         self.price = BlackScholesCalculator.price(
             call_or_put=self.call_or_put, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
@@ -98,6 +100,8 @@ class EquityOptionBuilder:
         """
         Calculate the implied volatility.
         """
+        if self.price is None:
+            raise ValueError('price is not yet set.')
         self.std_dev = BlackScholesCalculator.implied_volatility(
             call_or_put=self.call_or_put, price=self.price, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
@@ -107,7 +111,7 @@ class EquityOptionBuilder:
 
         return self
 
-    def risk_neutralization(self) -> Self:
+    def risk_neutralize(self) -> Self:
         return self.calibrate_implied_volatility()
 
     def build(self, pipeline: str | list[str] | None = None, pipe_operator: str = "|>") -> EquityOption:
@@ -124,12 +128,12 @@ class EquityOptionBuilder:
                 elif step in ('calibrate_implied_volatility', 'calculate_implied_volatility', 'implied_volatility'):
                     self.calibrate_implied_volatility()
                 elif step in ('risk_neutralization', 'risk_neutralize'):
-                    self.risk_neutralization()
+                    self.risk_neutralize()
                 else:
                     warnings.warn(f"{type(self).__name__}: '{step}' is ignored as no method matches.")
 
-        if self.price is None: raise RuntimeError("price is not yet set.")
-        if self.std_dev is None: raise RuntimeError("std_dev is not yet set.")
+        if self.price is None: raise ValueError("price is not yet set.")
+        if self.std_dev is None: raise ValueError("std_dev is not yet set.")
 
         return EquityOption(
             model_engine=self.model_engine,

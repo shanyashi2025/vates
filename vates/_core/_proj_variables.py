@@ -78,9 +78,9 @@ class ProjVariable(ABC):
         ...
 
     def __matmul__(self, other) -> Self:
-        attach = getattr(other, "attach_proj_variable", None)
-        if attach is not None:
-            attach(self)
+        func = getattr(other, "attach_proj_variable", None)
+        if func is not None and callable(func):
+            func(self)
         return self
 
 

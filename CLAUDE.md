@@ -83,12 +83,12 @@ High-level Asset–Liability Management building blocks that plug into the proje
   `CreditBand`, `EquityIndex`, `Currency`, `MarketInfo`. These are updated each time-step by an ESG
   master before assets roll forward.
 - **`assets/`** — asset classes (`Cash`, `Equity`, `BondFixed`, derivatives `EquityOption`) built on
-  the `Asset` abstract base. Each asset implements a `roll_forward()` / `close_dealing()` lifecycle. 
+  the `Asset` abstract base. Each asset implements a `roll_forward()` / `close_dealing()` lifecycle.
   Distinguishes *profile* (to-be-purchased) vs *existing* assets. 
-  `create_asset(cls_or_name, build_pipeline, ...)` is the factory: plain classes construct directly, 
-  while `BondFixed`/`EquityOption` route through a **builder** (`vates/alm/assets/builders/`). 
+  `create_asset(cls_or_name, build_pipeline, ...)` is the factory: plain classes construct directly,
+  while `BondFixed`/`EquityOption` route through a **builder** (`vates/alm/assets/builders/`).
   A builder performs a named `build_pipeline` of calibration steps (e.g. `derive_coupon_rate`, 
-  `calculate_amort_rate`, `calibrate_market_spread`, `calculate_market_price`, `risk_neutralization`) 
+  `calculate_amort_rate`, `calibrate_market_spread`, `calculate_market_price`, `risk_neutralize`) 
   then validates required prices/spreads before constructing the asset.
 - **`funds/`** — fund accounting (`Fund`) with an asset allocator and fund recorder (fund value,
   target weight / `AssetAllocationGroup`, `TargetWeight`).

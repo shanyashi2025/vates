@@ -2,10 +2,8 @@ import numpy as np
 import numpy.typing as npt
 
 
-from vates.utils import maybe_raise_if_ne
-
-def calculate_risk_adj_spot(rf_spots: npt.NDArray[np.float64], mult: float | npt.NDArray[np.float64],
-                            add: float | npt.NDArray[np.float64]) -> float | npt.NDArray[np.float64]:
+def calculate_risk_adjusted_spot_rates(rf_spots: npt.NDArray[np.float64], mult: float | npt.NDArray[np.float64],
+                                       add: float | npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """
     Calculate risk-adjusted spot rates: `ra = rf * (1 + mult) + add`.
 

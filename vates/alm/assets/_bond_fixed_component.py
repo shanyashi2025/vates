@@ -156,17 +156,17 @@ class BondFixedPricer:
     Handles bond pricing calculations.
 
     Attributes:
-        cash_flow_gen (BondFixedCashFlowGenerator): Cash flow generator.
+        cash_flow_gen (BondFixedCashFlowGenerator | BondFixedCashFlowProvider): Cash flow generator.
     """
 
     __slots__ = ('cash_flow_gen',)
 
-    def __init__(self, cash_flow_generator: BondFixedCashFlowGenerator):
+    def __init__(self, cash_flow_generator: 'BondFixedCashFlowGenerator | BondFixedCashFlowProvider'):
         """
         Initialize the bond pricer.
 
         Args:
-            cash_flow_generator (BondFixedCashFlowGenerator): Cash flow generator.
+            cash_flow_generator (BondFixedCashFlowGenerator | BondFixedCashFlowProvider): Cash flow generator.
         """
         self.cash_flow_gen = cash_flow_generator
 

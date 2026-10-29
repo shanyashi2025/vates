@@ -11,7 +11,7 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 from types import MethodType
-from typing import Callable, Literal, Self, get_type_hints, overload
+from typing import Any, Callable, Literal, Self, get_type_hints, overload
 
 from vates._core._proj_result_reader import proj_result
 from vates._core._proj_variables import ProjVariable, ProjVariableManager
@@ -201,7 +201,7 @@ class ProjModelEngine:
     def run(
         self,
         *,
-        projection_args: dict[str, ...] | None = None,
+        projection_args: dict[str, Any] | None = None,
     ) -> Self:
         if not hasattr(self, '_projection'):
             raise ValueError(f"Projection function has not been bound.")
@@ -236,7 +236,7 @@ class ProjModelEngine:
     def __call__(
         self,
         *,
-        projection_args: dict[str, ...] | None = None,
+        projection_args: dict[str, Any] | None = None,
     ) -> Self:
         return self.run(projection_args=projection_args)
 
@@ -333,7 +333,7 @@ class ProjModelEngine:
         self._result_files.add(output_file)
 
     @property
-    def runlog(self) -> dict[str, ...] | None:
+    def runlog(self) -> dict[str, Any] | None:
         return self._runlog
 
     def _dump_runlog(self, exec_success: bool, exec_start_time: datetime, exec_end_time: datetime) -> None:
@@ -562,7 +562,7 @@ class ProjModelEngine:
         ...
 
     def proj_result(self, *, group: str | None = None, owner: str | None = None, variable: str | None = None,
-                    date: str | int | None = None) -> pd.DataFrame | float:
+                    date: str | int | None = None) -> pd.DataFrame | Any:
         return proj_result(results_directory=self.RESULTS_DIRECTORY_PATH, slug=self.SLUG,
                            group=group, owner=owner, variable=variable, date=date)
 

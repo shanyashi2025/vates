@@ -17,7 +17,7 @@ from vates.alm.assets._bond_fixed_component import (
     BondFixedPricer,
     BondFixedRiskCalculator,
 )
-from vates.alm.assets._utils import calculate_risk_adj_spot
+from vates.alm.assets._utils import calculate_risk_adjusted_spot_rates
 
 
 class BondFixed(Asset):
@@ -204,7 +204,7 @@ class BondFixed(Asset):
         if rf_spots is None:
             raise ValueError("rf_curve.spot_rates is None. Yield curve must be initialized.")
         if self._credit_band:
-            return calculate_risk_adj_spot(
+            return calculate_risk_adjusted_spot_rates(
                 rf_spots=rf_spots,
                 mult=self._credit_band.credit_spotmult,
                 add=self._credit_band.credit_spread + self._market_spread

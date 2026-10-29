@@ -6,13 +6,12 @@ import os
 import sys
 import pandas as pd
 import traceback
-import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from itertools import batched
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Callable, Self, get_type_hints
+from typing import Any, Callable, Self, get_type_hints
 
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core._run_configuration import RunConfiguration
@@ -205,7 +204,7 @@ class StochExecutor:
     def run(
         self,
         *,
-        projection_args: dict[str, ...] | None = None,
+        projection_args: dict[str, Any] | None = None,
     ) -> Self:
         if not hasattr(self, '_projection'):
             raise ValueError(f"Projection function has not been bound.")
@@ -243,7 +242,7 @@ class StochExecutor:
         *,
         simulation_batch: tuple[int, ...],
         batch_id: str,
-        projection_args: dict[str, ...]
+        projection_args: dict[str, Any]
     ) -> tuple[bool, list, list]:
         success: bool = True
         messages: list = []
@@ -299,7 +298,7 @@ class StochExecutor:
     def _run_simulations_multiprocess(
         self,
         *,
-        projection_args: dict[str, ...]
+        projection_args: dict[str, Any]
     ) -> bool:
         n_workers = min(self._run_config.max_workers, len(self._run_config.simulations))
         simulation_batches = self._create_batches(self._run_config.simulations, n_workers)
@@ -337,21 +336,21 @@ class StochExecutor:
         time_cols = [col for col in df.columns if col not in meta_cols + ['simulation']]
 
         stat_dict = stoch_setting['statistic']
-        stat_funcs: dict[str, ...] = {stat: stat for stat in ['mean', 'std', 'median', 'max', 'min'] if stat in stat_dict}
+        stat_funcs: dict[str, Any] = {stat: stat for stat in ['mean', 'std', 'median', 'max', 'min'] if stat in stat_dict}
         if 'perc%' in stat_dict:
             for q in stat_dict['perc%']:
                 if not 0 < q < 100: raise ValueError(f"Invalidd perc%={q}, expected 0 to 100.")
                 stat_funcs[f"perc_{q}"] = lambda x, p=q: x.quantile(p / 100)
         agg_dict = {f"{col}:{stat}": (col, func) for col in time_cols for stat, func in stat_funcs.items()}
 
-        statistic = df.groupby(meta_cols).agg(**agg_dict).reset_index()  # pandas 3.3.x might raise PerformanceWarning
+        statistic = df.groupby(meta_cols).agg(**agg_dict).reset_index()  # pandas 3.3.x might warn PerformanceWarning
 
         output_file = self._concat_output_file_path('.stoch.stat.csv')
         statistic.to_csv(output_file, index=False)
         self._result_files.add(output_file)
 
     @property
-    def runlog(self) -> dict[str, ...] | None:
+    def runlog(self) -> dict[str, Any] | None:
         return self._runlog
 
     def _dump_runlog(self, exec_success: bool, exec_start_time: datetime, exec_end_time: datetime) -> None:
