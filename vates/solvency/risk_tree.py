@@ -55,7 +55,7 @@ to obtain an independent structure.
 import functools
 import numpy as np
 from dataclasses import dataclass
-from typing import Callable, Literal, Self, overload
+from typing import Any, Callable, Literal, Self, overload
 
 
 def risk_aggregation(*args, corr_matrix: np.ndarray) -> float:
@@ -139,7 +139,7 @@ class RiskNodeSpec:
     agg_func: Callable[..., float] | None = None
     agg_scope: Literal["children", "descendants"] | None = None
 
-    def to_dict(self) -> dict[str, ...]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "identifier": self.identifier,
@@ -149,7 +149,7 @@ class RiskNodeSpec:
         }
 
     @classmethod
-    def from_dict(cls, arg: dict[str, ...], /) -> Self:
+    def from_dict(cls, arg: dict[str, Any], /) -> 'RiskNodeSpec':
         return RiskNodeSpec(
             name=arg["name"],
             identifier=arg.get("identifier", None),
@@ -241,7 +241,7 @@ class RiskNode:
         return self._capital_cache
 
     @capital.setter
-    def capital(self, value: float, /) -> None:
+    def capital(self, value: float) -> None:
         if not self.is_leaf:
             raise ValueError(f"{self._name}: non-leaf node rejects set value for risk capital.")
         self._capital_cache = value
@@ -1023,7 +1023,7 @@ class RiskTree:
         """
         Provide the risk capital of the leaf node at ``key``.
 
-        See :meth:`RiskNode.set_capital` for the conditions and the
+        See :meth:`RiskNode.capital` for the conditions and the
         exceptions raised.
         """
         self.get_node(key).capital = value
