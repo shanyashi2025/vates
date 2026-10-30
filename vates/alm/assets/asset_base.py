@@ -57,7 +57,7 @@ class Asset(ABC):
             model_engine: Model engine object.
             asset_id (str): Asset identifier.
             is_profile (bool): Ture if profile asset, False if existing asset.
-            purchase_date (pd.Period): Purchase date. Set to initilization date if input is None.
+            purchase_date (pd.Period): Purchase date.
             currency (Currency): Asset currency.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute, {"MV": "market_value"}
         """

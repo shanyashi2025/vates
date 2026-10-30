@@ -64,7 +64,7 @@ def frequency_from_interval_unit(interval_unit: Literal["Y", "M"] = "Y", /) -> i
         raise ValueError(f"Invalid {interval_unit=}, expected 'Y' or 'M'.")
 
 
-def convert_interest_rates(rates: np.ndarray, /, *, interval_unit: Literal["Y", "M"] = "Y", from_what: str, to_what: str,
+def convert_interest_rates(rates: np.ndarray, /, *, interval_unit: Literal["Y", "M"] = "Y", from_kind: str, to_kind: str,
                            **kwargs) -> npt.NDArray[np.float64]:
     """
     Convert interest rates from one representation to another.
@@ -72,9 +72,9 @@ def convert_interest_rates(rates: np.ndarray, /, *, interval_unit: Literal["Y", 
     Args:
         rates (np.ndarray): Rates to convert, index `0, 1, ..., n` corresponds to term `0, 1, ..., n`.
         interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
-        from_what (str): Source representation, one of `"spot"`, `"forward"`, `"discount"`
+        from_kind (str): Source representation, one of `"spot"`, `"forward"`, `"discount"`
             (common aliases such as `"zero"` or `"spot_rates"` are accepted).
-        to_what (str): Target representation, one of `"spot"`, `"forward"`, `"discount"`, `"par"`.
+        to_kind (str): Target representation, one of `"spot"`, `"forward"`, `"discount"`, `"par"`.
         **kwargs: Extra keyword arguments forwarded to the underlying converter
             (e.g. `coupon_frequency` for par yields).
 
@@ -82,13 +82,13 @@ def convert_interest_rates(rates: np.ndarray, /, *, interval_unit: Literal["Y", 
         npt.NDArray[np.float64]: Converted rates.
 
     Raises:
-        ValueError: If `from_what`/`to_what` is unknown or the conversion is not supported.
+        ValueError: If `from_kind`/`to_kind` is unknown or the conversion is not supported.
     """
-    from_what = _normalize_rate_alias(from_what, name="from_what")
-    to_what = _normalize_rate_alias(to_what, name="to_what")
-    if from_what == to_what:
+    from_kind = _normalize_rate_alias(from_kind, name="from_kind")
+    to_kind = _normalize_rate_alias(to_kind, name="to_kind")
+    if from_kind == to_kind:
         return np.asarray(rates, dtype=float)
-    func = InterestRateConvertor.get_func(from_what=from_what, to_what=to_what)
+    func = InterestRateConvertor.get_func(from_kind=from_kind, to_kind=to_kind)
     return func(rates, interval_unit=interval_unit, **kwargs)
 
 
@@ -272,12 +272,12 @@ class InterestRateConvertor:
         return cls.discount_to_par(discount, coupon_frequency=coupon_frequency, interval_unit=interval_unit)
 
     @classmethod
-    def get_func(cls, *, from_what: str, to_what: str) -> Callable:
+    def get_func(cls, *, from_kind: str, to_kind: str) -> Callable:
         """Return the converter method for the requested rate-type pair.
 
         Args:
-            from_what: Canonical source rate type (`"spot"`, `"forward"`, `"discount"`).
-            to_what: Canonical target rate type (`"spot"`, `"forward"`, `"discount"`, `"par"`).
+            from_kind: Canonical source rate type (`"spot"`, `"forward"`, `"discount"`).
+            to_kind: Canonical target rate type (`"spot"`, `"forward"`, `"discount"`, `"par"`).
 
         Returns:
             Callable: Converter method of this class.
@@ -285,25 +285,25 @@ class InterestRateConvertor:
         Raises:
             ValueError: If the pair is not supported.
         """
-        if from_what == "discount" and to_what == "forward":
+        if from_kind == "discount" and to_kind == "forward":
             return cls.discount_to_forward
-        if from_what == "discount" and to_what == "par":
+        if from_kind == "discount" and to_kind == "par":
             return cls.discount_to_par
-        if from_what == "discount" and to_what == "spot":
+        if from_kind == "discount" and to_kind == "spot":
             return cls.discount_to_spot
-        if from_what == "forward" and to_what == "discount":
+        if from_kind == "forward" and to_kind == "discount":
             return cls.forward_to_discount
-        if from_what == "forward" and to_what == "par":
+        if from_kind == "forward" and to_kind == "par":
             return cls.forward_to_par
-        if from_what == "forward" and to_what == "spot":
+        if from_kind == "forward" and to_kind == "spot":
             return cls.forward_to_spot
-        if from_what == "spot" and to_what == "discount":
+        if from_kind == "spot" and to_kind == "discount":
             return cls.spot_to_discount
-        if from_what == "spot" and to_what == "forward":
+        if from_kind == "spot" and to_kind == "forward":
             return cls.spot_to_forward
-        if from_what == "spot" and to_what == "par":
+        if from_kind == "spot" and to_kind == "par":
             return cls.spot_to_par
-        raise ValueError(f"Invalid from '{from_what}' to '{to_what}' combination.")
+        raise ValueError(f"Invalid from '{from_kind}' to '{to_kind}' combination.")
 
 
 def solve_z_spread(*, target_pv: float, cash_flows: npt.NDArray[np.float64], spots: npt.NDArray[np.float64]) -> float:

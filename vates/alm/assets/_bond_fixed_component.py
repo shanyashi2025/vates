@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import pandas as pd
 import numpy.typing as npt
@@ -33,9 +34,10 @@ class BondFixedParameters:
         if self.coupon_freq not in (0, 1, 2, 4, 12):
             raise ValueError(f'Invalid coupon_freq={self.coupon_freq}, expected [0, 1, 2, 4, 12].')
         if self.coupon_interval and self.lifespan_in_months % self.coupon_interval != 0:
-            warnings.warn(f"Months between maturity date ({self.maturity_date}) and issue date {self.issue_date} is not "
-                          f"divisible by coupon interval ({self.coupon_interval}). Maturity date will be used in "
-                          f"determining months to pay coupon.")
+            warnings.warn(
+                f"Months between maturity date ({self.maturity_date}) and issue date ({self.issue_date}) is not "
+                f"divisible by coupon interval ({self.coupon_interval}). Maturity date will be used in "
+                f"determining months to pay coupon.")
         if not -0.05 < self.coupon_rate < 0.2:
             warnings.warn(f'coupon_rate={self.coupon_rate} not in normal range, recommend to check.')
 
@@ -51,6 +53,49 @@ class BondFixedParameters:
         return (self.maturity_date - self.issue_date).n
 
 
+@dataclass(frozen=True, slots=True)
+class BondFixedCashFlow:
+    """
+    Data class to hold bond cashflow.
+
+    Attributes:
+        interest_from_issue (np.ndarray): Bond interest cash flows from issue, array index `0, 1, ..., n-1`
+            represents month `1, 2, ..., n`
+        principal_from_issue (np.ndarray): Bond principal cash flows from issue, array index `0, 1, ..., n-1`
+            represents month `1, 2, ..., n`
+    """
+    interest_from_issue: npt.NDArray[np.float64]
+    principal_from_issue: npt.NDArray[np.float64]
+
+    def __post_init__(self):
+        if len(self.interest_from_issue) != len(self.principal_from_issue):
+            raise ValueError(f"len(interest_from_issue): {len(self.interest_from_issue)} != "
+                             f"len(principal_from_issue): {len(self.interest_from_issue)}")
+
+    @classmethod
+    def from_params(cls, params: BondFixedParameters) -> 'BondFixedCashFlow':
+        n_months = params.lifespan_in_months
+        face_value = params.face_value
+        coupon_rate = params.coupon_rate
+        coupon_freq = params.coupon_freq
+        principal_arr = np.zeros(n_months)
+        principal_arr[n_months - 1] = face_value
+        interest_arr = np.zeros(n_months)
+        if coupon_rate == 0.0:  # zero coupon bond
+            pass
+        elif coupon_freq == 0:  # one-off payment at maturity
+            interest_arr[n_months - 1] = face_value * coupon_rate
+        else:  # i.e. coupon_freq in (1, 2, 4, 12)
+            coupon_amt = face_value * coupon_rate / coupon_freq
+            coupon_interval = 12 // coupon_freq
+            interest_arr[::-coupon_interval] = coupon_amt  # traverse the array backward
+        return BondFixedCashFlow(interest_from_issue=interest_arr, principal_from_issue=principal_arr)
+
+    def __mul__(self, other: float) -> 'BondFixedCashFlow':
+        return BondFixedCashFlow(interest_from_issue=self.interest_from_issue * other,
+                                 principal_from_issue=self.principal_from_issue * other)
+
+
 class BondFixedCashFlowGenerator:
     """
     Handles cash flow generation for bonds.
@@ -60,17 +105,25 @@ class BondFixedCashFlowGenerator:
         _cash_flow_from_issue (np.ndarray): Bond cash flows from issue, index `0, 1, ..., n-1` represents month `1, 2, ..., n`
     """
 
-    __slots__ = ('params', '_cash_flow_from_issue',)
+    __slots__ = ('params', '_fixed_cash_flow', '_cash_flow_from_issue',)
 
-    def __init__(self, bond_params: BondFixedParameters):
+    def __init__(self, bond_params: BondFixedParameters, fixed_cash_flows: BondFixedCashFlow | None = None):
         """
         Initialize the cash flow generator.
 
         Args:
             bond_params (BondFixedParameters): Parameters of the bond.
         """
-        self.params = bond_params
-        self._cash_flow_from_issue: npt.NDArray[np.float64] | None = None
+        self.params: BondFixedParameters = bond_params
+        self._fixed_cash_flow: BondFixedCashFlow = fixed_cash_flows or BondFixedCashFlow.from_params(self.params)
+        self._cash_flow_from_issue: npt.NDArray[np.float64] = (self._fixed_cash_flow.interest_from_issue +
+                                                               self._fixed_cash_flow.principal_from_issue)
+        if (n1 := len(self._cash_flow_from_issue)) != (n2 := self.params.lifespan_in_months):
+            raise ValueError(f"len(cash_flow_from_issue): {n1} != (maturity_date - issue_date): {n2}.")
+
+    @property
+    def fixed_cash_flow(self) -> BondFixedCashFlow:
+        return self._fixed_cash_flow
 
     def get_interest_payment_at_month(self, ref_date: pd.Period) -> float:
         """
@@ -82,18 +135,10 @@ class BondFixedCashFlowGenerator:
         Returns:
             float: Interest payment for the month.
         """
-        if self.params.coupon_rate == 0.0:
-            return 0.0
-
-        coupon_interval = self.params.coupon_interval
-        if coupon_interval is not None:  # i.e. coupon_freq in (1, 2, 4, 12)
-            ost_in_month = (self.params.maturity_date - ref_date).n
-            if ost_in_month % coupon_interval != 0:
-                return 0.0
-            else:
-                return self.params.face_value * self.params.coupon_rate / self.params.coupon_freq
-        else:  # coupon_freq == 0:
-            return self.params.face_value * self.params.coupon_rate if ref_date == self.params.maturity_date else 0.0
+        age_in_month = (ref_date - self.params.issue_date).n
+        if 0 < age_in_month <= self.params.lifespan_in_months:
+            return float(self._fixed_cash_flow.interest_from_issue[age_in_month - 1])
+        return 0.0
 
     def get_principal_payment_at_month(self, ref_date: pd.Period) -> float:
         """
@@ -105,50 +150,23 @@ class BondFixedCashFlowGenerator:
         Returns:
             float: Principal payment for the month (at the maturity date).
         """
-        return self.params.face_value if ref_date == self.params.maturity_date else 0.0
+        age_in_month = (ref_date - self.params.issue_date).n
+        if 0 < age_in_month <= self.params.lifespan_in_months:
+            return float(self._fixed_cash_flow.principal_from_issue[age_in_month - 1])
+        return 0.0
 
-    @property
-    def cash_flow_from_issue(self) -> npt.NDArray[np.float64]:
+    def get_future_cash_flows(self, ref_date: pd.Period) -> npt.NDArray[np.float64]:
         """
-        Generate the cash flow array from bond start date for each month.
-        """
-        if self._cash_flow_from_issue is not None:
-            return self._cash_flow_from_issue
-
-        n_months = self.params.lifespan_in_months
-        arr = np.zeros(n_months)
-        coupon_interval = self.params.coupon_interval
-
-        if self.params.coupon_rate == 0.0:  # zero coupon bond
-            arr[n_months - 1] = self.params.face_value
-        elif coupon_interval is not None:  # i.e. coupon_freq in (1, 2, 4, 12)
-            coupon_amt = self.params.face_value * self.params.coupon_rate / self.params.coupon_freq
-            arr[::-coupon_interval] = coupon_amt  # traverse the array backward
-            arr[n_months - 1] += self.params.face_value
-        else:  # one-off payment at maturity
-            arr[n_months - 1] = self.params.face_value * (1 + self.params.coupon_rate)
-
-        self._cash_flow_from_issue = arr
-        return self._cash_flow_from_issue
-
-    def get_future_cash_flows(self, valn_date: pd.Period) -> npt.NDArray[np.float64] | None:
-        """
-        Get cash flows from a specific valuation date forward.
+        Get cash flows from a specific date forward.
 
         Args:
-            valn_date (pd.Period): The valuation date (t).
+            ref_date (pd.Period): The specific date (t).
 
         Returns:
-            npt.NDArray[np.float64] | None: Array of future cash flows (t+1, t+2, ...), None if already matured.
-
-        Raises:
-            RuntimeError: If the bond has already matured.
+            npt.NDArray[np.float64]: Array of future cash flows (t+1, t+2, ...), length is 0 for matured.
         """
-        if valn_date < self.params.maturity_date:
-            age_in_month = (valn_date - self.params.issue_date).n
-            return self.cash_flow_from_issue[age_in_month:]
-        else:
-            return None
+        age_in_month = (ref_date - self.params.issue_date).n
+        return self._cash_flow_from_issue[age_in_month:]
 
 
 class BondFixedPricer:
@@ -156,17 +174,17 @@ class BondFixedPricer:
     Handles bond pricing calculations.
 
     Attributes:
-        cash_flow_gen (BondFixedCashFlowGenerator | BondFixedCashFlowProvider): Cash flow generator.
+        cash_flow_gen (BondFixedCashFlowGenerator): Cash flow generator.
     """
 
     __slots__ = ('cash_flow_gen',)
 
-    def __init__(self, cash_flow_generator: 'BondFixedCashFlowGenerator | BondFixedCashFlowProvider'):
+    def __init__(self, cash_flow_generator: BondFixedCashFlowGenerator):
         """
         Initialize the bond pricer.
 
         Args:
-            cash_flow_generator (BondFixedCashFlowGenerator | BondFixedCashFlowProvider): Cash flow generator.
+            cash_flow_generator (BondFixedCashFlowGenerator): Cash flow generator.
         """
         self.cash_flow_gen = cash_flow_generator
 
@@ -182,11 +200,11 @@ class BondFixedPricer:
             float: Market price.
         """
         cash_flows = self.cash_flow_gen.get_future_cash_flows(valn_date)
-        if cash_flows is not None:  # return None if matured
-            discount = convert_interest_rates(spots, interval_unit="M", from_what="spot", to_what="discount")
-            return np.dot(cash_flows, discount[1:len(cash_flows) + 1])
-        else:
+        n = len(cash_flows)
+        if n == 0:  # matured
             return 0.0
+        discount = convert_interest_rates(spots, interval_unit="M", from_kind="spot", to_kind="discount")
+        return np.dot(cash_flows, discount[1:n + 1])
 
     def calculate_amortized_price(self, valn_date: pd.Period, amort_rate: float) -> float:
         """
@@ -200,15 +218,15 @@ class BondFixedPricer:
             float: Amortized price.
         """
         cash_flows = self.cash_flow_gen.get_future_cash_flows(valn_date)
-        if cash_flows is not None:  # return None if matured
-            time = np.arange(1, len(cash_flows) + 1)  # time in month
-            coupon_freq = self.cash_flow_gen.params.coupon_freq
-            freq = 1 if coupon_freq == 0 else coupon_freq # 1 for zero coupon bond
-            factor = (1 + amort_rate / freq) ** (-freq / 12)
-            discount = factor ** time
-            return np.dot(cash_flows, discount)
-        else:
+        n = len(cash_flows)
+        if n == 0:  # matured
             return 0.0
+        time = np.arange(1, n + 1)  # time in month
+        coupon_freq = self.cash_flow_gen.params.coupon_freq
+        freq = 1 if coupon_freq == 0 else coupon_freq  # 1 for zero coupon bond
+        factor = (1 + amort_rate / freq) ** (-freq / 12)
+        discount = factor ** time
+        return np.dot(cash_flows, discount)
 
 
 class BondFixedRiskCalculator:
@@ -218,7 +236,7 @@ class BondFixedRiskCalculator:
     Attributes:
         _pricer (BondFixedPricer): Bond pricer.
     """
-    __slots__ = ('_pricer', )
+    __slots__ = ('_pricer',)
 
     def __init__(self, pricer: BondFixedPricer):
         """
@@ -270,6 +288,8 @@ class BondFixedRiskCalculator:
         coupon_freq = self._pricer.cash_flow_gen.params.coupon_freq
         freq = 1 if coupon_freq == 0 else coupon_freq  # 1 for zero coupon bond
         cash_flows = self._pricer.cash_flow_gen.get_future_cash_flows(valn_date)
+        if len(cash_flows) == 0:  # matured
+            return 0.0
         return solve_ytm(
             target_pv=market_price,
             cash_flows=cash_flows,
@@ -290,27 +310,29 @@ class BondFixedRiskCalculator:
         Returns:
             tuple[float, float, float]: (mac_duration, mod_duration, convexity).
         """
+        cash_flows = self._pricer.cash_flow_gen.get_future_cash_flows(valn_date)
+        if len(cash_flows) == 0:  # matured
+            return 0.0, 0.0, 0.0
+
         coupon_freq = self._pricer.cash_flow_gen.params.coupon_freq
         freq = 1 if coupon_freq == 0 else coupon_freq  # 1 for zero coupon bond
         disc_fac = (1 / (1 + ytm / freq)) ** (1 / 12 * freq)  # monthly discount factor
-        cash_flows = self._pricer.cash_flow_gen.get_future_cash_flows(valn_date)
 
         present_value = 0.0
         weighted_time = 0.0
         convexity_sum = 0.0
 
-        for i in range(len(cash_flows)):
-            if cash_flows[i] > 0:
-                t = (i + 1) / 12  # t in years
-                pv_cf = cash_flows[i] * disc_fac ** (i + 1)
-                present_value += pv_cf
-                weighted_time += t * pv_cf
-                convexity_sum += pv_cf * t * (t + 1 / freq)
+        for i, cf in enumerate(cash_flows, 1):
+            if abs(cf) < 1e-10:
+                continue
+            t = i / 12  # t in years
+            pv_cf = cf * disc_fac ** i
+            present_value += pv_cf
+            weighted_time += t * pv_cf
+            convexity_sum += pv_cf * t * (t + 1 / freq)
 
-        if market_price:
-            tolerance = max(market_price * 1e-6, 1e-8)
-            if abs(present_value - market_price) > tolerance:
-                raise ValueError(f'Present value {present_value: .4f} does not equal market price {market_price: .4f}')
+        if market_price and math.isclose(present_value, market_price, rel_tol=1e-6, abs_tol=1e-8):
+            raise ValueError(f'Present value {present_value: .4f} != market price {market_price: .4f}')
 
         mac_duration = weighted_time / present_value
         mod_duration = mac_duration / (1 + ytm / freq)
@@ -335,102 +357,8 @@ class BondFixedRiskCalculator:
             float: Effective duration
         """
         pv0 = self._pricer.calculate_market_price(valn_date, spots)
-
-        if market_price:
-            tolerance = max(market_price * 1e-6, 1e-8)
-            if abs(pv0 - market_price) > tolerance:
-                raise ValueError(f'Present value {pv0: .4f} does not equal market price {market_price: .4f}')
-
+        if market_price and math.isclose(pv0, market_price, rel_tol=1e-6, abs_tol=1e-8):
+            raise ValueError(f'Present value {pv0: .4f} != market price {market_price: .4f}')
         pvu = self._pricer.calculate_market_price(valn_date, spots + delta)
         pvd = self._pricer.calculate_market_price(valn_date, spots - delta)
         return (pvd - pvu) / (2 * delta * pv0)
-
-
-class BondFixedCashFlowProvider:
-    """
-    Provide cash flow for bonds.
-
-    Attributes:
-        params (BondFixedParameters): Bond parameters.
-        _interest_from_issue (np.ndarray): Bond interest cash flows from issue, index `0, 1, ..., n-1` represents month `1, 2, ..., n`
-        _principal_from_issue (np.ndarray): Bond principal cash flows from issue, index ...
-        _total_from_issue (np.ndarray): Bond total cash flows from issue, index ...
-    """
-
-    __slots__ = ('params', '_interest_from_issue', '_principal_from_issue', '_total_from_issue',)
-
-    def __init__(self, bond_params: BondFixedParameters, provided_cash_flows_dict: dict[str, np.ndarray]):
-        """
-        Initialize the cash flow generator.
-
-        Args:
-            bond_params (BondFixedParameters): Parameters of the bond.
-        """
-        self.params = bond_params
-        self._interest_from_issue: npt.NDArray[np.float64] = provided_cash_flows_dict["interest"]
-        self._principal_from_issue: npt.NDArray[np.float64] = provided_cash_flows_dict["principal"]
-        n_months = self.params.lifespan_in_months
-        if len(self._interest_from_issue) != n_months:
-            raise ValueError(f"Length of interest cash flow array ({len(self._interest_from_issue)}) inconsistent with "
-                             f"maturity_date - issue_date ({n_months}).")
-        if len(self._principal_from_issue) != n_months:
-            raise ValueError(f"Length of principal cash flow array ({len(self._principal_from_issue)}) inconsistent with "
-                             f"maturity_date - issue_date ({n_months}).")
-        self._total_from_issue: npt.NDArray[np.float64] = self._interest_from_issue + self._principal_from_issue
-
-    def get_interest_payment_at_month(self, ref_date: pd.Period) -> float:
-        """
-        Get the interest payment at a specific month.
-
-        Args:
-            ref_date (pd.Period): The date for which to calculate interest.
-
-        Returns:
-            float: Interest payment for the month.
-        """
-        if self.params.issue_date < ref_date <= self.params.maturity_date:
-            age_in_month = (ref_date - self.params.issue_date).n
-            return float(self._interest_from_issue[age_in_month - 1])
-        else:
-            return 0.0
-
-    def get_principal_payment_at_month(self, ref_date: pd.Period) -> float:
-        """
-        Get the principal payment at a specific month.
-
-        Args:
-            ref_date (pd.Period): The date for which to calculate principal.
-
-        Returns:
-            float: Principal payment for the month. Usually the principal payment is at the maturity date, unless there is a repayment schedule.
-        """
-        if self.params.issue_date < ref_date <= self.params.maturity_date:
-            age_in_month = (ref_date - self.params.issue_date).n
-            return float(self._principal_from_issue[age_in_month - 1])
-        else:
-            return 0.0
-
-    def get_future_cash_flows(self, valn_date: pd.Period) -> npt.NDArray[np.float64] | None:
-        """
-        Get cash flows from a specific valuation date forward.
-
-        Args:
-            valn_date (pd.Period): The valuation date (t).
-
-        Returns:
-            npt.NDArray[np.float64] | None: Array of future cash flows (t+1, t+2, ...), None if already matured.
-
-        Raises:
-            RuntimeError: If the bond has already matured.
-        """
-        if valn_date <= self.params.maturity_date:
-            age_in_month = (valn_date - self.params.issue_date).n
-            return self._total_from_issue[age_in_month:]
-        else:
-            return None
-
-    def to_dict(self) -> dict[str, np.ndarray]:
-        return {
-            "interest": self._interest_from_issue,
-            "principal": self._principal_from_issue
-        }

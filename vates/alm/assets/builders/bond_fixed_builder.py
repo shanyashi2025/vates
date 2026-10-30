@@ -10,7 +10,7 @@ from vates.finmath import convert_interest_rates, solve_ytm, solve_z_spread
 from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.assets.bond_fixed import BondFixed
 from vates.alm.assets._bond_fixed_component import (
-    BondFixedParameters, BondFixedCashFlowGenerator, BondFixedCashFlowProvider, BondFixedPricer
+    BondFixedParameters, BondFixedCashFlow, BondFixedCashFlowGenerator, BondFixedPricer
 )
 from vates.alm.assets._utils import calculate_risk_adjusted_spot_rates
 
@@ -40,7 +40,7 @@ class BondFixedBuilder:
         credit_band: CreditBand | None,
         is_profile: bool,
         attr_aliases: Mapping[str, str] | None = None,
-        provided_cash_flow_dict: dict[str, np.ndarray] | None = None,
+        fixed_cash_flow: BondFixedCashFlow | dict[str, np.ndarray] | None = None,
         coupon_rate: float | None = None,
         abv_price: float | None = None,
         amort_rate: float | None = None,
@@ -64,8 +64,8 @@ class BondFixedBuilder:
             issue_date (pd.Period): Issue date of the bond.
             maturity_date (pd.Period): Maturity date of the bond.
             coupon_freq (int): Coupon frequency per year, [0, 1, 2, 4, 12].
-            redemp_sched (np.ndarray | None): Redemption schedule.
             face_value (float | None): Face value of the bond.
+            fixed_cash_flow (BondFixedCashFlow | dict[str, np.ndarray] | None): Fixed cash flow of the bond.
             coupon_rate (float | None): Coupon rate.
             mv_price (float | None): Market value price (dirty value).
             market_spread (float | None): Market spread.
@@ -82,7 +82,13 @@ class BondFixedBuilder:
 
         self.coupon_freq: int = coupon_freq
         self.face_value: float = face_value
-        self.provided_cash_flow_dict: dict[str, np.ndarray] | None = provided_cash_flow_dict
+
+        if fixed_cash_flow is None or isinstance(fixed_cash_flow, BondFixedCashFlow):
+            self.fixed_cash_flow: BondFixedCashFlow | None = fixed_cash_flow
+        elif isinstance(fixed_cash_flow, dict):
+            self.fixed_cash_flow: BondFixedCashFlow | None = BondFixedCashFlow(**fixed_cash_flow)
+        else:
+            raise TypeError(f"Invalid type of 'fixed_cash_flow', expected ('BondFixedCashFlow', 'dict').")
 
         self.rf_curve: YieldCurve = rf_curve
         self.credit_band: CreditBand | None = credit_band
@@ -106,14 +112,10 @@ class BondFixedBuilder:
             face_value=self.face_value,
         )
 
-    def _make_cash_flow_gen(self, params: BondFixedParameters | object = _MISSING
-                            ) -> BondFixedCashFlowGenerator | BondFixedCashFlowProvider:
+    def _make_cash_flow_gen(self, params: BondFixedParameters | object = _MISSING) -> BondFixedCashFlowGenerator:
         if params is _MISSING:
             params = self._params
-        if self.provided_cash_flow_dict is None:
-            return BondFixedCashFlowGenerator(params)
-        else:
-            return BondFixedCashFlowProvider(params, self.provided_cash_flow_dict)
+        return BondFixedCashFlowGenerator(bond_params=params, fixed_cash_flows=self.fixed_cash_flow)
 
     def _make_cash_flow(self, params: BondFixedParameters | object = _MISSING) -> np.ndarray:
         if params is _MISSING:
@@ -162,7 +164,7 @@ class BondFixedBuilder:
         spots = self._make_ra_spot_rates()
         n_months = (self.maturity_date - self.issue_date).n
         par_yield = convert_interest_rates(
-            spots, interval_unit="M", from_what="spot", to_what="par", coupon_frequency=self.coupon_freq)[n_months]
+            spots, interval_unit="M", from_kind="spot", to_kind="par", coupon_frequency=self.coupon_freq)[n_months]
         self.coupon_rate = float(par_yield)
 
         return self
@@ -217,7 +219,10 @@ class BondFixedBuilder:
             raise ValueError('mv_price need to be set first.')
         pricer = self._make_pricer()
         calc_price = pricer.calculate_market_price(self.period, spots=self._make_ra_spot_rates())
-        self.face_value *= self.mv_price / calc_price  # scale face_value that makes mv_price
+        scale = self.mv_price / calc_price
+        self.face_value *= scale  # scale face_value that makes mv_price
+        if self.fixed_cash_flow is not None:
+            self.fixed_cash_flow *= scale
         return self
 
     def build(self, pipeline: str | list[str] | None = None, pipe_operator: str = "|>") -> BondFixed:
@@ -283,7 +288,7 @@ class BondFixedBuilder:
             coupon_rate=self.coupon_rate,
             coupon_freq=self.coupon_freq,
             face_value=self.face_value,
-            provided_cash_flow_dict=self.provided_cash_flow_dict,
+            fixed_cash_flow=self.fixed_cash_flow,
             mv_price=self.mv_price,
             market_spread=self.market_spread,
             abv_price=self.abv_price,

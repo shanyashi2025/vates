@@ -241,9 +241,9 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
 def _interp_monthly_spot(spot_in: np.ndarray) -> np.ndarray:
     terms = np.arange(len(spot_in)) * 12 # term in month
     # modify the code to implement other curve interpolation method
-    fwrd_in = convert_interest_rates(spot_in, interval_unit="Y", from_what="spot", to_what="forward")
+    fwrd_in = convert_interest_rates(spot_in, interval_unit="Y", from_kind="spot", to_kind="forward")
     fwrd_interp = interpolate_interest_rates(terms, fwrd_in, interp_method="next")
-    spot_out = convert_interest_rates(fwrd_interp, interval_unit="M", from_what="forward", to_what="spot")
+    spot_out = convert_interest_rates(fwrd_interp, interval_unit="M", from_kind="forward", to_kind="spot")
     return spot_out
 
 

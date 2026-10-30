@@ -12,8 +12,8 @@ from vates.alm.econs import Currency, YieldCurve, CreditBand
 from vates.alm.assets.asset_base import Asset, AssetPhase
 from vates.alm.assets._bond_fixed_component import (
     BondFixedParameters,
+    BondFixedCashFlow,
     BondFixedCashFlowGenerator,
-    BondFixedCashFlowProvider,
     BondFixedPricer,
     BondFixedRiskCalculator,
 )
@@ -62,7 +62,7 @@ class BondFixed(Asset):
         is_profile: bool = False,
         units: float = 1.0,
         currency: Currency | None = None,
-        provided_cash_flow_dict: dict[str, np.ndarray] | None = None,
+        fixed_cash_flow: BondFixedCashFlow | None = None,
         credit_band: CreditBand | None = None,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
@@ -81,7 +81,7 @@ class BondFixed(Asset):
             coupon_rate (float): Coupon rate.
             coupon_freq (int): Coupon frequency per year, [0, 1, 2, 4, 12].
             face_value (float): Face value of the bond.
-            provided_cash_flow_dict (np.ndarray | None): Dict of provided bond cash flows.
+            fixed_cash_flow (BondFixedCashFlow | None): Fixed cash flow of the bond.
             mv_price (float): Market value price (dirty value).
             market_spread (float): Market spread.
             abv_price (float): Amortized book value price (dirty value).
@@ -113,10 +113,7 @@ class BondFixed(Asset):
         self._n_clone: int = 0
 
         # Compose with specialized components
-        if provided_cash_flow_dict is None:
-            self.cash_flow_gen = BondFixedCashFlowGenerator(self._params)
-        else:
-            self.cash_flow_gen = BondFixedCashFlowProvider(self._params, provided_cash_flow_dict)
+        self.cash_flow_gen = BondFixedCashFlowGenerator(bond_params=self._params, fixed_cash_flows=fixed_cash_flow)
         self.pricer = BondFixedPricer(self.cash_flow_gen)
         self.risk_calc = BondFixedRiskCalculator(self.pricer)
 
@@ -373,7 +370,7 @@ class BondFixed(Asset):
             asset_id=new_asset_id,
             is_profile=False,
             currency=self._currency,
-            provided_cash_flow_dict=self.cash_flow_gen.to_dict() if isinstance(self.cash_flow_gen, BondFixedCashFlowProvider) else None,
+            fixed_cash_flow=self.cash_flow_gen.fixed_cash_flow,
             credit_band=self._credit_band,
             purchase_date=self.period,
         )

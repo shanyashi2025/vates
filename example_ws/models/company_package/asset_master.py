@@ -345,14 +345,14 @@ class AssetMaster:
             provided_cash_flow_id = row["provided_cash_flow_id"]
             is_cash_flow_provided = provided_cash_flow_id.lower() != 'none'
             if is_cash_flow_provided:
-                provided_cash_flow_dict = cls.get_provided_bond_cash_flow_from_df(
+                fixed_cash_flow = cls.get_provided_bond_cash_flow_from_df(
                     df=provided_cash_flow_df,
                     provided_cash_flow_id=provided_cash_flow_id,
                     issue_date=pd.Period(row["issue_date"], freq='M'),
                     maturity_date=pd.Period(row["maturity_date"], freq='M'),
                 )
             else:
-                provided_cash_flow_dict = None
+                fixed_cash_flow = None
 
             ifrs_classification = row["ifrs_classification"]
             local_classification = row["local_classification"]
@@ -370,7 +370,7 @@ class AssetMaster:
                 coupon_rate=row["coupon_rate"],
                 coupon_freq=row["coupon_freq"],
                 face_value=row["face_value"],
-                provided_cash_flow_dict=provided_cash_flow_dict,
+                fixed_cash_flow=fixed_cash_flow,
                 units=row["units"],
                 attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="fixed_bond",
@@ -409,7 +409,8 @@ class AssetMaster:
         maturity_date: pd.Period
     ) -> dict[str, np.ndarray]:
         n_months = (maturity_date - issue_date).n
-        arr_dict = {"principal": np.zeros(n_months), "interest": np.zeros(n_months)}
+        principal_arr = np.zeros(n_months)
+        interest_arr = np.zeros(n_months)
 
         df = df.loc[(df["provided_cash_flow_id"] == provided_cash_flow_id)].astype(
             {"month": int, "principal": float, "interest": float}).set_index("month")
@@ -417,10 +418,10 @@ class AssetMaster:
         for i in range(n_months):
             month = i + 1
             if month in df.index:
-                arr_dict["principal"][i] = df.at[month, "principal"]
-                arr_dict["interest"][i] = df.at[month, "interest"]
+                principal_arr[i] = df.at[month, "principal"]
+                interest_arr[i] = df.at[month, "interest"]
 
-        return arr_dict
+        return {"principal_from_issue": principal_arr, "interest_from_issue": interest_arr}
 
     @classmethod
     def build_profile_fixed_bond_from_df(
