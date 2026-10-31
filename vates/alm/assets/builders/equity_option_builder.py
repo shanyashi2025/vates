@@ -114,23 +114,21 @@ class EquityOptionBuilder:
     def risk_neutralize(self) -> Self:
         return self.calibrate_implied_volatility()
 
-    def build(self, pipeline: str | list[str] | None = None, pipe_operator: str = "|>") -> EquityOption:
+    def build(self, pipeline: list[str] | None = None) -> EquityOption:
         if pipeline:
-            if isinstance(pipeline, str):
-                pipeline = pipeline.split(pipe_operator)
             if not isinstance(pipeline, list):
-                raise TypeError(f"Invalid type of pipeline {type(pipeline)}, expected 'list' or 'str'")
+                raise TypeError(f"Invalid type of pipeline {type(pipeline)}, expected 'list'")
 
             for step in pipeline:
-                step = step.lower()
-                if step in ('calculate_market_price', 'market_price'):
+                name = step.lower()
+                if name in ('calculate_market_price', 'market_price'):
                     self.calculate_market_price()
-                elif step in ('calibrate_implied_volatility', 'calculate_implied_volatility', 'implied_volatility'):
+                elif name in ('calibrate_implied_volatility', 'calculate_implied_volatility', 'implied_volatility'):
                     self.calibrate_implied_volatility()
-                elif step in ('risk_neutralization', 'risk_neutralize'):
+                elif name in ('risk_neutralization', 'risk_neutralize'):
                     self.risk_neutralize()
                 else:
-                    warnings.warn(f"{type(self).__name__}: '{step}' is ignored as no method matches.")
+                    warnings.warn(f"{type(self).__name__}: '{name}' is ignored as no method matches.")
 
         if self.price is None: raise ValueError("price is not yet set.")
         if self.std_dev is None: raise ValueError("std_dev is not yet set.")

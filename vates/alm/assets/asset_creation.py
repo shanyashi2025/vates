@@ -1,3 +1,5 @@
+from typing import Any
+
 from vates.alm.assets.cash import Cash
 from vates.alm.assets.equity import Equity
 from vates.alm.assets.builders.bond_fixed_builder import BondFixedBuilder
@@ -13,15 +15,15 @@ _DEFAULT_CREATOR_CLASS_DICT = {
 }
 
 
-def create_asset(asset_cls, /, *, build_pipeline: str | list[str] | None = None, pipe_operator: str = "|>",
-                 creator_class_dict: dict[str, ...] = None, dynamic_setattrs: dict[str, ...] | None = None, **kwargs):
+def create_asset(asset_cls, /, *, build_pipeline: list[str | tuple[str, dict]] | None = None,
+                 creator_class_dict: dict[str, Any] = None, dynamic_setattrs: dict[str, Any] | None = None, **kwargs):
     """
     Factory function to create an asset.
 
     Args:
         asset_cls: Asset class, 'cash', 'equity', 'bond' ('bond_fixed', 'fixed_bond' equivalently), 'equity_option'
-        build_pipeline (str | list[str] | None): Build pipeline.
-        pipe_operator (str): Pipe operator, used when `build_pipeline` is str, defaults to '|>'.
+        build_pipeline (list[str | tuple[str, dict] | None): Build pipeline, values can be either a key (str)
+            or a tuple of (key, kwargs (dict)) pairs.
         creator_class_dict (dict[str, ...]): Dict of asset creator class, defaults to `_DEFAULT_CREATOR_CLASS_DICT`
         dynamic_setattrs (dict[str, ...]): Dict of attributes to be dynamically created, defaults to None.
         **kwargs: Parameters.
@@ -38,7 +40,7 @@ def create_asset(asset_cls, /, *, build_pipeline: str | list[str] | None = None,
     creator_class = creator_class_dict.get(asset_cls) or asset_cls
 
     if hasattr(creator_class, "build"):
-        obj = creator_class(**kwargs).build(build_pipeline, pipe_operator)
+        obj = creator_class(**kwargs).build(build_pipeline)
     else:
         if build_pipeline:
             raise ValueError(f"{asset_cls}: build_pipeline is provided ({build_pipeline}), "

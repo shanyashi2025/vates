@@ -106,6 +106,8 @@ class AssetReportItems:
 
 class AssetMaster:
 
+    pipe_operator: str = "|>"
+
     def __init__(
         self,
         *,
@@ -357,12 +359,19 @@ class AssetMaster:
             ifrs_classification = row["ifrs_classification"]
             local_classification = row["local_classification"]
             stat_classification = row["stat_classification"]
+            if "build_pipeline" in df.columns:
+                build_pipeline = row["build_pipeline"].split(cls.pipe_operator)
+                for i, item in enumerate(build_pipeline):
+                    if item == "credit_band_params":
+                        build_pipeline[i] = ("credit_band_params", {"credit_spread": row["credit_spread"]})
+            else:
+                build_pipeline = None
 
             # create instance
             fixed_bond = create_asset(
                 "fixed_bond",
                 model_engine=model_engine,
-                build_pipeline=row["build_pipeline"] if "build_pipeline" in df.columns else None,
+                build_pipeline=build_pipeline,
                 asset_id=asset_id,
                 currency=currency,
                 issue_date=pd.Period(row["issue_date"], freq='M'),
@@ -471,7 +480,7 @@ class AssetMaster:
             fixed_bond = create_asset(
                 "fixed_bond",
                 model_engine=model_engine,
-                build_pipeline='coupon_rate',
+                build_pipeline=["coupon_rate"],
                 asset_id=f"{str_cal_ym}{_asset_id}",
                 currency=currency,
                 issue_date=p,
@@ -686,7 +695,7 @@ class AssetMaster:
             equity_option = create_asset(
                 "equity_option",
                 model_engine=model_engine,
-                build_pipeline=row["build_pipeline"] if "build_pipeline" in df.columns else None,
+                build_pipeline=row["build_pipeline"].split(cls.pipe_operator) if "build_pipeline" in df.columns else None,
                 asset_id=asset_id,
                 attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="equity_option",

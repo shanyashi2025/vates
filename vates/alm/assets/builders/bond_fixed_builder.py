@@ -7,7 +7,7 @@ from typing import Self
 
 from vates._core import ProjModelEngine, time_synchronized
 from vates.finmath import convert_interest_rates, solve_ytm, solve_z_spread
-from vates.alm.econs import Currency, YieldCurve, CreditBand
+from vates.alm.econs import Currency, YieldCurve, CreditBand, CreditBandParams
 from vates.alm.assets.bond_fixed import BondFixed
 from vates.alm.assets._bond_fixed_component import (
     BondFixedParameters, BondFixedCashFlow, BondFixedCashFlowGenerator, BondFixedPricer
@@ -91,7 +91,7 @@ class BondFixedBuilder:
             raise TypeError(f"Invalid type of 'fixed_cash_flow', expected ('BondFixedCashFlow', 'dict').")
 
         self.rf_curve: YieldCurve = rf_curve
-        self.credit_band: CreditBand | None = credit_band
+        self.credit_band: CreditBand | CreditBandParams | None = credit_band
         self.is_profile: bool = is_profile
 
         self.coupon_rate: float | None = coupon_rate
@@ -219,7 +219,36 @@ class BondFixedBuilder:
             self.fixed_cash_flow *= scale
         return self
 
-    def build(self, pipeline: str | list[str] | None = None, pipe_operator: str = "|>") -> BondFixed:
+    def set_credit_band_params(self, credit_spread: float) -> Self:
+        """
+        Creates a `CreditBandParams` object for the bond's `credit_band`, and calibrate MPD (marginal probability of
+        default) to be consistent with the credit spread. No effect on decrement or recovery.
+
+        The `CreditBandParams` are set up using follows parameters:
+            spread_add: `credit_spread`
+            mpd: calibrate it to be consistent with `credit_spread`
+            apply_mpd_to_decrement (not used): False => no decrement
+            spread_mult (not used): 0.0
+            lgd (not used): 1.0 => this makes recovery to be 0.0
+
+        Args:
+            credit_spread: credit spread (additive)
+        """
+        if isinstance(self.credit_band, CreditBand):
+            raise ValueError(f"'{self.credit_band.band_id}': 'CreditBand' object is not allowed to manually set parameters.")
+        if self.mv_price is None:
+            raise ValueError('mv_price need to be set first.')
+        pricer = self._make_pricer()
+        comprehensive_spread = solve_z_spread(target_pv=self.mv_price, cash_flows=self._make_cash_flow(),
+                                              spots=self._make_ra_spot_rates(market_spread=0.0))
+        market_spread = comprehensive_spread - credit_spread
+        pv_cf = pricer.calculate_market_price(self.period, spots=self._make_ra_spot_rates(market_spread=market_spread))
+        mpd = 1 - self.mv_price / pv_cf  # marginal probability of default => (1 - mpd) * `pv_cf` @ `disc w/o credit` = mv
+        self.credit_band = CreditBandParams(band_id=self.asset_id, spread_add=credit_spread, mpd=mpd)
+        self.market_spread = market_spread
+        return self
+
+    def build(self, pipeline: list[str | tuple[str, dict]] | None = None) -> BondFixed:
         """
         Build and return a fully initialized BondFixed object.
 
@@ -230,25 +259,30 @@ class BondFixedBuilder:
             ValueError: If required data is missing or timing constraints are violated.
         """
         if pipeline:
-            if isinstance(pipeline, str):
-                pipeline = pipeline.split(pipe_operator)
             if not isinstance(pipeline, list):
                 raise TypeError(f"Invalid type of pipeline {type(pipeline)}, expected 'list' or 'str'")
 
             for step in pipeline:
-                step = step.lower()
-                if step in ('calibrate_market_spread', 'calculate_market_spread', 'market_spread'):
-                    self.calibrate_market_spread()
-                elif step in ('calculate_market_price', 'market_price'):
-                    self.calculate_market_price()
-                elif step in ('calculate_amort_rate', 'amort_rate'):
-                    self.calculate_amort_rate()
-                elif step in ('derive_coupon_rate', 'calculate_coupon_rate', 'coupon_rate'):
-                    self.derive_coupon_rate()
-                elif step in ('risk_neutralization', 'risk_neutralize'):
-                    self.risk_neutralize()
+                if isinstance(step, str):
+                    name, kwargs = step.lower(), {}
+                elif isinstance(step, tuple):
+                    name, kwargs = step[0].lower(), step[1]
                 else:
-                    warnings.warn(f"{type(self).__name__}: '{step}' is ignored as no method matches.")
+                    raise TypeError(f"Invalid type of pipeline {type(step)}, expected 'str' or 'dict'")
+                if name in ('calibrate_market_spread', 'calculate_market_spread', 'market_spread'):
+                    self.calibrate_market_spread()
+                elif name in ('calculate_market_price', 'market_price'):
+                    self.calculate_market_price()
+                elif name in ('calculate_amort_rate', 'amort_rate'):
+                    self.calculate_amort_rate()
+                elif name in ('derive_coupon_rate', 'calculate_coupon_rate', 'coupon_rate'):
+                    self.derive_coupon_rate()
+                elif name in ('risk_neutralization', 'risk_neutralize'):
+                    self.risk_neutralize()
+                elif name in ('set_credit_band_params', 'credit_band_params'):
+                    self.set_credit_band_params(**kwargs)
+                else:
+                    warnings.warn(f"{type(self).__name__}: '{name}' is ignored as no method matches.")
 
         # Validate required data
         if self.coupon_rate is None: raise ValueError("coupon_rate is not yet set.")
