@@ -28,6 +28,9 @@ class MarketInfo:
         self.info_id: str = info_id
         self._data: dict[str, ...] = {}
 
+    def update(self) -> None:
+        pass
+
     def get(self, key, default=None, /):
         return self._data.get(key, default)
 

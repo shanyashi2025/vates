@@ -9,7 +9,7 @@ def calculate_risk_adjusted_spot_rates(rf_spots: npt.NDArray[np.float64], mult: 
 
     Args:
         rf_spots (npt.NDArray[np.float64]): Risk-free spot rates.
-        mult (float, npt.NDArray[np.float64]): Multiplicative adjustment factors.
+        mult (float, npt.NDArray[np.float64]): Multiplicative spread adjustment factors.
         add (float, npt.NDArray[np.float64]): Additive spread adjustments.
 
     Returns:

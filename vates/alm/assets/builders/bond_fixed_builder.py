@@ -144,8 +144,8 @@ class BondFixedBuilder:
         if market_spread is None:
             raise ValueError(f'{self.asset_id}: market_spread not specified.')
         if credit_band:
-            return calculate_risk_adjusted_spot_rates(rf_spots=self._rf_spot_rates, mult=credit_band.credit_spotmult,
-                                                      add=credit_band.credit_spread + market_spread)
+            return calculate_risk_adjusted_spot_rates(rf_spots=self._rf_spot_rates, mult=credit_band.spread_mult,
+                                                      add=credit_band.spread_add + market_spread)
         else:
             return self._rf_spot_rates + market_spread
 

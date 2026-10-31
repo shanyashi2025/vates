@@ -203,8 +203,8 @@ class BondFixed(Asset):
         if self._credit_band:
             return calculate_risk_adjusted_spot_rates(
                 rf_spots=rf_spots,
-                mult=self._credit_band.credit_spotmult,
-                add=self._credit_band.credit_spread + self._market_spread
+                mult=self._credit_band.spread_mult,
+                add=self._credit_band.spread_add + self._market_spread
             )
         else:
             return rf_spots + self._market_spread
@@ -253,14 +253,14 @@ class BondFixed(Asset):
             return
 
         if self._credit_band is None:
-            prob_of_default = 0.0
-            recovery_rate = 0.0
+            mpd = 0.0
+            rr = 0.0
         else:
-            prob_of_default = 1 - (1 - self._credit_band.prob_of_default_ac) ** (1/12)
-            recovery_rate = self._credit_band.recovery_rate
+            mpd = self._credit_band.marginal_prob_of_default
+            rr = self._credit_band.recovery_rate
 
         units_st = self._units
-        units_default = units_st * prob_of_default
+        units_default = units_st * mpd
         units_survive = units_st - units_default
         units_maturity = units_survive if (p == self._params.maturity_date) else 0
         self._units = units_survive - units_maturity
@@ -271,7 +271,7 @@ class BondFixed(Asset):
 
         interest = coupon_paid * units_survive
         principal = principal_paid * units_survive
-        default_recovery = (abv_price_st - coupon_paid) * units_default * recovery_rate
+        default_recovery = (abv_price_st - coupon_paid) * units_default * rr
         self._cash_flow = interest + principal + default_recovery
 
         freq = 1 if self._params.coupon_freq == 0 else self._params.coupon_freq  # 1 for zero coupon bond

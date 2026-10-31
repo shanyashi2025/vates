@@ -1,6 +1,6 @@
 {
   "yield_curves": {
-    "default_variable_attribute": {
+    "variable_default_attribute": {
       "rates": {"measure": "PRICE", "term": "1-50", "term_type": "Y", "interp_method": "Geometric"}
     },
     "item_list": [
@@ -8,11 +8,11 @@
     ]
   },
   "credit_bands": {
-    "default_variable_attribute": {
-      "prop_of_default": {"measure": "DEFAULT_PC", "divby": 100, "compound_freq": "monthly"},
-      "recovery_rate": {"measure": "RECOVERY_PC", "divby": 100},
-      "credit_spotmult": {"measure": "SPOT_MULT_PC", "divby": 100},
-      "credit_spread": {"measure": "SPREAD_BP", "divby": 10000}
+    "variable_default_attribute": {
+      "MPD": {"measure": "MPD_PC", "divby": 100, "compound_freq": "monthly"},
+      "LGD": {"measure": "LGD_PC", "divby": 100},
+      "spread_add": {"measure": "SPREAD_ADD_BP", "divby": 10000},
+      "spread_mult": {"measure": "SPREAD_MULT_PC", "divby": 100}
     },
     "item_list": [
       {"band_id": "AAA", "economy": "CNY", "class": "RATING_AAA"},
@@ -20,7 +20,7 @@
     ]
   },
   "equity_indices": {
-    "default_variable_attribute": {
+    "variable_default_attribute": {
       "total_return_index": {"measure": "RET_IDX"},
       "dividend_yield": {"measure": "RNY_PC", "divby": 100, "compound_freq": "monthly"}
     },

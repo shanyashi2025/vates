@@ -1,6 +1,6 @@
 {
   "yield_curves": {
-    "default_variable_attribute": {
+    "variable_default_attribute": {
       "rates": {"measure": "PRICE", "term": "1;2;3;5;7;10;20;30;50", "term_type": "Y", "interp_method": "Geometric"}
     },
     "item_list": [
@@ -11,7 +11,7 @@
     "item_list": []
   },
   "equity_indices": {
-    "default_variable_attribute": {
+    "variable_default_attribute": {
       "total_return_index": {"measure": "RET_IDX"},
       "dividend_yield": {"measure": "RNY_PC", "divby": 100, "compound_freq": "monthly"}
     },

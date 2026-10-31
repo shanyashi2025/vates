@@ -200,33 +200,33 @@ class EsgMaster:
         esg_data = esg_item.esg_data
         ipos_date = esg_data.key_to_pos("date_col", date_col)
 
-        # 1. prop_of_default
-        var = esg_vars["prop_of_default"]
-        pod = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        # 1. MPD (Marginal Probability of Default)
+        var = esg_vars["MPD"]
+        mpd = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
         if var.compound_freq == 'annual':
-            prop_of_default_ac = pod
+            mpd = 1 - (1 - mpd) ** (1/12)
         elif var.compound_freq == 'monthly':
-            prop_of_default_ac = 1 - (1 - pod) ** 12
+            pass
         else:
             raise ValueError(f"{var.descr}: invalid {var.compound_freq=}.")
 
-        # 2. recovery_rate
-        var = esg_vars["recovery_rate"]
-        recovery_rate = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        # 2. LGD (Loss Given Default)
+        var = esg_vars["LGD"]
+        lgd = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
 
-        # 3. credit_spotmult
-        var = esg_vars["credit_spotmult"]
-        credit_spotmult = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        # 3. spread_add
+        var = esg_vars["spread_add"]
+        spread_add = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
 
-        # 4. credit_spread
-        var = esg_vars["credit_spread"]
-        credit_spread = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        # 4. spread_mult
+        var = esg_vars["spread_mult"]
+        spread_mult = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
 
         esg_item.econ_obj.update(
-            prop_of_default_ac=float(prop_of_default_ac),
-            recovery_rate=float(recovery_rate),
-            credit_spotmult=np.full(shape=13, fill_value=credit_spotmult),
-            credit_spread=np.full(shape=13, fill_value=credit_spread),
+            mpd=float(mpd),
+            lgd=float(lgd),
+            spread_add=np.full(shape=13, fill_value=spread_add),
+            spread_mult=np.full(shape=13, fill_value=spread_mult),
         )
 
     @staticmethod
@@ -317,10 +317,10 @@ class EsgMaster:
         credit_bands = cls.build_esg_items(model_engine=model_engine, econ_cls=CreditBand, econ_id_attr="band_id",
                                            esg_params=esg_params.get("credit_bands"), esg_df=esg_df,
                                            variable_spec={
-                                               "prop_of_default": ["measure", "divby", "compound_freq"],
-                                               "recovery_rate": ["measure", "divby"],
-                                               "credit_spotmult": ["measure", "divby"],
-                                               "credit_spread": ["measure", "divby"],
+                                               "MPD": ["measure", "divby", "compound_freq"],
+                                               "LGD": ["measure", "divby"],
+                                               "spread_add": ["measure", "divby"],
+                                               "spread_mult": ["measure", "divby"],
                                            })
         equity_indices = cls.build_esg_items(model_engine=model_engine, econ_cls=EquityIndex, econ_id_attr="index_id",
                                              esg_params=esg_params.get("equity_indices"), esg_df=esg_df,
@@ -374,7 +374,7 @@ class EsgMaster:
             return []
 
         esg_item_list = []
-        default_var_attr_dict = esg_params.get("default_variable_attribute") or {}
+        var_default_attr_dict = esg_params.get("variable_default_attribute") or {}
         for item in esg_params["item_list"]:
             econ_id = item[econ_id_attr]
             kwargs = {"model_engine": model_engine, econ_id_attr: econ_id}
@@ -385,8 +385,8 @@ class EsgMaster:
             esg_vars = {}
             for var_name, attr_list in variable_spec.items():
                 var_attr = item.get(var_name) or {}
-                default_var_attr = default_var_attr_dict.get(var_name) or {}
-                kwargs = {attr: var_attr.get(attr) or default_var_attr[attr] for attr in attr_list}
+                var_default_attr = var_default_attr_dict.get(var_name) or {}
+                kwargs = {attr: var_attr.get(attr) or var_default_attr[attr] for attr in attr_list}
                 esg_vars[var_name] = EsgVariable(economy, class_, **kwargs)
 
             esg_item = EsgItem(descr=econ_id, econ_obj=obj, esg_vars=esg_vars)
