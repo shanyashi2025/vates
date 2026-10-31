@@ -255,33 +255,47 @@ class BondFixed(Asset):
         coupon = self.cash_flow_gen.get_coupon_payment_at_month(p)
         principal = self.cash_flow_gen.get_principal_payment_at_month(p)
         abv_price = self.pricer.get_amortized_price(p)
-        ead = abv_price + coupon + principal  # EAD (Exposure at Default)
 
         if self._credit_band is None:
-            mpd = 0.0
-            rr = 0.0
+            mpd = 0
+            rr = 0
             units_default = 0
+            ead = 0
         else:
             mpd = self._credit_band.marginal_prob_of_default
             rr = self._credit_band.recovery_rate
-            units_default = units_st * mpd if self._credit_band.apply_mpd_to_decrement else 0
+            if self._credit_band.apply_mpd_to_decrement:
+                units_default = units_st * mpd
+                ead = abv_price + coupon + principal  # EAD (Exposure at Default)
+            else:
+                units_default = 0
+                ead = coupon + principal
 
         # Expected Cash Flow, generally: (1 - PD) * Contractual CF + PD * Recovery
-        # +-------------+--------------------+--------+
-        # | probability |     cash flow      | bv end |
-        # +-------------+--------------------+--------+
-        # |     1 - MPD | coupon + principal |     bv |
-        # |         MPD |           recovery |      0 |
-        # +-------------+--------------------+--------+
+        #   +-------------+--------------------+--------+
+        #   | probability |     cash flow      | bv end |
+        #   +-------------+--------------------+--------+
+        #   |     1 - MPD | coupon + principal |     bv |
+        #   |         MPD |           recovery | 0 / bv |  <- 0 when mpd applies to decrement, otherwise bv
+        #   +-------------+--------------------+--------+
         #   expected cash flow = (1 - MPD) * (coupon + principal) + MPD * recovery
+        # 1. MPD applies to decrement
         #      expected bv end = (1 - MPD) * bv
-        #        expected loss = coupon + principal + bv - (expected cash flow + expected bv end)
+        #        expected loss = contractual cash flow + bv - (expected cash flow + expected bv end)
         #                      = MPD * (coupon + principal + bv) - MPD * recovery
         #    let expected loss = MPD * LGD * EAD
         # =>   MPD * LGD * EAD = MPD * (coupon + principal + bv) - MPD * recovery
         # => expected recovery = MPD * recovery
         #                      = MPD * (coupon + principal + bv) - MPD * LGD * EAD
-        #                      = MPD * RR * EAD (given EAD = bv + coupon + principal)
+        #                      = MPD * RR * EAD (<- EAD = bv + coupon + principal)
+        # 2. MPD doesn't apply to decrement
+        #        expected loss = contractual cash flow - expected cash flow
+        #                      = MPD * (coupon + principal) - MPD * recovery
+        #    let expected loss = MPD * LGD * EAD
+        # =>   MPD * LGD * EAD = MPD * (coupon + principal) - MPD * recovery
+        # => expected recovery = MPD * recovery
+        #                      = MPD * (coupon + principal) - MPD * LGD * EAD
+        #                      = MPD * RR * EAD (<- EAD = coupon + principal)
 
         cf_coupon = (1 - mpd) * coupon * units_st
         cf_principal = (1 - mpd) * principal * units_st
