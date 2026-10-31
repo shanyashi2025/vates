@@ -97,7 +97,7 @@ class CreditBand:
                apply_mpd_to_decrement: bool | None = None,
                spread_add: float | npt.NDArray[np.float64] | None = None,
                spread_mult: float | npt.NDArray[np.float64] | None = None,
-               is_unchange: bool = False) -> None:
+               ) -> None:
         """
         Update the credit parameters for the current time step.
 
@@ -107,14 +107,12 @@ class CreditBand:
             lgd (float): Loss Given Default (LGD).
             spread_add (float | npt.NDArray[np.float64]): Additive spread.
             spread_mult (float | npt.NDArray[np.float64]): Multiplicative spread (proportional to risk-free spot rates).
-            is_unchange (bool): True if kept unchanged, defaults to False.
         """
-        if is_unchange:
-            if any(x is not None for x in (mpd, lgd, spread_mult, spread_add)):
-                raise ValueError(f"is_unchange=True but parameters are provided.")
+        if all(x is None for x in (mpd, lgd, spread_mult, spread_add, apply_mpd_to_decrement)):
+           pass
+        elif any(x is None for x in (mpd, lgd, spread_mult, spread_add, apply_mpd_to_decrement)):
+            raise ValueError(f"One or more parameters are None.")
         else:
-            if any(x is None for x in (mpd, lgd, spread_mult, spread_add)):
-                raise ValueError(f"One or more parameters are None.")
             self._mpd = mpd
             self._lgd = lgd
             self._spread_mult = spread_mult

@@ -58,29 +58,28 @@ class YieldCurve:
                                                  dims=[tdv_term_dim], model_engine=model_engine)
         self._last_update: int = self.time or 0
 
-    def update(self, *, from_what: Literal["spot_rates", "forward_rates", "discount_factors"] = None,
-               value: npt.NDArray[np.float64] = None, is_unchange: bool = False) -> None:
+    def update(self, *, from_kind: Literal["spot_rates", "forward_rates", "discount_factors"] | None = None,
+               value: npt.NDArray[np.float64] | None = None) -> None:
         """
         Update the yield curve for the current time step.
 
         Args:
-            from_what (Literal["spot_rates", "forward_rates", "discount_factors"]): Update from.
+            from_kind (Literal["spot_rates", "forward_rates", "discount_factors"]): Update from.
             value (npt.NDArray[np.float64]): Updated value.
-            is_unchange (bool): True if kept unchanged, defaults to False.
         """
-        if is_unchange:
-            if any(x is not None for x in (from_what, value)):
-                raise ValueError(f"is_unchange=True but other arguments are given.")
-        elif any(x is None for x in (from_what, value)):
-            raise ValueError(f"`from_what` or `value` is None.")
-        elif from_what == "spot_rates":
-            self._curve = InterestRateTermStructure.from_zeroac(value, interval_unit="M")
-        elif from_what == "forward_rates":
-            self._curve = InterestRateTermStructure.from_forwardac(value, interval_unit="M")
-        elif from_what == "discount_factors":
-            self._curve = InterestRateTermStructure.from_discount(value, interval_unit="M")
+        if from_kind is None and value is None:
+            pass
+        elif from_kind is None or value is None:
+            raise ValueError(f"`from_kind` or `value` is None.")
         else:
-            raise ValueError(f"Invalid {from_what=}, expected: 'spot_rates', 'forward_rates' or 'discount_factors'.")
+            if from_kind == "spot_rates":
+                self._curve = InterestRateTermStructure.from_zeroac(value, interval_unit="M")
+            elif from_kind == "forward_rates":
+                self._curve = InterestRateTermStructure.from_forwardac(value, interval_unit="M")
+            elif from_kind == "discount_factors":
+                self._curve = InterestRateTermStructure.from_discount(value, interval_unit="M")
+            else:
+                raise ValueError(f"Invalid {from_kind=}, expected: 'spot_rates', 'forward_rates' or 'discount_factors'.")
 
         self._on_exit_update()
         self._last_update = self.time

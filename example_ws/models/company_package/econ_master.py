@@ -114,28 +114,16 @@ class EsgMaster:
         date_col = self._get_esg_date_col(period, esg_step)
         # update yield curves
         for esg_item in self.yield_curves:
-            if date_col:
-                self.update_yield_curve(esg_item, date_col)
-            else:
-                esg_item.econ_obj.update(is_unchange=True)
+            self.update_yield_curve(esg_item, date_col)
         # update credit bands
         for esg_item in self.credit_bands:
-            if date_col:
-                self.update_credit_band(esg_item, date_col)
-            else:
-                esg_item.econ_obj.update(is_unchange=True)
+            self.update_credit_band(esg_item, date_col)
         # update equity indices
         for esg_item in self.equity_indices:
-            if date_col:
-                self.update_equity_index(esg_item, date_col, esg_step)
-            else:
-                esg_item.econ_obj.update(is_apply_compound_growth=True)
+            self.update_equity_index(esg_item, date_col, esg_step)
         # update currencies
         for esg_item in self.currencies:
-            if date_col:
-                self.update_currency(esg_item, date_col)
-            else:
-                esg_item.econ_obj.update(is_apply_compound_growth=True)
+            self.update_currency(esg_item, date_col)
         # update market info
         self.update_market_info(date_col)
 
@@ -151,7 +139,7 @@ class EsgMaster:
             return None
 
     @staticmethod
-    def update_yield_curve(esg_item: EsgItem, date_col: str) -> None:
+    def update_yield_curve(esg_item: EsgItem, date_col: str | None) -> None:
         """
         Update risk-free yield curve with ESG data.
 
@@ -159,7 +147,10 @@ class EsgMaster:
             esg_item (YieldCurve): Curve to update.
             date_col (str): Date column.
         """
-        yield_curve_obj = esg_item.econ_obj
+        if date_col is None:
+            esg_item.econ_obj.update()
+            return
+
         esg_vars = esg_item.esg_vars
         esg_data = esg_item.esg_data
         ipos_date = esg_data.key_to_pos("date_col", date_col)
@@ -177,19 +168,19 @@ class EsgMaster:
 
         # determine rate type and process curve data
         if var.measure == "PRICE":
-            from_what = "discount_factors"
+            from_kind = "discount_factors"
             rates = np.insert(arr=rates, obj=0, values=1)  # let discount_factor = 1 at term 0
             value = interpolate_interest_rates(term, rates, interp_method=var.interp_method)
         elif var.measure == "SPOT":
-            from_what = "spot_rates"
+            from_kind = "spot_rates"
             rates = np.insert(arr=rates, obj=0, values=0)  # let spot_rate = 0 at term 0
             value = interpolate_interest_rates(term, rates, interp_method=var.interp_method)
         else:
             raise ValueError(f"{var.descr}: invalid {var.measure=}")
-        yield_curve_obj.update(from_what=from_what, value=value)
+        esg_item.econ_obj.update(from_kind=from_kind, value=value)
 
     @staticmethod
-    def update_credit_band(esg_item: EsgItem, date_col: str) -> None:
+    def update_credit_band(esg_item: EsgItem, date_col: str | None) -> None:
         """
         Update credit band(s) with ESG data.
 
@@ -197,6 +188,10 @@ class EsgMaster:
             esg_item (CreditBand): credit band(s) to update.
             date_col (str): Date column.
         """
+        if date_col is None:
+            esg_item.econ_obj.update()
+            return
+
         esg_vars = esg_item.esg_vars
         esg_data = esg_item.esg_data
         ipos_date = esg_data.key_to_pos("date_col", date_col)
@@ -235,7 +230,7 @@ class EsgMaster:
         )
 
     @staticmethod
-    def update_equity_index(esg_item: EsgItem, date_col: str, esg_step: int) -> None:
+    def update_equity_index(esg_item: EsgItem, date_col: str | None, esg_step: int) -> None:
         """
         Update equity index(es) with ESG data.
 
@@ -244,6 +239,10 @@ class EsgMaster:
             date_col (str): Date column.
             esg_step (int): esg step.
         """
+        if date_col is None:
+            esg_item.econ_obj.update(apply_compound_growth=True)
+            return
+
         esg_vars = esg_item.esg_vars
         esg_data = esg_item.esg_data
         ipos_date = esg_data.key_to_pos("date_col", date_col)
@@ -272,7 +271,7 @@ class EsgMaster:
         esg_item.econ_obj.update(total_return_index=total_return_index, dividend_yield_ac=dividend_yield_ac)
 
     @staticmethod
-    def update_currency(esg_item: EsgItem, date_col: str) -> None:
+    def update_currency(esg_item: EsgItem, date_col: str | None) -> None:
         """
         Update currency(ies) with ESG data.
 
@@ -280,6 +279,9 @@ class EsgMaster:
             esg_item (Currency or list of Currency): Currency(ies) to update.
             date_col (str): Date column.
         """
+        if date_col is None:
+            esg_item.econ_obj.update(apply_compound_growth=True)
+            return
         esg_item.econ_obj.update(fx_rate=1.0)  # read from esg once there are foreign currencies
 
 

@@ -55,17 +55,17 @@ class Currency:
         """TDimVariable: FX rates."""
         return self.tdv_fx_rate
 
-    def update(self, *, fx_rate: float = None, is_apply_compound_growth: bool = False) -> None:
+    def update(self, *, fx_rate: float | None = None, apply_compound_growth: bool = False) -> None:
         """
         Update the FX rate for the current time step.
 
         Args:
             fx_rate (float): New FX rate.
-            is_apply_compound_growth (bool): True if applying compound growth, defaults to False.
+            apply_compound_growth (bool): True if applying compound growth, defaults to False.
         """
-        if is_apply_compound_growth:
+        if apply_compound_growth:
             if fx_rate is not None:
-                raise ValueError(f"is_apply_compound_growth=True but other fx_rate is given.")
+                raise ValueError(f"apply_compound_growth=True but 'fx_rate' is provided.")
             if self._fx_rate_prev == 0:
                 raise ZeroDivisionError(f"{self.currency_id}: previous fx rate is zero.")
             growth = self._fx_rate / self._fx_rate_prev
@@ -78,7 +78,7 @@ class Currency:
 
         t = self.time
         self.tdv_fx_rate[t] = fx_rate
-        self._last_update = ("updated", t)
+        self._last_update = t
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.currency_id}'"

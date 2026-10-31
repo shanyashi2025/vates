@@ -92,18 +92,18 @@ class EquityIndex:
         return self.tdv_dividend_yield_ac
 
     def update(self, *, total_return_index: float = None, dividend_yield_ac: float = None,
-               is_apply_compound_growth: bool = False) -> None:
+               apply_compound_growth: bool = False) -> None:
         """
         Update the equity index values for the current time step.
 
         Args:
             total_return_index (float): New total return index.
             dividend_yield_ac (float): New dividend yield (annual compounding).
-            is_apply_compound_growth (bool): True if applying compound growth on total return index, defaults to False.
+            apply_compound_growth (bool): True if applying compound growth on total return index, defaults to False.
         """
-        if is_apply_compound_growth:
+        if apply_compound_growth:
             if any(x is not None for x in (total_return_index, dividend_yield_ac)):
-                raise ValueError(f"is_apply_compound_growth=True but other arguments are given.")
+                raise ValueError(f"apply_compound_growth=True but other parameters are provided.")
             growth = self._total_return_index / self._total_return_index_prev
             self._total_return_index_prev = self._total_return_index
             self._total_return_index *= growth

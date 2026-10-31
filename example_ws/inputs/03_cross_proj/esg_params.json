@@ -14,11 +14,11 @@
       "LGD": {"measure": "LGD_PC", "divby": 100},
       "spread_add": {"measure": "SPREAD_ADD_BP", "divby": 10000},
       "spread_mult": {"measure": "SPREAD_MULT_PC", "divby": 100},
-      "apply_mpd_to_decrement": {"measure": "", "fixed_value": true}
+      "apply_mpd_to_decrement": {"measure": ""}
     },
     "item_list": [
-      {"band_id": "AAA", "economy": "CNY", "class": "RATING_AAA"},
-      {"band_id": "AA", "economy": "CNY", "class": "RATING_AA"}
+      {"band_id": "AAA", "economy": "CNY", "class": "RATING_AAA", "apply_mpd_to_decrement": {"fixed_value": true}},
+      {"band_id": "AA", "economy": "CNY", "class": "RATING_AA", "apply_mpd_to_decrement": {"fixed_value": true}}
     ]
   },
   "equity_indices": {
