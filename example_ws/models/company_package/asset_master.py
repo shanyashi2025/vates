@@ -410,18 +410,18 @@ class AssetMaster:
     ) -> dict[str, np.ndarray]:
         n_months = (maturity_date - issue_date).n
         principal = np.zeros(n_months)
-        interest = np.zeros(n_months)
+        coupon = np.zeros(n_months)
 
         df = df.loc[(df["provided_cash_flow_id"] == provided_cash_flow_id)].astype(
-            {"month": int, "principal": float, "interest": float}).set_index("month")
+            {"month": int, "principal": float, "coupon": float}).set_index("month")
 
         for i in range(n_months):
             month = i + 1
             if month in df.index:
                 principal[i] = df.at[month, "principal"]
-                interest[i] = df.at[month, "interest"]
+                coupon[i] = df.at[month, "coupon"]
 
-        return {"principal": principal, "interest": interest}
+        return {"principal": principal, "coupon": coupon}
 
     @classmethod
     def build_profile_fixed_bond_from_df(

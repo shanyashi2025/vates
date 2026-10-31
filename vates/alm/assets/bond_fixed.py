@@ -39,7 +39,7 @@ class BondFixed(Asset):
     __slots__ = ('_units', '_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
                  '_credit_band', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
                  'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
-                 'tdv_interest', 'tdv_principal', 'tdv_default_recovery', 'tdv_mv_price', 'tdv_abv_price',
+                 'tdv_coupon', 'tdv_principal', 'tdv_default_recovery', 'tdv_mv_price', 'tdv_abv_price',
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
 
     
@@ -139,7 +139,7 @@ class BondFixed(Asset):
         self.tdv_units_bd: TDimVariable = create_tdv("units_bd")
         self.tdv_units_ad: TDimVariable = create_tdv("units_ad")
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
-        self.tdv_interest: TDimVariable = create_tdv("interest")
+        self.tdv_coupon: TDimVariable = create_tdv("coupon")
         self.tdv_principal: TDimVariable = create_tdv("principal")
         self.tdv_default_recovery: TDimVariable = create_tdv("default_recovery")
         self.tdv_mv_price: TDimVariable = create_tdv("mv_price")
@@ -266,13 +266,13 @@ class BondFixed(Asset):
         self._units = units_survive - units_maturity
 
         abv_price_st = self._abv_price_dirty
-        coupon_paid = self.cash_flow_gen.get_interest_payment_at_month(p)
+        coupon_paid = self.cash_flow_gen.get_coupon_payment_at_month(p)
         principal_paid = self.cash_flow_gen.get_principal_payment_at_month(p)
 
-        interest = coupon_paid * units_survive
+        coupon = coupon_paid * units_survive
         principal = principal_paid * units_survive
         default_recovery = (abv_price_st - coupon_paid) * units_default * rr
-        self._cash_flow = interest + principal + default_recovery
+        self._cash_flow = coupon + principal + default_recovery
 
         freq = 1 if self._params.coupon_freq == 0 else self._params.coupon_freq  # 1 for zero coupon bond
         self._abv_price_dirty = abv_price_st * (1 + self._amort_rate / freq) ** (freq / 12) - coupon_paid - principal_paid
@@ -289,7 +289,7 @@ class BondFixed(Asset):
         self.tdv_units_maturity[t] = units_maturity
         self.tdv_mv_bd[t] = self._mv_price_dirty * self._units
         self.tdv_abv_bd[t] = self._abv_price_dirty * self._units
-        self.tdv_interest[t] = interest
+        self.tdv_coupon[t] = coupon
         self.tdv_principal[t] = principal
         self.tdv_default_recovery[t] = default_recovery
         self.tdv_cash_flow[t] = self._cash_flow

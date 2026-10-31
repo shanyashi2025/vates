@@ -64,15 +64,15 @@ class BondFixedCashFlow:
     Data class to hold bond cashflow.
 
     Attributes:
-        interest (np.ndarray): Interest cash flows of the bond
+        coupon (np.ndarray): Coupon cash flows of the bond
         principal (np.ndarray): Principal cash flows of the bond
     """
-    interest: npt.NDArray[np.float64]
+    coupon: npt.NDArray[np.float64]
     principal: npt.NDArray[np.float64]
 
     def __post_init__(self):
-        if len(self.interest) != len(self.principal):
-            raise ValueError(f"len(interest): {len(self.interest)} != len(principal): {len(self.interest)}")
+        if len(self.coupon) != len(self.principal):
+            raise ValueError(f"len(coupon): {len(self.coupon)} != len(principal): {len(self.coupon)}")
 
     @classmethod
     def from_params(cls, params: BondFixedParameters) -> 'BondFixedCashFlow':
@@ -83,7 +83,7 @@ class BondFixedCashFlow:
             params (BondFixedParameters): Bond parameters
 
         Returns:
-            BondFixedCashFlow: Fixed cash flow (interest and principal) since issue,
+            BondFixedCashFlow: Fixed cash flow (coupon and principal) since issue,
                 array index `0, 1, ..., n-1` represents month `1, 2, ..., n`
         """
         n_months = params.lifespan_in_months
@@ -92,23 +92,23 @@ class BondFixedCashFlow:
         coupon_freq = params.coupon_freq
         principal = np.zeros(n_months)
         principal[-1] = face_value
-        interest = np.zeros(n_months)
+        coupon = np.zeros(n_months)
         if coupon_rate == 0.0:  # zero coupon bond
             pass
         elif coupon_freq == 0:  # one-off payment at maturity
-            interest[-1] = face_value * coupon_rate
+            coupon[-1] = face_value * coupon_rate
         else:  # i.e. coupon_freq in (1, 2, 4, 12)
             amount = face_value * coupon_rate / coupon_freq
             interval = 12 // coupon_freq
-            interest[::-interval] = amount  # traverse the array backward
-        return BondFixedCashFlow(interest=interest, principal=principal)
+            coupon[::-interval] = amount  # traverse the array backward
+        return BondFixedCashFlow(coupon=coupon, principal=principal)
 
     @property
     def total(self) -> npt.NDArray[np.float64]:
-        return self.interest + self.principal
+        return self.coupon + self.principal
 
     def __mul__(self, other: float) -> 'BondFixedCashFlow':
-        return BondFixedCashFlow(interest=self.interest * other, principal=self.principal * other)
+        return BondFixedCashFlow(coupon=self.coupon * other, principal=self.principal * other)
 
 
 class BondFixedCashFlowGenerator:
@@ -142,19 +142,19 @@ class BondFixedCashFlowGenerator:
     def fixed_cash_flow(self) -> BondFixedCashFlow:
         return self._fixed_cash_flow
 
-    def get_interest_payment_at_month(self, ref_date: pd.Period) -> float:
+    def get_coupon_payment_at_month(self, ref_date: pd.Period) -> float:
         """
-        Get the interest payment at a specific month.
+        Get the coupon payment at a specific month.
 
         Args:
-            ref_date (pd.Period): The date for which to calculate interest.
+            ref_date (pd.Period): The date for which to calculate coupon.
 
         Returns:
-            float: Interest payment for the month.
+            float: Coupon payment for the month.
         """
         age_in_month = (ref_date - self.params.issue_date).n
         if 0 < age_in_month <= self.params.lifespan_in_months:
-            return float(self._fixed_cash_flow.interest[age_in_month - 1])
+            return float(self._fixed_cash_flow.coupon[age_in_month - 1])
         return 0.0
 
     def get_principal_payment_at_month(self, ref_date: pd.Period) -> float:

@@ -1,4 +1,4 @@
-﻿provided_cash_flow_id,month,principal,interest
+﻿provided_cash_flow_id,month,principal,coupon
 test_repay,1,0,0.0000
 test_repay,2,0,0.0000
 test_repay,3,0,0.0000
