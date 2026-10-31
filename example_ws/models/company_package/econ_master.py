@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from dataclasses import dataclass
-from typing import Callable, Self
+from typing import Any, Callable, Self
 
 from vates import ProjModelEngine
 from vates._core import time_synchronized
@@ -39,6 +39,7 @@ class EsgVariable:
     ipos_measure: int = 0
     ipos_term: int | list[int] = 0
     descr: str = ""
+    fixed_value: Any = None
 
     def __post_init__(self):
         if isinstance(self.term, str):
@@ -222,11 +223,15 @@ class EsgMaster:
         var = esg_vars["spread_mult"]
         spread_mult = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
 
+        # 5. apply_mpd_to_decrement
+        var = esg_vars["apply_mpd_to_decrement"]
+        apply_mpd_to_decrement = var.fixed_value
         esg_item.econ_obj.update(
             mpd=float(mpd),
             lgd=float(lgd),
             spread_add=np.full(shape=13, fill_value=spread_add),
             spread_mult=np.full(shape=13, fill_value=spread_mult),
+            apply_mpd_to_decrement=apply_mpd_to_decrement,
         )
 
     @staticmethod
@@ -321,6 +326,7 @@ class EsgMaster:
                                                "LGD": ["measure", "divby"],
                                                "spread_add": ["measure", "divby"],
                                                "spread_mult": ["measure", "divby"],
+                                               "apply_mpd_to_decrement": ["measure", "fixed_value"],
                                            })
         equity_indices = cls.build_esg_items(model_engine=model_engine, econ_cls=EquityIndex, econ_id_attr="index_id",
                                              esg_params=esg_params.get("equity_indices"), esg_df=esg_df,

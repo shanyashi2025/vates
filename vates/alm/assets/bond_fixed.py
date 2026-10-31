@@ -39,7 +39,7 @@ class BondFixed(Asset):
     __slots__ = ('_units', '_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
                  '_credit_band', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
                  'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
-                 'tdv_coupon', 'tdv_principal', 'tdv_default_recovery', 'tdv_mv_price', 'tdv_abv_price',
+                 'tdv_coupon', 'tdv_principal', 'tdv_recovery', 'tdv_mv_price', 'tdv_abv_price',
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
 
     
@@ -116,6 +116,7 @@ class BondFixed(Asset):
         self.cash_flow_gen = BondFixedCashFlowGenerator(bond_params=self._params, fixed_cash_flows=fixed_cash_flow)
         self.pricer = BondFixedPricer(self.cash_flow_gen)
         self.risk_calc = BondFixedRiskCalculator(self.pricer)
+        self.pricer.lock_amortized_price(amort_rate=self.amort_rate, since_date=self.period, init_price=self._abv_price_dirty)
 
         # validate profile price
         if is_profile and not math.isclose(self._abv_price_dirty, self._mv_price_dirty, rel_tol=1e-6, abs_tol=1e-8):
@@ -128,7 +129,7 @@ class BondFixed(Asset):
             calc_price = self.pricer.calculate_market_price(self.period, self.ra_spots)
             if not math.isclose(self._mv_price_dirty, calc_price, rel_tol=1e-6, abs_tol=1e-8):
                 raise ValueError(f"Bond {asset_id} mv_price {self._mv_price_dirty:.4f} != calculated {calc_price:.4f}.")
-            calc_price = self.pricer.calculate_amortized_price(self.period, self._amort_rate)
+            calc_price = self.pricer.get_amortized_price(self.period)
             if not math.isclose(self._abv_price_dirty, calc_price, rel_tol=1e-6, abs_tol=1e-8):
                 raise ValueError(f"Bond {asset_id} abv_price {self._abv_price_dirty:.4f} != calculated {calc_price:.4f}.")
 
@@ -141,7 +142,7 @@ class BondFixed(Asset):
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_coupon: TDimVariable = create_tdv("coupon")
         self.tdv_principal: TDimVariable = create_tdv("principal")
-        self.tdv_default_recovery: TDimVariable = create_tdv("default_recovery")
+        self.tdv_recovery: TDimVariable = create_tdv("recovery")
         self.tdv_mv_price: TDimVariable = create_tdv("mv_price")
         self.tdv_abv_price: TDimVariable = create_tdv("abv_price")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
@@ -201,11 +202,9 @@ class BondFixed(Asset):
         if rf_spots is None:
             raise ValueError("rf_curve.spot_rates is None. Yield curve must be initialized.")
         if self._credit_band:
-            return calculate_risk_adjusted_spot_rates(
-                rf_spots=rf_spots,
-                mult=self._credit_band.spread_mult,
-                add=self._credit_band.spread_add + self._market_spread
-            )
+            return calculate_risk_adjusted_spot_rates(rf_spots=rf_spots,
+                                                      mult=self._credit_band.spread_mult,
+                                                      add=self._credit_band.spread_add + self._market_spread)
         else:
             return rf_spots + self._market_spread
 
@@ -228,7 +227,7 @@ class BondFixed(Asset):
         Calculate all risk metrics for the bond.
 
         Args:
-            eff_dur_delta (float): Delta yiled curve for effective duration calculation.
+            eff_dur_delta (float): Delta yield curve for effective duration calculation.
         """
         return self.risk_calc.calculate_all_risk_metrics(
             valn_date=self.period, market_price=self._mv_price_dirty, spots=self.ra_spots, eff_dur_delta=eff_dur_delta
@@ -252,32 +251,50 @@ class BondFixed(Asset):
             self._abv_price_dirty = 0
             return
 
+        units_st = self._units
+        coupon = self.cash_flow_gen.get_coupon_payment_at_month(p)
+        principal = self.cash_flow_gen.get_principal_payment_at_month(p)
+        abv_price = self.pricer.get_amortized_price(p)
+        ead = abv_price + coupon + principal  # EAD (Exposure at Default)
+
         if self._credit_band is None:
             mpd = 0.0
             rr = 0.0
+            units_default = 0
         else:
             mpd = self._credit_band.marginal_prob_of_default
             rr = self._credit_band.recovery_rate
+            units_default = units_st * mpd if self._credit_band.apply_mpd_to_decrement else 0
 
-        units_st = self._units
-        units_default = units_st * mpd
-        units_survive = units_st - units_default
-        units_maturity = units_survive if (p == self._params.maturity_date) else 0
-        self._units = units_survive - units_maturity
+        # Expected Cash Flow, generally: (1 - PD) * Contractual CF + PD * Recovery
+        # +-------------+--------------------+--------+
+        # | probability |     cash flow      | bv end |
+        # +-------------+--------------------+--------+
+        # |     1 - MPD | coupon + principal |     bv |
+        # |         MPD |           recovery |      0 |
+        # +-------------+--------------------+--------+
+        #   expected cash flow = (1 - MPD) * (coupon + principal) + MPD * recovery
+        #      expected bv end = (1 - MPD) * bv
+        #        expected loss = coupon + principal + bv - (expected cash flow + expected bv end)
+        #                      = MPD * (coupon + principal + bv) - MPD * recovery
+        #    let expected loss = MPD * LGD * EAD
+        # =>   MPD * LGD * EAD = MPD * (coupon + principal + bv) - MPD * recovery
+        # => expected recovery = MPD * recovery
+        #                      = MPD * (coupon + principal + bv) - MPD * LGD * EAD
+        #                      = MPD * RR * EAD (given EAD = bv + coupon + principal)
 
-        abv_price_st = self._abv_price_dirty
-        coupon_paid = self.cash_flow_gen.get_coupon_payment_at_month(p)
-        principal_paid = self.cash_flow_gen.get_principal_payment_at_month(p)
+        cf_coupon = (1 - mpd) * coupon * units_st
+        cf_principal = (1 - mpd) * principal * units_st
+        cf_recovery = mpd * rr * ead * units_st
 
-        coupon = coupon_paid * units_survive
-        principal = principal_paid * units_survive
-        default_recovery = (abv_price_st - coupon_paid) * units_default * rr
-        self._cash_flow = coupon + principal + default_recovery
+        # decrement
+        units = units_st - units_default  # survival
+        units, units_maturity = (0, units) if (p == self._params.maturity_date) else (units, 0)
 
-        freq = 1 if self._params.coupon_freq == 0 else self._params.coupon_freq  # 1 for zero coupon bond
-        self._abv_price_dirty = abv_price_st * (1 + self._amort_rate / freq) ** (freq / 12) - coupon_paid - principal_paid
-        # valid, price = self._validate_current_price("abv", self._abv_price_dirty)
-
+        # store calculated results
+        self._units = units
+        self._cash_flow = cf_coupon + cf_principal + cf_recovery
+        self._abv_price_dirty = abv_price
         if is_update_mv_price:
             self._mv_price_dirty = self.pricer.calculate_market_price(p, self.ra_spots)
 
@@ -289,9 +306,9 @@ class BondFixed(Asset):
         self.tdv_units_maturity[t] = units_maturity
         self.tdv_mv_bd[t] = self._mv_price_dirty * self._units
         self.tdv_abv_bd[t] = self._abv_price_dirty * self._units
-        self.tdv_coupon[t] = coupon
-        self.tdv_principal[t] = principal
-        self.tdv_default_recovery[t] = default_recovery
+        self.tdv_coupon[t] = cf_coupon
+        self.tdv_principal[t] = cf_principal
+        self.tdv_recovery[t] = cf_recovery
         self.tdv_cash_flow[t] = self._cash_flow
 
     @property

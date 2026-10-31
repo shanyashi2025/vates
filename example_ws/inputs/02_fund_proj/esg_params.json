@@ -12,7 +12,8 @@
       "MPD": {"measure": "MPD_PC", "divby": 100, "compound_freq": "monthly"},
       "LGD": {"measure": "LGD_PC", "divby": 100},
       "spread_add": {"measure": "SPREAD_ADD_BP", "divby": 10000},
-      "spread_mult": {"measure": "SPREAD_MULT_PC", "divby": 100}
+      "spread_mult": {"measure": "SPREAD_MULT_PC", "divby": 100},
+      "apply_mpd_to_decrement": {"measure": "", "fixed_value": true}
     },
     "item_list": [
       {"band_id": "AAA", "economy": "CNY", "class": "RATING_AAA"},

@@ -194,7 +194,7 @@ class BondFixedPricer:
         cash_flow_gen (BondFixedCashFlowGenerator): Cash flow generator.
     """
 
-    __slots__ = ('cash_flow_gen',)
+    __slots__ = ('cash_flow_gen', '_amortized_price',)
 
     def __init__(self, cash_flow_generator: BondFixedCashFlowGenerator):
         """
@@ -203,7 +203,8 @@ class BondFixedPricer:
         Args:
             cash_flow_generator (BondFixedCashFlowGenerator): Cash flow generator.
         """
-        self.cash_flow_gen = cash_flow_generator
+        self.cash_flow_gen: BondFixedCashFlowGenerator = cash_flow_generator
+        self._amortized_price: np.ndarray | None = None
 
     def calculate_market_price(self, valn_date: pd.Period, spots: npt.NDArray[np.float64]) -> float:
         """
@@ -244,6 +245,32 @@ class BondFixedPricer:
         factor = (1 + amort_rate / freq) ** (-freq / 12)
         discount = factor ** time
         return np.dot(cash_flows, discount)
+
+    def lock_amortized_price(self, amort_rate: float, since_date: pd.Period | None = None,
+                             init_price: float | None = None) -> None:
+        if since_date is None:
+            since_date = self.cash_flow_gen.params.issue_date
+            n = 0
+            init_price = self.calculate_amortized_price(since_date, amort_rate)
+        else:
+            n = (since_date - self.cash_flow_gen.params.issue_date).n
+        if init_price is None:
+            raise ValueError(f"'init_price' is not provided.")
+        prices = np.full(self.cash_flow_gen.params.lifespan_in_months + 1, fill_value=np.nan)
+        prices[n] = init_price
+        cash_flows = self.cash_flow_gen.get_future_cash_flows(since_date)
+        coupon_freq = self.cash_flow_gen.params.coupon_freq
+        freq = 1 if coupon_freq == 0 else coupon_freq  # 1 for zero coupon bond
+        factor = (1 + amort_rate / freq) ** (freq / 12)
+        for i, cf in enumerate(cash_flows, n + 1):
+            prices[i] = prices[i-1] * factor - cf
+        self._amortized_price = prices
+
+    def get_amortized_price(self, ref_date: pd.Period) -> float:
+        if self._amortized_price is None:
+            return float('nan')
+        n = (ref_date - self.cash_flow_gen.params.issue_date).n
+        return float(self._amortized_price[n])
 
 
 class BondFixedRiskCalculator:

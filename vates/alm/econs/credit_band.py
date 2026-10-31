@@ -24,9 +24,10 @@ class CreditBand:
     _spread_mult: float | npt.NDArray[np.float64]
     _mpd: float
     _lgd: float
+    _apply_mpd_to_decrement: bool
 
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_last_update',
-                 'band_id', '_spread_add', '_spread_mult', '_mpd', '_lgd',
+                 'band_id', '_spread_add', '_spread_mult', '_mpd', '_lgd', '_apply_mpd_to_decrement',
                  'tdv_mpd', 'tdv_lgd', 'tdv_spread_add', 'tdv_spread_mult',)
 
     def __init__(
@@ -76,6 +77,11 @@ class CreditBand:
         return self._mpd
 
     @property
+    def apply_mpd_to_decrement(self) -> bool:
+        """bool: True if apply MPD to decrement."""
+        return self._apply_mpd_to_decrement
+
+    @property
     def loss_given_default(self) -> float:
         """float: Loss Given Default (LGD)."""
         maybe_raise_if_ne(self._last_update, self.time)
@@ -88,6 +94,7 @@ class CreditBand:
         return 1 - self._lgd
 
     def update(self, *, mpd: float | None = None, lgd: float| None = None,
+               apply_mpd_to_decrement: bool | None = None,
                spread_add: float | npt.NDArray[np.float64] | None = None,
                spread_mult: float | npt.NDArray[np.float64] | None = None,
                is_unchange: bool = False) -> None:
@@ -96,6 +103,7 @@ class CreditBand:
 
         Args:
             mpd (float): Marginal Probability of Default (MPD).
+            apply_mpd_to_decrement (bool): True if apply MPD to decrement.
             lgd (float): Loss Given Default (LGD).
             spread_add (float | npt.NDArray[np.float64]): Additive spread.
             spread_mult (float | npt.NDArray[np.float64]): Multiplicative spread (proportional to risk-free spot rates).
@@ -111,6 +119,7 @@ class CreditBand:
             self._lgd = lgd
             self._spread_mult = spread_mult
             self._spread_add = spread_add
+            self._apply_mpd_to_decrement = apply_mpd_to_decrement
         self._on_exit_update()
         self._last_update = self.time
 
