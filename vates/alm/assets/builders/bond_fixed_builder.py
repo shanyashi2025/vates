@@ -208,15 +208,9 @@ class BondFixedBuilder:
         """
         Set market spread to zero and goal seek the face value that gives market price.
         """
-        self.market_spread = 0.0
-        return self.calibrate_face_value()
-
-    def calibrate_face_value(self) -> Self:
-        """
-        Goal seek the face value that makes the market price.
-        """
         if self.mv_price is None:
             raise ValueError('mv_price need to be set first.')
+        self.market_spread = 0.0
         pricer = self._make_pricer()
         calc_price = pricer.calculate_market_price(self.period, spots=self._make_ra_spot_rates())
         scale = self.mv_price / calc_price
@@ -253,8 +247,6 @@ class BondFixedBuilder:
                     self.derive_coupon_rate()
                 elif step in ('risk_neutralization', 'risk_neutralize'):
                     self.risk_neutralize()
-                elif step in ('calibrate_face_value', 'face_value'):
-                    self.calibrate_face_value()
                 else:
                     warnings.warn(f"{type(self).__name__}: '{step}' is ignored as no method matches.")
 
