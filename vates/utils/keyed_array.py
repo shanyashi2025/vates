@@ -104,7 +104,7 @@ class KeyedArray:
             axis = self._at.dim_name_to_axis.get(dim, None)
             if axis is None:
                 if default is _MISSING:
-                    raise KeyError(f"'{dim}' is not an valid dimension name.")
+                    raise KeyError(f"'{dim}' is not a valid dimension name.")
                 return default
         else:
             if default is _MISSING:
@@ -113,7 +113,7 @@ class KeyedArray:
         pos = self._at.key_pos_pairs[axis].get(key, None)
         if pos is None:
             if default is _MISSING:
-                raise KeyError(f"'{key}' is not an valid key in dimension '{dim}'.")
+                raise KeyError(f"'{key}' is not a valid key in dimension '{dim}'.")
             return default
         return pos
 
@@ -333,7 +333,7 @@ class _AtIndexer:
         Returns:
             The element at the specified keys, or `default_value` if lookup fails.
         """
-        pos_tuple = self.parse_pos_tuple(args)
+        pos_tuple = self.parse_pos_tuple(args, None)
         if pos_tuple is None:
             return default_value
         return self._nparray[pos_tuple]
@@ -348,11 +348,9 @@ class _AtIndexer:
             Element(s) from the underlying array.
 
         Raises:
-            IndexError: If keys are incorrect.
+            KeyError: If keys are incorrect.
         """
-        pos_tuple = self.parse_pos_tuple(keys)
-        if pos_tuple is None:
-            raise IndexError(f"index {keys} is not valid")
+        pos_tuple = self.parse_pos_tuple(keys)  # will raise if keys are invalid
         return self._nparray[pos_tuple]
 
     def __setitem__(self, keys, value):
@@ -363,9 +361,7 @@ class _AtIndexer:
             value: Value to assign.
 
         Raises:
-            IndexError: If keys are incorrect.
+            KeyError: If keys are incorrect.
         """
-        pos_tuple = self.parse_pos_tuple(keys)
-        if pos_tuple is None:
-            raise IndexError(f"index {keys} is not valid")
+        pos_tuple = self.parse_pos_tuple(keys)  # will raise if keys are invalid
         self._nparray[pos_tuple] = value

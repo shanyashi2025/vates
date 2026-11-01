@@ -119,16 +119,15 @@ class TestLabelIndexingAt:
 
     def test_at_invalid_key_raises(self, make_kr):
         kr = make_kr()
-        with pytest.raises(IndexError):
+        with pytest.raises(KeyError):
             kr.at[("nope", "c0")]
 
     def test_at_wrong_key_length_warns_then_raises(self, make_kr):
-        # key count != ndim: parse warns and IndexError is raised
+        # key count != ndim: parse warns and ValueError is raised
         kr = make_kr()
 
-        with pytest.warns(UserWarning, match="does not match ndim"):
-            with pytest.raises(IndexError):
-                kr.at[("r0",)]  # 1 key for a 2-D array
+        with pytest.raises(ValueError, match="does not match ndim"):
+            kr.at[("r0",)]  # 1 key for a 2-D array
 
     def test_setitem_by_label(self, make_kr):
         kr = make_kr()
@@ -157,11 +156,11 @@ class TestGetMethod:
 
     def test_get_missing_returns_none_default(self, make_kr):
         kr = make_kr()
-        assert kr.get(("nope", "c0")) is None
+        assert kr.get("nope", "c0") is None
 
     def test_get_missing_returns_explicit_default(self, make_kr):
         kr = make_kr()
-        assert kr.get(("nope", "c0"), default=-1) == -1
+        assert kr.get("nope", "c0", default=-1) == -1
 
     def test_get_unknown_kwarg_dim_returns_default(self, make_kr):
         kr = make_kr()
@@ -188,27 +187,30 @@ class TestKeyToPos:
         kr = make_kr()
         assert kr.key_to_pos("col", "c2") == 2
 
-    def test_unknown_key_returns_none(self, make_kr):
+    def test_unknown_key_raises(self, make_kr):
         kr = make_kr()
-        assert kr.key_to_pos("col", "zzz") is None
+        with pytest.raises(KeyError, match="not a valid key"):
+            kr.key_to_pos("col", "zzz")
 
-    def test_unknown_dim_name_returns_none(self, make_kr):
+    def test_unknown_dim_name_raises(self, make_kr):
         kr = make_kr()
-        assert kr.key_to_pos("bogus", "c2") is None
+        with pytest.raises(KeyError, match="not a valid dimension name"):
+            kr.key_to_pos("bogus", "c2")
 
-    def test_invalid_dim_type_returns_none(self, make_kr):
+    def test_invalid_dim_type_raises(self, make_kr):
         kr = make_kr()
-        assert kr.key_to_pos(1.5, "c2") is None
+        with pytest.raises(TypeError):
+            kr.key_to_pos(1.5, "c2")
 
     def test_unknown_key_with_if_not_found(self, make_kr):
         kr = make_kr()
-        assert kr.key_to_pos("col", "zzz", if_not_found=-9) == -9
+        assert kr.key_to_pos("col", "zzz", default=-9) == -9
 
 
 class TestFromDf:
-    def test_empty_returns_none(self):
+    def test_empty_returns_empty(self):
         df = pd.DataFrame({"A": []})
-        assert KeyedArray.from_df(df) is None
+        assert KeyedArray.from_df(df).shape == (0,)
 
     def test_single_index_labelled(self):
         df = pd.DataFrame({"A": [1.0, 2.0], "B": [3.0, 4.0]},
