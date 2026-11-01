@@ -23,10 +23,12 @@ from vates.alm.assets.derivatives import (
 )
 # econs
 from vates.alm.econs import (
-    CreditBand,
     Currency,
+    DefaultRisk,
+    DefaultRiskParams,
     EquityIndex,
     MarketInfo,
+    Spread,
     YieldCurve,
 )
 # liabs
@@ -58,10 +60,12 @@ __all__ = [
     'Equity',
     'EquityOption',
     # econs
-    'CreditBand',
     'Currency',
+    'DefaultRisk',
+    'DefaultRiskParams',
     'EquityIndex',
     'MarketInfo',
+    'Spread',
     'YieldCurve',
     # liabs
     'Liab',

@@ -199,7 +199,7 @@ The `vates.alm` is the subpackage for asset-liability model.
 There are building blocks for model developments:
 
 - assets: `Cash`, `Equity`, `BondFixed`, `EquityOption`
-- econs: `YieldCurve`, `CreditBand`, `EquityIndex`
+- econs: `EquityIndex`, `YieldCurve`, `Spread`, `DefaultRisk`
 - funds: `Fund`
 - liabs: `ExtProjLiab`
 

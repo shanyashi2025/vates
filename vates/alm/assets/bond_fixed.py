@@ -8,7 +8,7 @@ from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
-from vates.alm.econs import Currency, YieldCurve, CreditBand
+from vates.alm.econs import Currency, YieldCurve, Spread, DefaultRisk, DefaultRiskParams
 from vates.alm.assets.asset_base import Asset, AssetPhase
 from vates.alm.assets._bond_fixed_component import (
     BondFixedParameters,
@@ -17,7 +17,7 @@ from vates.alm.assets._bond_fixed_component import (
     BondFixedPricer,
     BondFixedRiskCalculator,
 )
-from vates.alm.assets._utils import calculate_risk_adjusted_spot_rates
+from vates.alm.assets._utils import make_risk_adjusted_rates
 
 
 class BondFixed(Asset):
@@ -31,13 +31,14 @@ class BondFixed(Asset):
         _abv_price_dirty (float): Amortized book value price (dirty).
         _amort_rate (float): Amortization rate.
         _rf_curve (YieldCurve): Risk-free yield curve.
-        _credit_band (CreditBand | None): Credit band (to provide assumptions, e.g. default and spread).
+        _spread (Spread | None): Spread.
+        _default_risk (DefaultRisk | DefaultRiskParams | None): Default risk.
         cash_flow_gen (BondFixedCashFlowGenerator): Cash flow generator.
         pricer (BondFixedPricer): Bond pricer.
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
     __slots__ = ('_units', '_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
-                 '_credit_band', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
+                 '_spread', '_default_risk', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
                  'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
                  'tdv_coupon', 'tdv_principal', 'tdv_recovery', 'tdv_mv_price', 'tdv_abv_price',
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
@@ -63,7 +64,8 @@ class BondFixed(Asset):
         units: float = 1.0,
         currency: Currency | None = None,
         fixed_cash_flow: BondFixedCashFlow | None = None,
-        credit_band: CreditBand | None = None,
+        spread: Spread | None = None,
+        default_risk: DefaultRisk | DefaultRiskParams | None = None,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
     ):
@@ -87,7 +89,8 @@ class BondFixed(Asset):
             abv_price (float): Amortized book value price (dirty value).
             amort_rate (float): Amortization rate.
             rf_curve (YieldCurve): Risk-free yield curve.
-            credit_band (CreditBand | None): Credit band (to provide assumptions, e.g. default and spread).
+            spread (Spread | None): Spread.
+            default_risk (DefaultRisk | DefaultRiskParams | None): Default risk.
             purchase_date (pd.Period | None): Purchase date, default to initialization date.
             _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
@@ -106,7 +109,8 @@ class BondFixed(Asset):
         self._abv_price_dirty: float = abv_price
         self._amort_rate: float = amort_rate
         self._rf_curve: YieldCurve = rf_curve
-        self._credit_band: CreditBand | None = credit_band
+        self._spread: Spread | None = spread
+        self._default_risk: DefaultRisk | DefaultRiskParams | None = default_risk
         self._cash_flow: float = 0.0
         self._purchase_proceeds: float = 0.0
         self._disposal_proceeds: float = 0.0
@@ -201,10 +205,9 @@ class BondFixed(Asset):
 
         if rf_spots is None:
             raise ValueError("rf_curve.spot_rates is None. Yield curve must be initialized.")
-        if self._credit_band:
-            return calculate_risk_adjusted_spot_rates(rf_spots=rf_spots,
-                                                      mult=self._credit_band.spread_mult,
-                                                      add=self._credit_band.spread_add + self._market_spread)
+        if self._spread:
+            return make_risk_adjusted_rates(rf_rates=rf_spots, proportional_spread=self._spread.proportional,
+                                            additive_spread=self._spread.additive + self._market_spread)
         else:
             return rf_spots + self._market_spread
 
@@ -256,15 +259,15 @@ class BondFixed(Asset):
         principal = self.cash_flow_gen.get_principal_payment_at_month(p)
         abv_price = self.pricer.get_amortized_price(p)
 
-        if self._credit_band is None:
+        if self._default_risk is None:
             mpd = 0
             rr = 0
             units_default = 0
             ead = 0
         else:
-            mpd = self._credit_band.marginal_prob_of_default
-            rr = self._credit_band.recovery_rate
-            if self._credit_band.apply_mpd_to_decrement:
+            mpd = self._default_risk.marginal_prob_of_default
+            rr = self._default_risk.recovery_rate
+            if self._default_risk.pd_affects_decrement:
                 units_default = units_st * mpd
                 ead = abv_price + coupon + principal  # EAD (Exposure at Default)
             else:
@@ -402,7 +405,8 @@ class BondFixed(Asset):
             is_profile=False,
             currency=self._currency,
             fixed_cash_flow=self.cash_flow_gen.fixed_cash_flow,
-            credit_band=self._credit_band,
+            spread=self._spread,
+            default_risk=self._default_risk,
             purchase_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)

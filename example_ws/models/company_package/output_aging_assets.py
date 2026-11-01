@@ -84,13 +84,16 @@ class AgingBond:
     abv_price_dirty: float
     amort_rate: float
     rf_curve_id: str
-    credit_band_id: str
+    spread_id: str
+    default_risk_id: str
     purchase_date: pd.Period
 
     @classmethod
     def from_asset_object(cls, bond: BondFixed) -> Self:
         params = getattr(bond, '_params')
-        credit_band = getattr(bond, '_credit_band', None)
+        spread = getattr(bond, '_spread', None)
+        default_risk = getattr(bond, '_default_risk', None)
+
         return AgingBond(
             asset_id=bond.asset_id,
             is_profile=bond.is_profile,
@@ -110,7 +113,8 @@ class AgingBond:
             market_spread=bond.market_spread,
             abv_price_dirty=bond.abv_price,
             amort_rate=bond.amort_rate,
-            credit_band_id='none' if credit_band is None else credit_band.band_id,
+            spread_id='none' if spread is None else spread.spread_id,
+            default_risk_id='none' if default_risk is None else default_risk.default_risk_id,
             purchase_date=bond.purchase_date,
             coupon_rate=params.coupon_rate,
             rf_curve_id=getattr(bond, '_rf_curve').curve_id,

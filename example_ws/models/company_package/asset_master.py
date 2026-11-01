@@ -4,7 +4,8 @@ from enum import Enum, unique
 from typing import Self, NamedTuple
 
 from vates import ProjModelEngine
-from vates.alm import create_asset, Asset, Cash, BondFixed, Equity, EquityOption, YieldCurve, CreditBand, EquityIndex, Currency, MarketInfo
+from vates.alm import (create_asset, Asset, Cash, BondFixed, Equity, EquityOption, YieldCurve, Spread, DefaultRisk,
+                       EquityIndex, Currency, MarketInfo)
 from .econ_master import EsgMaster
 
 ASSET_CATEGORY_MAPPING = {
@@ -131,7 +132,7 @@ class AssetMaster:
         df_dict: dict[str, pd.DataFrame],
         *,
         model_engine: ProjModelEngine,
-        econs: dict[str, ...] | EsgMaster,
+        econs: dict[str, object] | EsgMaster,
         fund_id: str | None = None
     ) -> Self:
         """
@@ -150,16 +151,18 @@ class AssetMaster:
             currencies = [item.econ_obj for item in econs.currencies]
             equity_indices = [item.econ_obj for item in econs.equity_indices]
             yield_curves = [item.econ_obj for item in econs.yield_curves]
-            credit_bands = [item.econ_obj for item in econs.credit_bands]
+            spreads = [item.econ_obj for item in econs.spreads]
+            default_risks = [item.econ_obj for item in econs.default_risks]
             market_info = econs.market_info.econ_obj
         elif isinstance(econs, dict):
             currencies = econs['currencies']
             equity_indices = econs['equity_indices']
             yield_curves = econs['yield_curves']
-            credit_bands = econs['credit_bands']
+            spreads = econs['spreads']
+            default_risks = econs['default_risks']
             market_info = econs['market_info']
         else:
-            raise TypeError(f"Invalid type of 'market_dict': {econs}, expected 'dict' or 'EsgMaster'.")
+            raise TypeError(f"Invalid type of 'econs': {type(econs)}, expected 'dict' or 'EsgMaster'.")
 
         cash_ls = cls.build_assets_cash_from_df(
             model_engine=model_engine, df=df_dict['assets_cash'].copy(), fund_id=fund_id,
@@ -176,7 +179,7 @@ class AssetMaster:
             fixed_bond_ls = cls.build_assets_fixed_bond_from_df(
                 model_engine=model_engine, df=df_dict[name].copy(), fund_id=fund_id,
                 provided_cash_flow_df= df_dict.get('bond_provided_cash_flow', None),
-                currencies=currencies, yield_curves=yield_curves, credit_bands=credit_bands
+                currencies=currencies, yield_curves=yield_curves, spreads=spreads, default_risks=default_risks,
             )
         else:
             fixed_bond_ls = []
@@ -215,14 +218,16 @@ class AssetMaster:
             currencies = [item.econ_obj for item in econs.currencies]
             equity_indices = [item.econ_obj for item in econs.equity_indices]
             yield_curves = [item.econ_obj for item in econs.yield_curves]
-            credit_bands = [item.econ_obj for item in econs.credit_bands]
+            spreads = [item.econ_obj for item in econs.spreads]
+            default_risks = [item.econ_obj for item in econs.default_risks]
         elif isinstance(econs, dict):
             currencies = econs['currencies']
             equity_indices = econs['equity_indices']
             yield_curves = econs['yield_curves']
-            credit_bands = econs['credit_bands']
+            spreads = econs['spreads']
+            default_risks = econs['default_risks']
         else:
-            raise TypeError(f"Invalid type of 'market_dict': {econs}, expected 'dict' or 'EsgMaster'.")
+            raise TypeError(f"Invalid type of 'econs': {type(econs)}, expected 'dict' or 'EsgMaster'.")
 
         equity_ls = []
         fixed_bond_ls = []
@@ -235,7 +240,7 @@ class AssetMaster:
         if df_dict.get(name := 'profile_bond', None) is not None:
             fixed_bond_ls = cls.build_profile_fixed_bond_from_df(
                 model_engine=model_engine, df=df_dict[name].copy(), fund_id=fund_id,
-                currencies=currencies, yield_curves=yield_curves, credit_bands=credit_bands
+                currencies=currencies, yield_curves=yield_curves, spreads=spreads, default_risks=default_risks
             )
 
         return AssetMaster(fixed_bond_ls=fixed_bond_ls, equity_ls=equity_ls)
@@ -315,7 +320,8 @@ class AssetMaster:
         provided_cash_flow_df: pd.DataFrame | None = None,
         currencies: list['Currency'],
         yield_curves: list['YieldCurve'],
-        credit_bands: list['CreditBand'],
+        spreads: list['Spread'],
+        default_risks: list['DefaultRisk'],
     ) -> list:
         """
         Build bond asset objects from a DataFrame and add them to a fund if provided.
@@ -327,7 +333,8 @@ class AssetMaster:
             provided_cash_flow_df (pd.DataFrame): DataFrame of provided cash flow.
             currencies (list): List of Currency objects.
             yield_curves (list): List of YieldCurve objects.
-            credit_bands (list): List of CreditBand objects.
+            spreads (list): List of Spread objects.
+            default_risks (list): List of DefaultRisk objects.
 
         Returns:
             list: List of Bond asset objects.
@@ -342,8 +349,10 @@ class AssetMaster:
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
             rf_curve_id = row["rf_curve_id"]
             rf_curve = next((x for x in yield_curves if x.curve_id == rf_curve_id), None)
-            credit_band_id = row["credit_band_id"]
-            credit_band = next((x for x in credit_bands if x.band_id == credit_band_id), None)
+            spread_id = row["spread_id"]
+            spread = next((x for x in spreads if x.spread_id == spread_id), None)
+            default_risk_id = row["default_risk_id"]
+            default_risk = next((x for x in default_risks if x.default_risk_id == default_risk_id), None)
             provided_cash_flow_id = row["provided_cash_flow_id"]
             is_cash_flow_provided = provided_cash_flow_id.lower() != 'none'
             if is_cash_flow_provided:
@@ -362,8 +371,8 @@ class AssetMaster:
             if "build_pipeline" in df.columns:
                 build_pipeline = row["build_pipeline"].split(cls.pipe_operator)
                 for i, item in enumerate(build_pipeline):
-                    if item == "credit_band_params":
-                        build_pipeline[i] = ("credit_band_params", {"credit_spread": row["credit_spread"]})
+                    if item == "prob_of_default":
+                        build_pipeline[i] = ("prob_of_default", {"credit_spread": row["credit_spread"]})
             else:
                 build_pipeline = None
 
@@ -388,7 +397,8 @@ class AssetMaster:
                     stat_classification=stat_classification,
                 ),
                 rf_curve=rf_curve,
-                credit_band=credit_band,
+                spread=spread,
+                default_risk=default_risk,
                 abv_price=row["abv_price_dirty"],
                 mv_price=row["mv_price_dirty"],
                 market_spread=row["market_spread"],
@@ -441,7 +451,8 @@ class AssetMaster:
         fund_id: str | None,
         currencies: list['Currency'],
         yield_curves: list['YieldCurve'],
-        credit_bands: list['CreditBand']
+        spreads: list['Spread'],
+        default_risks: list['DefaultRisk'],
     ) -> list:
         """
         Build a profile of bond assets for a fund from a DataFrame.
@@ -452,7 +463,8 @@ class AssetMaster:
             fund_id (str): Fund id to filter the df.
             currencies (list): List of Currency objects.
             yield_curves (list): List of YieldCurve objects.
-            credit_bands (list): List of CreditBand objects.
+            spreads (list): List of Spread objects.
+            default_risks (list): List of DefaultRisk objects.
 
         Returns:
             list: List of Bond asset objects for the profile.
@@ -471,8 +483,10 @@ class AssetMaster:
             currency = next((x for x in currencies if x.currency_id == currency_id), None)
             rf_curve_id = row["rf_curve_id"]
             rf_curve = next((x for x in yield_curves if x.curve_id == rf_curve_id), None)
-            credit_band_id = row["credit_band_id"]
-            credit_band = next((x for x in credit_bands if x.band_id == credit_band_id), None)
+            spread_id = row["spread_id"]
+            spread = next((x for x in spreads if x.spread_id == spread_id), None)
+            default_risk_id = row["default_risk_id"]
+            default_risk = next((x for x in default_risks if x.default_risk_id == default_risk_id), None)
             ifrs_classification = row["ifrs_classification"]
             local_classification = row["local_classification"]
             stat_classification = row["stat_classification"]
@@ -496,7 +510,8 @@ class AssetMaster:
                     stat_classification=stat_classification,
                 ),
                 rf_curve=rf_curve,
-                credit_band=credit_band,
+                spread=spread,
+                default_risk=default_risk,
                 abv_price=row["face_value"],
                 mv_price=row["face_value"],
                 market_spread=row["market_spread"],

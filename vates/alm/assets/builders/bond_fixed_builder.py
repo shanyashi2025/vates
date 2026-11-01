@@ -7,12 +7,12 @@ from typing import Self
 
 from vates._core import ProjModelEngine, time_synchronized
 from vates.finmath import convert_interest_rates, solve_ytm, solve_z_spread
-from vates.alm.econs import Currency, YieldCurve, CreditBand, CreditBandParams
+from vates.alm.econs import Currency, YieldCurve, Spread, DefaultRisk, DefaultRiskParams
 from vates.alm.assets.bond_fixed import BondFixed
 from vates.alm.assets._bond_fixed_component import (
     BondFixedParameters, BondFixedCashFlow, BondFixedCashFlowGenerator, BondFixedPricer
 )
-from vates.alm.assets._utils import calculate_risk_adjusted_spot_rates
+from vates.alm.assets._utils import make_risk_adjusted_rates
 
 
 _MISSING: object = object()
@@ -37,7 +37,8 @@ class BondFixedBuilder:
         coupon_freq: int,
         face_value: float,
         rf_curve: YieldCurve,
-        credit_band: CreditBand | None,
+        spread: Spread | None,
+        default_risk: DefaultRisk | None,
         is_profile: bool,
         attr_aliases: Mapping[str, str] | None = None,
         fixed_cash_flow: BondFixedCashFlow | dict[str, np.ndarray] | None = None,
@@ -60,7 +61,8 @@ class BondFixedBuilder:
             currency (Currency): Currency.
             units (float): Number of units.
             rf_curve (YieldCurve): Risk-free yield curve
-            credit_band (CreditBand | None): Credit band (to provide assumptions, e.g. default and spread).
+            spread (Spread | None): Spread.
+            default_risk (DefaultRisk | DefaultRiskParams | None): Default risk.
             issue_date (pd.Period): Issue date of the bond.
             maturity_date (pd.Period): Maturity date of the bond.
             coupon_freq (int): Coupon frequency per year, [0, 1, 2, 4, 12].
@@ -91,7 +93,8 @@ class BondFixedBuilder:
             raise TypeError(f"Invalid type of 'fixed_cash_flow', expected ('BondFixedCashFlow', 'dict').")
 
         self.rf_curve: YieldCurve = rf_curve
-        self.credit_band: CreditBand | CreditBandParams | None = credit_band
+        self.spread: Spread | None = spread
+        self.default_risk: DefaultRisk | DefaultRiskParams | None = default_risk
         self.is_profile: bool = is_profile
 
         self.coupon_rate: float | None = coupon_rate
@@ -135,19 +138,18 @@ class BondFixedBuilder:
     def _rf_spot_rates(self) -> np.ndarray:
         return self.rf_curve.spot_rates
 
-    def _make_ra_spot_rates(self, credit_band: CreditBand | object = _MISSING,
-                            market_spread: float | object = _MISSING) -> np.ndarray:
-        if credit_band is _MISSING:
-            credit_band = self.credit_band
-        if market_spread is _MISSING:
-            market_spread = self.market_spread
-        if market_spread is None:
+    def _make_ra_spot_rates(self, spread: Spread | object = _MISSING, plus: float | object = _MISSING) -> np.ndarray:
+        if spread is _MISSING:
+            spread = self.spread
+        if plus is _MISSING:
+            plus = self.market_spread
+        if plus is None:
             raise ValueError(f'{self.asset_id}: market_spread not specified.')
-        if credit_band:
-            return calculate_risk_adjusted_spot_rates(rf_spots=self._rf_spot_rates, mult=credit_band.spread_mult,
-                                                      add=credit_band.spread_add + market_spread)
+        if spread:
+            return make_risk_adjusted_rates(rf_rates=self._rf_spot_rates, proportional_spread=spread.proportional,
+                                            additive_spread=spread.additive + plus)
         else:
-            return self._rf_spot_rates + market_spread
+            return self._rf_spot_rates + plus
 
     def derive_coupon_rate(self) -> Self:
         """
@@ -192,7 +194,7 @@ class BondFixedBuilder:
         self.market_spread = solve_z_spread(
             target_pv=self.mv_price,
             cash_flows=self._make_cash_flow(),
-            spots=self._make_ra_spot_rates(market_spread=0.0)
+            spots=self._make_ra_spot_rates(plus=0.0)
         )
         return self
 
@@ -219,33 +221,31 @@ class BondFixedBuilder:
             self.fixed_cash_flow *= scale
         return self
 
-    def set_credit_band_params(self, credit_spread: float) -> Self:
+    def calibrate_prob_of_default(self, credit_spread: float) -> Self:
         """
-        Creates a `CreditBandParams` object for the bond's `credit_band`, and calibrate MPD (marginal probability of
-        default) to be consistent with the credit spread. No effect on decrement or recovery.
+        Creates a `DefaultRiskParams` object for the bond's `default_risk`, and calibrate probability of default
+        to be consistent with the credit spread. Not affects decrement or recovery.
 
-        The `CreditBandParams` are set up using follows parameters:
-            spread_add: `credit_spread`
-            mpd: calibrate it to be consistent with `credit_spread`
-            apply_mpd_to_decrement (not used): False => no decrement
-            spread_mult (not used): 0.0
-            lgd (not used): 1.0 => this makes recovery to be 0.0
+        The `DefaultRiskParams` are set up using follows parameters:
+            marginal_prob_of_default (MPD): calibrate it to be consistent with `credit_spread`
+            (not used) pd_affects_decrement: False => no decrement
+            (not used) loss_given_default (LGD): 1.0 => makes recovery cash flow to be 0.0
 
         Args:
-            credit_spread: credit spread (additive)
+            credit_spread: component that compensates credit risk
         """
-        if isinstance(self.credit_band, CreditBand):
-            raise ValueError(f"'{self.credit_band.band_id}': 'CreditBand' object is not allowed to manually set parameters.")
+        if isinstance(self.default_risk, DefaultRisk):
+            raise ValueError(f"'{self.default_risk.default_risk_id}': 'DefaultRisk' object is not allowed to manually set parameters.")
         if self.mv_price is None:
             raise ValueError('mv_price need to be set first.')
         pricer = self._make_pricer()
         comprehensive_spread = solve_z_spread(target_pv=self.mv_price, cash_flows=self._make_cash_flow(),
-                                              spots=self._make_ra_spot_rates(market_spread=0.0))
-        market_spread = comprehensive_spread - credit_spread
-        pv_cf = pricer.calculate_market_price(self.period, spots=self._make_ra_spot_rates(market_spread=market_spread))
-        mpd = 1 - self.mv_price / pv_cf  # marginal probability of default => (1 - mpd) * `pv_cf` @ `disc w/o credit` = mv
-        self.credit_band = CreditBandParams(band_id=self.asset_id, spread_add=credit_spread, mpd=mpd)
-        self.market_spread = market_spread
+                                              spots=self._make_ra_spot_rates(spread=None, plus=0.0))
+        net_spread = comprehensive_spread - credit_spread
+        pv_cf = pricer.calculate_market_price(valn_date=self.period,
+                                              spots=self._make_ra_spot_rates(spread=None, plus=net_spread))
+        mpd = 1 - self.mv_price / pv_cf  # makes (1 - mpd) * `pv_cf` @ `disc w/o credit` = mv
+        self.default_risk = DefaultRiskParams(default_risk_id=self.asset_id, marginal_prob_of_default=mpd)
         return self
 
     def build(self, pipeline: list[str | tuple[str, dict]] | None = None) -> BondFixed:
@@ -279,8 +279,8 @@ class BondFixedBuilder:
                     self.derive_coupon_rate()
                 elif name in ('risk_neutralization', 'risk_neutralize'):
                     self.risk_neutralize()
-                elif name in ('set_credit_band_params', 'credit_band_params'):
-                    self.set_credit_band_params(**kwargs)
+                elif name in ('calibrate_prob_of_default', 'prob_of_default'):
+                    self.calibrate_prob_of_default(**kwargs)
                 else:
                     warnings.warn(f"{type(self).__name__}: '{name}' is ignored as no method matches.")
 
@@ -320,6 +320,7 @@ class BondFixedBuilder:
             abv_price=self.abv_price,
             amort_rate=self.amort_rate,
             rf_curve=self.rf_curve,
-            credit_band=self.credit_band,
+            spread=self.spread,
+            default_risk=self.default_risk,
             is_profile=self.is_profile
         )

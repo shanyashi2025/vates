@@ -3,22 +3,30 @@
     "variable_default_attribute": {
       "rates": {"measure": "PRICE", "term": "1-50", "term_type": "Y", "interp_method": "Geometric"}
     },
-    "item_list": [
+    "items": [
       {"curve_id": "cny_rf", "economy": "CNY", "class": "ZCB"},
       {"curve_id": "gby_60d_ma", "economy": "CNY", "class": "GBY_60D_MA", "rates": {"term": "1-40"}}
     ]
   },
-  "credit_bands": {
+"spreads": {
+    "variable_default_attribute": {
+      "spread_add": {"measure": "SPREAD_BP", "divby": 10000},
+      "spread_propn": {"measure": "SPREAD_PROPN_PC", "divby": 100}
+    },
+    "items": [
+      {"spread_id": "AAA", "economy": "CNY", "class": "RATING_AAA", "spread_propn": {"fixed_value": 0}},
+      {"spread_id": "AA", "economy": "CNY", "class": "RATING_AA", "spread_propn": {"fixed_value": 0}}
+    ]
+  },
+  "default_risks": {
     "variable_default_attribute": {
       "MPD": {"measure": "MPD_PC", "divby": 100, "compound_freq": "monthly"},
       "LGD": {"measure": "LGD_PC", "divby": 100},
-      "spread_add": {"measure": "SPREAD_ADD_BP", "divby": 10000},
-      "spread_mult": {"measure": "SPREAD_MULT_PC", "divby": 100},
-      "apply_mpd_to_decrement": {"measure": ""}
+      "pd_affects_decrement": {"measure": "NOT_USED"}
     },
-    "item_list": [
-      {"band_id": "AAA", "economy": "CNY", "class": "RATING_AAA", "apply_mpd_to_decrement": {"fixed_value": true}},
-      {"band_id": "AA", "economy": "CNY", "class": "RATING_AA", "apply_mpd_to_decrement": {"fixed_value": true}}
+    "items": [
+      {"default_risk_id": "AAA", "economy": "CNY", "class": "RATING_AAA", "pd_affects_decrement": {"fixed_value": true}},
+      {"default_risk_id": "AA", "economy": "CNY", "class": "RATING_AA", "pd_affects_decrement": {"fixed_value": true}}
     ]
   },
   "equity_indices": {
@@ -26,10 +34,10 @@
       "total_return_index": {"measure": "RET_IDX"},
       "dividend_yield": {"measure": "RNY_PC", "divby": 100, "compound_freq": "monthly"}
     },
-    "item_list": []
+    "items": []
   },
   "currencies": {
-    "item_list": [
+    "items": [
       {"currency_id": "cny", "economy": "CNY", "class": "EXCHANGE_RATE"}
     ]
   }

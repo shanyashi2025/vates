@@ -80,8 +80,8 @@ with the running projection. `vates/alm/assets/asset_base.py` is the canonical e
 High-level Asset–Liability Management building blocks that plug into the projection engine:
 
 - **`econs/`** — economic/ESG items: `YieldCurve` (spot-rate curve with a `last_update` time tag),
-  `CreditBand`, `EquityIndex`, `Currency`, `MarketInfo`. These are updated each time-step by an ESG
-  master before assets roll forward.
+  `Spread`, `DefaultRisk`, `EquityIndex`, `Currency`, `MarketInfo`. These are updated each time-step 
+  by an ESG master before assets roll forward.
 - **`assets/`** — asset classes (`Cash`, `Equity`, `BondFixed`, derivatives `EquityOption`) built on
   the `Asset` abstract base. Each asset implements a `roll_forward()` / `close_dealing()` lifecycle.
   Distinguishes *profile* (to-be-purchased) vs *existing* assets. 

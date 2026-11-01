@@ -14,7 +14,10 @@
   "yield_curve": {
     "include": ["spot_rate"]
   },
-  "credit": {
+  "spread": {
+    "include": "__ALL__"
+  },
+  "default_risk": {
     "include": "__ALL__"
   }
 }

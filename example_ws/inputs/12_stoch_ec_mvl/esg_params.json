@@ -3,24 +3,27 @@
     "variable_default_attribute": {
       "rates": {"measure": "PRICE", "term": "1;2;3;5;7;10;20;30;50", "term_type": "Y", "interp_method": "Geometric"}
     },
-    "item_list": [
+    "items": [
       {"curve_id": "cny_rf", "economy": "CNY", "class": "ZCB"}
     ]
   },
-  "credit_bands": {
-    "item_list": []
+  "spreads": {
+    "items": []
+  },
+  "default_risks": {
+    "items": []
   },
   "equity_indices": {
     "variable_default_attribute": {
       "total_return_index": {"measure": "RET_IDX"},
       "dividend_yield": {"measure": "RNY_PC", "divby": 100, "compound_freq": "monthly"}
     },
-    "item_list": [
+    "items": [
       {"index_id": "cny_equity", "economy": "CNY", "class": "EQUITY"}
     ]
   },
   "currencies": {
-    "item_list": [
+    "items": [
       {"currency_id": "cny", "economy": "CNY", "class": "EXCHANGE_RATE"}
     ]
   }
