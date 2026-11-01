@@ -4,6 +4,8 @@ import warnings
 from typing import Any, Self
 
 
+_MISSING: object = object()
+
 class KeyedArray:
     """NumPy array with label-based indexing support.
 
@@ -85,13 +87,13 @@ class KeyedArray:
         """Mapping from keys to integer-position indices for each dimension."""
         return self._at.key_pos_pairs
 
-    def key_to_pos(self, dim: int | str, key: Any, if_not_found = None) -> int | None:
+    def key_to_pos(self, dim: int | str, key: Any, default = _MISSING) -> int:
         """Return the integer-position index mapped from the key of the dimension.
 
         Args:
             dim (int | str): Dimension, either dimension (int) or dimension name (str) is supported.
             key: Key to lookup.
-            if_not_found (Optional): Value to return if no match is found, defaults to None.
+            default (Optional): Value to return if no match is found; raise if not provided.
 
         Returns:
             The integer-position index mapped from the key of the dimension.
@@ -101,12 +103,18 @@ class KeyedArray:
         elif isinstance(dim, str):
             axis = self._at.dim_name_to_axis.get(dim, None)
             if axis is None:
-                return if_not_found
+                if default is _MISSING:
+                    raise KeyError(f"'{dim}' is not an valid dimension name.")
+                return default
         else:
-            return if_not_found
+            if default is _MISSING:
+                raise TypeError(f"Invalid type of 'dim': {type(dim)}, expected ('int', 'str').")
+            return default
         pos = self._at.key_pos_pairs[axis].get(key, None)
         if pos is None:
-            return if_not_found
+            if default is _MISSING:
+                raise KeyError(f"'{key}' is not an valid key in dimension '{dim}'.")
+            return default
         return pos
 
     def get(self, *args, default=None, **kwargs):
@@ -147,7 +155,7 @@ class KeyedArray:
         unpack_multi_index: bool = False,
         multi_index_name: str = 'row_index',
         col_index_name: str = 'col_name'
-    ) -> Self | None:
+    ) -> 'KeyedArray':
         """Creat KeyedArray object from pandas DataFrame.
 
         Args:
@@ -159,12 +167,12 @@ class KeyedArray:
             col_index_name (str): Name of column index, e.g. 'col_name', 'var_name', 'field_name', defaults to 'col_name'.
 
         Returns:
-            KeyedArray object: return None for empty DataFrame (`n_rows` is 0).
+            KeyedArray object.
 
         """
         n_rows, n_cols = df.shape
         if n_rows == 0:
-            return None
+            return KeyedArray(np.array([]), frozen=frozen, key_pos_pairs=[{}])
 
         col_key_pos_pair = {key: pos for pos, key in enumerate(df.columns)}
         values = df.to_numpy().ravel()
@@ -261,15 +269,15 @@ class _AtIndexer:
             return default
         return dim_names
 
-    def parse_pos_tuple(self, keys, if_not_found = None) -> tuple[int, ...] | None:
+    def parse_pos_tuple(self, keys, default = _MISSING) -> tuple[int, ...]:
         """Convert a tuple of keys into a tuple of integer-position indices.
 
         Args:
             keys: Keys corresponding to each dimension.
-            if_not_found (Optional): Value to return if no match is found, defaults to None.
+            default (Optional): Value to return if no match is found; raise if not provided.
 
         Returns:
-            Tuple of integer indices. None (or specified `if_not_found` value) if not found.
+            Tuple of integer indices.
 
         """
         if not isinstance(keys, tuple):
@@ -278,14 +286,19 @@ class _AtIndexer:
             if self._nparray.ndim == 2 and len(keys) > 2:  # attempt to infer tuple of keys for 2D array
                 keys = keys[:-1], keys[-1]
             else:
-                warnings.warn(f"length of keys {len(keys)} does not match ndim {self._nparray.ndim}")
-                return if_not_found
+                msg = f"length of keys {len(keys)} does not match ndim {self._nparray.ndim}"
+                if default is _MISSING:
+                    raise ValueError(msg)
+                warnings.warn(msg)
+                return default
 
         pos_list: list[int] = []
         for axis, key in enumerate(keys):
             pos, valid, _ = self.resolve_key(axis, key)
             if not valid:
-                return if_not_found
+                if default is _MISSING:
+                    raise KeyError(f"'{key}' is not a valid key in dimension '{self.dim_names[axis]}'")
+                return default
             pos_list.append(pos)
 
         return tuple(pos_list)
