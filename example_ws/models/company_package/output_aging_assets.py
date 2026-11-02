@@ -66,7 +66,7 @@ class AgingEquity:
 class AgingBond:
     asset_id: str
     is_profile: bool
-    units: float
+    qty: float
     currency_id: str
     fund_id: str
     allocation_group: str
@@ -97,7 +97,7 @@ class AgingBond:
         return AgingBond(
             asset_id=bond.asset_id,
             is_profile=bond.is_profile,
-            units=bond.units,
+            qty=bond.qty,
             currency_id='none' if bond.currency is None else bond.currency.currency_id,
             fund_id=getattr(bond, "fund_id"),
             allocation_group=getattr(bond, "allocation_group"),

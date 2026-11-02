@@ -389,7 +389,7 @@ class AssetMaster:
                 coupon_freq=row["coupon_freq"],
                 face_value=row["face_value"],
                 fixed_cash_flow=fixed_cash_flow,
-                units=row["units"],
+                qty=row["qty"],
                 attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="fixed_bond",
                     ifrs_classification=ifrs_classification,
@@ -502,7 +502,7 @@ class AssetMaster:
                 coupon_freq=row["coupon_freq"],
                 face_value=row["face_value"],
                 redemp_sched=None,
-                units=row["units"],
+                qty=row["qty"],
                 attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="fixed_bond",
                     ifrs_classification=ifrs_classification,
@@ -721,7 +721,7 @@ class AssetMaster:
                 currency=currency,
                 call_or_put=row["call_or_put"],
                 exercise_date=pd.Period(row["exercise_date"], freq='M'),
-                units=row["units"],
+                qty=row["qty"],
                 price=row["price"],
                 stock_price=row["stock_price"],
                 strike_price=row["strike_price"],

@@ -31,7 +31,7 @@ class BondFixedBuilder:
         model_engine: ProjModelEngine,
         asset_id: str,
         currency: Currency,
-        units: float,
+        qty: float,
         issue_date: pd.Period,
         maturity_date: pd.Period,
         coupon_freq: int,
@@ -59,7 +59,7 @@ class BondFixedBuilder:
             asset_id (str): Asset identifier.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             currency (Currency): Currency.
-            units (float): Number of units.
+            qty (float): Number of units.
             rf_curve (YieldCurve): Risk-free yield curve
             spread (Spread | None): Spread.
             default_risk (DefaultRisk | DefaultRiskParams | None): Default risk.
@@ -78,7 +78,7 @@ class BondFixedBuilder:
         self.asset_id: str = asset_id
         self.attr_aliases: Mapping[str, str] | None = attr_aliases
         self.currency: Currency = currency
-        self.units: float = units
+        self.qty: float = qty
         self.issue_date: pd.Period = issue_date
         self.maturity_date: pd.Period = maturity_date
 
@@ -308,7 +308,7 @@ class BondFixedBuilder:
             asset_id=self.asset_id,
             attr_aliases=self.attr_aliases,
             currency=self.currency,
-            units=self.units,
+            qty=self.qty,
             issue_date=self.issue_date,
             maturity_date=self.maturity_date,
             coupon_rate=self.coupon_rate,

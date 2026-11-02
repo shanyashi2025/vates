@@ -27,7 +27,7 @@ class EquityOptionBuilder:
         is_profile: bool,
         call_or_put: CallOrPut,
         exercise_date: pd.Period,
-        units: float,
+        qty: float,
         stock_price: float,
         strike_price: float,
         equity_index: EquityIndex,
@@ -50,7 +50,7 @@ class EquityOptionBuilder:
             is_profile (bool): Ture if profile asset, False if existing asset.
             call_or_put (CallOrPut): Call or put option.
             exercise_date (pd.Period): Option exercise date.
-            units (float): Number of equity option units.
+            qty (float): Number of units, +ve/-ve represents long/short position.
             price (float): Option price (market value).
             stock_price (float): Underlying stock price.
             strike_price (float): Strike price.
@@ -66,7 +66,7 @@ class EquityOptionBuilder:
         self.is_profile: bool = is_profile
         self.call_or_put: CallOrPut = call_or_put
         self.exercise_date: pd.Period = exercise_date
-        self.units: float = units
+        self.qty: float = qty
         self.stock_price: float = stock_price
         self.strike_price: float = strike_price
         self.equity_index: EquityIndex = equity_index
@@ -141,7 +141,7 @@ class EquityOptionBuilder:
             is_profile=self.is_profile,
             call_or_put=self.call_or_put,
             exercise_date=self.exercise_date,
-            units=self.units,
+            qty=self.qty,
             price=self.price,
             stock_price=self.stock_price,
             strike_price=self.strike_price,

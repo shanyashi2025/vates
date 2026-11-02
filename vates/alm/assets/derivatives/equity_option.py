@@ -25,9 +25,9 @@ class EquityOption(Asset):
         _std_dev (float): Standard deviation, i.e. volatility.
         _is_pay_dividend (bool): True if paying dividend, otherwise False.
     """
-    __slots__ = ('_units', '_call_or_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
+    __slots__ = ('_qty', '_call_or_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
                  '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds',
-                 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow', 'tdv_stock_price', 'tdv_price',
+                 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow', 'tdv_stock_price', 'tdv_price',
                  'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
 
     def __init__(
@@ -45,7 +45,7 @@ class EquityOption(Asset):
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,
-        units: float = 1.0,
+        qty: float = 1.0,
         currency: Currency | None = None,
         attr_aliases: Mapping[str, str] | None = None,
         purchase_date: pd.Period | None = None,
@@ -57,7 +57,7 @@ class EquityOption(Asset):
         Args:
             asset_id (str): Asset identifier.
             is_profile (bool): Ture if profile asset, False if existing asset.
-            units (float): Number of equity option units, +ve/-ve means long/short position.
+            qty (float): Number of units, +ve/-ve represents long/short position.
             currency (Currency): Asset currency.
             call_or_put (CallOrPut): Call or put option.
             exercise_date (pd.Period): Option exercise date.
@@ -73,7 +73,7 @@ class EquityOption(Asset):
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
-        self._units: float = units
+        self._qty: float = qty
         self._call_or_put: CallOrPut = CallOrPut[call_or_put.upper()] if isinstance(call_or_put, str) else call_or_put
         self._exercise_date: pd.Period = exercise_date
         self._price: float = price
@@ -102,8 +102,8 @@ class EquityOption(Asset):
 
         # create array variables
         create_tdv = lambda name: make_proj_variable(name, model_engine=model_engine, owner=asset_id, group='equity_option')
-        self.tdv_units_bd: TDimVariable = create_tdv("units_bd")
-        self.tdv_units_ad: TDimVariable = create_tdv("units_ad")
+        self.tdv_qty_bd: TDimVariable = create_tdv("qty_bd")
+        self.tdv_qty_ad: TDimVariable = create_tdv("qty_ad")
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_stock_price: TDimVariable = create_tdv("stock_price")
         self.tdv_price: TDimVariable = create_tdv("price")
@@ -113,14 +113,14 @@ class EquityOption(Asset):
         self.tdv_disposal_proceeds: TDimVariable = create_tdv("disposal_proceeds")
 
         t = self.time
-        self.tdv_units_ad[t] = self._units
+        self.tdv_qty_ad[t] = self._qty
         self.tdv_stock_price[t] = self._stock_price
         self.tdv_price[t] = self._price
         self.tdv_mv_ad[t] = self.market_value
 
     @property
-    def units(self) -> float:
-        return self._units
+    def qty(self) -> float:
+        return self._qty
 
     @property
     def std_dev(self) -> float:
@@ -155,7 +155,7 @@ class EquityOption(Asset):
         t = self.time
 
         if not self.is_alive_beg:
-            self._units = 0
+            self._qty = 0
             self._price = 0
             self._cash_flow = 0
             return
@@ -177,13 +177,13 @@ class EquityOption(Asset):
         else:  # exercise at this month
             payoff = max(self._stock_price - self._strike_price, 0.0) if self._call_or_put == CallOrPut.CALL else \
                      max(self._strike_price - self._stock_price, 0.0)
-            self._cash_flow = payoff * self._units
+            self._cash_flow = payoff * self._qty
             self._price = 0.0
 
-        self.tdv_units_bd[t] = self._units
+        self.tdv_qty_bd[t] = self._qty
         self.tdv_stock_price[t] = self._stock_price
         self.tdv_price[t] = self._price
-        self.tdv_mv_bd[t] = self._price * self._units
+        self.tdv_mv_bd[t] = self._price * self._qty
         self.tdv_cash_flow[t] = self._cash_flow
 
     def get_greeks(self) -> dict:
@@ -224,9 +224,9 @@ class EquityOption(Asset):
         if not (0 < propn <=1):
             warnings.warn(f"Buying proportion {propn:.4f} of an existing equity option '{self._asset_id}', "
                           f"normally expected: 0 < proportion <=1.")
-        units = self._units * propn
-        self._units -= units
-        self._disposal_proceeds += self._price * units
+        qty = self._qty * propn
+        self._qty -= qty
+        self._disposal_proceeds += self._price * qty
 
     @transition(require_all=AssetPhase.PROFILE)
     def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> 'EquityOption':
@@ -243,10 +243,10 @@ class EquityOption(Asset):
         if new_asset_id is None:
             new_asset_id = self.asset_id + ("" if self._n_clone == 0 else f"_{self._n_clone}")
 
-        units = self._units * scale
+        qty = self._qty * scale
 
         clone = EquityOption(
-            units=units,
+            qty=qty,
             call_or_put=self._call_or_put,
             exercise_date=self._exercise_date,
             price=self._price,
@@ -264,7 +264,7 @@ class EquityOption(Asset):
             purchase_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)
-        clone._purchase_proceeds = clone._price * units
+        clone._purchase_proceeds = clone._price * qty
         self._n_clone += 1
         return clone
 
@@ -274,7 +274,7 @@ class EquityOption(Asset):
         Update the equity option asset after dealing.
         """
         t = self.time
-        self.tdv_units_ad[t] = self._units
+        self.tdv_qty_ad[t] = self._qty
         self.tdv_mv_ad[t] = self.market_value
         self.tdv_purchase_proceeds[t] = self._purchase_proceeds
         self.tdv_disposal_proceeds[t] = self._disposal_proceeds
@@ -286,7 +286,7 @@ class EquityOption(Asset):
     @property
     def market_value(self) -> float:
         """float: Market value of the equity option asset."""
-        return self._price * self._units
+        return self._price * self._qty
 
     @property
     @transition(require_all=AssetPhase.ROLLED)

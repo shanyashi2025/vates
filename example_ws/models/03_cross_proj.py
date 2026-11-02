@@ -214,9 +214,9 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
                 ctx.mc_equity += asset.market_value * mc_factor_equity
             # --- (3.1.2) interest rate risk mc ---
             for asset in aging_assets_master.fixed_bond_ls:
-                ctx.aa_int_base += asset.pricer.calculate_market_price(p, cross_intba_spot) * asset.units
-                ctx.aa_int_up += asset.pricer.calculate_market_price(p, cross_intup_spot) * asset.units
-                ctx.aa_int_dn += asset.pricer.calculate_market_price(p, cross_intdn_spot) * asset.units
+                ctx.aa_int_base += asset.pricer.calculate_market_price(p, cross_intba_spot) * asset.qty
+                ctx.aa_int_up += asset.pricer.calculate_market_price(p, cross_intup_spot) * asset.qty
+                ctx.aa_int_dn += asset.pricer.calculate_market_price(p, cross_intdn_spot) * asset.qty
                 ctx.mc_spread += asset.market_value * mc_factor_spread
 
             # --- (3.2) collect liability mc input ---

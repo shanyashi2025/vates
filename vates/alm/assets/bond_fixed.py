@@ -36,9 +36,9 @@ class BondFixed(Asset):
         pricer (BondFixedPricer): Bond pricer.
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
-    __slots__ = ('_units', '_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
+    __slots__ = ('_qty', '_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
                  '_spread', '_default_risk', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
-                 'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
+                 'tdv_qty_default', 'tdv_qty_maturity', 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow',
                  'tdv_coupon', 'tdv_principal', 'tdv_recovery', 'tdv_mv_price', 'tdv_abv_price',
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purchase_proceeds',
                  'tdv_disposal_proceeds',)
@@ -61,7 +61,7 @@ class BondFixed(Asset):
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,
-        units: float = 1.0,
+        qty: float = 1.0,
         currency: Currency | None = None,
         fixed_cash_flow: BondFixedCashFlow | None = None,
         spread: Spread | None = None,
@@ -75,7 +75,7 @@ class BondFixed(Asset):
         Args:
             asset_id (str): Asset identifier.
             is_profile (bool): Ture if profile asset, False if existing asset.
-            units (float): Number of bond units.
+            qty (float): Number of units.
             currency (Currency): Asset currency.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             issue_date (pd.Period): Issue date of the bond.
@@ -96,7 +96,7 @@ class BondFixed(Asset):
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
-        self._units: float = units
+        self._qty: float = qty
         self._params: BondFixedParameters = BondFixedParameters(
             issue_date=issue_date,
             maturity_date=maturity_date,
@@ -139,10 +139,10 @@ class BondFixed(Asset):
 
         # Initialize TDepVariable
         create_tdv = lambda name: make_proj_variable(name, model_engine=model_engine, owner=asset_id, group='bond')
-        self.tdv_units_default: TDimVariable = create_tdv("units_default")
-        self.tdv_units_maturity: TDimVariable = create_tdv("units_maturity")
-        self.tdv_units_bd: TDimVariable = create_tdv("units_bd")
-        self.tdv_units_ad: TDimVariable = create_tdv("units_ad")
+        self.tdv_qty_default: TDimVariable = create_tdv("qty_default")
+        self.tdv_qty_maturity: TDimVariable = create_tdv("qty_maturity")
+        self.tdv_qty_bd: TDimVariable = create_tdv("qty_bd")
+        self.tdv_qty_ad: TDimVariable = create_tdv("qty_ad")
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_coupon: TDimVariable = create_tdv("coupon")
         self.tdv_principal: TDimVariable = create_tdv("principal")
@@ -159,13 +159,13 @@ class BondFixed(Asset):
         t = self.time
         self.tdv_mv_price[t] = self._mv_price_dirty
         self.tdv_abv_price[t] = self._abv_price_dirty
-        self.tdv_units_ad[t] = self._units
-        self.tdv_mv_ad[t] = self.mv_price * self._units
-        self.tdv_abv_ad[t] = self.abv_price * self._units
+        self.tdv_qty_ad[t] = self._qty
+        self.tdv_mv_ad[t] = self.mv_price * self._qty
+        self.tdv_abv_ad[t] = self.abv_price * self._qty
 
     @property
-    def units(self) -> float:
-        return self._units
+    def qty(self) -> float:
+        return self._qty
 
     @property
     def mv_price(self) -> float:
@@ -178,12 +178,12 @@ class BondFixed(Asset):
     @property
     def market_value(self) -> float:
         """float: Market value of the bond asset."""
-        return self._mv_price_dirty * self._units
+        return self._mv_price_dirty * self._qty
 
     @property
     def amortized_book_value(self) -> float:
         """float: Amortized book value of the bond asset."""
-        return self._abv_price_dirty * self._units
+        return self._abv_price_dirty * self._qty
 
     @property
     def market_spread(self) -> float:
@@ -244,17 +244,17 @@ class BondFixed(Asset):
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, *, is_update_mv_price: bool = True, **kwargs) -> None:
         """
-        Roll the bond forward one period, updating units, prices, and cash flows.
+        Roll the bond forward one period, updating quantity, prices, and cash flows.
         """
         t, p = self.time, self.period
 
         if not self.is_alive_beg:
-            self._units = 0
+            self._qty = 0
             self._mv_price_dirty = 0
             self._abv_price_dirty = 0
             return
 
-        units_st = self._units
+        qty_st = self._qty
         coupon = self.cash_flow_gen.get_coupon_payment_at_month(p)
         principal = self.cash_flow_gen.get_principal_payment_at_month(p)
         abv_price = self.pricer.get_amortized_price(p)
@@ -262,16 +262,16 @@ class BondFixed(Asset):
         if self._default_risk is None:
             mpd = 0
             rr = 0
-            units_default = 0
+            qty_default = 0
             ead = 0
         else:
             mpd = self._default_risk.marginal_prob_of_default
             rr = self._default_risk.recovery_rate
             if self._default_risk.pd_affects_decrement:
-                units_default = units_st * mpd
+                qty_default = qty_st * mpd
                 ead = abv_price + coupon + principal  # EAD (Exposure at Default)
             else:
-                units_default = 0
+                qty_default = 0
                 ead = coupon + principal
 
         # Expected Cash Flow, generally: (1 - PD) * Contractual CF + PD * Recovery
@@ -300,16 +300,16 @@ class BondFixed(Asset):
         #                      = MPD * (coupon + principal) - MPD * LGD * EAD
         #                      = MPD * RR * EAD (<- EAD = coupon + principal)
 
-        cf_coupon = (1 - mpd) * coupon * units_st
-        cf_principal = (1 - mpd) * principal * units_st
-        cf_recovery = mpd * rr * ead * units_st
+        cf_coupon = (1 - mpd) * coupon * qty_st
+        cf_principal = (1 - mpd) * principal * qty_st
+        cf_recovery = mpd * rr * ead * qty_st
 
         # decrement
-        units = units_st - units_default  # survival
-        units, units_maturity = (0, units) if (p == self._params.maturity_date) else (units, 0)
+        qty = qty_st - qty_default  # survival
+        qty, qty_maturity = (0, qty) if (p == self._params.maturity_date) else (qty, 0)
 
         # store calculated results
-        self._units = units
+        self._qty = qty
         self._cash_flow = cf_coupon + cf_principal + cf_recovery
         self._abv_price_dirty = abv_price
         if is_update_mv_price:
@@ -318,11 +318,11 @@ class BondFixed(Asset):
         # Update arrays
         self.tdv_mv_price[t] = self._mv_price_dirty
         self.tdv_abv_price[t] = self._abv_price_dirty
-        self.tdv_units_bd[t] = self._units
-        self.tdv_units_default[t] = units_default
-        self.tdv_units_maturity[t] = units_maturity
-        self.tdv_mv_bd[t] = self._mv_price_dirty * self._units
-        self.tdv_abv_bd[t] = self._abv_price_dirty * self._units
+        self.tdv_qty_bd[t] = self._qty
+        self.tdv_qty_default[t] = qty_default
+        self.tdv_qty_maturity[t] = qty_maturity
+        self.tdv_mv_bd[t] = self._mv_price_dirty * self._qty
+        self.tdv_abv_bd[t] = self._abv_price_dirty * self._qty
         self.tdv_coupon[t] = cf_coupon
         self.tdv_principal[t] = cf_principal
         self.tdv_recovery[t] = cf_recovery
@@ -361,9 +361,9 @@ class BondFixed(Asset):
         """
         if propn < 0: raise ValueError(f"{propn=:.6f}: can not sell negative proportion of existing bonds.")
         if propn > 1: raise ValueError(f"{propn=:.6f}: can not sell >100% proportion of existing bonds.")
-        units = self._units * propn
-        self._units -= units
-        self._disposal_proceeds += self._mv_price_dirty * units
+        qty = self._qty * propn
+        self._qty -= qty
+        self._disposal_proceeds += self._mv_price_dirty * qty
 
     @transition(require_all=AssetPhase.PROFILE)
     def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> 'BondFixed':
@@ -385,10 +385,10 @@ class BondFixed(Asset):
         if new_asset_id is None:
             new_asset_id = self.asset_id + ("" if self._n_clone == 0 else f"_{self._n_clone}")
 
-        units = self._units * scale
+        qty = self._qty * scale
 
         clone = BondFixed(
-            units=units,
+            qty=qty,
             issue_date=self._params.issue_date,
             maturity_date=self._params.maturity_date,
             coupon_rate=self._params.coupon_rate,
@@ -410,17 +410,17 @@ class BondFixed(Asset):
             purchase_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)
-        clone._purchase_proceeds = clone._mv_price_dirty * units
+        clone._purchase_proceeds = clone._mv_price_dirty * qty
         self._n_clone += 1
         return clone
 
     @transition(require_all=AssetPhase.ROLLED, mark=AssetPhase.CLOSED)
     def close_dealing(self) -> None:
         """
-        Update the bond after dealing, storing units and values.
+        Update the bond after dealing, storing quantity and values.
         """
         t = self.time
-        self.tdv_units_ad[t] = self._units
+        self.tdv_qty_ad[t] = self._qty
         self.tdv_mv_ad[t] = self.market_value
         self.tdv_abv_ad[t] = self.amortized_book_value
         self.tdv_purchase_proceeds[t] = self._purchase_proceeds

@@ -1,5 +1,4 @@
 import numpy as np
-from typing import Dict
 
 from vates.finmath.rate_conversion import InterestRateTermStructure
 
