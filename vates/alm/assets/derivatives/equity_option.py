@@ -2,7 +2,6 @@ import math
 import pandas as pd
 import warnings
 from collections.abc import Mapping
-from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
@@ -29,7 +28,7 @@ class EquityOption(Asset):
     __slots__ = ('_units', '_call_or_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
                  '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds',
                  'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow', 'tdv_stock_price', 'tdv_price',
-                 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
+                 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
 
     def __init__(
         self,
@@ -41,10 +40,10 @@ class EquityOption(Asset):
         strike_price: float,
         equity_index: EquityIndex,
         rf_curve: YieldCurve,
-        std_dev: float = None,
+        std_dev: float = float("nan"),
         is_pay_dividend: bool = False,
         model_engine: ProjModelEngine | None = None,
-        asset_id: str | None = None,
+        asset_id: str = "",
         is_profile: bool = False,
         units: float = 1.0,
         currency: Currency | None = None,
@@ -70,7 +69,7 @@ class EquityOption(Asset):
             std_dev (float): Standard deviation, i.e. volatility.
             is_pay_dividend (bool): True if paying dividend, otherwise False.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
-            purchase_date (pd.Period | None): Purchase date, default to initilization date.
+            purchase_date (pd.Period | None): Purchase date, default to initialization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
@@ -110,8 +109,8 @@ class EquityOption(Asset):
         self.tdv_price: TDimVariable = create_tdv("price")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
-        self.tdv_purch_proceeds: TDimVariable = create_tdv("purchase_proceeds")
-        self.tdv_disp_proceeds: TDimVariable = create_tdv("disposal_proceeds")
+        self.tdv_purchase_proceeds: TDimVariable = create_tdv("purchase_proceeds")
+        self.tdv_disposal_proceeds: TDimVariable = create_tdv("disposal_proceeds")
 
         t = self.time
         self.tdv_units_ad[t] = self._units
@@ -209,7 +208,7 @@ class EquityOption(Asset):
         Raises:
             ValueError: Always.
         """
-        raise ValueError("Can not buy equity option by scaling exsiting segment.")
+        raise ValueError("Can not buy equity option by scaling existing instance.")
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
@@ -223,14 +222,14 @@ class EquityOption(Asset):
             ValueError: If propn is negative.
         """
         if not (0 < propn <=1):
-            warnings.warn(f"Buying proportion {propn:.4f} of an exsiting equity option '{self._asset_id}', "
+            warnings.warn(f"Buying proportion {propn:.4f} of an existing equity option '{self._asset_id}', "
                           f"normally expected: 0 < proportion <=1.")
         units = self._units * propn
         self._units -= units
         self._disposal_proceeds += self._price * units
 
     @transition(require_all=AssetPhase.PROFILE)
-    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
+    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> 'EquityOption':
         """
         Scale the equity option profile by a factor, positive/negative scale represents long/short.
 
@@ -277,8 +276,8 @@ class EquityOption(Asset):
         t = self.time
         self.tdv_units_ad[t] = self._units
         self.tdv_mv_ad[t] = self.market_value
-        self.tdv_purch_proceeds[t] = self._purchase_proceeds
-        self.tdv_disp_proceeds[t] = self._disposal_proceeds
+        self.tdv_purchase_proceeds[t] = self._purchase_proceeds
+        self.tdv_disposal_proceeds[t] = self._disposal_proceeds
 
     @property
     def price(self) -> float:

@@ -20,18 +20,18 @@ class Cash(Asset):
 
     """
     __slots__ = ('_nominal', '_purchase_proceeds', '_disposal_proceeds', '_market_info', '_ret_id', '_ret_id_short_pos',
-                 'tdv_cash_flow', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
+                 'tdv_cash_flow', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
 
     def __init__(
         self,
         *,
         nominal: float,
         model_engine: ProjModelEngine | None = None,
-        asset_id: str | None = None,
+        asset_id: str = "",
         currency: Currency | None = None,
         market_info: MarketInfo | None = None,
-        ret_id: str | None = "",
-        ret_id_short_pos: str | None = None,
+        ret_id: str = "",
+        ret_id_short_pos: str = "",
         attr_aliases: Mapping[str, str] | None = None,
         purchase_date: pd.Period | None = None
     ):
@@ -46,7 +46,7 @@ class Cash(Asset):
             ret_id (str): Identifier of cash return.
             ret_id_short_pos (str): Identifier of cash return on short cash positions.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
-            purchase_date (pd.Period | None): Purchase date, default to initilization date.
+            purchase_date (pd.Period | None): Purchase date, default to initialization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
@@ -62,8 +62,8 @@ class Cash(Asset):
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
-        self.tdv_purch_proceeds: TDimVariable = create_tdv("purchase_proceeds")
-        self.tdv_disp_proceeds: TDimVariable = create_tdv("disposal_proceeds")
+        self.tdv_purchase_proceeds: TDimVariable = create_tdv("purchase_proceeds")
+        self.tdv_disposal_proceeds: TDimVariable = create_tdv("disposal_proceeds")
 
         self.tdv_mv_ad[self.time] = self._nominal
 
@@ -95,6 +95,8 @@ class Cash(Asset):
         ret = ret_rate if self._nominal >= 0 else ret_rate_pos
         if ret is None:
             ret_id = self._ret_id if self._nominal >= 0 else self._ret_id_short_pos
+            if self._market_info is None:
+                raise ValueError(f"'ret_rate' is not provided.")
             ret = self._market_info.get(ret_id)
 
         t = self.time
@@ -148,8 +150,8 @@ class Cash(Asset):
         """
         t = self.time
         self.tdv_mv_ad[t] = self.market_value
-        self.tdv_purch_proceeds[t] = self._purchase_proceeds
-        self.tdv_disp_proceeds[t] = self._disposal_proceeds
+        self.tdv_purchase_proceeds[t] = self._purchase_proceeds
+        self.tdv_disposal_proceeds[t] = self._disposal_proceeds
 
     @property
     def market_value(self) -> float:

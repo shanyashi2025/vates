@@ -342,7 +342,7 @@ class TestAddProjectionTimeSynchronizer:
                                           ("time_synchronizer", "synchronizer"),
                                           (".time_synchronizer", "model_engine"),])
     def test_decorator_unmatched_key_raises(self, key, sig):
-        with pytest.raises(KeyError, match="does't match signaure of '__init__'"):
+        with pytest.raises(KeyError, match="doesn't match signature of '__init__'"):
             @time_synchronized(key)
             class Asset:
                 def __init__(self, sig):

@@ -43,7 +43,7 @@ class Asset(ABC):
     def __init__(
         self,
         *,
-        model_engine: ProjModelEngine = None,  # will be referenced by decorator `time_synchronized`
+        model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `time_synchronized`
         asset_id: str,
         is_profile: bool,
         purchase_date: pd.Period | None,
@@ -64,7 +64,7 @@ class Asset(ABC):
         self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else (lambda: None)
         self._asset_id: str = asset_id or str(uuid.uuid4())
         self._is_profile: bool = is_profile
-        self._purchase_date: pd.Period = purchase_date
+        self._purchase_date: pd.Period | None = purchase_date
         self._currency: Currency | None = currency
         self._attr_aliases: Mapping[str, str] | None = attr_aliases
         self._lc: Lifecycle[AssetPhase] = Lifecycle[AssetPhase]()
@@ -83,11 +83,11 @@ class Asset(ABC):
         return self._is_profile
 
     @property
-    def currency(self) -> Currency:
+    def currency(self) -> Currency | None:
         return self._currency
 
     @property
-    def purchase_date(self) -> pd.Period:
+    def purchase_date(self) -> pd.Period | None:
         return self._purchase_date
 
     @property
@@ -154,7 +154,7 @@ class Asset(ABC):
         """Return a new, non-profile asset scaled by `scale`; leave self unchanged."""
         pass
 
-    def _copy_dynamic_attrs_to(self, clone: Self, *, check_level: CheckLevel | None = None) -> None:
+    def _copy_dynamic_attrs_to(self, clone, *, check_level: CheckLevel | None = None) -> None:
         if clone is self:
             warnings.warn("Ignore copying attributes to self.")
             return

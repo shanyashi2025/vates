@@ -1,7 +1,6 @@
 import pandas as pd
 import warnings
 from collections.abc import Mapping
-from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
@@ -20,8 +19,9 @@ class Equity(Asset):
         tdv_dividend (float): Dividend for the current period.
     """
     __slots__ = ('_equity_index', '_mv', '_purchase_cost', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', '_n_clone',
-                 'tdv_cash_flow', 'tdv_dividend', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purch_cost_bd', 'tdv_purch_cost_ad',
-                 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
+                 'tdv_cash_flow', 'tdv_dividend', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_cost_bd',
+                 'tdv_purchase_cost_ad',
+                 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
 
     def __init__(
         self,
@@ -31,7 +31,7 @@ class Equity(Asset):
         purchase_cost: float | None = None,
         attr_aliases: Mapping[str, str] | None = None,
         model_engine: ProjModelEngine | None = None,
-        asset_id: str | None = None,
+        asset_id: str = "",
         is_profile: bool = False,
         currency: Currency | None = None,
         purchase_date: pd.Period | None = None
@@ -47,7 +47,7 @@ class Equity(Asset):
             purchase_cost (float | None): Purchase cost.
             equity_index (EquityIndex): Associated equity index.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
-            purchase_date (pd.Period | None): Purchase date, default to initilization date.
+            purchase_date (pd.Period | None): Purchase date, default to initialization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, )
@@ -70,14 +70,14 @@ class Equity(Asset):
         self.tdv_dividend: TDimVariable = create_tdv("dividend")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
-        self.tdv_purch_cost_bd: TDimVariable = create_tdv("purchase_cost_bd")
-        self.tdv_purch_cost_ad: TDimVariable = create_tdv("purchase_cost_ad")
-        self.tdv_purch_proceeds: TDimVariable = create_tdv("purchase_proceeds")
-        self.tdv_disp_proceeds: TDimVariable = create_tdv("disposal_proceeds")
+        self.tdv_purchase_cost_bd: TDimVariable = create_tdv("purchase_cost_bd")
+        self.tdv_purchase_cost_ad: TDimVariable = create_tdv("purchase_cost_ad")
+        self.tdv_purchase_proceeds: TDimVariable = create_tdv("purchase_proceeds")
+        self.tdv_disposal_proceeds: TDimVariable = create_tdv("disposal_proceeds")
 
         t = self.time
         self.tdv_mv_ad[t] = self._mv
-        self.tdv_purch_cost_ad[t] = self._purchase_cost
+        self.tdv_purchase_cost_ad[t] = self._purchase_cost
 
     @property
     def is_alive(self) -> bool:
@@ -101,7 +101,7 @@ class Equity(Asset):
         self.tdv_dividend[t] = dividend
         self.tdv_cash_flow[t] = self._cash_flow
         self.tdv_mv_bd[t] = self._mv
-        self.tdv_purch_cost_bd[t] = self._purchase_cost
+        self.tdv_purchase_cost_bd[t] = self._purchase_cost
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def buy_propn(self, propn: float) -> None:
@@ -147,7 +147,7 @@ class Equity(Asset):
         return self._disposal_proceeds
 
     @transition(require_all=AssetPhase.PROFILE)
-    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
+    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> 'Equity':
         """
         Scale the equity profile by a factor.
 
@@ -188,9 +188,9 @@ class Equity(Asset):
         """
         t = self.time
         self.tdv_mv_ad[t] = self._mv
-        self.tdv_purch_cost_ad[t] = self._purchase_cost
-        self.tdv_purch_proceeds[t] = self._purchase_proceeds
-        self.tdv_disp_proceeds[t] = self._disposal_proceeds
+        self.tdv_purchase_cost_ad[t] = self._purchase_cost
+        self.tdv_purchase_proceeds[t] = self._purchase_proceeds
+        self.tdv_disposal_proceeds[t] = self._disposal_proceeds
 
     @property
     def market_value(self) -> float:

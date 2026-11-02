@@ -259,8 +259,8 @@ class ProjModelEngine:
         """Write the projection result."""
         if not self._run_config.enable_write_proj_result:
             return
-        variables = self._proj_variable_manager.select(
-            where=self.load_json('__proj_variables__.json', allow_not_found=True))
+        variables = self._proj_variable_manager.filter(
+            rule=self.load_json('__proj_variables__.json', allow_not_found=True))
         if not variables:
             return  # empty list
         variables.sort(key=lambda x: (x.group, x.owner, x.name))
@@ -284,10 +284,10 @@ class ProjModelEngine:
         """Write the stochastic result."""
         if not self._run_config.stoch_result_file_mode:
             return
-        where = self.load_json('__stoch_variables__.json', allow_not_found=True)
-        if where is None:
+        rule = self.load_json('__stoch_variables__.json', allow_not_found=True)
+        if rule is None:
             return
-        variables = self._proj_variable_manager.select(where)
+        variables = self._proj_variable_manager.filter(rule)
         if not variables:
             return  # empty list
         variables.sort(key=lambda x: (x.group, x.owner, x.name))

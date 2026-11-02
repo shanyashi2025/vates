@@ -4,7 +4,6 @@ import numpy.typing as npt
 import pandas as pd
 import warnings
 from collections.abc import Mapping
-from typing import Self
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
@@ -41,7 +40,8 @@ class BondFixed(Asset):
                  '_spread', '_default_risk', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
                  'tdv_units_default', 'tdv_units_maturity', 'tdv_units_bd', 'tdv_units_ad', 'tdv_cash_flow',
                  'tdv_coupon', 'tdv_principal', 'tdv_recovery', 'tdv_mv_price', 'tdv_abv_price',
-                 'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purch_proceeds', 'tdv_disp_proceeds',)
+                 'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purchase_proceeds',
+                 'tdv_disposal_proceeds',)
 
     
     def __init__(
@@ -59,7 +59,7 @@ class BondFixed(Asset):
         rf_curve: YieldCurve,
         attr_aliases: Mapping[str, str] | None = None,
         model_engine: ProjModelEngine | None = None,
-        asset_id: str | None = None,
+        asset_id: str = "",
         is_profile: bool = False,
         units: float = 1.0,
         currency: Currency | None = None,
@@ -153,8 +153,8 @@ class BondFixed(Asset):
         self.tdv_abv_bd: TDimVariable = create_tdv("abv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
         self.tdv_abv_ad: TDimVariable = create_tdv("abv_ad")
-        self.tdv_purch_proceeds: TDimVariable = create_tdv("purchase_proceeds")
-        self.tdv_disp_proceeds: TDimVariable = create_tdv("disposal_proceeds")
+        self.tdv_purchase_proceeds: TDimVariable = create_tdv("purchase_proceeds")
+        self.tdv_disposal_proceeds: TDimVariable = create_tdv("disposal_proceeds")
 
         t = self.time
         self.tdv_mv_price[t] = self._mv_price_dirty
@@ -346,7 +346,7 @@ class BondFixed(Asset):
         Raises:
             ValueError: Always.
         """
-        raise ValueError("It's not allowed to buy bonds by scaling exsiting segments.")
+        raise ValueError("Cannot buy bond by scaling existing instance.")
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
@@ -366,7 +366,7 @@ class BondFixed(Asset):
         self._disposal_proceeds += self._mv_price_dirty * units
 
     @transition(require_all=AssetPhase.PROFILE)
-    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
+    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> 'BondFixed':
         """
         Scale the bond profile by a factor.
 
@@ -423,5 +423,5 @@ class BondFixed(Asset):
         self.tdv_units_ad[t] = self._units
         self.tdv_mv_ad[t] = self.market_value
         self.tdv_abv_ad[t] = self.amortized_book_value
-        self.tdv_purch_proceeds[t] = self._purchase_proceeds
-        self.tdv_disp_proceeds[t] = self._disposal_proceeds
+        self.tdv_purchase_proceeds[t] = self._purchase_proceeds
+        self.tdv_disposal_proceeds[t] = self._disposal_proceeds

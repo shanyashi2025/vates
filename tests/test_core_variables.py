@@ -33,12 +33,12 @@ class TestConstVariable:
         assert v.result == 42
         assert v.is_constant is True
         assert v.ndim == 0
-        assert v.dims is None
+        assert v.dims is ()
         v.result = 21
         assert v.result == 21
         assert v.is_constant is True
         assert v.ndim == 0
-        assert v.dims is None
+        assert v.dims is ()
 
     def test_array_storage(self):
         v = ConstVariable("c", owner="o", group="g",
@@ -75,25 +75,16 @@ class TestConstVariable:
         assert v.ndim == 3
         assert v.dims == (("a", "b"), ("c", ), ("d", ))
 
-    def test_four_dims_rejected(self):
-        with pytest.raises(ValueError):
-            ConstVariable("4d", owner="o", group="g",
-                          dims=[["a"], ["b"], ["c"], ["d"]])
-
-    def test_dims_must_be_list(self):
-        with pytest.raises(ValueError):
-            ConstVariable("bad", owner="o", group="g", dims="AB")
-
-    def test_dim_class_that_is_not_enum_raises_valueerror(self):
-        # a class that is not an Enum reaches the `else` branch
-        with pytest.raises(ValueError):
-            ConstVariable("bad", owner="o", group="g", dims=[int])
-
-    def test_dim_element_that_is_not_a_class_raises_typeerror(self):
-        # `issubclass(1, Enum)` fails before the guard's `else` branch
+    @pytest.mark.parametrize("bad", ["foo", 42, 3.14])
+    def test_dims_must_be_list_or_tuple(self, bad):
         with pytest.raises(TypeError):
-            ConstVariable("bad", owner="o", group="g",
-                          dims=[1, 2])
+            ConstVariable("bad", owner="o", group="g", dims=bad)
+
+    @pytest.mark.parametrize("bad", [int, 42, "foo"])
+    def test_wrong_dim_type_raises(self, bad):
+        # must be list, tuple or subclass of Enum, else raises
+        with pytest.raises(TypeError):
+            ConstVariable("bad", owner="o", group="g", dims=[bad])
 
 
 class TestTDimVariable:

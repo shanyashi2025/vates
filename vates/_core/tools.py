@@ -1,5 +1,5 @@
 import inspect
-from typing import Literal
+from typing import Literal, overload
 
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core._time_synchronizer import ProjectionTimeSynchronizer
@@ -53,7 +53,7 @@ def time_synchronized(key: str, /):
         sig = inspect.signature(cls.__init__)
         req_param = engine_param if engine_param is not None else sync_param
         if req_param not in sig.parameters:
-            raise KeyError(f"time_synchronizer key '{key}': '{req_param}' does't match signaure of '__init__'.")
+            raise KeyError(f"time_synchronizer key '{key}': '{req_param}' doesn't match signature of '__init__'.")
 
         def new_init(self, *args, **kwargs):
             bound = sig.bind(self, *args, **kwargs)
@@ -80,6 +80,32 @@ def time_synchronized(key: str, /):
 
     return decorator
 
+
+@overload
+def make_proj_variable(
+    name: str,
+    /,
+    *,
+    model_engine: ProjModelEngine | None = None,
+    variable_type: Literal["const", "c"],
+    owner: str,
+    group: str,
+    dims: list | None = None,
+) -> ConstVariable:
+    ...
+
+@overload
+def make_proj_variable(
+    name: str,
+    /,
+    *,
+    model_engine: ProjModelEngine | None = None,
+    variable_type: Literal["t", "time_dimensioned"] = "t",
+    owner: str,
+    group: str,
+    dims: list | None = None,
+) -> TDimVariable:
+    ...
 
 def make_proj_variable(
     name: str,

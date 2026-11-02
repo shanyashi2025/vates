@@ -2,9 +2,66 @@ import numpy as np
 import pandas as pd
 import weakref
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from enum import Enum
 from itertools import product
-from typing import Self, Iterator
+from typing import Self
+
+
+type DimElemItem = str | int
+type DimItem = list[DimElemItem] | tuple[DimElemItem, ...] | Enum
+
+
+def _maybe_convert_to_str(x) -> str:
+    if isinstance(x, str):
+        return x
+    elif isinstance(x, int):
+        return str(x)
+    else:
+        raise TypeError(f"Invalid type of {x}: {type(x)}, expected ('str', 'int').")
+
+def _maybe_hit_dim_cache(x: tuple, cache: set[tuple]) -> tuple:
+    hit = next((item for item in cache if item == x), None)
+    if hit is not None:
+        return hit
+    cache.add(x)
+    return x
+
+def _resolve_dims(dims: list[DimItem] | tuple[DimItem, ...] | None,
+                  cache: set[tuple[tuple[str, ...], ...]] | None = None) -> tuple[tuple[str, ...], ...]:
+    """Normalize dims to a tuple of label lists.
+
+    Args:
+        dims (list[DimItem] | tuple[DimItem]): List or tuple of `DimItem`; `DimItem` can be list (of str or int),
+            tuple (of str or int) or Enum class.
+        cache (set[tuple[tuple[str, ...], ...]]): Set of cache.
+
+    Returns:
+        tuple[tuple[str, ...], ...]: Normalized labels.
+
+    Raises:
+        TypeError: If `dims` is not list or tuple; if `dim` (item in `dims`) is not list, tuple or Enum subclass;
+            if an item in a `dim` is not str or int.
+    """
+    if dims is None:
+        return () if cache is None else _maybe_hit_dim_cache((), cache)
+
+    if not isinstance(dims, (list, tuple)):
+        raise TypeError(f"Invalid type of 'dims': {type(dims)}, expected ('list', 'tuple').")
+
+    resolved = []
+    for dim in dims:
+        if isinstance(dim, list):
+            resolved.append(tuple([_maybe_convert_to_str(x) for x in dim]))
+        elif isinstance(dim, tuple):
+            resolved.append(dim)
+        elif isinstance(dim, type) and issubclass(dim, Enum):
+            resolved.append(tuple([x.name for x in dim]))
+        else:
+            raise TypeError(f"Invalid type of 'dims' item: {type(dim)}, expected ('list', 'tuple', 'Enum' subclass).")
+
+    resolved = tuple(resolved)
+    return resolved if cache is None else _maybe_hit_dim_cache(resolved, cache)
 
 
 class ProjVariable(ABC):
@@ -14,60 +71,12 @@ class ProjVariable(ABC):
     name: str
     owner: str
     group: str
-    dims: tuple | None
+    dims: tuple[tuple[str, ...], ...]
     ndim: int
-    result: float | np.ndarray | None
+    result: float | int | np.ndarray | None
     is_constant: bool
 
-    _dims_cache: set[tuple[tuple, ...]] = set()
-
-    @classmethod
-    def _resolve_dims(cls, dims) -> tuple[tuple, ...] | None:
-        """Normalize dims to a tuple of label lists.
-
-        Args:
-            dims: None, a list of lists (of str or int), or Enum classes.
-
-        Returns:
-            tuple[tuple[str]] | None: Normalized labels or None.
-
-        Raises:
-            ValueError: If dims are malformed or exceed 3 dimensions.
-        """
-
-        if dims is None:
-            return None
-
-        if not isinstance(dims, (list, tuple)):
-            raise ValueError("dims must be a list.")
-        if len(dims) > 3:
-            raise ValueError("Number of dimensions exceeds maximum (3).")
-
-        def _maybe_convert_to_str(x) -> str:
-            if isinstance(x, str):
-                return x
-            elif isinstance(x, int):
-                return str(x)
-            else:
-                raise ValueError(f"{x}: variable dimension list should contain str or int.")
-
-        resolved = []
-        for dim in dims:
-            if isinstance(dim, list):
-                resolved.append(tuple([_maybe_convert_to_str(x) for x in dim]))
-            elif isinstance(dim, tuple):
-                resolved.append(dim)
-            elif issubclass(dim, Enum):
-                resolved.append(tuple([x.name for x in dim]))
-            else:
-                raise ValueError(f"{dim}: variable dimension must be either list or enumeration.")
-
-        resolved = tuple(resolved)
-        cache = next((x for x in cls._dims_cache if x == resolved), None)
-        if cache is not None:
-            return cache
-        cls._dims_cache.add(resolved)
-        return resolved
+    _dims_cache: set[tuple[tuple[str, ...], ...]] = set()
 
     @abstractmethod
     def __getitem__(self, index):
@@ -78,24 +87,23 @@ class ProjVariable(ABC):
         ...
 
     def __matmul__(self, other) -> Self:
-        func = getattr(other, "attach_proj_variable", None)
-        if func is not None and callable(func):
-            func(self)
+        func = getattr(other, "attach_proj_variable", lambda _: None)
+        func(self)
         return self
 
 
 class ConstVariable(ProjVariable):
     """Container for constant (non-time-dimensioned) variables.
 
-    Holds a scalar, string, or an array (up to 3 dimensions) that does not vary over time.
-    Optional dimension labels can be provided as lists or Enums; they are used in CSV output.
+    Holds a scalar, string, or an array that does not vary over time.
+    Optional dimension labels can be provided as lists, tuples or Enums; they are used in CSV output.
 
     Attributes:
         _name (str): Variable name used in outputs.
         _owner (str): Variable owner used in outputs.
         _group (str): Variable group used in outputs.
-        _dims (list[list[str]] | None): Dimension labels (expanded from lists or Enums), or None if scalar.
-        _ndim (int): Number of dimensions (0-3).
+        _dims (tuple[tuple[str, ...], ...]): Dimension labels.
+        _ndim (int): Number of dimensions.
         _result: Stored value (copied if array-like).
     """
 
@@ -108,7 +116,7 @@ class ConstVariable(ProjVariable):
         *,
         owner: str,
         group: str,
-        dims: list | None = None
+        dims: list[DimItem] | tuple[DimItem, ...] | None = None
     ):
         """
         Initialize the Constant Variable.
@@ -117,13 +125,13 @@ class ConstVariable(ProjVariable):
             name (str): Variable name.
             owner (str): Variable owner.
             group (str): Variable group.
-            dims (list|None): Dimensions.
+            dims (list[DimItem] | tuple[DimItem, ...] | None): Dimensions.
         """
         self._name: str = name
         self._owner: str = owner
         self._group: str = group
-        self._dims: tuple[tuple[str]] | None = self._resolve_dims(dims)
-        self._ndim: int = len(dims) if dims is not None else 0
+        self._dims: tuple[tuple[str, ...], ...] = _resolve_dims(dims, self._dims_cache)
+        self._ndim: int = len(self._dims)
         self._result = None
 
     @property
@@ -152,13 +160,13 @@ class ConstVariable(ProjVariable):
         return True
 
     @property
-    def dims(self) -> tuple[tuple[str]] | None:
-        """tuple[tuple[str]] | None: Dimension labels or None if scalar."""
+    def dims(self) -> tuple[tuple[str, ...], ...]:
+        """tuple[tuple[str, ...], ...]: Dimension labels."""
         return self._dims
 
     @property
     def ndim(self) -> int:
-        """int: Number of dimensions (0-3)."""
+        """int: Number of dimensions."""
         return self._ndim
 
     def __getitem__(self, index):
@@ -181,19 +189,19 @@ class ConstVariable(ProjVariable):
 class TDimVariable(ProjVariable):
     """Container for time-dimensioned variables (indexed by the time or period).
 
-    Values are stored for each `t` from 0 to `max_t` (inclusive). Optional up to 3 labeled
-    dimensions (lists or Enums) are supported and preserved for CSV output.
+    Values are stored for each `t` from 0 to `max_t` (inclusive). Labeled dimensions (lists, tuples or Enums)
+    are supported and preserved for CSV output.
 
     Attributes:
         _owner (str): Variable owner used in outputs.
-        _dims (list[list[str]] | None): Dimension labels (expanded from lists or Enums), or None if scalar.
-        _ndim (int): Number of dimensions (0-3).
+        _dims (tuple[tuple[str, ...], ...]): Dimension labels.
+        _ndim (int): Number of dimensions.
         _result (np.ndarray): Values across time and optional dimensions.
     """
 
     __slots__ = ('__weakref__', '_meta', '_owner', '_dims', '_ndim', '_result',)
 
-    _meta_cache: set[tuple[str, str, int, pd.Period | None]] = set()
+    _meta_cache: set[tuple[str, str, int, pd.Period | None]] = set()  # tuple of (name, group, max_t, start_date)
 
     def __init__(
         self,
@@ -202,7 +210,7 @@ class TDimVariable(ProjVariable):
         *,
         owner: str,
         group: str,
-        dims: list | None = None,
+        dims: list[DimItem] | tuple[DimItem, ...] | None = None,
         max_t: int,
         start_date: pd.Period | None = None,
     ):
@@ -213,14 +221,14 @@ class TDimVariable(ProjVariable):
             name (str): Variable name.
             owner (str): Variable owner.
             group (str): Variable group.
-            dims (list|None): Dimensions.
+            dims (list[DimItem] | tuple[DimItem, ...] | None): Dimensions.
             max_t (int): Max time.
-            start_date (pd.Period): Start date (coresponding to time 0).
+            start_date (pd.Period): Start date (corresponds to time 0).
         """
-        self._meta: tuple[str, str, int, pd.Period | None] = self._make_meta(name, group, max_t, start_date)
+        self._meta: tuple[str, str, int, pd.Period | None] = self._maybe_hit_meta_cache(name, group, max_t, start_date)
         self._owner: str = owner
-        self._dims: tuple[tuple[str]] | None = self._resolve_dims(dims)
-        self._ndim: int = len(dims) if dims is not None else 0
+        self._dims: tuple[tuple[str, ...], ...] = _resolve_dims(dims, self._dims_cache)
+        self._ndim: int = len(self._dims)
         shape = tuple([max_t + 1] + ([len(dim) for dim in self._dims] if self._ndim > 0 else []))
         self._result = np.zeros(shape=shape)
 
@@ -245,19 +253,19 @@ class TDimVariable(ProjVariable):
         return self._meta[3]
 
     @classmethod
-    def _make_meta(cls, name: str, group: str, max_t: int, start_date: pd.Period
-                   ) -> tuple[str, str, int, pd.Period | None]:
+    def _maybe_hit_meta_cache(cls, name: str, group: str, max_t: int, start_date: pd.Period | None
+                              ) -> tuple[str, str, int, pd.Period | None]:
         meta = (name, group, max_t, start_date)
-        cache = next((x for x in cls._meta_cache if x == meta), None)
-        if cache is not None:
-            return cache
+        hit = next((x for x in cls._meta_cache if x == meta), None)
+        if hit is not None:
+            return hit
         if not isinstance(max_t, int):
             raise TypeError(f"Invalid type of 'max_t': {type(max_t)}, expected 'int'.")
         if max_t <= 0:
             raise ValueError(f"Invalid value of 'max_t': {max_t}, expected positive.")
         if start_date is not None and not isinstance(start_date, pd.Period):
-            raise TypeError(f"Invalid type of 'start_date': {type(max_t)}, expected 'pd.Period'.")
-        cls._meta_cache.add(meta)
+            raise TypeError(f"Invalid type of 'start_date': {type(start_date)}, expected 'pd.Period'.")
+        cls._meta_cache.add(meta)  # noqa
         return meta
 
     @property
@@ -270,27 +278,28 @@ class TDimVariable(ProjVariable):
         return False
 
     @property
-    def dims(self) -> tuple[tuple[str]] | None:
-        """tuple[tuple[str]] | None: Dimension labels or None if scalar."""
+    def dims(self) -> tuple[tuple[str, ...], ...]:
+        """tuple[tuple[str, ...], ...]: Dimension labels."""
         return self._dims
 
     @property
     def ndim(self) -> int:
-        """int: Number of dimensions (0-3)."""
+        """int: Number of dimensions."""
         return self._ndim
 
     def _resolve_time_index(self, index: int | pd.Period) -> int:
         if isinstance(index, int):
             t = index
         elif isinstance(index, pd.Period):
-            if self.start_date is None:
+            start_date = self.start_date
+            if start_date is None:
                 raise ValueError(f"'start_date' is None, cannot index by 'pd.Period'.")
-            t = (index - self.start_date).n
+            t = (index - start_date).n
         else:
             raise TypeError(f"Invalid {type(index)=}, expected 'int' or 'pd.Period'.")
         if not (0 <= t <= self.max_t):
             raise IndexError(f"Invalid {index=}, expected: '0 to {self.max_t}', or "
-                             f"'{self.start_date} to {self.start_date + self.max_t} .")
+                             f"'{self.start_date} to {self.start_date + self.max_t}.")
         return t
 
     def __getitem__(self, index: int | pd.Period):
@@ -330,14 +339,13 @@ class ProjVariableManager:
         """Attach a projection variable into `_proj_variables`
 
         Args:
-            obj (ProjVariable): Projection variable to be attched.
+            obj (ProjVariable): Projection variable to be attached.
 
         Raises:
             TypeError: Invalid type.
-            ValueError: Projection variable already attched.
         """
         if not isinstance(obj, ProjVariable):
-            raise TypeError(f"Invalid type {type(obj)}, expected 'ProjVariable'.")
+            raise TypeError(f"Invalid type: {type(obj)}, expected 'ProjVariable'.")
         ref = weakref.ref(obj)
         if ref not in self._proj_variables:
             self._proj_variables.append(ref)
@@ -349,15 +357,15 @@ class ProjVariableManager:
     def clear_dead(self) -> None:
         self._proj_variables[:] = [ref for ref in self._proj_variables if ref() is not None]
 
-    def select(self, where: dict[str, dict] | None = None) -> list[ProjVariable]:
-        ls = [ref() for ref in self._proj_variables if ref() is not None]
-        if where is None:
-            return ls
-        return [ref for ref in ls if self._is_select(ref, where)]
+    def filter(self, rule: dict[str, dict] | None = None) -> list[ProjVariable]:
+        alive = (v for ref in self._proj_variables if (v := ref()) is not None)
+        if rule is None:
+            return list(alive)
+        return [v for v in alive if self._is_kept(v, rule)]
 
     @classmethod
-    def _is_select(cls, v: ProjVariable, where: dict[str, dict] | None) -> bool:
-        group: dict[str, str | list] | None = where.get(v.group, None)
+    def _is_kept(cls, v: ProjVariable, rule: dict[str, dict]) -> bool:
+        group: dict[str, str | list] | None = rule.get(v.group, None)
         if group is None:
             return False
 
@@ -368,7 +376,7 @@ class ProjVariableManager:
             elif isinstance(include, list):
                 return v.name in include
             else:
-                raise TypeError(f"Invalid type of 'include': {type(include)}, epxected ('str', 'list[str]').")
+                raise TypeError(f"Invalid type of 'include': {type(include)}, expected ('str', 'list[str]').")
 
         exclude = group.get("exclude", None)
         if exclude is not None:
@@ -377,13 +385,13 @@ class ProjVariableManager:
             elif isinstance(exclude, str):
                 return v.name != exclude
             else:
-                raise TypeError(f"Invalid type of 'include': {type(exclude)}, epxected ('str', 'list[str]').")
+                raise TypeError(f"Invalid type of 'exclude': {type(exclude)}, expected ('str', 'list[str]').")
 
-        return True  # if niether 'include' nor 'exclude' provided, all variables in the group are included
+        return True  # if neither 'include' nor 'exclude' provided, all variables in the group are included
 
     @classmethod
     def iter_label_result(cls, v: ProjVariable, dim_joiner: str = ":", dim_bracket: tuple[str, str] = ("[", "]")
-                          ) -> Iterator[tuple[str, float | np.ndarray]]:
+                          ) -> Iterator[tuple[str, float | np.ndarray | None]]:
         if v.ndim == 0:
             yield v.name, v.result
         else:
@@ -392,7 +400,7 @@ class ProjVariableManager:
             for item in product(*indexed_dims):
                 dim_idx, dim_str = map(tuple, zip(*item))
                 label = f"{v.name}{_left}{dim_joiner.join(dim_str)}{right_}"
-                result = v.result[(slice(0, None),) + dim_idx]
+                result = v.result[(slice(0, None),) + dim_idx]  # noqa
                 yield label, result
 
     def __contains__(self, item) -> bool:
