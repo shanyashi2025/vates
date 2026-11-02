@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Callable
 
 from vates import ProjModelEngine
-from vates.alm import Currency, Liab, ExtProjLiab, Fund, AssetAllocationParams, Rebalancer
+from vates.alm import Currency, Liab, ExternalLiab, Fund, AssetAllocationParams, Rebalancer
 
 
 @dataclass
@@ -138,25 +138,21 @@ def build_liabs(model_engine: ProjModelEngine, df: pd.DataFrame, fund_id: str | 
     for idx, row in df_flt.iterrows():
         currency_id = row["currency_id"]
         currency = next((x for x in currencies if x.currency_id == currency_id), None)
-        liab_class = row["liab_class"].lower()
 
-        if liab_class == 'extprojliab':
-            liab = ExtProjLiab(
-                model_engine=model_engine,
-                liab_id=row["liab_id"],
-                fund_id=row["fund_id"],
-                currency=currency,
-                entry_date=pd.Period(row["entry_date"], freq='M'),
-                no_pols_if=row["no_pols_if"],
-                math_res_if=row["math_res_if"],
-                surr_val_if=row["surr_val_if"],
-                asset_share_if_bd=row["asset_share_if"],
-                asset_share_if_ad=row["asset_share_if"],
-                output_attrs_bd=row["output_vars_bd"].split(';') if row["output_vars_bd"] != 'none' else None,
-                output_attrs_ad=row["output_vars_ad"].split(';') if row["output_vars_ad"] != 'none' else None,
-            )
-        else:
-            raise ValueError(f"Invalid liab class {liab_class}.")
+        liab = ExternalLiab(
+            model_engine=model_engine,
+            liab_id=row["liab_id"],
+            fund_id=row["fund_id"],
+            currency=currency,
+            entry_date=pd.Period(row["entry_date"], freq='M'),
+            no_pols_if=row["no_pols_if"],
+            math_res_if=row["math_res_if"],
+            surr_val_if=row["surr_val_if"],
+            asset_share_if_bd=row["asset_share_if"],
+            asset_share_if_ad=row["asset_share_if"],
+            output_attrs_bd=row["output_vars_bd"].split(';') if row["output_vars_bd"] != 'none' else (),
+            output_attrs_ad=row["output_vars_ad"].split(';') if row["output_vars_ad"] != 'none' else (),
+        )
         # dynamically create attribute(s)
         setattr(liab, 'liab_type', row["liab_type"])
         # append to list

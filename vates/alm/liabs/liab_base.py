@@ -50,8 +50,8 @@ class Liab(ABC):
         """
         self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else (lambda: None)
         self._liab_id: str = liab_id or str(uuid.uuid4())
-        self._currency: Currency = currency
-        self._entry_date: pd.Period = entry_date
+        self._currency: Currency | None = currency
+        self._entry_date: pd.Period | None = entry_date
         self._attr_aliases: dict[str, str] | None = attr_aliases
         self._lc: Lifecycle[LiabPhase] = Lifecycle[LiabPhase](created_phase=LiabPhase.CLOSED, created_at=self.time or 0)
 
@@ -60,11 +60,11 @@ class Liab(ABC):
         return self._liab_id
 
     @property
-    def currency(self) -> Currency:
+    def currency(self) -> Currency | None:
         return self._currency
 
     @property
-    def entry_date(self) -> pd.Period:
+    def entry_date(self) -> pd.Period | None:
         return self._entry_date
 
     @abstractmethod

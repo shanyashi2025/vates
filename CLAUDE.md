@@ -92,7 +92,7 @@ High-level Asset–Liability Management building blocks that plug into the proje
   then validates required prices/spreads before constructing the asset.
 - **`funds/`** — fund accounting (`Fund`) with an asset allocator and fund recorder (fund value,
   target weight / `AssetAllocationGroup`, `TargetWeight`).
-- **`liabs/`** — liability base class (`Liab`) and `ExtProjLiab` for liabilities projected externally.
+- **`liabs/`** — liability base class (`Liab`) and `ExternalLiab` for liabilities calculated externally.
 - **`enums.py`** — shared Enums (`AssetBuySellApproach`, `AssetPurchaseMethod`, ...).
 
 ### Financial math (`vates/finmath/`)

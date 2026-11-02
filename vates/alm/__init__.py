@@ -34,7 +34,7 @@ from vates.alm.econs import (
 # liabs
 from vates.alm.liabs import (
     Liab,
-    ExtProjLiab,
+    ExternalLiab,
 )
 # funds
 from vates.alm.funds import (
@@ -69,7 +69,7 @@ __all__ = [
     'YieldCurve',
     # liabs
     'Liab',
-    'ExtProjLiab',
+    'ExternalLiab',
     # funds
     'Fund',
 ]

@@ -5,28 +5,30 @@ from vates.utils import transition
 from vates.alm.econs import Currency
 from vates.alm.liabs.liab_base import Liab, LiabPhase
 
+_MISSING: object = object()
 
-class ExtProjLiab(Liab):
+
+class ExternalLiab(Liab):
     """
-    Externally projected liability.
+    Externally calculated liability.
     """
 
-    __slots__ = ('_cash_flow', 'tdv_cash_flow', 'output_attrs_bd', 'output_attrs_ad')
+    __slots__ = ('_cash_flow', 'tdv_cash_flow', 'tdv_list_bd', 'tdv_list_ad')
 
     def __init__(
         self,
         *,
         model_engine: ProjModelEngine | None = None,
-        liab_id: str | None = None,
+        liab_id: str = "",
         currency: Currency | None = None,
         entry_date: pd.Period | None = None,
         attr_aliases: dict[str, str] | None = None,
-        output_attrs_bd: list[str] | None = None,
-        output_attrs_ad: list[str] | None = None,
+        output_attrs_bd: list[str] | tuple[str, ...] = (),
+        output_attrs_ad: list[str] | tuple[str, ...] = (),
         **kwargs
     ):
         """
-        Initialize a ExtProjLiab object.
+        Initialize a ExternalLiab object.
 
         Args:
             liab_id (str): Liability identifier.
@@ -34,8 +36,8 @@ class ExtProjLiab(Liab):
             currency (Currency): Currency of the liability.
             entry_date (pd.Period): Entry date of the liability.
             attr_aliases (dict[str, str]): Dict of alias to named attribute.
-            output_attrs_bd (list[str]): List of attributes to output.
-            output_attrs_ad (list[str]): List of attributes to output.
+            output_attrs_bd (list[str] | tuple[str, ...]): List or tuple of attributes to output.
+            output_attrs_ad (list[str] | tuple[str, ...]): List or tuple of attributes to output.
         """
         super().__init__(model_engine=model_engine, liab_id=liab_id, currency=currency,
                          entry_date=entry_date, attr_aliases=attr_aliases)
@@ -45,25 +47,17 @@ class ExtProjLiab(Liab):
         self._cash_flow: float = 0.0
 
         create_tdv = lambda name: make_proj_variable(name, model_engine=model_engine, owner=liab_id, group='liability')
-        self.tdv_cash_flow = create_tdv("cash_flow")
-        self.output_attrs_bd: list = [create_tdv(name) for name in (output_attrs_bd or [])]
-        self.output_attrs_ad: list = [create_tdv(name) for name in (output_attrs_ad or [])]
-        self._set_output_attrs_bd()
-        self._set_output_attrs_ad()
+        self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
+        self.tdv_list_bd: list[TDimVariable] = [create_tdv(name) for name in output_attrs_bd]
+        self.tdv_list_ad: list[TDimVariable] = [create_tdv(name) for name in output_attrs_ad]
+        self._set_tdv(self.tdv_list_bd + self.tdv_list_ad)
 
-    def _set_output_attrs_bd(self) -> None:
+    def _set_tdv(self, tdv_list: list[TDimVariable]) -> None:
         t = self.time
-        for item in self.output_attrs_bd:
-            if not hasattr(self, item.name):
-                setattr(self, item.name, 0.0)
-            item[t] = getattr(self, item.name)
-
-    def _set_output_attrs_ad(self) -> None:
-        t = self.time
-        for item in self.output_attrs_ad:
-            if not hasattr(self, item.name):
-                setattr(self, item.name, 0.0)
-            item[t] = getattr(self, item.name)
+        for item in tdv_list:
+            val = getattr(self, item.name, _MISSING)
+            if val is not _MISSING:
+                item[t] = val
 
     @transition(require_all=LiabPhase.CLOSED, require_offset=-1, require_not=LiabPhase.ROLLED, mark=LiabPhase.ROLLED)
     def roll_forward(self, cash_flow: float, **kwargs):
@@ -74,7 +68,7 @@ class ExtProjLiab(Liab):
         for key, val in kwargs.items():
             setattr(self, key, val)
         self.tdv_cash_flow[self.time] = self._cash_flow
-        self._set_output_attrs_bd()
+        self._set_tdv(self.tdv_list_bd)
 
     @transition(require_all=LiabPhase.ROLLED, require_not=LiabPhase.CLOSED, mark=LiabPhase.CLOSED)
     def close_dealing(self, **kwargs) -> None:
@@ -83,7 +77,7 @@ class ExtProjLiab(Liab):
         """
         for key, val in kwargs.items():
             setattr(self, key, val)
-        self._set_output_attrs_ad()
+        self._set_tdv(self.tdv_list_ad)
 
     @property
     @transition(require_all=LiabPhase.ROLLED)
