@@ -9,10 +9,7 @@ from company_package import (
     AssetMaster,
     FundMaster,
     build_liabs,
-    fund_assets_roll_forward,
-    fund_liabs_roll_forward,
     fund_rebalance,
-    liabs_close_dealing,
 )
 
 try:
@@ -89,15 +86,16 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
 
             # step 1: assets roll forward
             is_update_mv_price = (p.year == model.START_YEAR) or (p.month % esg_step == 0)
-            fund_assets_roll_forward(fund, is_update_mv_price=is_update_mv_price)
+            for asset in fund.assets:
+                asset.roll_forward(is_update_mv_price=is_update_mv_price)
+            fund.record_before_dealing(scope="assets")
 
             # step 2: liabs roll forward
-            fund_liabs_roll_forward(
-                fund=fund,
-                epl=epl,
-                as_inv_ret=fund.rate_of_return_bd[t, "FAV"],
-                as_cf_ret=0  # specify the rate
-            )
+            inv_ret_bd = fund.rate_of_return_bd[t, "FAV"]
+            as_cf_ret = 0  # # specify the rate
+            for liab in fund.liabs:
+                liab.roll_forward(epl=epl, inv_ret_bd=inv_ret_bd, as_cf_ret=as_cf_ret)
+            fund.record_before_dealing(scope="liabs")
 
             # step 3: rebalance if needed
             fund_rebalance(
@@ -110,7 +108,10 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             )
 
             # step 4: liabs update after dealing (ad)
-            liabs_close_dealing(fund=fund)
+            inv_ret_ad = fund.rate_of_return_ad[t, "FAV"]
+            for liab in fund.liabs:
+                liab.close_dealing(inv_ret_ad=inv_ret_ad)
+            fund.record_after_dealing(scope="liabs")
 
             # step 5: transfer free proceeds to shareholder fund
             _ = fund.take_out_free_proceeds()  # just take out, shareholder fund is None

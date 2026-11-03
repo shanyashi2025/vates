@@ -7,10 +7,7 @@ from company_package import (
     AssetMaster,
     FundMaster,
     build_liabs,
-    fund_assets_roll_forward,
-    fund_liabs_roll_forward,
     fund_rebalance,
-    liabs_close_dealing,
     output_aging_assets,
 )
 
@@ -82,17 +79,16 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 is_sh_fund = fund is fund_master.sh_fund
 
                 # step 1: assets roll forward
-                fund_assets_roll_forward(fund)
+                for asset in fund.assets:
+                    asset.roll_forward()
+                fund.record_before_dealing(scope="assets")
 
                 # step 2: liabs roll forward
-                if not is_sh_fund:
-                    kwargs = {}
-                    if fund.fund_id in ("cd1_fund", "cd2_fund"):  # hard coded
-                        kwargs["as_inv_ret"] = fund.rate_of_return_bd[t, "FAV"]
-                        kwargs["as_cf_ret"] = 0  # specify the rate]
-                    fund_liabs_roll_forward(fund=fund, epl=epl, **kwargs)
-                else:
-                    fund_liabs_roll_forward(fund)
+                inv_ret_bd = fund.rate_of_return_bd[t, "FAV"]
+                as_cf_ret = 0  # specify the rate
+                for liab in fund.liabs:
+                    liab.roll_forward(epl=epl, inv_ret_bd=inv_ret_bd, as_cf_ret=as_cf_ret)
+                fund.record_before_dealing(scope="liabs")
 
                 # step 3: rebalance if needed
                 fund_rebalance(
@@ -105,7 +101,10 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 )
 
                 # step 4: liabs update after dealing (ad)
-                liabs_close_dealing(fund=fund)
+                inv_ret_ad = fund.rate_of_return_ad[t, "FAV"]
+                for liab in fund.liabs:
+                    liab.close_dealing(inv_ret_ad=inv_ret_ad)
+                fund.record_after_dealing(scope="liabs")
 
                 # step 5: transfer free proceeds to shareholder fund
                 if not is_sh_fund:

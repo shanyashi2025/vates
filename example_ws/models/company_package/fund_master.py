@@ -1,10 +1,13 @@
 import json
 import pandas as pd
-from dataclasses import dataclass
-from typing import List, Callable
+from dataclasses import dataclass, replace
+from typing import Callable
 
 from vates import ProjModelEngine
-from vates.alm import Currency, Liab, ExternalLiab, Fund, AssetAllocationParams, Rebalancer
+from vates.alm import Fund, AssetAllocationParams, Rebalancer
+
+from .asset_master import AssetMaster
+from .econ_master import EsgMaster
 
 
 @dataclass
@@ -36,9 +39,9 @@ class FundMaster:
         rebalance_params_dict: dict[str, FundRebalanceParams] | None = None,
 
     ):
-        self.funds: list[Fund] | None = funds or []
+        self.funds: list[Fund] = funds or []
         self.rebalance_params_dict: dict[str, FundRebalanceParams] | None = rebalance_params_dict
-        self.ph_funds: list[Fund] | None = ph_funds
+        self.ph_funds: list[Fund] = ph_funds or []
         self.sh_fund: Fund | None = sh_fund
 
     @classmethod
@@ -116,46 +119,106 @@ class FundMaster:
 
         return params
 
-def build_liabs(model_engine: ProjModelEngine, df: pd.DataFrame, fund_id: str | None,
-                currencies: List['Currency']) -> List['Liab']:
+
+def _rebalance_this_month(cal_month: int, rebalance_freq: int) -> bool:
     """
-    Build liability objects from a DataFrame and add them to a fund if provided.
+    Check if asset rebalance is required for this month.
 
     Args:
-        model_engine: Model engine object.
-        df (pd.DataFrame): DataFrame containing liability data.
-        fund_id (str | None): Fund id to filter, or None.
-        currencies (list): List of Currency objects.
+        cal_month (int): Calendar month.
+        rebalance_freq (int): rebalance frequency.
 
     Returns:
-        list: List of Liab objects.
+        bool: True if rebalance is required, False otherwise.
     """
-    liabs = []
+    if rebalance_freq not in (0, 1, 2, 4, 12):
+        raise ValueError(f"Invalid fund rebalance frequency {rebalance_freq}.")
+    if rebalance_freq == 0:
+        return False
+    return cal_month % (12 / rebalance_freq) == 0
+
+
+def fund_rebalance(model_engine: ProjModelEngine, fund: Fund, rebalance_params: FundRebalanceParams,
+                   assets_df_dict: dict, econs: dict | EsgMaster, asset_mix_df: pd.DataFrame):
+    fund_id = fund.fund_id
+    period = fund.period
+
+    fund.record_free_proceeds("bd")
+
+    if _rebalance_this_month(period.month, rebalance_params.rebalance_freq):
+        profile_assets = AssetMaster.profile_from_df(
+            assets_df_dict, model_engine=model_engine, econs=econs, fund_id=fund_id
+        ).all
+        size_type = rebalance_params.fund_size_type.upper()
+        asset_size_basis = rebalance_params.asset_size_basis
+        total_size = get_fund_size(fund, size_type=size_type, asset_size_basis=asset_size_basis)
+        allocation_group_params: dict[str, AssetAllocationParams] = {}
+        weight_triplet = build_weight_triplet(asset_mix_df, fund_id, str(period.year * 100 + period.month))
+        for key, params in rebalance_params.allocation_params.items():
+            allocation_group_params[key] = replace(params, weight_triplet=weight_triplet.get(key, None))
+
+        _ = rebalance_params.rebalance_func(
+            exist_assets=fund.assets,
+            free_proceeds_keeper=fund.free_proceeds_keeper,
+            profile_assets=profile_assets,
+            total_size=total_size,
+            asset_size_basis=asset_size_basis,
+            allocation_group_params=allocation_group_params,
+        )
+
+    else:
+        fund.invest_free_proceeds_to_cash()
+
+    for asset in fund.assets:
+        asset.close_dealing()
+
+    fund.record_free_proceeds("ad")
+    fund.record_after_dealing(scope="assets")
+
+
+def get_fund_size(fund: Fund, size_type: str, *, asset_size_basis: str) -> float:
+    if size_type == "FUND":
+        return fund.get_total(key=f"asset.{asset_size_basis}") + fund.free_proceeds
+        # return fund.get_total(func=lambda x, y: x + y, key=(f"asset.{asset_size_basis}", "uninvested_proceeds"))
+    elif size_type == "MATH_RES":
+        return fund.get_total(key="liab.math_res_if")
+    elif size_type == "SURR_VALUE":
+        return fund.get_total(key="liab.surr_val_if")
+    elif size_type == "ACCT_VALUE":
+        return fund.get_total(key="liab.acct_val_if")
+    elif size_type == "ASSET_SHARE":
+        return fund.get_total(key="liab.asset_share_if_bd")
+    elif size_type == "MAX_AS_MATH":
+        return fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+    elif size_type == "MAX_AS_CSV":
+        return fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+    else:
+        raise ValueError(f"Invalid {size_type=}.")
+
+
+def build_weight_triplet(df: pd.DataFrame, fund_id: str, date_col: str) -> dict[str, tuple[float, float, float]]:
+    """
+    Build a dictionary of target allocations for a fund from a DataFrame.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing allocation data.
+        fund_id (str): Fund id the target allocations for.
+        date_col (str): String date column to lookup.
+
+    Returns:
+        dict[str, tuple[float, float, float]]: Mapping of allocation group to
+            a three-element tuple (lower, target, upper) of weights.
+    """
+    weight_triplet: dict[str, tuple[float, float, float]] = {}
 
     df_flt: pd.DataFrame = df.copy()
     if fund_id is not None: df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
 
-    for idx, row in df_flt.iterrows():
-        currency_id = row["currency_id"]
-        currency = next((x for x in currencies if x.currency_id == currency_id), None)
+    for _, row in df_flt.iterrows():
+        key = row["allocation_group"]
+        target = row[date_col] / 100
+        lower = target - abs(row["allow_downward_drift_pc"]) / 100
+        upper = target + row["allow_upward_drift_pc"] / 100
+        weight_triplet[key] = lower, target, upper
 
-        liab = ExternalLiab(
-            model_engine=model_engine,
-            liab_id=row["liab_id"],
-            fund_id=row["fund_id"],
-            currency=currency,
-            entry_date=pd.Period(row["entry_date"], freq='M'),
-            no_pols_if=row["no_pols_if"],
-            math_res_if=row["math_res_if"],
-            surr_val_if=row["surr_val_if"],
-            asset_share_if_bd=row["asset_share_if"],
-            asset_share_if_ad=row["asset_share_if"],
-            output_attrs_bd=row["output_vars_bd"].split(';') if row["output_vars_bd"] != 'none' else (),
-            output_attrs_ad=row["output_vars_ad"].split(';') if row["output_vars_ad"] != 'none' else (),
-        )
-        # dynamically create attribute(s)
-        setattr(liab, 'liab_type', row["liab_type"])
-        # append to list
-        liabs.append(liab)
-
-    return liabs
+    return weight_triplet

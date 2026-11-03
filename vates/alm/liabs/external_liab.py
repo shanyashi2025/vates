@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import Callable
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
@@ -13,7 +14,8 @@ class ExternalLiab(Liab):
     Externally calculated liability.
     """
 
-    __slots__ = ('_cash_flow', 'tdv_cash_flow', 'tdv_list_bd', 'tdv_list_ad')
+    __slots__ = ('_cash_flow', 'on_time_change_hook', 'roll_forward_hook', 'close_dealing_hook',
+                 'tdv_cash_flow', 'tdv_list_bd', 'tdv_list_ad')
 
     def __init__(
         self,
@@ -45,6 +47,9 @@ class ExternalLiab(Liab):
             setattr(self, key, val)
 
         self._cash_flow: float = 0.0
+        self.on_time_change_hook: Callable | None = None
+        self.roll_forward_hook: Callable | None = None
+        self.close_dealing_hook: Callable | None = None
 
         create_tdv = lambda name: make_proj_variable(name, model_engine=model_engine, owner=liab_id, group='liability')
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
@@ -59,14 +64,29 @@ class ExternalLiab(Liab):
             if val is not _MISSING:
                 item[t] = val
 
+    def register_on_time_change_hook(self, hook_func: Callable, /) -> None:
+        self.on_time_change_hook = hook_func
+
+    def register_roll_forward_hook(self, hook_func: Callable, /) -> None:
+        self.roll_forward_hook = hook_func
+
+    def register_close_dealing_hook(self, hook_func: Callable, /) -> None:
+        self.close_dealing_hook = hook_func
+
+    def _on_time_change(self) -> None:
+        self._cash_flow = 0.0
+        if self.on_time_change_hook is not None:
+            self.on_time_change_hook(self)
+
     @transition(require_all=LiabPhase.CLOSED, require_offset=-1, require_not=LiabPhase.ROLLED, mark=LiabPhase.ROLLED)
-    def roll_forward(self, cash_flow: float, **kwargs):
+    def roll_forward(self, **kwargs):
         """
         Roll the liability forward one period, updating variables and calculating cash flow.
         """
-        self._cash_flow = cash_flow
         for key, val in kwargs.items():
             setattr(self, key, val)
+        if self.roll_forward_hook is not None:
+            self.roll_forward_hook(self)
         self.tdv_cash_flow[self.time] = self._cash_flow
         self._set_tdv(self.tdv_list_bd)
 
@@ -77,12 +97,18 @@ class ExternalLiab(Liab):
         """
         for key, val in kwargs.items():
             setattr(self, key, val)
+        if self.close_dealing_hook is not None:
+            self.close_dealing_hook(self)
         self._set_tdv(self.tdv_list_ad)
 
     @property
     @transition(require_all=LiabPhase.ROLLED)
     def cash_flow(self) -> float:
         return self._cash_flow
+
+    @cash_flow.setter
+    def cash_flow(self, value: float) -> None:
+        self._cash_flow = value
 
     @property
     def arr_cash_flow(self) -> TDimVariable:
