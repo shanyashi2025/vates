@@ -159,10 +159,10 @@ class Fund:
         self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"end")
 
     def _get_primary_cash_asset(self) -> Cash | None:
-        if self._primary_cash_asset is None or not self._primary_cash_asset.is_alive:
+        if self._primary_cash_asset is None or not self._primary_cash_asset.is_alive("end"):
             self._primary_cash_asset = None
             for asset in self._assets:
-                if isinstance(asset, Cash) and asset.is_alive:
+                if isinstance(asset, Cash) and asset.is_alive("end"):
                     self._primary_cash_asset = asset
                     break
             if self._primary_cash_asset is None:

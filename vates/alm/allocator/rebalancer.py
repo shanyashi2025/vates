@@ -238,7 +238,7 @@ def _process_unconstrain_group(group: _AllocationGroup, fill_size: float, tolera
         # Utilize cash asset to safely proceed
         _fallback_cash: Cash | None = None
         for asset in group.exist:
-            if isinstance(asset, Cash) and asset.is_alive:
+            if isinstance(asset, Cash) and asset.is_alive("end"):
                 _fallback_cash = asset
                 break
         if _fallback_cash is not None:

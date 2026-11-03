@@ -1,6 +1,6 @@
 import pandas as pd
 from collections.abc import Mapping
-from typing import Self
+from typing import Literal
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
@@ -67,8 +67,7 @@ class Cash(Asset):
 
         self.tdv_mv_ad[self.time] = self._nominal
 
-    @property
-    def is_alive(self) -> bool:
+    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
         return True
 
     @property
@@ -137,7 +136,7 @@ class Cash(Asset):
         """
         self.buy_amount(self._nominal * -propn)
 
-    def buy_profile(self, *args, **kwargs) -> Self:
+    def buy_profile(self, *args, **kwargs):
         """
         Not applicable for cash assets.
         """

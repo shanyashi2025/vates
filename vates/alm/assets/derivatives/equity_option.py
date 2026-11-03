@@ -2,6 +2,7 @@ import math
 import pandas as pd
 import warnings
 from collections.abc import Mapping
+from typing import Literal
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
@@ -134,13 +135,8 @@ class EquityOption(Asset):
     def os_term_m(self) -> int:
         return max((self._exercise_date - self.period).n, 0)
 
-    @property
-    def is_alive(self) -> bool:
-        return self.period < self._exercise_date
-
-    @property
-    def is_alive_beg(self) -> bool:
-        return self.period <= self._exercise_date
+    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
+        return (self.period < self._exercise_date) if at == "end" else (self.period <= self._exercise_date)
 
     def _on_time_change(self) -> None:
         self._cash_flow = 0.0
@@ -154,7 +150,7 @@ class EquityOption(Asset):
         """
         t = self.time
 
-        if not self.is_alive_beg:
+        if not self.is_alive("begin"):
             self._qty = 0
             self._price = 0
             self._cash_flow = 0
@@ -167,7 +163,7 @@ class EquityOption(Asset):
             self._stock_price = self._stock_price * (1 + self._equity_index.total_return)
             q = 0.0
 
-        if self.is_alive:
+        if self.is_alive("end"):
             self._cash_flow = 0.0
             self._price = BlackScholesCalculator.price(
                 call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,

@@ -5,7 +5,7 @@ import weakref
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import Enum, auto
-from typing import Self
+from typing import Self, Literal
 
 from vates._core import ProjModelEngine, time_synchronized
 from vates.utils import Lifecycle, maybe_raise_if_ne
@@ -90,11 +90,14 @@ class Asset(ABC):
     def purchase_date(self) -> pd.Period | None:
         return self._purchase_date
 
-    @property
     @abstractmethod
-    def is_alive(self) -> bool:
+    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
         """
-        Abstract property for whether asset is alive.
+        Abstract method for whether asset is alive at the beginning or end of the current period.
+
+        Args:
+            at (Literal["begin", "end"]): "end"/"begin" tests if the asset is alive at the
+                end/beginning of the current period.
 
         Returns:
             bool: True if asset is alive, False otherwise.

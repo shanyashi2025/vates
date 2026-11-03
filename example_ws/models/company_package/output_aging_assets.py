@@ -173,7 +173,7 @@ def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int |
             )
 
     for asset in assets:
-        if not asset.is_alive:
+        if not asset.is_alive("end"):
             continue
 
         asset_type = type(asset)

@@ -4,6 +4,7 @@ import numpy.typing as npt
 import pandas as pd
 import warnings
 from collections.abc import Mapping
+from typing import Literal
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
@@ -217,13 +218,9 @@ class BondFixed(Asset):
             return (self._params.maturity_date - self.period).n  # gives: n, n-1, ..., 1, 0 during lifespan
         return None
 
-    @property
-    def is_alive(self) -> bool:
-        return self._params.issue_date <= self.period < self._params.maturity_date
-
-    @property
-    def is_alive_beg(self) -> bool:
-        return self._params.issue_date < self.period <= self._params.maturity_date
+    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
+        return (self._params.issue_date <= self.period < self._params.maturity_date) if at == "end" else (
+                self._params.issue_date < self.period <= self._params.maturity_date)
 
     def calculate_risk_metrics(self, eff_dur_delta: float = 0.001):
         """
@@ -248,7 +245,7 @@ class BondFixed(Asset):
         """
         t, p = self.time, self.period
 
-        if not self.is_alive_beg:
+        if not self.is_alive("begin"):
             self._qty = 0
             self._mv_price_dirty = 0
             self._abv_price_dirty = 0

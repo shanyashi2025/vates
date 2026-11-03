@@ -1,6 +1,7 @@
 import pandas as pd
 import warnings
 from collections.abc import Mapping
+from typing import Literal
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
@@ -79,8 +80,7 @@ class Equity(Asset):
         self.tdv_mv_ad[t] = self._mv
         self.tdv_purchase_cost_ad[t] = self._purchase_cost
 
-    @property
-    def is_alive(self) -> bool:
+    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
         return True
 
     def _on_time_change(self) -> None:
