@@ -1,5 +1,6 @@
 from vates import ProjModelEngine
-from company_package import run_with_json_config, load_file_df, EsgMaster, AssetMaster
+from vates.alm import Cash
+from company_package import run_with_json_config, load_file_df, EconMaster, AssetMaster
 
 try:
     import scipy
@@ -33,10 +34,11 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
     file_df_dict = load_file_df(model.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg"])
 
     # build esg master
-    esg_master = EsgMaster.from_df(
+    econ_master = EconMaster.from_df(
         model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
-        esg_df=model.read_csv(filename_dict["esg"])
+        esg_df=model.read_csv(filename_dict["esg"]),
+        econ_asm_df=file_df_dict["econ_asm"],
     )
 
     assets_df_dict = {
@@ -57,12 +59,20 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
     @model.bind_projection
     def assets_projection():
-        esg_master.update_econ_data(period=model.period)
+        econ_master.update()
         if model.time == 0:
-            assets[:] = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=esg_master).all
+            assets[:] = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=econ_master).all
         else:
             for asset in assets:
-                asset.roll_forward()
+                if isinstance(asset, Cash):
+                    if asset.nominal >= 0:
+                        ret_id = getattr(asset, "positive_cash_balance_ret_id")
+                    else:
+                        ret_id = getattr(asset, "negative_cash_balance_ret_id")
+                    ret = (1 + econ_master.econ_asm[ret_id]) ** (1 / 12) - 1
+                    asset.roll_forward(rate_of_return=ret)
+                else:
+                    asset.roll_forward()
                 asset.close_dealing()
 
     model.run()

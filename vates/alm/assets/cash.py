@@ -4,7 +4,7 @@ from typing import Literal
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
-from vates.alm.econs import Currency, MarketInfo
+from vates.alm.econs import Currency
 from vates.alm.assets.asset_base import Asset, AssetPhase
 
 
@@ -14,12 +14,9 @@ class Cash(Asset):
 
     Attributes:
         _nominal (float): Nominal value of the cash asset.
-        _market_info (MarketInfo): Market information.
-        _ret_id (str): Identifier of cash return.
-        _ret_id_short_pos (str): Identifier of cash return on short cash positions.
 
     """
-    __slots__ = ('_nominal', '_purchase_proceeds', '_disposal_proceeds', '_market_info', '_ret_id', '_ret_id_short_pos',
+    __slots__ = ('_nominal', '_purchase_proceeds', '_disposal_proceeds',
                  'tdv_cash_flow', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
 
     def __init__(
@@ -29,9 +26,6 @@ class Cash(Asset):
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         currency: Currency | None = None,
-        market_info: MarketInfo | None = None,
-        ret_id: str = "",
-        ret_id_short_pos: str = "",
         attr_aliases: Mapping[str, str] | None = None,
         purchase_date: pd.Period | None = None
     ):
@@ -42,19 +36,12 @@ class Cash(Asset):
             asset_id (str): Asset identifier.
             currency (Currency): Asset currency.
             nominal (float): Nominal value.
-            market_info (MarketInfo): Market information.
-            ret_id (str): Identifier of cash return.
-            ret_id_short_pos (str): Identifier of cash return on short cash positions.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initialization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
         self._nominal: float = nominal
-        self._market_info: MarketInfo | None = market_info
-        self._ret_id: str = ret_id
-        self._ret_id_short_pos: str = ret_id_short_pos or ret_id
-
         self._purchase_proceeds: float = 0.0
         self._disposal_proceeds: float = 0.0
 
@@ -74,32 +61,17 @@ class Cash(Asset):
     def nominal(self) -> float:
         return self._nominal
 
-    @property
-    def ret_id(self) -> str:
-        return self._ret_id
-
-    @property
-    def ret_id_short_pos(self) -> str:
-        return self._ret_id_short_pos
-
     def _on_time_change(self) -> None:
         self._purchase_proceeds = 0.0
         self._disposal_proceeds = 0.0
 
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
-    def roll_forward(self, *, ret_rate: float | None = None, ret_rate_pos: float | None = None, **kwargs) -> None:
+    def roll_forward(self, *, rate_of_return: float, **kwargs) -> None:
         """
         Roll the cash asset forward one period.
         """
-        ret = ret_rate if self._nominal >= 0 else ret_rate_pos
-        if ret is None:
-            ret_id = self._ret_id if self._nominal >= 0 else self._ret_id_short_pos
-            if self._market_info is None:
-                raise ValueError(f"'ret_rate' is not provided.")
-            ret = self._market_info.get(ret_id)
-
         t = self.time
-        self._nominal = self._nominal * (1 + ret) ** (1 / 12)
+        self._nominal = self._nominal * (1 + rate_of_return)
         self.tdv_cash_flow[t] = 0.0
         self.tdv_mv_bd[t] = self._nominal
 

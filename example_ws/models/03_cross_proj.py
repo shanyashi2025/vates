@@ -9,7 +9,7 @@ from vates.solvency.cn_cross2 import MinCapUnit, MinCapConsolidator, interest_ri
 from company_package import (
     run_with_json_config,
     load_file_df,
-    EsgMaster,
+    EconMaster,
     AssetMaster,
 )
 
@@ -132,14 +132,15 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     del file_df_dict['epl']
 
     # build esg master
-    esg_master = EsgMaster.from_df(
+    econ_master = EconMaster.from_df(
         model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
-        esg_df=model.read_csv(filename_dict["esg"])
+        esg_df=model.read_csv(filename_dict["esg"]),
+        econ_asm_df=None,
     )
 
     # 60-day moving average of government bond yield curve
-    gby_60d_ma_curve = next((x.econ_obj for x in esg_master.yield_curves if x.econ_obj.curve_id == 'gby_60d_ma'), None)
+    gby_60d_ma_curve = next((x.econ_obj for x in econ_master.yield_curves if x.econ_obj.curve_id == 'gby_60d_ma'), None)
     if gby_60d_ma_curve is None:
         raise ValueError(f"'gby_60d_ma' is not found in {filename_dict["esg_params"]}.")
 
@@ -175,7 +176,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
     @model.bind_projection
     def cross_min_cap_projection():
         t, p = model.time, model.period
-        esg_master.update_econ_data(period=p)
+        econ_master.update()
         date_index = p.year * 100 + p.month
 
         if date_index not in aging_assets_input_filelist_df.index:
@@ -196,7 +197,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
         }
         aging_assets_master_dict = {
             key: AssetMaster.existing_from_df(
-                aging_assets_df_dict, model_engine=model, econs=esg_master, fund_id=key)
+                aging_assets_df_dict, model_engine=model, econs=econ_master, fund_id=key)
             for key in mc_units.keys()
         }
 

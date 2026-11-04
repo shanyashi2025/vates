@@ -7,7 +7,7 @@ profile_equity,profile_equity.csv
 profile_bond,profile_bond.csv
 esg,esg.csv
 esg_params,esg_params.json
-market_info,market_info.csv
+econ_asm,econ_asm.csv
 liabs,liabs.csv
 epl,epl.csv
 asset_allocation_groups,asset_allocation_groups.csv

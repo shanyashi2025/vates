@@ -1,5 +1,6 @@
 from vates import ProjModelEngine
-from company_package import load_file_df, EsgMaster, AssetMaster, run_with_json_config
+from vates.alm import Cash
+from company_package import load_file_df, EconMaster, AssetMaster, run_with_json_config
 
 try:
     import scipy
@@ -7,13 +8,21 @@ try:
 except ImportError:
     has_scipy = False
 
-def assets_projection(model: ProjModelEngine, assets_df_dict: dict, esg_master: EsgMaster):
-    esg_master.update_econ_data(period=model.period)
+def assets_projection(model: ProjModelEngine, assets_df_dict: dict, econ_master: EconMaster):
+    econ_master.update()
     if model.time == 0:
-        model.assets = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=esg_master).all
+        model.assets = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=econ_master).all
     else:
         for asset in model.assets:
-            asset.roll_forward()
+            if isinstance(asset, Cash):
+                if asset.nominal >= 0:
+                    ret_id = getattr(asset, "positive_cash_balance_ret_id")
+                else:
+                    ret_id = getattr(asset, "negative_cash_balance_ret_id")
+                ret = (1 + econ_master.econ_asm[ret_id]) ** (1 / 12) - 1
+                asset.roll_forward(rate_of_return=ret)
+            else:
+                asset.roll_forward()
             asset.close_dealing()
 
 
@@ -42,10 +51,11 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
     file_df_dict = load_file_df(model.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg"])
 
     # build esg master
-    esg_master = EsgMaster.from_df(
+    econ_master = EconMaster.from_df(
         model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
-        esg_df=model.read_csv(filename_dict["esg"])
+        esg_df=model.read_csv(filename_dict["esg"]),
+        econ_asm_df=file_df_dict["econ_asm"],
     )
 
     assets_df_dict = {
@@ -65,7 +75,7 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
     model.run(
         projection_args={
             "assets_df_dict": assets_df_dict,
-            "esg_master": esg_master
+            "econ_master": econ_master
         }
     )
     return model

@@ -5,8 +5,8 @@ from typing import Self, NamedTuple
 
 from vates import ProjModelEngine
 from vates.alm import (create_asset, Asset, Cash, BondFixed, Equity, EquityOption, YieldCurve, Spread, DefaultRisk,
-                       EquityIndex, Currency, MarketInfo)
-from .econ_master import EsgMaster
+                       EquityIndex, Currency)
+from .econ_master import EconMaster
 
 ASSET_CATEGORY_MAPPING = {
     'cash': 'CASH',
@@ -132,7 +132,7 @@ class AssetMaster:
         df_dict: dict[str, pd.DataFrame],
         *,
         model_engine: ProjModelEngine,
-        econs: dict[str, object] | EsgMaster,
+        econs: dict[str, object] | EconMaster,
         fund_id: str | None = None
     ) -> Self:
         """
@@ -147,26 +147,24 @@ class AssetMaster:
         Returns:
             An AssetMaster object.
         """
-        if isinstance(econs, EsgMaster):
+        if isinstance(econs, EconMaster):
             currencies = [item.econ_obj for item in econs.currencies]
             equity_indices = [item.econ_obj for item in econs.equity_indices]
             yield_curves = [item.econ_obj for item in econs.yield_curves]
             spreads = [item.econ_obj for item in econs.spreads]
             default_risks = [item.econ_obj for item in econs.default_risks]
-            market_info = econs.market_info.econ_obj
         elif isinstance(econs, dict):
             currencies = econs['currencies']
             equity_indices = econs['equity_indices']
             yield_curves = econs['yield_curves']
             spreads = econs['spreads']
             default_risks = econs['default_risks']
-            market_info = econs['market_info']
         else:
             raise TypeError(f"Invalid type of 'econs': {type(econs)}, expected 'dict' or 'EsgMaster'.")
 
         cash_ls = cls.build_assets_cash_from_df(
             model_engine=model_engine, df=df_dict['assets_cash'].copy(), fund_id=fund_id,
-            currencies=currencies, market_info=market_info
+            currencies=currencies
         )
         if df_dict.get(name := 'assets_equity', None) is not None:
             equity_ls = cls.build_assets_equity_from_df(
@@ -199,7 +197,7 @@ class AssetMaster:
         df_dict: dict[str, pd.DataFrame],
         *,
         model_engine: ProjModelEngine,
-        econs: dict[str, ...] | EsgMaster,
+        econs: dict[str, ...] | EconMaster,
         fund_id: str | None = None,
     ) -> Self:
         """
@@ -214,7 +212,7 @@ class AssetMaster:
         Returns:
             dict[str, list[Asset]]: Dictionary of list of asset objects.
         """
-        if isinstance(econs, EsgMaster):
+        if isinstance(econs, EconMaster):
             currencies = [item.econ_obj for item in econs.currencies]
             equity_indices = [item.econ_obj for item in econs.equity_indices]
             yield_curves = [item.econ_obj for item in econs.yield_curves]
@@ -253,7 +251,6 @@ class AssetMaster:
         model_engine: ProjModelEngine,
         fund_id: str | None,
         currencies: list['Currency'],
-        market_info: MarketInfo
     ) -> list:
         """
         Build cash asset objects from a DataFrame and add them to a fund if provided.
@@ -263,7 +260,6 @@ class AssetMaster:
             df (pd.DataFrame): DataFrame containing cash asset data.
             fund_id (str | None): Fund id to filter the df, or None.
             currencies (list): List of Currency objects.
-            market_info (MarketInfo): MarketInfo object.
 
         Returns:
             list: List of Cash asset objects.
@@ -293,10 +289,9 @@ class AssetMaster:
                 ),
                 currency=currency,
                 nominal=row["nominal"],
-                market_info=market_info,
-                ret_id=row["positive_cash_balance_ret_id"],
-                ret_id_short_pos=row["negative_cash_balance_ret_id"],
                 dynamic_setattrs={
+                    "positive_cash_balance_ret_id": row["positive_cash_balance_ret_id"],
+                    "negative_cash_balance_ret_id": row["negative_cash_balance_ret_id"],
                     'ifrs_classification': ifrs_classification,
                     'local_classification': local_classification,
                     'stat_classification': stat_classification,

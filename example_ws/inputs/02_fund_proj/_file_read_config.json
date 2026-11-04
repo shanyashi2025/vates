@@ -5,7 +5,7 @@
     "assets_bond": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
     "profile_equity": {"index_col": "_asset_id", "allow_not_found": true, "keep_default_na": false},
     "profile_bond": {"index_col": "_asset_id", "allow_not_found": true, "keep_default_na": false},
-    "market_info": {"index_col": "data_item"},
+    "econ_asm": {"index_col": "item", "allow_not_found":  true},
     "bond_provided_cash_flow": {"allow_not_found": true, "keep_default_na": false},
     "aging_assets_output_config": {"index_col": "date"}
 }

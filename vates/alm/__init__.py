@@ -27,7 +27,6 @@ from vates.alm.econs import (
     DefaultRisk,
     DefaultRiskParams,
     EquityIndex,
-    MarketInfo,
     Spread,
     YieldCurve,
 )
@@ -64,7 +63,6 @@ __all__ = [
     'DefaultRisk',
     'DefaultRiskParams',
     'EquityIndex',
-    'MarketInfo',
     'Spread',
     'YieldCurve',
     # liabs

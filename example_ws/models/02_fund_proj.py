@@ -1,8 +1,9 @@
 from vates import ProjModelEngine
+from vates.alm import Cash
 from company_package import (
     run_with_json_config,
     load_file_df,
-    EsgMaster,
+    EconMaster,
     AssetMaster,
     FundMaster,
     build_liabs,
@@ -35,10 +36,11 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     file_df_dict = load_file_df(model.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg", "epl"])
 
     # build esg master
-    esg_master = EsgMaster.from_df(
+    econ_master = EconMaster.from_df(
         model_engine=model,
         esg_params=model.load_json(filename_dict["esg_params"]),
-        esg_df=model.read_csv(filename_dict["esg"])
+        esg_df=model.read_csv(filename_dict["esg"]),
+        econ_asm_df=file_df_dict["econ_asm"],
     )
     # build fund master
     fund_master = FundMaster.from_df(
@@ -55,14 +57,14 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     @model.bind_projection
     def fund_projection():
         t, p = model.time, model.period
-        esg_master.update_econ_data(period=p)
+        econ_master.update()
 
         if t == 0:
             epl_df = model.read_csv(filename_dict["epl"])
             for fund in fund_master.funds:
                 fund_id = fund.fund_id
                 existing_assets = AssetMaster.existing_from_df(
-                    assets_df_dict, model_engine=model, econs=esg_master, fund_id=fund_id
+                    assets_df_dict, model_engine=model, econs=econ_master, fund_id=fund_id
                 ).all
                 if fund is not fund_master.sh_fund:
                     existing_liabs = build_liabs(model_engine=model, df=liabs_df, epl_df=epl_df, fund_id=fund_id, currencies=[])
@@ -78,7 +80,15 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
 
                 # step 1: assets roll forward
                 for asset in fund.assets:
-                    asset.roll_forward()
+                    if isinstance(asset, Cash):
+                        if asset.nominal >= 0:
+                            ret_id = getattr(asset, "positive_cash_balance_ret_id")
+                        else:
+                            ret_id = getattr(asset, "negative_cash_balance_ret_id")
+                        ret = (1 + econ_master.econ_asm[ret_id]) ** (1/12) - 1
+                        asset.roll_forward(rate_of_return=ret)
+                    else:
+                        asset.roll_forward()
                 fund.record_before_dealing(scope="assets")
 
                 # step 2: liabs roll forward
@@ -94,7 +104,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                     fund=fund,
                     rebalance_params=rebalance_params,
                     assets_df_dict=assets_df_dict,
-                    econs=esg_master,
+                    econs=econ_master,
                     asset_mix_df=asset_mix_df
                 )
 

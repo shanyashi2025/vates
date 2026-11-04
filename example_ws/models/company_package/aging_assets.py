@@ -26,8 +26,8 @@ class AgingCash:
             fund_id=getattr(cash, "fund_id"),
             allocation_group=getattr(cash, "allocation_group"),
             nominal=cash.nominal,
-            positive_cash_balance_ret_id=cash.ret_id,
-            negative_cash_balance_ret_id=cash.ret_id_short_pos,
+            positive_cash_balance_ret_id=getattr(cash, "positive_cash_balance_ret_id"),
+            negative_cash_balance_ret_id=getattr(cash, "negative_cash_balance_ret_id"),
         )
 
 @dataclass

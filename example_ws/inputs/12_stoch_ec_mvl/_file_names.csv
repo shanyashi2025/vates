@@ -6,7 +6,6 @@ assets_bond,assets_bond.csv
 profile_bond,profile_bond.csv
 esg,esg_50sims.parquet
 esg_params,esg_params.json
-market_info,market_info.csv
 liabs,liabs.csv
 epl,epl.csv
 asset_allocation_groups,asset_allocation_groups.csv

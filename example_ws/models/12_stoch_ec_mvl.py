@@ -1,11 +1,12 @@
 import numpy as np
 import pandas as pd
 from vates import StochExecutor, ProjModelEngine, make_proj_variable
+from vates.alm import Cash, BondFixed
 from vates.utils import KeyedArray
 from company_package import (
     run_with_json_config,
     load_file_df,
-    EsgMaster,
+    EconMaster,
     AssetMaster,
     FundMaster,
     build_liabs,
@@ -35,13 +36,13 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
         table = dataset.scanner(filter=ds.field("SIMULATION") == model.SIMULATION).to_table()
         esg_df = table.to_pandas().drop('SIMULATION', axis=1)  # drop SIMULATION column
 
-        model.esg_master = EsgMaster.from_df(
+        model.econ_master = EconMaster.from_df(
             model_engine=model,
             esg_params=esg_params,
             esg_df=esg_df,
             esg_step_map=_get_esg_step
         )
-        model.esg_master.update_econ_data(period=p)
+        model.econ_master.update()
 
         deflators_df = esg_df[(esg_df["CLASS"]=='VALN') & (esg_df["MEASURE"]=='DEF')].set_index(['ECONOMY', 'CLASS', 'MEASURE', 'TERM'])
         model.deflators_kr = KeyedArray.from_df(deflators_df)
@@ -59,7 +60,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
         for fund in model.fund_master.funds:
             fund_id = fund.fund_id
             existing_assets = AssetMaster.existing_from_df(
-                assets_df_dict, model_engine=model, econs=model.esg_master, fund_id=fund_id
+                assets_df_dict, model_engine=model, econs=model.econ_master, fund_id=fund_id
             ).all
             if fund is not model.fund_master.sh_fund:
                 existing_liabs = build_liabs(model_engine=model, df=liabs_df, epl_df=epl_df, fund_id=fund_id, currencies=[])
@@ -69,7 +70,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             model.liab_cf[fund] = np.zeros(model.MAX_T + 1)
 
     else:  # t > 1
-        model.esg_master.update_econ_data(period=p)
+        model.econ_master.update()
         esg_step = _get_esg_step(p)
         if esg_step == 1:
             model.deflators[t] = model.deflators_kr.at[('CNY', 'VALN', 'DEF', 0), str_date]
@@ -87,7 +88,17 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             # step 1: assets roll forward
             is_update_mv_price = (p.year == model.START_YEAR) or (p.month % esg_step == 0)
             for asset in fund.assets:
-                asset.roll_forward(is_update_mv_price=is_update_mv_price)
+                if isinstance(asset, Cash):
+                    if asset.nominal >= 0:
+                        ret_id = getattr(asset, "positive_cash_balance_ret_id")
+                    else:
+                        ret_id = getattr(asset, "negative_cash_balance_ret_id")
+                    ret = (1 + model.econ_master.econ_asm[ret_id]) ** (1 / 12) - 1
+                    asset.roll_forward(rate_of_return=ret)
+                elif isinstance(asset, BondFixed):
+                    asset.roll_forward(is_update_mv_price=is_update_mv_price)
+                else:
+                    asset.roll_forward()
             fund.record_before_dealing(scope="assets")
 
             # step 2: liabs roll forward
@@ -103,7 +114,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
                 fund=fund,
                 rebalance_params=rebalance_params,
                 assets_df_dict=assets_df_dict,
-                econs=model.esg_master,
+                econs=model.econ_master,
                 asset_mix_df=asset_mix_df
             )
 

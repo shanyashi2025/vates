@@ -80,7 +80,7 @@ with the running projection. `vates/alm/assets/asset_base.py` is the canonical e
 High-level Asset–Liability Management building blocks that plug into the projection engine:
 
 - **`econs/`** — economic/ESG items: `YieldCurve` (spot-rate curve with a `last_update` time tag),
-  `Spread`, `DefaultRisk`, `EquityIndex`, `Currency`, `MarketInfo`. These are updated each time-step 
+  `Spread`, `DefaultRisk`, `EquityIndex`, `Currency`. These are updated each time-step 
   by an ESG master before assets roll forward.
 - **`assets/`** — asset classes (`Cash`, `Equity`, `BondFixed`, derivatives `EquityOption`) built on
   the `Asset` abstract base. Each asset implements a `roll_forward()` / `close_dealing()` lifecycle.
@@ -116,7 +116,7 @@ Compute quantitative-risk minimum capital.
 
 `example_ws/models/` are the reference implementations. The asset models
 (`01_*`) use a bespoke `company_package/` module (in `example_ws/models/`) with classes like
-`EsgMaster`, `AssetMaster`, and file-loading helpers; input tables live in `example_ws/inputs/<name>/`
+`EconMaster`, `AssetMaster`, and file-loading helpers; input tables live in `example_ws/inputs/<name>/`
 and are resolved by name through `_file_names.csv` + `_file_read_config.json` configs. The stochastic
 models (`11_monte_carlo`, `12_stoch_ec_mvl`) demonstrate `StochExecutor`. Generated 
 outputs (`example_ws/results/`, `example_ws/intermediate/`) are git-ignored.
