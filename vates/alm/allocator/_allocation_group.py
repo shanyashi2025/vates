@@ -23,7 +23,7 @@ class TradeOrder:
     arg: float = 0.0
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class RebalancePreference:
     below_range: RebalanceSizeKind | None
     within_range: RebalanceSizeKind | None
@@ -47,7 +47,7 @@ class RebalancePreference:
                 raise TypeError(f"Invalid type of '{name}': {type(field)}, expected 'RebalanceSizeKind'")
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class AssetAllocationParams:
     """Allocation parameters for an allocation group.
 

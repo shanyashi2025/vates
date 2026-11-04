@@ -152,10 +152,10 @@ def fund_rebalance(model_engine: ProjModelEngine, fund: Fund, rebalance_params: 
         size_type = rebalance_params.fund_size_type.upper()
         asset_size_basis = rebalance_params.asset_size_basis
         total_size = get_fund_size(fund, size_type=size_type, asset_size_basis=asset_size_basis)
-        allocation_group_params: dict[str, AssetAllocationParams] = {}
+        allocation_group_params = rebalance_params.allocation_params
         weight_triplet = build_weight_triplet(asset_mix_df, fund_id, str(period.year * 100 + period.month))
-        for key, params in rebalance_params.allocation_params.items():
-            allocation_group_params[key] = replace(params, weight_triplet=weight_triplet.get(key, None))
+        for key, params in allocation_group_params.items():
+            params.weight_triplet = weight_triplet.get(key, None)
 
         _ = rebalance_params.rebalance_func(
             exist_assets=fund.assets,
