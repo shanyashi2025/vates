@@ -213,7 +213,7 @@ class KeyedArray:
 class _AtIndexer:
     """Internal label-based indexer for KeyedArray."""
 
-    __slots__ = ('_nparray', '_key_pos_pairs', '_dim_names', '_dim_name_to_axis', '_cached_key_pos')
+    __slots__ = ('_nparray', '_key_pos_pairs', '_dim_names', '_dim_name_to_axis', '_key_pos_cache')
 
     def __init__(self, nparray: np.ndarray, key_pos_pairs: list[dict[Any, int]], dim_names: list[str] | None = None):
         """Initialize the indexer.
@@ -240,7 +240,7 @@ class _AtIndexer:
         self._dim_names: list[str] = self._validate_dim_names(dim_names)
         self._dim_name_to_axis: dict[str, int] = {name: i for i, name in enumerate(self._dim_names)}
         self._key_pos_pairs: list[dict[Any, int]] = key_pos_pairs
-        self._cached_key_pos: dict[tuple[int, Any], tuple[Any, bool, str]] = {}
+        self._key_pos_cache: dict[tuple[int, Any], tuple[Any, bool, str]] = {}
 
     @property
     def dim_names(self) -> list[str]:
@@ -269,7 +269,7 @@ class _AtIndexer:
             return default
         return dim_names
 
-    def parse_pos_tuple(self, keys, default = _MISSING) -> tuple[int, ...]:
+    def _parse_pos_tuple(self, keys, default = _MISSING) -> tuple[int, ...]:
         """Convert a tuple of keys into a tuple of integer-position indices.
 
         Args:
@@ -294,7 +294,7 @@ class _AtIndexer:
 
         pos_list: list[int] = []
         for axis, key in enumerate(keys):
-            pos, valid, _ = self.resolve_key(axis, key)
+            pos, valid, _ = self._resolve_key(axis, key)
             if not valid:
                 if default is _MISSING:
                     raise KeyError(f"'{key}' is not a valid key in dimension '{self.dim_names[axis]}'")
@@ -303,8 +303,8 @@ class _AtIndexer:
 
         return tuple(pos_list)
 
-    def resolve_key(self, axis, key) -> tuple[Any, bool, str]:
-        resolved = self._cached_key_pos.get((axis, key), None)
+    def _resolve_key(self, axis: int, key) -> tuple[Any, bool, str]:
+        resolved = self._key_pos_cache.get((axis, key), None)
         if resolved is not None:
             return resolved
 
@@ -320,7 +320,7 @@ class _AtIndexer:
             return pos, False, f"position {pos} is out of bounds range(0, {self._nparray.shape[axis]})"
 
         resolved = pos, True, ""
-        self._cached_key_pos[(axis, key)] = resolved
+        self._key_pos_cache[(axis, key)] = resolved
         return resolved
 
     def get(self, args, /, *, default_value):
@@ -333,7 +333,7 @@ class _AtIndexer:
         Returns:
             The element at the specified keys, or `default_value` if lookup fails.
         """
-        pos_tuple = self.parse_pos_tuple(args, None)
+        pos_tuple = self._parse_pos_tuple(args, None)
         if pos_tuple is None:
             return default_value
         return self._nparray[pos_tuple]
@@ -350,7 +350,7 @@ class _AtIndexer:
         Raises:
             KeyError: If keys are incorrect.
         """
-        pos_tuple = self.parse_pos_tuple(keys)  # will raise if keys are invalid
+        pos_tuple = self._parse_pos_tuple(keys)  # will raise if keys are invalid
         return self._nparray[pos_tuple]
 
     def __setitem__(self, keys, value):
@@ -363,5 +363,5 @@ class _AtIndexer:
         Raises:
             KeyError: If keys are incorrect.
         """
-        pos_tuple = self.parse_pos_tuple(keys)  # will raise if keys are invalid
+        pos_tuple = self._parse_pos_tuple(keys)  # will raise if keys are invalid
         self._nparray[pos_tuple] = value

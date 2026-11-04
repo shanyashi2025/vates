@@ -19,8 +19,8 @@ except ImportError as e:
 
 
 def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str, assets_df_dict: dict,
-                    liabs_df: pd.DataFrame, funds_df: pd.DataFrame, asset_allocation_groups_df: pd.DataFrame,
-                    epl: KeyedArray, asset_mix_df: pd.DataFrame):
+                    liabs_df: pd.DataFrame, epl_df: pd.DataFrame, funds_df: pd.DataFrame,
+                    asset_allocation_groups_df: pd.DataFrame, asset_mix_df: pd.DataFrame):
 
     t, p = model.time, model.period
     str_date = str(p.year * 100 + p.month)
@@ -62,7 +62,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
                 assets_df_dict, model_engine=model, econs=model.esg_master, fund_id=fund_id
             ).all
             if fund is not model.fund_master.sh_fund:
-                existing_liabs = build_liabs(model, liabs_df, fund_id, currencies=[])
+                existing_liabs = build_liabs(model_engine=model, df=liabs_df, epl_df=epl_df, fund_id=fund_id, currencies=[])
             else:
                 existing_liabs = None
             fund.assemble_on_start(existing_assets=existing_assets, existing_liabs=existing_liabs)
@@ -94,7 +94,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             inv_ret_bd = fund.rate_of_return_bd[t, "FAV"]
             as_cf_ret = 0  # # specify the rate
             for liab in fund.liabs:
-                liab.roll_forward(epl=epl, inv_ret_bd=inv_ret_bd, as_cf_ret=as_cf_ret)
+                liab.roll_forward(inv_ret_bd=inv_ret_bd, as_cf_ret=as_cf_ret)
             fund.record_before_dealing(scope="liabs")
 
             # step 3: rebalance if needed
@@ -154,12 +154,11 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
     filename_dict = {idx: row[stoch.SCENARIO] for idx, row in df.iterrows()}
     file_read_args = stoch.load_json("_file_read_config.json")
     file_df_dict = load_file_df(stoch.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg"])
-    epl = KeyedArray.from_df(file_df_dict['epl'])
-    del file_df_dict['epl']
 
     assets_df_dict = file_df_dict
     asset_mix_df = file_df_dict["asset_mix"]
     liabs_df = file_df_dict["liabs"]
+    epl_df = file_df_dict["epl"]
 
     stoch.run(
         projection_args={
@@ -167,7 +166,7 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
             "esg_filename": filename_dict["esg"],
             "assets_df_dict": assets_df_dict,
             "liabs_df": liabs_df,
-            "epl": epl,
+            "epl_df": epl_df,
             "funds_df": file_df_dict['funds'],
             "asset_allocation_groups_df": file_df_dict['asset_allocation_groups'],
             "asset_mix_df": asset_mix_df,

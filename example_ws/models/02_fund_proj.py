@@ -1,5 +1,4 @@
 from vates import ProjModelEngine
-from vates.utils import KeyedArray
 from company_package import (
     run_with_json_config,
     load_file_df,
@@ -33,9 +32,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     df = model.read_csv("_file_names.csv", index_col="table")
     filename_dict = {idx: row[model.SCENARIO] for idx, row in df.iterrows()}
     file_read_args = model.load_json("_file_read_config.json")
-    file_df_dict = load_file_df(model.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg"])
-    epl = KeyedArray.from_df(file_df_dict['epl'])
-    del file_df_dict['epl']
+    file_df_dict = load_file_df(model.read_csv, filename_dict, file_read_args, exclude=["esg_params", "esg", "epl"])
 
     # build esg master
     esg_master = EsgMaster.from_df(
@@ -61,13 +58,14 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
         esg_master.update_econ_data(period=p)
 
         if t == 0:
+            epl_df = model.read_csv(filename_dict["epl"])
             for fund in fund_master.funds:
                 fund_id = fund.fund_id
                 existing_assets = AssetMaster.existing_from_df(
                     assets_df_dict, model_engine=model, econs=esg_master, fund_id=fund_id
                 ).all
                 if fund is not fund_master.sh_fund:
-                    existing_liabs = build_liabs(model, liabs_df, fund_id, currencies=[])
+                    existing_liabs = build_liabs(model_engine=model, df=liabs_df, epl_df=epl_df, fund_id=fund_id, currencies=[])
                 else:
                     existing_liabs = None
                 fund.assemble_on_start(existing_assets=existing_assets, existing_liabs=existing_liabs)
@@ -87,7 +85,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 inv_ret_bd = fund.rate_of_return_bd[t, "FAV"]
                 as_cf_ret = 0  # specify the rate
                 for liab in fund.liabs:
-                    liab.roll_forward(epl=epl, inv_ret_bd=inv_ret_bd, as_cf_ret=as_cf_ret)
+                    liab.roll_forward(inv_ret_bd=inv_ret_bd, as_cf_ret=as_cf_ret)
                 fund.record_before_dealing(scope="liabs")
 
                 # step 3: rebalance if needed
