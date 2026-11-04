@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Self
+from typing import Any, Callable
 
 from vates import ProjModelEngine
 from vates._core import time_synchronized
@@ -34,12 +34,10 @@ class EsgVariable:
     term_type: str | None = None
     interp_method: str | None = None
     compound_freq: str | None = None
-    ipos_economy: int = 0
-    ipos_class: int = 0
-    ipos_measure: int = 0
     ipos_term: int | list[int] = 0
     descr: str = ""
     fixed_value: Any = None
+    data: KeyedArray | None = None
 
     def __post_init__(self):
         if isinstance(self.term, str):
@@ -51,37 +49,27 @@ class EsgVariable:
 
 
 @dataclass(slots=True)
-class EsgItem[T]:
+class EsgContext[T]:
     econ_obj: T
-    esg_data: KeyedArray | pd.DataFrame
+    esg_data: KeyedArray | pd.DataFrame | None = None
     esg_vars: dict[str, EsgVariable] = field(default_factory=dict)
     descr: str = ""
 
-    def include_esg_data(self, esg_df: pd.DataFrame) -> None:
-        class_list = [v.class_ for _, v in self.esg_vars.items()]
-        df = esg_df[esg_df["CLASS"].isin(class_list)].copy()
-        df.set_index(['ECONOMY', 'CLASS', 'MEASURE', 'TERM'], inplace=True)
-        self.esg_data = KeyedArray.from_df(df=df, unpack_multi_index=True, col_index_name='date_col')
-        self._set_esg_vars_intpos()
-
-    def _set_esg_vars_intpos(self) -> None:
-        for _, var in self.esg_vars.items():
-            var.ipos_economy = self.esg_data.key_to_pos(dim='ECONOMY', key=var.economy, default=-1)
-            if var.ipos_economy == -1:
-                var.ipos_economy = 999
-            var.ipos_class = self.esg_data.key_to_pos(dim='CLASS', key=var.class_, default=-1)
-            if var.ipos_class == -1:
-                var.ipos_class = 999
-            var.ipos_measure = self.esg_data.key_to_pos(dim='MEASURE', key=var.measure, default=-1)
-            if var.ipos_measure == -1:
-                var.ipos_measure = 999
-
-            if isinstance(var.term, int):
-                var.ipos_term = self.esg_data.key_to_pos(dim='TERM', key=var.term)
-            elif isinstance(var.term, list):
-                var.ipos_term = [self.esg_data.key_to_pos(dim='TERM', key=x) for x in var.term]
+    def set_esg_data(self, df: pd.DataFrame) -> None:
+        for v in self.esg_vars.values():
+            filtered_df = (df[(df['ECONOMY'] == v.economy) & (df['CLASS'] == v.class_) & (df['MEASURE'] == v.measure)]
+                           .drop(['ECONOMY', 'CLASS', 'MEASURE'], axis=1)
+                           .set_index('TERM'))
+            if len(filtered_df) == 0:
+                continue
+            data: KeyedArray = KeyedArray.from_df(df=filtered_df, col_index_name='date_col')
+            v.data = data
+            if isinstance(v.term, int):
+                v.ipos_term = data.key_to_pos(dim='TERM', key=v.term)
+            elif isinstance(v.term, list):
+                v.ipos_term = [data.key_to_pos(dim='TERM', key=x) for x in v.term]
             else:
-                raise TypeError(f"{var.descr}: invalid term type {type(var.term)}, expected 'int' or 'list'.")
+                raise TypeError(f"{v.descr}: invalid term type {type(v.term)}, expected 'int' or 'list'.")
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -92,22 +80,22 @@ class EsgMaster:
 
     def __init__(
         self,
-        yield_curves: list[EsgItem[YieldCurve]] | None = None,
-        spreads: list[EsgItem[Spread]] | None = None,
-        default_risks: list[EsgItem[DefaultRisk]] | None = None,
-        equity_indices: list[EsgItem[EquityIndex]] | None = None,
-        currencies: list[EsgItem[Currency]] | None = None,
-        market_info: EsgItem[MarketInfo] | None = None,
+        yield_curves: list[EsgContext[YieldCurve]] | None = None,
+        spreads: list[EsgContext[Spread]] | None = None,
+        default_risks: list[EsgContext[DefaultRisk]] | None = None,
+        equity_indices: list[EsgContext[EquityIndex]] | None = None,
+        currencies: list[EsgContext[Currency]] | None = None,
+        market_info: EsgContext[MarketInfo] | None = None,
         *,
-        model_engine: ProjModelEngine = None,
+        model_engine: ProjModelEngine | None = None,
         esg_step_map: dict | Callable | None = None,
     ) -> None:
-        self.yield_curves: list[EsgItem[YieldCurve]] = yield_curves or []
-        self.spreads: list[EsgItem[Spread]] = spreads or []
-        self.default_risks: list[EsgItem[DefaultRisk]] = default_risks or []
-        self.equity_indices: list[EsgItem[EquityIndex]] = equity_indices or []
-        self.currencies: list[EsgItem[Currency]] = currencies or []
-        self.market_info: EsgItem[MarketInfo] | None = market_info
+        self.yield_curves: list[EsgContext[YieldCurve]] = yield_curves or []
+        self.spreads: list[EsgContext[Spread]] = spreads or []
+        self.default_risks: list[EsgContext[DefaultRisk]] = default_risks or []
+        self.equity_indices: list[EsgContext[EquityIndex]] = equity_indices or []
+        self.currencies: list[EsgContext[Currency]] = currencies or []
+        self.market_info: EsgContext[MarketInfo] | None = market_info
         self.esg_step_map: dict | Callable | None = esg_step_map  # take one argument of `period`
 
     def update_econ_data(self, period: pd.Period) -> None:
@@ -120,16 +108,16 @@ class EsgMaster:
         else:
             raise TypeError(f"Invalid {type(period)=}, expected 'dict' or 'callable'.")
         date_col = self._get_esg_date_col(period, esg_step)
-        for esg_item in self.yield_curves:
-            self.update_yield_curve(esg_item, date_col)
-        for esg_item in self.spreads:
-            self.update_spread(esg_item, date_col)
-        for esg_item in self.default_risks:
-            self.update_default_risk(esg_item, date_col)
-        for esg_item in self.equity_indices:
-            self.update_equity_index(esg_item, date_col, esg_step)
-        for esg_item in self.currencies:
-            self.update_currency(esg_item, date_col)
+        for ctx in self.yield_curves:
+            self.update_yield_curve(ctx, date_col)
+        for ctx in self.spreads:
+            self.update_spread(ctx, date_col)
+        for ctx in self.default_risks:
+            self.update_default_risk(ctx, date_col)
+        for ctx in self.equity_indices:
+            self.update_equity_index(ctx, date_col, esg_step)
+        for ctx in self.currencies:
+            self.update_currency(ctx, date_col)
         self.update_market_info(date_col)
 
     @staticmethod
@@ -144,24 +132,23 @@ class EsgMaster:
             return None
 
     @staticmethod
-    def update_yield_curve(esg_item: EsgItem, date_col: str | None) -> None:
+    def update_yield_curve(ctx: EsgContext, date_col: str | None) -> None:
         """
         Update risk-free yield curve with ESG data.
 
         Args:
-            esg_item (YieldCurve): Curve to update.
+            ctx (EsgContext[YieldCurve]): Curve to update.
             date_col (str): Date column.
         """
         if date_col is None:
-            esg_item.econ_obj.update()
+            ctx.econ_obj.update()
             return
 
-        esg_vars = esg_item.esg_vars
-        esg_data = esg_item.esg_data
-        ipos_date = esg_data.key_to_pos("date_col", date_col)
+        esg_vars = ctx.esg_vars
 
         var = esg_vars["rates"]
-        rates = np.array(esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date])
+        ipos_date = var.data.key_to_pos("date_col", date_col)
+        rates = np.array(var.data[var.ipos_term, ipos_date])
 
         # convert term to months
         if var.term_type == "Y":
@@ -175,47 +162,47 @@ class EsgMaster:
         if var.measure == "PRICE":
             from_kind = "discount_factors"
             rates = np.insert(arr=rates, obj=0, values=1)  # let discount_factor = 1 at term 0
-            value = interpolate_interest_rates(term, rates, interp_method=var.interp_method)
         elif var.measure == "SPOT":
             from_kind = "spot_rates"
             rates = np.insert(arr=rates, obj=0, values=0)  # let spot_rate = 0 at term 0
-            value = interpolate_interest_rates(term, rates, interp_method=var.interp_method)
         else:
             raise ValueError(f"{var.descr}: invalid {var.measure=}")
-        esg_item.econ_obj.update(from_kind=from_kind, value=value)
+
+        ctx.econ_obj.update(from_kind=from_kind, value=interpolate_interest_rates(term, rates, interp_method=var.interp_method))
 
     @staticmethod
-    def update_spread(esg_item: EsgItem[Spread], date_col: str | None) -> None:
+    def update_spread(ctx: EsgContext[Spread], date_col: str | None) -> None:
         """
         Update spread(s) with ESG data.
 
         Args:
-            esg_item (EsgItem[Spread]): spread(s) to update.
+            ctx (EsgContext[Spread]): spread(s) to update.
             date_col (str): Date column.
         """
-        econ_obj: Spread = esg_item.econ_obj
+        econ_obj: Spread = ctx.econ_obj
 
         if date_col is None:
             econ_obj.update()
             return
 
-        esg_vars = esg_item.esg_vars
-        esg_data = esg_item.esg_data
-        ipos_date = esg_data.key_to_pos("date_col", date_col)
+        esg_vars = ctx.esg_vars
+        ipos_date = None
 
         # 1. spread_add
         var = esg_vars["spread_add"]
-        if var.fixed_value is None:
-            spread_add = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        if (fixed_value := var.fixed_value) is None:
+            ipos_date = var.data.key_to_pos("date_col", date_col)
+            spread_add = var.data[var.ipos_term, ipos_date] / var.divby
         else:
-            spread_add = var.fixed_value
+            spread_add = fixed_value / var.divby
 
         # 2. spread_propn
         var = esg_vars["spread_propn"]
-        if var.fixed_value is None:
-            spread_propn = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        if (fixed_value := var.fixed_value) is None:
+            ipos_date = ipos_date if ipos_date is not None else var.data.key_to_pos("date_col", date_col)
+            spread_propn = var.data[var.ipos_term, ipos_date] / var.divby
         else:
-            spread_propn = var.fixed_value / var.divby
+            spread_propn = fixed_value / var.divby
 
         econ_obj.update(
             additive=np.full(shape=13, fill_value=spread_add),
@@ -223,27 +210,26 @@ class EsgMaster:
         )
 
     @staticmethod
-    def update_default_risk(esg_item: EsgItem[DefaultRisk], date_col: str | None) -> None:
+    def update_default_risk(ctx: EsgContext[DefaultRisk], date_col: str | None) -> None:
         """
         Update default risk(s) with ESG data.
 
         Args:
-            esg_item (EsgItem[DefaultRisk]): default risk(s) to update.
+            ctx (EsgContext[DefaultRisk]): default risk(s) to update.
             date_col (str): Date column.
         """
-        econ_obj: DefaultRisk = esg_item.econ_obj
+        econ_obj: DefaultRisk = ctx.econ_obj
 
         if date_col is None:
             econ_obj.update()
             return
 
-        esg_vars = esg_item.esg_vars
-        esg_data = esg_item.esg_data
-        ipos_date = esg_data.key_to_pos("date_col", date_col)
+        esg_vars = ctx.esg_vars
 
         # 1. MPD (Marginal Probability of Default)
         var = esg_vars["MPD"]
-        mpd = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        ipos_date = var.data.key_to_pos("date_col", date_col)
+        mpd = var.data[var.ipos_term, ipos_date] / var.divby
         if var.compound_freq == 'annual':
             mpd = 1 - (1 - mpd) ** (1 / 12)
         elif var.compound_freq == 'monthly':
@@ -253,7 +239,7 @@ class EsgMaster:
 
         # 2. LGD (Loss Given Default)
         var = esg_vars["LGD"]
-        lgd = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        lgd = var.data[var.ipos_term, ipos_date] / var.divby
 
         # 3. pd_affects_decrement
         var = esg_vars["pd_affects_decrement"]
@@ -266,35 +252,34 @@ class EsgMaster:
         )
 
     @staticmethod
-    def update_equity_index(esg_item: EsgItem, date_col: str | None, esg_step: int) -> None:
+    def update_equity_index(ctx: EsgContext, date_col: str | None, esg_step: int) -> None:
         """
         Update equity index(es) with ESG data.
 
         Args:
-            esg_item (EsgItem): Equity index(es) to update.
+            ctx (EsgContext[EquityIndex]): Equity index(es) to update.
             date_col (str): Date column.
             esg_step (int): esg step.
         """
         if date_col is None:
-            esg_item.econ_obj.update(apply_compound_growth=True)
+            ctx.econ_obj.update(apply_compound_growth=True)
             return
 
-        esg_vars = esg_item.esg_vars
-        esg_data = esg_item.esg_data
-        ipos_date = esg_data.key_to_pos("date_col", date_col)
+        esg_vars = ctx.esg_vars
 
         # 1. total_return_index
         var = esg_vars["total_return_index"]
-        total_return_index = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        ipos_date = var.data.key_to_pos("date_col", date_col)
+        total_return_index = var.data[var.ipos_term, ipos_date] / var.divby
         if esg_step != 1:  # convert 'index as at period end' to 'index as at first month of the period'
-            equity_index = esg_item.econ_obj
+            equity_index = ctx.econ_obj
             p = equity_index.period
             mon_tot_ret = (total_return_index / equity_index.tdv_tot_return_index[p - 1]) ** (1 / esg_step)
             total_return_index = equity_index.tdv_tot_return_index[p - 1] * mon_tot_ret
 
         # 2. dividend_yield
         var = esg_vars["dividend_yield"]
-        dvy = esg_data[var.ipos_economy, var.ipos_class, var.ipos_measure, var.ipos_term, ipos_date] / var.divby
+        dvy = var.data[var.ipos_term, ipos_date] / var.divby
         if var.compound_freq == 'annual':
             dividend_yield_ac = dvy
         elif var.compound_freq == 'monthly':
@@ -304,21 +289,21 @@ class EsgMaster:
         else:
             raise ValueError(f"{var.descr}: {var.compound_freq=} not defined.")
 
-        esg_item.econ_obj.update(total_return_index=total_return_index, dividend_yield_ac=dividend_yield_ac)
+        ctx.econ_obj.update(total_return_index=total_return_index, dividend_yield_ac=dividend_yield_ac)
 
     @staticmethod
-    def update_currency(esg_item: EsgItem, date_col: str | None) -> None:
+    def update_currency(ctx: EsgContext, date_col: str | None) -> None:
         """
         Update currency(ies) with ESG data.
 
         Args:
-            esg_item (Currency or list of Currency): Currency(ies) to update.
+            ctx (EsgContext[Currency]): Currency(ies) to update.
             date_col (str): Date column.
         """
         if date_col is None:
-            esg_item.econ_obj.update(apply_compound_growth=True)
+            ctx.econ_obj.update(apply_compound_growth=True)
             return
-        esg_item.econ_obj.update(fx_rate=1.0)  # read from esg once there are foreign currencies
+        ctx.econ_obj.update(fx_rate=1.0)  # read from esg once there are foreign currencies
 
 
     def update_market_info(self, date_col: str | None) -> None:
@@ -333,8 +318,8 @@ class EsgMaster:
             data = {}
 
         # update short rate
-        for curve_esg_item in self.yield_curves:
-            curve_obj = curve_esg_item.econ_obj
+        for curve_ctx in self.yield_curves:
+            curve_obj = curve_ctx.econ_obj
             curve_id = curve_obj.curve_id
             short_rate_id = f'{curve_id}:short_rate'
             if short_rate_id not in data:
@@ -353,33 +338,52 @@ class EsgMaster:
         esg_params: dict,
         market_info_df: pd.DataFrame | None = None,
         esg_step_map: dict | Callable | None = None
-    ) -> Self:
-        yield_curves = cls.build_esg_items(model_engine=model_engine, econ_cls=YieldCurve, econ_id_attr="curve_id",
-                                           esg_params=esg_params.get("yield_curves"), esg_df=esg_df,
-                                           variable_spec={"rates": ["measure", "term", "term_type", "interp_method"]})
-        spreads = cls.build_esg_items(model_engine=model_engine, econ_cls=Spread, econ_id_attr="spread_id",
-                                      esg_params=esg_params.get("spreads"), esg_df=esg_df,
-                                      variable_spec={
-                                          "spread_add": ["measure", "divby"],
-                                          "spread_propn": ["measure", "divby", "fixed_value"],
-                                      })
-        default_risks = cls.build_esg_items(model_engine=model_engine, econ_cls=DefaultRisk, econ_id_attr="default_risk_id",
-                                            esg_params=esg_params.get("default_risks"), esg_df=esg_df,
-                                            variable_spec={
-                                                "MPD": ["measure", "divby", "compound_freq"],
-                                                "LGD": ["measure", "divby"],
-                                                "pd_affects_decrement": ["measure", "fixed_value"],
-                                            })
-        equity_indices = cls.build_esg_items(model_engine=model_engine, econ_cls=EquityIndex, econ_id_attr="index_id",
-                                             esg_params=esg_params.get("equity_indices"), esg_df=esg_df,
-                                             variable_spec={
-                                                 "total_return_index": ["measure"],
-                                                 "dividend_yield": ["measure", "divby", "compound_freq"],
-                                             })
-        currencies = cls.build_esg_items(model_engine=model_engine, econ_cls=Currency, econ_id_attr="currency_id",
-                                         esg_params=esg_params.get("currencies"), esg_df=esg_df,
-                                         variable_spec={})
-        market_info = EsgItem(descr="general", econ_obj=MarketInfo(model_engine=model_engine), esg_data=market_info_df)
+    ) -> 'EsgMaster':
+        yield_curves = cls.build_esg_context(
+            model_engine=model_engine,
+            econ_cls=YieldCurve,
+            econ_id_attr="curve_id",
+            esg_params=esg_params.get("yield_curves"),
+            esg_df=esg_df,
+            variable_spec={"rates": ["measure", "term", "term_type", "interp_method"]}
+        )
+        spreads = cls.build_esg_context(
+            model_engine=model_engine,
+            econ_cls=Spread,
+            econ_id_attr="spread_id",
+            esg_params=esg_params.get("spreads"),
+            esg_df=esg_df,
+            variable_spec={"spread_add": ["measure", "divby"],
+                           "spread_propn": ["measure", "divby", "fixed_value"]}
+        )
+        default_risks = cls.build_esg_context(
+            model_engine=model_engine,
+            econ_cls=DefaultRisk,
+            econ_id_attr="default_risk_id",
+            esg_params=esg_params.get("default_risks"),
+            esg_df=esg_df,
+            variable_spec={"MPD": ["measure", "divby", "compound_freq"],
+                           "LGD": ["measure", "divby"],
+                           "pd_affects_decrement": ["measure", "fixed_value"]}
+        )
+        equity_indices = cls.build_esg_context(
+            model_engine=model_engine,
+            econ_cls=EquityIndex,
+            econ_id_attr="index_id",
+            esg_params=esg_params.get("equity_indices"),
+            esg_df=esg_df,
+            variable_spec={"total_return_index": ["measure"],
+                           "dividend_yield": ["measure", "divby", "compound_freq"]}
+        )
+        currencies = cls.build_esg_context(
+            model_engine=model_engine,
+            econ_cls=Currency,
+            econ_id_attr="currency_id",
+            esg_params=esg_params.get("currencies"),
+            esg_df=esg_df,
+            variable_spec={}
+        )
+        market_info = EsgContext(descr="general", econ_obj=MarketInfo(model_engine=model_engine), esg_data=market_info_df)
         obj = EsgMaster(
             yield_curves=yield_curves,
             spreads=spreads,
@@ -395,16 +399,16 @@ class EsgMaster:
         return obj
 
     @classmethod
-    def build_esg_items(
+    def build_esg_context(
         cls,
         *,
         model_engine: ProjModelEngine,
         econ_cls,
         econ_id_attr: str,
-        esg_params: dict,
+        esg_params: dict | None,
         esg_df: pd.DataFrame,
         variable_spec: dict[str, list]
-    ) -> list[EsgItem]:
+    ) -> list[EsgContext]:
         """
         Build Econ objects and their ESG variables.
 
@@ -417,30 +421,30 @@ class EsgMaster:
             variable_spec (dict): Dict containing variable spec.
 
         Returns:
-            list: List of EsgItem objects
+            list: List of EsgContext objects
         """
         if esg_params is None:
             return []
 
-        esg_item_list = []
+        ctx_list = []
         var_default_attr_dict = esg_params.get("variable_default_attribute") or {}
-        for item in esg_params["items"]:
-            econ_id = item[econ_id_attr]
+        for instrument in esg_params["instruments"]:
+            econ_id = instrument[econ_id_attr]
             kwargs = {"model_engine": model_engine, econ_id_attr: econ_id}
             obj = econ_cls(**kwargs)
-            economy = item["economy"]
-            class_ = item["class"]
+            economy = instrument["economy"]
+            class_ = instrument["class"]
 
             esg_vars = {}
             for var_name, attr_list in variable_spec.items():
-                var_attr = item.get(var_name) or {}
+                var_attr = instrument.get(var_name) or {}
                 var_default_attr = var_default_attr_dict.get(var_name) or {}
                 kwargs = {key: val if (val := var_attr.get(key, None)) is not None else var_default_attr[key]
                           for key in attr_list}
                 esg_vars[var_name] = EsgVariable(economy, class_, **kwargs)
 
-            esg_item = EsgItem(descr=econ_id, econ_obj=obj, esg_vars=esg_vars, esg_data=esg_df)
-            esg_item.include_esg_data(esg_df)
-            esg_item_list.append(esg_item)
+            ctx = EsgContext(descr=econ_id, econ_obj=obj, esg_vars=esg_vars)
+            ctx.set_esg_data(esg_df)
+            ctx_list.append(ctx)
 
-        return esg_item_list
+        return ctx_list

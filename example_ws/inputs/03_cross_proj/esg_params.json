@@ -3,7 +3,7 @@
     "variable_default_attribute": {
       "rates": {"measure": "PRICE", "term": "1-50", "term_type": "Y", "interp_method": "Geometric"}
     },
-    "items": [
+    "instruments": [
       {"curve_id": "cny_rf", "economy": "CNY", "class": "ZCB"},
       {"curve_id": "gby_60d_ma", "economy": "CNY", "class": "GBY_60D_MA", "rates": {"term": "1-40"}}
     ]
@@ -13,7 +13,7 @@
       "spread_add": {"measure": "SPREAD_BP", "divby": 10000},
       "spread_propn": {"measure": "SPREAD_PROPN_PC", "divby": 100}
     },
-    "items": [
+    "instruments": [
       {"spread_id": "AAA", "economy": "CNY", "class": "RATING_AAA", "spread_propn": {"fixed_value": 0}},
       {"spread_id": "AA", "economy": "CNY", "class": "RATING_AA", "spread_propn": {"fixed_value": 0}}
     ]
@@ -24,7 +24,7 @@
       "LGD": {"measure": "LGD_PC", "divby": 100},
       "pd_affects_decrement": {"measure": "NOT_USED"}
     },
-    "items": [
+    "instruments": [
       {"default_risk_id": "AAA", "economy": "CNY", "class": "RATING_AAA", "pd_affects_decrement": {"fixed_value": true}},
       {"default_risk_id": "AA", "economy": "CNY", "class": "RATING_AA", "pd_affects_decrement": {"fixed_value": true}}
     ]
@@ -34,10 +34,10 @@
       "total_return_index": {"measure": "RET_IDX"},
       "dividend_yield": {"measure": "RNY_PC", "divby": 100, "compound_freq": "monthly"}
     },
-    "items": []
+    "instruments": []
   },
   "currencies": {
-    "items": [
+    "instruments": [
       {"currency_id": "cny", "economy": "CNY", "class": "EXCHANGE_RATE"}
     ]
   }
