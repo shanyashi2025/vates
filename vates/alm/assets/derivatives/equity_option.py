@@ -157,7 +157,7 @@ class EquityOption(Asset):
             return
 
         if self._is_pay_dividend:
-            self._stock_price = self._stock_price * (1 + self._equity_index.capital_growth)
+            self._stock_price = self._stock_price * (1 + self._equity_index.price_return)
             q = math.log(1 + self._equity_index.dividend_yield_ac) # obtain continuously compounded dividend assumption
         else:
             self._stock_price = self._stock_price * (1 + self._equity_index.total_return)

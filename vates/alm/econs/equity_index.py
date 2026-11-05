@@ -52,8 +52,8 @@ class EquityIndex:
         return self._total_return_index / self._total_return_index_prev - 1
 
     @property
-    def capital_growth(self) -> float:
-        """float: Capital growth in period."""
+    def price_return(self) -> float:
+        """float: Price return (capital gain or loss) in period."""
         maybe_raise_if_ne(self._last_update, self.time)
         return self.total_return - self.dividend_yield
 
@@ -94,7 +94,8 @@ class EquityIndex:
     def update(self, *, total_return_index: float = None, dividend_yield_ac: float = None,
                apply_compound_growth: bool = False) -> None:
         """
-        Update the equity index values for the current time step.
+        Update the equity index values for the current time step. The total return index (TRI) includes price return
+        (capital gain or loss) and dividends over the period.
 
         Args:
             total_return_index (float): New total return index.

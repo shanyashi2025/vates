@@ -95,7 +95,7 @@ class Equity(Asset):
         """
         dividend = self._mv * self._equity_index.dividend_yield
         self._cash_flow = dividend
-        self._mv = self._mv * (1 + self._equity_index.capital_growth)  # total return = capital growth + dividend yield
+        self._mv = self._mv * (1 + self._equity_index.price_return)  # total return = price return + dividend yield
 
         t = self.time
         self.tdv_dividend[t] = dividend
