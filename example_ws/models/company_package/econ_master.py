@@ -283,15 +283,15 @@ class EconMaster:
         var = esg_vars["dividend_yield"]
         dvy = var.data[var.ipos_term, ipos_date] / var.divby
         if var.compound_freq == 'annual':
-            dividend_yield_ac = dvy
+            dividend_yield_pa = dvy
         elif var.compound_freq == 'monthly':
-            dividend_yield_ac = (1 + dvy) ** 12 - 1
+            dividend_yield_pa = (1 + dvy) ** 12 - 1
         elif var.compound_freq == 'continuous':
-            dividend_yield_ac = math.exp(dvy * 12) - 1
+            dividend_yield_pa = math.exp(dvy * 12) - 1
         else:
             raise ValueError(f"{var.descr}: {var.compound_freq=} not defined.")
 
-        ctx.econ_obj.update(total_return_index=total_return_index, dividend_yield_ac=dividend_yield_ac)
+        ctx.econ_obj.update(total_return_index=total_return_index, dividend_yield_pa=dividend_yield_pa)
 
     @staticmethod
     def update_currency(ctx: EconContext, date_col: str | None) -> None:

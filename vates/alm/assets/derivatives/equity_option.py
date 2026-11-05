@@ -95,7 +95,7 @@ class EquityOption(Asset):
             calc_price = BlackScholesCalculator.price(
                 call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-                q=math.log(1 + self._equity_index.dividend_yield_ac) if self._is_pay_dividend else 0.0,
+                q=math.log(1 + self._equity_index.dividend_yield_pa) if self._is_pay_dividend else 0.0,
                 sigma=self._std_dev, tau=self.os_term_m / 12
             )
             if not math.isclose(self._price, calc_price, rel_tol=1e-6, abs_tol=1e-8):
@@ -158,7 +158,7 @@ class EquityOption(Asset):
 
         if self._is_pay_dividend:
             self._stock_price = self._stock_price * (1 + self._equity_index.price_return)
-            q = math.log(1 + self._equity_index.dividend_yield_ac) # obtain continuously compounded dividend assumption
+            q = math.log(1 + self._equity_index.dividend_yield_pa) # obtain continuously compounded dividend assumption
         else:
             self._stock_price = self._stock_price * (1 + self._equity_index.total_return)
             q = 0.0
@@ -192,7 +192,7 @@ class EquityOption(Asset):
         return BlackScholesCalculator.greeks(
             call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
             r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-            q=math.log(1 + self._equity_index.dividend_yield_ac) if self._is_pay_dividend else 0.0,
+            q=math.log(1 + self._equity_index.dividend_yield_pa) if self._is_pay_dividend else 0.0,
             sigma=self._std_dev, tau=self.os_term_m / 12
         )
 

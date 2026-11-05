@@ -12,17 +12,17 @@ class EquityIndex:
     Attributes:
         index_id (str): Equity index identifier.
         tdv_tot_return_index (TDimVariable): Total return index.
-        tdv_dividend_yield_ac (float): Dividend yield (annual compounding).
+        tdv_dividend_yield_pa (float): Dividend yield (per annum).
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
-    _dividend_yield_ac: float
+    _dividend_yield_pa: float
     _total_return_index: float
     _total_return_index_prev: float
 
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_last_update',
-                 'index_id', '_dividend_yield_ac', '_total_return_index', '_total_return_index_prev',
-                 'tdv_tot_return_index', 'tdv_dividend_yield_ac', )
+                 'index_id', '_dividend_yield_pa', '_total_return_index', '_total_return_index_prev',
+                 'tdv_tot_return_index', 'tdv_dividend_yield_pa',)
 
     def __init__(
         self,
@@ -40,7 +40,7 @@ class EquityIndex:
         self._total_return_index = 1.0
         tdv_kwargs = {"model_engine": model_engine, "owner": index_id, "group": 'equity_index'}
         self.tdv_tot_return_index = make_proj_variable("tot_return_index", **tdv_kwargs)
-        self.tdv_dividend_yield_ac = make_proj_variable("dividend_yield_ac", **tdv_kwargs)
+        self.tdv_dividend_yield_pa = make_proj_variable("dividend_yield_pa", **tdv_kwargs)
         self._last_update: int = self.time or 0
 
     @property
@@ -61,13 +61,13 @@ class EquityIndex:
     def dividend_yield(self) -> float:
         """float: Dividend yield (monthly) in period."""
         maybe_raise_if_ne(self._last_update, self.time)
-        return (1 + self.dividend_yield_ac) ** (1 / 12) - 1
+        return (1 + self.dividend_yield_pa) ** (1 / 12) - 1
 
     @property
-    def dividend_yield_ac(self) -> float:
-        """float: Dividend yield (annual compounding) in period."""
+    def dividend_yield_pa(self) -> float:
+        """float: Dividend yield (per annum) in period."""
         maybe_raise_if_ne(self._last_update, self.time)
-        return self._dividend_yield_ac
+        return self._dividend_yield_pa
 
     @property
     def total_return_index(self) -> float:
@@ -87,11 +87,11 @@ class EquityIndex:
         return self.tdv_tot_return_index
 
     @property
-    def arr_dividend_yield_ac(self) -> TDimVariable:
-        """TDepVariable: Dividend yield (annual compounding)."""
-        return self.tdv_dividend_yield_ac
+    def arr_dividend_yield_pa(self) -> TDimVariable:
+        """TDepVariable: Dividend yield (per annum)."""
+        return self.tdv_dividend_yield_pa
 
-    def update(self, *, total_return_index: float = None, dividend_yield_ac: float = None,
+    def update(self, *, total_return_index: float = None, dividend_yield_pa: float = None,
                apply_compound_growth: bool = False) -> None:
         """
         Update the equity index values for the current time step. The total return index (TRI) includes price return
@@ -99,25 +99,25 @@ class EquityIndex:
 
         Args:
             total_return_index (float): New total return index.
-            dividend_yield_ac (float): New dividend yield (annual compounding).
+            dividend_yield_pa (float): New dividend yield (per annum).
             apply_compound_growth (bool): True if applying compound growth on total return index, defaults to False.
         """
         if apply_compound_growth:
-            if any(x is not None for x in (total_return_index, dividend_yield_ac)):
+            if any(x is not None for x in (total_return_index, dividend_yield_pa)):
                 raise ValueError(f"apply_compound_growth=True but other parameters are provided.")
             growth = self._total_return_index / self._total_return_index_prev
             self._total_return_index_prev = self._total_return_index
             self._total_return_index *= growth
         else:
-            if any(x is None for x in (total_return_index, dividend_yield_ac)):
-                raise ValueError(f"total_return_index or dividend_yield_ac is None.")
-            self._dividend_yield_ac = dividend_yield_ac
+            if any(x is None for x in (total_return_index, dividend_yield_pa)):
+                raise ValueError(f"total_return_index or dividend_yield_pa is None.")
+            self._dividend_yield_pa = dividend_yield_pa
             self._total_return_index_prev = self._total_return_index
             self._total_return_index = total_return_index
 
         t = self.time
         self.tdv_tot_return_index[t] = self._total_return_index
-        self.tdv_dividend_yield_ac[t] = self._dividend_yield_ac
+        self.tdv_dividend_yield_pa[t] = self._dividend_yield_pa
         self._last_update = t
 
     def __str__(self) -> str:

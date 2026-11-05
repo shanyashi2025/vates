@@ -90,7 +90,7 @@ class EquityOptionBuilder:
         self.price = BlackScholesCalculator.price(
             call_or_put=self.call_or_put, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
-            q=math.log(1 + self.equity_index.dividend_yield_ac) if self.is_pay_dividend else 0.0, # continuously compounded
+            q=math.log(1 + self.equity_index.dividend_yield_pa) if self.is_pay_dividend else 0.0, # continuously compounded
             sigma=self.std_dev, tau=self.os_term_m / 12
         )
 
@@ -105,7 +105,7 @@ class EquityOptionBuilder:
         self.std_dev = BlackScholesCalculator.implied_volatility(
             call_or_put=self.call_or_put, price=self.price, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
-            q=math.log(1 + self.equity_index.dividend_yield_ac) if self.is_pay_dividend else 0.0, # continuously compounded
+            q=math.log(1 + self.equity_index.dividend_yield_pa) if self.is_pay_dividend else 0.0, # continuously compounded
             tau=self.os_term_m / 12
         )
 
