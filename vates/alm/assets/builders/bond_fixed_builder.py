@@ -245,7 +245,8 @@ class BondFixedBuilder:
         pv_cf = pricer.calculate_market_price(valn_date=self.period,
                                               spots=self._make_ra_spot_rates(spread=None, plus=net_spread))
         mpd = 1 - self.mv_price / pv_cf  # makes (1 - mpd) * `pv_cf` @ `disc w/o credit` = mv
-        self.default_risk = DefaultRiskParams(default_risk_id=self.asset_id, marginal_prob_of_default=mpd)
+        self.default_risk = DefaultRiskParams(default_risk_id=self.asset_id, marginal_prob_of_default=mpd,
+                                              loss_given_default=1.0, pd_affects_decrement=False)
         return self
 
     def build(self, pipeline: list[str | tuple[str, dict]] | None = None) -> BondFixed:

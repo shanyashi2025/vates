@@ -17,10 +17,10 @@ class DefaultRiskParams:
         loss_given_default (float): Loss Given Default (LGD).
     """
 
+    marginal_prob_of_default: float
+    loss_given_default: float
+    pd_affects_decrement: bool
     default_risk_id: str = ""
-    marginal_prob_of_default: float = 0.0
-    loss_given_default: float = 1.0
-    pd_affects_decrement: bool = False
 
     @property
     def recovery_rate(self) -> float:
@@ -59,7 +59,8 @@ class DefaultRisk:
             default_risk_id (str): default risk identifier.
         """
         self.default_risk_id: str = default_risk_id
-        self._params: DefaultRiskParams = DefaultRiskParams()
+        self._params: DefaultRiskParams = DefaultRiskParams(marginal_prob_of_default=0.0, loss_given_default=1.0,
+                                                            pd_affects_decrement=True)
         tdv_kwargs = {"model_engine": model_engine, "owner": default_risk_id, "group": 'default_risk'}
         self.tdv_mpd = make_proj_variable("MPD", **tdv_kwargs)
         self.tdv_lgd = make_proj_variable("LGD", **tdv_kwargs)
