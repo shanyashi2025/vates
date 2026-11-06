@@ -1,7 +1,7 @@
 from enum import Enum, auto
 
-class AssetAllocationStrategy(Enum):
-    """Enum for asset allocation strategies."""
+class AssetDealingStrategy(Enum):
+    """Enum for asset dealing (buying and selling) strategies."""
     NO_TRADE = auto()
     BUY_HOLD = auto()
     BUY_SELL = auto()

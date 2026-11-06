@@ -5,7 +5,7 @@ from enum import Enum
 from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 from vates.alm.assets import Asset
 from vates.alm._utils import ObjList
-from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod, RebalanceSizeKind
+from vates.alm.allocator._enums import AssetDealingStrategy, AssetPurchaseMethod, RebalanceSizeKind
 
 
 class BuySellAction(Enum):
@@ -53,7 +53,7 @@ class AssetAllocationParams:
 
     Attributes:
 
-        strategy (AssetAllocationStrategy): Allocation strategy for this allocation group.
+        strategy (AssetDealingStrategy): Dealing strategy for this allocation group.
         weight_triplet (tuple[float, float, float]): Target weight for the allocation group,
             a three-element tuple representing (lower, target, upper).
         rebalance_preference (RebalancePreference): Rebalance preference.
@@ -61,7 +61,7 @@ class AssetAllocationParams:
         priority (int): The priority in which the allocation group will be processed, smaller integer represents
             higher priority.
     """
-    strategy: AssetAllocationStrategy
+    strategy: AssetDealingStrategy
     weight_triplet: tuple[float, float, float] | None
     rebalance_preference: RebalancePreference
     purchase_method: AssetPurchaseMethod
@@ -70,7 +70,7 @@ class AssetAllocationParams:
     @classmethod
     def create(
         cls,
-        strategy: AssetAllocationStrategy | str,
+        strategy: AssetDealingStrategy | str,
         weight_triplet: tuple[float, float, float] | None = None,
         rebalance_preference: dict[str, str | RebalanceSizeKind | None] | RebalancePreference | None = None,
         purchase_method: AssetPurchaseMethod | str | None = None,
@@ -78,7 +78,7 @@ class AssetAllocationParams:
     ) -> 'AssetAllocationParams':
         """
         Args:
-            strategy (AssetAllocationStrategy | str): Allocation strategy for this allocation group:
+            strategy (AssetDealingStrategy | str): Dealing strategy for this allocation group:
                - NO_TRADE
                - BUY_HOLD
                - BUY_SELL
@@ -107,7 +107,7 @@ class AssetAllocationParams:
             AssetAllocationParams
         """
         if isinstance(strategy, str):
-            strategy = AssetAllocationStrategy[strategy.upper()]
+            strategy = AssetDealingStrategy[strategy.upper()]
         if purchase_method is None:
             purchase_method = AssetPurchaseMethod.NOT_USED
         elif isinstance(purchase_method, str):
@@ -126,7 +126,7 @@ class AssetAllocationParams:
         )
 
     def __post_init__(self):
-        if not isinstance(self.strategy, AssetAllocationStrategy):
+        if not isinstance(self.strategy, AssetDealingStrategy):
             raise TypeError(f"Invalid type of 'strategy': {type(self.strategy)}, expected 'AssetAllocationStrategy'.")
 
         if not isinstance(self.purchase_method, AssetPurchaseMethod):
@@ -161,7 +161,7 @@ class _AllocationGroup:
         *,
         name: str,
         exist_assets: ObjList[Asset],
-        strategy: AssetAllocationStrategy,
+        strategy: AssetDealingStrategy,
         weight_triplet: tuple[float, float, float] | None,
         rebalance_preference: RebalancePreference,
         purchase_method: AssetPurchaseMethod,
@@ -174,7 +174,7 @@ class _AllocationGroup:
         if not isinstance(exist_assets, list):
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('ObjList', 'list').")
         self.exist: ObjList[Asset] = ObjList[Asset](exist_assets)
-        self.strategy: AssetAllocationStrategy = strategy
+        self.strategy: AssetDealingStrategy = strategy
         self.rebalance_preference: RebalancePreference = rebalance_preference
         self.purchase_method: AssetPurchaseMethod = purchase_method
         self.priority: int = priority
@@ -192,7 +192,7 @@ class _AllocationGroup:
         self._free_proceeds: float = 0.0
 
         # initial validation
-        if self.strategy in (AssetAllocationStrategy.BUY_HOLD, AssetAllocationStrategy.BUY_SELL):
+        if self.strategy in (AssetDealingStrategy.BUY_HOLD, AssetDealingStrategy.BUY_SELL):
             if self.purchase_method == AssetPurchaseMethod.NOT_USED:
                 raise ValueError(f"'{self.name}': '{self.strategy.name}'; 'purchase_method' is 'NOT_USED'.")
             if self.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and len(self.exist) == 0:
@@ -203,16 +203,16 @@ class _AllocationGroup:
     def _compute_size_triplet(self, total_size: float, weight_triplet: tuple[float, float, float] | None
                               ) -> tuple[float, float, float]:
         strategy = self.strategy
-        if strategy == AssetAllocationStrategy.UNCONSTRAIN:
+        if strategy == AssetDealingStrategy.UNCONSTRAIN:
             return float("-inf"), 0.0, float("inf")
-        if strategy == AssetAllocationStrategy.NO_TRADE:
+        if strategy == AssetDealingStrategy.NO_TRADE:
             exist_size = self.exist_size
             return float("-inf"), exist_size, float("inf")
         if weight_triplet is None:
             raise ValueError(f"'{self.name}': strategy '{strategy}': 'weight_triplet' is None.")
-        if strategy == AssetAllocationStrategy.BUY_HOLD:
+        if strategy == AssetDealingStrategy.BUY_HOLD:
             return total_size * weight_triplet[0], total_size * weight_triplet[1], float("inf")
-        if strategy == AssetAllocationStrategy.BUY_SELL:
+        if strategy == AssetDealingStrategy.BUY_SELL:
             return total_size * weight_triplet[0], total_size * weight_triplet[1], total_size * weight_triplet[2]
         raise ValueError("Should never get here.")
 
@@ -242,12 +242,12 @@ class _AllocationGroup:
         exist_size = self.exist_size
         lower_size, target_size, upper_size = self.size_triplet
 
-        if strategy == AssetAllocationStrategy.UNCONSTRAIN:
+        if strategy == AssetDealingStrategy.UNCONSTRAIN:
             return None
-        if strategy == AssetAllocationStrategy.NO_TRADE:
+        if strategy == AssetDealingStrategy.NO_TRADE:
             return exist_size
 
-        if strategy == AssetAllocationStrategy.BUY_HOLD:
+        if strategy == AssetDealingStrategy.BUY_HOLD:
             if exist_size >= lower_size:
                 return exist_size
             prefer = self.rebalance_preference.below_range
@@ -260,7 +260,7 @@ class _AllocationGroup:
                               f"cannot determine size.")
                 return exist_size
 
-        if strategy == AssetAllocationStrategy.BUY_SELL:
+        if strategy == AssetDealingStrategy.BUY_SELL:
             if exist_size < lower_size:
                 prefer = self.rebalance_preference.below_range
                 if prefer == RebalanceSizeKind.LOWER:
@@ -396,13 +396,13 @@ class _AllocationGroup:
         """
         lower, target, upper = self.size_triplet
 
-        if self.strategy in (AssetAllocationStrategy.UNCONSTRAIN, AssetAllocationStrategy.NO_TRADE):
+        if self.strategy in (AssetDealingStrategy.UNCONSTRAIN, AssetDealingStrategy.NO_TRADE):
             satisfied = True
-        elif self.strategy == AssetAllocationStrategy.BUY_HOLD:
+        elif self.strategy == AssetDealingStrategy.BUY_HOLD:
             satisfied = lower - rel_tol * target <= self.current_size
-        elif self.strategy == AssetAllocationStrategy.BUY_SELL:
+        elif self.strategy == AssetDealingStrategy.BUY_SELL:
             satisfied = lower - rel_tol * target <= self.current_size <= upper + rel_tol * target
         else:
-            raise ValueError(f"{self.name}: invalid asset allocation strategy {self.strategy}.")
+            raise ValueError(f"{self.name}: invalid asset dealing strategy {self.strategy}.")
 
         return satisfied, (lower, upper)

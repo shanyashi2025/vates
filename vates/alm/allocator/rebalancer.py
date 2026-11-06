@@ -8,7 +8,7 @@ from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
 from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
 from vates.alm.assets import Asset, Cash
 from vates.alm.allocator._allocation_group import _AllocationGroup, AssetAllocationParams, TradeOrder, BuySellAction
-from vates.alm.allocator._enums import AssetAllocationStrategy, AssetPurchaseMethod
+from vates.alm.allocator._enums import AssetDealingStrategy, AssetPurchaseMethod
 from vates.alm.allocator.proceeds_keeper import ProceedsKeeper
 
 
@@ -25,14 +25,14 @@ def _rebalance_alloc_groups(
 
     """
     for ag in groups[:-1]:
-        if ag.strategy is AssetAllocationStrategy.UNCONSTRAIN:
+        if ag.strategy is AssetDealingStrategy.UNCONSTRAIN:
             raise ValueError(f"'UNCONSTRAIN' allocation groups must be the last.")
-    has_uc_group: bool = groups[-1].strategy is AssetAllocationStrategy.UNCONSTRAIN
+    has_uc_group: bool = groups[-1].strategy is AssetDealingStrategy.UNCONSTRAIN
 
     if has_uc_group:  # has unconstrained group
         # --- step 1: process non-unconstrained groups in priority ---
         for ag in groups:
-            if ag.strategy != AssetAllocationStrategy.UNCONSTRAIN:
+            if ag.strategy != AssetDealingStrategy.UNCONSTRAIN:
                 trade_order = _make_trade_order_on_preference(ag)
                 ag.execute_trade(trade_order, on_exception_raise=True)
         # --- step 2: process unconstrained groups ---
@@ -63,12 +63,12 @@ def _make_trade_order_on_preference(group: _AllocationGroup) -> TradeOrder:
     prefer_size = group.preferred_size
     if prefer_size is None:
         raise ValueError(f"'{group.name}': 'preferred_size' is None.")
-    if strategy == AssetAllocationStrategy.NO_TRADE:
+    if strategy == AssetDealingStrategy.NO_TRADE:
         if abs(prefer_size - exist_size) > 1e-8:
             raise ValueError(f"'{group.name}': strategy 'NO_TRADE' cannot buy/sell; preferred_size: {prefer_size:.2f} != "
                              f"exist_size: {exist_size:.2f}.")
         return TradeOrder(action=BuySellAction.PASS)
-    if strategy == AssetAllocationStrategy.BUY_HOLD:
+    if strategy == AssetDealingStrategy.BUY_HOLD:
         if prefer_size < exist_size and abs(prefer_size - exist_size) > 1e-8:
             raise ValueError(f"'{group.name}': strategy 'BUY_HOLD' cannot sell; preferred_size: {prefer_size:.2f} < "
                              f"exist_size: {exist_size:.2f}.")
@@ -89,13 +89,13 @@ def _make_trade_orders_on_best_effort(groups: list[_AllocationGroup], total_size
         prefer_size = g.preferred_size
         lower, _, upper = g.size_triplet
 
-        if strategy == AssetAllocationStrategy.UNCONSTRAIN:
+        if strategy == AssetDealingStrategy.UNCONSTRAIN:
             raise ValueError(f"'{g.name}': unexpected 'UNCONSTRAIN'.")
 
-        if strategy == AssetAllocationStrategy.NO_TRADE:
+        if strategy == AssetDealingStrategy.NO_TRADE:
             require_sizes.append(exist_size)
             size_corridors.append((exist_size, exist_size))
-        elif strategy == AssetAllocationStrategy.BUY_HOLD:
+        elif strategy == AssetDealingStrategy.BUY_HOLD:
             if prefer_size <= exist_size:  # to sell but not allowed
                 require_sizes.append(exist_size)
                 size_corridors.append((max(lower, exist_size), max(upper, exist_size)))
@@ -106,7 +106,7 @@ def _make_trade_orders_on_best_effort(groups: list[_AllocationGroup], total_size
                 else:
                     require_sizes.append(prefer_size)
                     size_corridors.append((max(lower, exist_size), max(upper, exist_size)))
-        elif strategy == AssetAllocationStrategy.BUY_SELL:
+        elif strategy == AssetDealingStrategy.BUY_SELL:
             if prefer_size <= exist_size:  # to sell
                 require_sizes.append(prefer_size)
                 size_corridors.append((lower, upper))
@@ -138,7 +138,7 @@ def _make_trade_order_on_require_size(group: _AllocationGroup, require_size: flo
     strategy = group.strategy
     purchase_method = group.purchase_method
     current_size, exist_size, profile_size = group.current_size, group.exist_size, group.profile_size
-    if strategy == AssetAllocationStrategy.NO_TRADE:
+    if strategy == AssetDealingStrategy.NO_TRADE:
         if abs(require_size - exist_size) > 1e-8:
             warnings.warn(f"'{group.name}': strategy 'NO_TRADE', can not rebalance to another size; "
                           f"require={require_size:,.2f}; exist={exist_size:,.2f}.")
@@ -161,7 +161,7 @@ def _make_trade_order_on_require_size(group: _AllocationGroup, require_size: flo
             warnings.warn(f"'{_name}': invalid purchase method '{_purchase_method}'.")
             return TradeOrder(action=BuySellAction.EXCEPTION)
 
-    if strategy == AssetAllocationStrategy.BUY_HOLD:
+    if strategy == AssetDealingStrategy.BUY_HOLD:
         if require_size <= exist_size:
             if abs(require_size - exist_size) > 1e-8:
                 warnings.warn(f"'{group.name}': strategy 'BUY_HOLD', can not sell; "
@@ -170,7 +170,7 @@ def _make_trade_order_on_require_size(group: _AllocationGroup, require_size: flo
             return TradeOrder(action=BuySellAction.PASS)
         return _make_buy_order(_name=group.name, _purchase_method=purchase_method, _require_size=require_size,
                                _current_size=current_size, _exist_size=exist_size, _profile_size=profile_size)
-    elif strategy == AssetAllocationStrategy.BUY_SELL:
+    elif strategy == AssetDealingStrategy.BUY_SELL:
         if require_size == current_size:
             return TradeOrder(action=BuySellAction.PASS)
         elif require_size < current_size:
@@ -179,7 +179,7 @@ def _make_trade_order_on_require_size(group: _AllocationGroup, require_size: flo
             return _make_buy_order(_name=group.name, _purchase_method=purchase_method, _require_size=require_size,
                                    _current_size=current_size, _exist_size=exist_size, _profile_size=profile_size)
     else:
-        warnings.warn(f"{group.name}: invalid allocation strategy: {strategy}")
+        warnings.warn(f"{group.name}: invalid dealing strategy: {strategy}")
         return TradeOrder(action=BuySellAction.EXCEPTION)
 
 
@@ -225,7 +225,7 @@ def _make_sorted_alloc_groups(
 
 
 def _process_unconstrain_group(group: _AllocationGroup, fill_size: float, tolerance: float) -> None:
-    if group.strategy != AssetAllocationStrategy.UNCONSTRAIN:
+    if group.strategy != AssetDealingStrategy.UNCONSTRAIN:
         raise ValueError(f"'{group.name}': invalid strategy '{group.strategy}', expected 'UNCONSTRAIN'.")
 
     if abs(fill_size) <= tolerance:
