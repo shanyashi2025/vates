@@ -714,7 +714,7 @@ class AssetMaster:
                     stat_classification=stat_classification,
                 ),
                 currency=currency,
-                call_or_put=row["call_or_put"],
+                call_put=row["call_put"],
                 exercise_date=pd.Period(row["exercise_date"], freq='M'),
                 qty=row["qty"],
                 price=row["price"],

@@ -31,7 +31,7 @@ def main():
     for i in range(_shape[0]):
         for j in range(_shape[1]):
             s, tau = X[i, j], Y[i, j]
-            Z[i, j] = BlackScholesCalculator.price(call_or_put="call", s=s, k=K, r=r, sigma=sigma, tau=tau)
+            Z[i, j] = BlackScholesCalculator.price(call_put="call", s=s, k=K, r=r, sigma=sigma, tau=tau)
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')

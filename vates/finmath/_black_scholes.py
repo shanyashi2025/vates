@@ -1,5 +1,5 @@
 import math
-from vates.finmath.enums import CallOrPut
+from vates.finmath.enums import CallPut
 from vates.utils import class_lazy_property
 
 
@@ -17,13 +17,13 @@ class BlackScholesCalculator:
             raise ImportError("Need to install 'scipy' library (`pip install scipy`).") from None
 
     @classmethod
-    def price(cls, *, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
+    def price(cls, *, call_put: CallPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
               ) -> float:
         """
         Calculate Black-Scholes price.
 
         Args:
-            call_or_put (CallOrPut): Call or put option.
+            call_put (CallPut): Call or put option.
             s (float): Stock price.
             k (float): Strike price.
             r (float): Risk-free interest rate (continuously compounded).
@@ -34,13 +34,13 @@ class BlackScholesCalculator:
         Returns:
             float: Option price.
         """
-        call_or_put = CallOrPut(call_or_put.upper()) if isinstance(call_or_put, str) else call_or_put
+        call_put = CallPut(call_put.upper()) if isinstance(call_put, str) else call_put
 
         if tau < 0:
             raise ValueError(f'{tau=}, must be non-negative.')
 
         if tau < 1e-10:
-            return max(s - k, 0.0) if call_or_put == CallOrPut.CALL else max(k - s, 0.0)
+            return max(s - k, 0.0) if call_put == CallPut.CALL else max(k - s, 0.0)
 
         f = s * math.exp((r - q) * tau)  # forward price: `F = S * exp((r - q) * t)`
         vol_tau = sigma * math.sqrt(tau)  # volatility over tau
@@ -49,19 +49,19 @@ class BlackScholesCalculator:
         nd1, nd2 = cls.norm.cdf(d1), cls.norm.cdf(d2)
         z = math.exp(-r * tau)
 
-        if call_or_put == CallOrPut.CALL:
+        if call_put == CallPut.CALL:
             return z * (f * nd1 - k * nd2)
         else:
             return z * (k * (1 - nd2) - f * (1 - nd1))
 
     @classmethod
-    def greeks(cls, *, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
+    def greeks(cls, *, call_put: CallPut | str, s: float, k: float, r: float, q: float = 0.0, sigma: float, tau: float
                ) -> dict[str, float]:
         """
         Calculate Black-Scholes Greeks.
 
         Args:
-            call_or_put (CallOrPut): Call or put option.
+            call_put (CallPut): Call or put option.
             s (float): Stock price.
             k (float): Strike price.
             r (float): Risk-free interest rate (continuously compounded).
@@ -72,7 +72,7 @@ class BlackScholesCalculator:
         Returns:
             dict[str, float]: Dictionary of greeks.
         """
-        call_or_put = CallOrPut(call_or_put.upper()) if isinstance(call_or_put, str) else call_or_put
+        call_put = CallPut(call_put.upper()) if isinstance(call_put, str) else call_put
         if tau < 0: raise ValueError(f'{tau=}, must be non-negative.')
         if tau < 1e-10: return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0, 'rho': 0, }
 
@@ -84,7 +84,7 @@ class BlackScholesCalculator:
         pdf_d1 = cls.norm.pdf(d1)
         z, zq = math.exp(-r * tau), math.exp(-q * tau)
 
-        if call_or_put == CallOrPut.CALL:
+        if call_put == CallPut.CALL:
             delta = zq * nd1  # `exp(-q * tau) * N(d1)`
             theta = -0.5 * z * f * sigma * pdf_d1 / math.sqrt(tau) + z * (q * f * nd1 - r * k * nd2)
             # `-0.5 * exp(-q * tau) * S * sgima * N'(d1) / sqrt(tau) + q * exp(-q * tau) * S * N(d1) - r * exp(-r * tau) * K * N(d2)`
@@ -107,13 +107,13 @@ class BlackScholesCalculator:
         }
 
     @classmethod
-    def _price_and_vega(cls, *, call_or_put: CallOrPut | str, s: float, k: float, r: float, q: float, sigma: float, tau: float
+    def _price_and_vega(cls, *, call_put: CallPut | str, s: float, k: float, r: float, q: float, sigma: float, tau: float
                         ) -> tuple[float, float]:
         """
         Calculate Black-Scholes price and vega.
 
         Args:
-            call_or_put (CallOrPut): Call or put option.
+            call_put (CallPut): Call or put option.
             s (float): Stock price.
             k (float): Strike price.
             r (float): Risk-free interest rate (continuously compounded).
@@ -124,12 +124,12 @@ class BlackScholesCalculator:
         Returns:
             tuple[float, float]: Price and vega (`dPrice/dSigma`).
         """
-        call_or_put = CallOrPut(call_or_put.upper()) if isinstance(call_or_put, str) else call_or_put
+        call_put = CallPut(call_put.upper()) if isinstance(call_put, str) else call_put
         if tau < 0:
             raise ValueError(f'{tau=}, must be non-negative.')
 
         if tau < 1e-10:
-            return max(s - k, 0.0) if call_or_put == CallOrPut.CALL else max(k - s, 0.0), 0.0
+            return max(s - k, 0.0) if call_put == CallPut.CALL else max(k - s, 0.0), 0.0
 
         f = s * math.exp((r - q) * tau)  # forward price: `F = S * exp((r - q) * t)`
         vol_tau = sigma * math.sqrt(tau)  # volatility over tau
@@ -138,7 +138,7 @@ class BlackScholesCalculator:
         nd1, nd2 = cls.norm.cdf(d1), cls.norm.cdf(d2)
         z = math.exp(-r * tau)
 
-        if call_or_put == CallOrPut.CALL:
+        if call_put == CallPut.CALL:
             price = z * (f * nd1 - k * nd2)
         else:
             price = z * (k * (1 - nd2) - f * (1 - nd1))
@@ -148,7 +148,7 @@ class BlackScholesCalculator:
         return price, vega
 
     @classmethod
-    def implied_volatility(cls, *, call_or_put: CallOrPut | str, price: float, s: float, k: float, r: float, q: float = 0.0,
+    def implied_volatility(cls, *, call_put: CallPut | str, price: float, s: float, k: float, r: float, q: float = 0.0,
                            tau: float, initial_guess: float = 0.2, tol: float = 1e-10, maxiter: int = 100) -> float:
         """
         Solve Black-Scholes implied volatility (sigma).
@@ -159,7 +159,7 @@ class BlackScholesCalculator:
           3) If NR fails to converge (or vega too small), fall back to bisection.
 
         Args:
-            call_or_put (CallOrPut): Call or put option.
+            call_put (CallPut): Call or put option.
             price (float): Option price.
             s (float): Stock price.
             k (float): Strike price.
@@ -173,12 +173,12 @@ class BlackScholesCalculator:
         Returns:
             float: Implied volatility.
         """
-        call_or_put = CallOrPut(call_or_put.upper()) if isinstance(call_or_put, str) else call_or_put
+        call_put = CallPut(call_put.upper()) if isinstance(call_put, str) else call_put
         _price_and_vega = BlackScholesCalculator._price_and_vega
         # --- handle immediate expiry ---
         if tau <= 1e-12:
             # At expiry price must equal intrinsic (discounting irrelevant since tau ~ 0)
-            intrinsic = max(s - k, 0.0) if call_or_put == CallOrPut.CALL else max(k - s, 0.0)
+            intrinsic = max(s - k, 0.0) if call_put == CallPut.CALL else max(k - s, 0.0)
             # For numerical robustness allow tiny tolerance
             if abs(price - intrinsic) <= 1e-12:
                 return 0.0
@@ -188,7 +188,7 @@ class BlackScholesCalculator:
         disc = math.exp(-r * tau)
         f = s * math.exp((r - q) * tau)
 
-        if call_or_put == CallOrPut.CALL:
+        if call_put == CallPut.CALL:
             lower_bound = max(0.0, disc * (f - k))  # = exp(-rτ) * max(F - K, 0)
             upper_bound = disc * f  # = S * exp(-qτ)
         else:
@@ -207,7 +207,7 @@ class BlackScholesCalculator:
         # --- Newton-Raphson ---
         sigma = max(1e-12, initial_guess)
         for i in range(maxiter):
-            p, v = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=sigma, tau=tau)
+            p, v = _price_and_vega(call_put=call_put, s=s, k=k, r=r, q=q, sigma=sigma, tau=tau)
             diff = p - price
             if abs(diff) < 1e-12:
                 return max(0.0, sigma)
@@ -226,14 +226,14 @@ class BlackScholesCalculator:
         # Find bracket [lo, hi] such that price(lo) - market_price and price(hi) - market_price have opposite signs
         lo = 1e-12
         hi = 1.0  # start with 100% vol as upper, expand if necessary
-        p_lo, _ = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=lo, tau=tau)
-        p_hi, _ = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=hi, tau=tau)
+        p_lo, _ = _price_and_vega(call_put=call_put, s=s, k=k, r=r, q=q, sigma=lo, tau=tau)
+        p_hi, _ = _price_and_vega(call_put=call_put, s=s, k=k, r=r, q=q, sigma=hi, tau=tau)
 
         # expand hi until sign change or until hi becomes huge
         expand_iter = 0
         while (p_lo - price) * (p_hi - price) > 0 and expand_iter < 50:
             hi *= 2
-            p_hi, _ = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=hi, tau=tau)
+            p_hi, _ = _price_and_vega(call_put=call_put, s=s, k=k, r=r, q=q, sigma=hi, tau=tau)
             expand_iter += 1
 
         if (p_lo - price) * (p_hi - price) > 0:
@@ -243,7 +243,7 @@ class BlackScholesCalculator:
         # now bisection until tolerance achieved
         for _ in range(200):
             mid = 0.5 * (lo + hi)
-            p_mid, _ = _price_and_vega(call_or_put=call_or_put, s=s, k=k, r=r, q=q, sigma=mid, tau=tau)
+            p_mid, _ = _price_and_vega(call_put=call_put, s=s, k=k, r=r, q=q, sigma=mid, tau=tau)
             if abs(p_mid - price) < 1e-12 or (hi - lo) < tol:
                 return max(0.0, mid)
             # decide side

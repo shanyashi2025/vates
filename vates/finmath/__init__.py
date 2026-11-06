@@ -14,7 +14,7 @@ from vates.finmath.qf import (
     geometric_brownian_motion,
     search_efficient_frontier,
 )
-from vates.finmath.enums import CallOrPut, LongOrShort
+from vates.finmath.enums import CallPut, LongShort
 
 
 __all__ = [
@@ -31,7 +31,7 @@ __all__ = [
     'geometric_brownian_motion',
     'search_efficient_frontier',
     # Enums
-    'CallOrPut',
-    'LongOrShort'
+    'CallPut',
+    'LongShort'
 
 ]

@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import Self
 
 from vates._core import ProjModelEngine, time_synchronized
-from vates.finmath import CallOrPut, BlackScholesCalculator
+from vates.finmath import CallPut, BlackScholesCalculator
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.derivatives import EquityOption
 
@@ -25,7 +25,7 @@ class EquityOptionBuilder:
         asset_id: str,
         currency: Currency,
         is_profile: bool,
-        call_or_put: CallOrPut,
+        call_put: CallPut,
         exercise_date: pd.Period,
         qty: float,
         stock_price: float,
@@ -48,7 +48,7 @@ class EquityOptionBuilder:
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             currency (Currency): Asset currency.
             is_profile (bool): Ture if profile asset, False if existing asset.
-            call_or_put (CallOrPut): Call or put option.
+            call_put (CallPut): Call or put option.
             exercise_date (pd.Period): Option exercise date.
             qty (float): Number of units, +ve/-ve represents long/short position.
             price (float): Option price (market value).
@@ -64,7 +64,7 @@ class EquityOptionBuilder:
         self.attr_aliases: Mapping[str, str] | None = attr_aliases
         self.currency: Currency = currency
         self.is_profile: bool = is_profile
-        self.call_or_put: CallOrPut = call_or_put
+        self.call_put: CallPut = call_put
         self.exercise_date: pd.Period = exercise_date
         self.qty: float = qty
         self.stock_price: float = stock_price
@@ -88,7 +88,7 @@ class EquityOptionBuilder:
         if self.std_dev is None:
             raise ValueError('std_dev is not yet set.')
         self.price = BlackScholesCalculator.price(
-            call_or_put=self.call_or_put, s=self.stock_price, k=self.strike_price,
+            call_put=self.call_put, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
             q=math.log(1 + self.equity_index.dividend_yield_pa) if self.is_pay_dividend else 0.0, # continuously compounded
             sigma=self.std_dev, tau=self.os_term_m / 12
@@ -103,7 +103,7 @@ class EquityOptionBuilder:
         if self.price is None:
             raise ValueError('price is not yet set.')
         self.std_dev = BlackScholesCalculator.implied_volatility(
-            call_or_put=self.call_or_put, price=self.price, s=self.stock_price, k=self.strike_price,
+            call_put=self.call_put, price=self.price, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
             q=math.log(1 + self.equity_index.dividend_yield_pa) if self.is_pay_dividend else 0.0, # continuously compounded
             tau=self.os_term_m / 12
@@ -139,7 +139,7 @@ class EquityOptionBuilder:
             attr_aliases=self.attr_aliases,
             currency=self.currency,
             is_profile=self.is_profile,
-            call_or_put=self.call_or_put,
+            call_put=self.call_put,
             exercise_date=self.exercise_date,
             qty=self.qty,
             price=self.price,

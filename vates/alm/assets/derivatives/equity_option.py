@@ -6,7 +6,7 @@ from typing import Literal
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
-from vates.finmath import CallOrPut, BlackScholesCalculator
+from vates.finmath import CallPut, BlackScholesCalculator
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
 from vates.alm.assets.asset_base import Asset, AssetPhase
 
@@ -16,7 +16,7 @@ class EquityOption(Asset):
     Represents an equity option asset.
 
     Attributes:
-        _call_or_put (CallOrPut): Call or put option.
+        _call_put (CallPut): Call or put option.
         _exercise_date (pd.Period): Option exercise date.
         _price (float): Option price (market value).
         _stock_price (float): Underlying stock price.
@@ -26,7 +26,7 @@ class EquityOption(Asset):
         _std_dev (float): Standard deviation, i.e. volatility.
         _is_pay_dividend (bool): True if paying dividend, otherwise False.
     """
-    __slots__ = ('_qty', '_call_or_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
+    __slots__ = ('_qty', '_call_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
                  '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds',
                  'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow', 'tdv_stock_price', 'tdv_price',
                  'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
@@ -34,7 +34,7 @@ class EquityOption(Asset):
     def __init__(
         self,
         *,
-        call_or_put: CallOrPut | str,
+        call_put: CallPut | str,
         exercise_date: pd.Period,
         price: float,
         stock_price: float,
@@ -60,7 +60,7 @@ class EquityOption(Asset):
             is_profile (bool): Ture if profile asset, False if existing asset.
             qty (float): Number of units, +ve/-ve represents long/short position.
             currency (Currency): Asset currency.
-            call_or_put (CallOrPut): Call or put option.
+            call_put (CallPut): Call or put option.
             exercise_date (pd.Period): Option exercise date.
             price (float): Option price (market value).
             stock_price (float): Underlying stock price.
@@ -75,7 +75,7 @@ class EquityOption(Asset):
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
         self._qty: float = qty
-        self._call_or_put: CallOrPut = CallOrPut[call_or_put.upper()] if isinstance(call_or_put, str) else call_or_put
+        self._call_put: CallPut = CallPut[call_put.upper()] if isinstance(call_put, str) else call_put
         self._exercise_date: pd.Period = exercise_date
         self._price: float = price
         self._stock_price: float = stock_price
@@ -93,7 +93,7 @@ class EquityOption(Asset):
             if self.time is None:
                 warnings.warn(f"'time' is None, can\'t perform init validation.")
             calc_price = BlackScholesCalculator.price(
-                call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
+                call_put=self._call_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
                 q=math.log(1 + self._equity_index.dividend_yield_pa) if self._is_pay_dividend else 0.0,
                 sigma=self._std_dev, tau=self.os_term_m / 12
@@ -166,12 +166,12 @@ class EquityOption(Asset):
         if self.is_alive("end"):
             self._cash_flow = 0.0
             self._price = BlackScholesCalculator.price(
-                call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
+                call_put=self._call_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
                 q=q, sigma=self._std_dev, tau=self.os_term_m / 12
             )
         else:  # exercise at this month
-            payoff = max(self._stock_price - self._strike_price, 0.0) if self._call_or_put == CallOrPut.CALL else \
+            payoff = max(self._stock_price - self._strike_price, 0.0) if self._call_put == CallPut.CALL else \
                      max(self._strike_price - self._stock_price, 0.0)
             self._cash_flow = payoff * self._qty
             self._price = 0.0
@@ -190,7 +190,7 @@ class EquityOption(Asset):
             dict[str, float]: dictionary of greeks.
         """
         return BlackScholesCalculator.greeks(
-            call_or_put=self._call_or_put, s=self._stock_price, k=self._strike_price,
+            call_put=self._call_put, s=self._stock_price, k=self._strike_price,
             r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
             q=math.log(1 + self._equity_index.dividend_yield_pa) if self._is_pay_dividend else 0.0,
             sigma=self._std_dev, tau=self.os_term_m / 12
@@ -243,7 +243,7 @@ class EquityOption(Asset):
 
         clone = EquityOption(
             qty=qty,
-            call_or_put=self._call_or_put,
+            call_put=self._call_put,
             exercise_date=self._exercise_date,
             price=self._price,
             stock_price=self._stock_price,
