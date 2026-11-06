@@ -112,7 +112,7 @@ class FundMaster:
                 raise KeyError(f"Duplicate 'allocation_group': '{name}'; fund '{fund_id}'.")
             params[name] = AssetAllocationParams.create(
                 priority=row["priority"],
-                strategy=row["strategy"],
+                dealing_strategy=row["dealing_strategy"],
                 purchase_method=row["purchase_method"],
                 rebalance_preference=json.loads(row["rebalance_preference"]),
             )

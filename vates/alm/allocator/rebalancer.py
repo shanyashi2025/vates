@@ -25,14 +25,14 @@ def _rebalance_alloc_groups(
 
     """
     for ag in groups[:-1]:
-        if ag.strategy is AssetDealingStrategy.UNCONSTRAIN:
+        if ag.dealing_strategy is AssetDealingStrategy.UNCONSTRAIN:
             raise ValueError(f"'UNCONSTRAIN' allocation groups must be the last.")
-    has_uc_group: bool = groups[-1].strategy is AssetDealingStrategy.UNCONSTRAIN
+    has_uc_group: bool = groups[-1].dealing_strategy is AssetDealingStrategy.UNCONSTRAIN
 
     if has_uc_group:  # has unconstrained group
         # --- step 1: process non-unconstrained groups in priority ---
         for ag in groups:
-            if ag.strategy != AssetDealingStrategy.UNCONSTRAIN:
+            if ag.dealing_strategy != AssetDealingStrategy.UNCONSTRAIN:
                 trade_order = _make_trade_order_on_preference(ag)
                 ag.execute_trade(trade_order, on_exception_raise=True)
         # --- step 2: process unconstrained groups ---
@@ -47,7 +47,7 @@ def _rebalance_alloc_groups(
     for ag in groups:
         satisfied, ref_sizes = ag.is_allocation_satisfied()
         if not satisfied:
-            msg = (f"{ag.name}: allocation is not satisfied; strategy: {ag.strategy.name}; "
+            msg = (f"{ag.name}: allocation is not satisfied; dealing strategy: {ag.dealing_strategy.name}; "
                    f"purchase method: {ag.purchase_method.name}.")
             if abs(total_size) > 1e-8:
                 curr, lower, upper = ag.current_size/total_size, ref_sizes[0]/total_size, ref_sizes[1]/total_size
@@ -58,19 +58,19 @@ def _rebalance_alloc_groups(
 
 
 def _make_trade_order_on_preference(group: _AllocationGroup) -> TradeOrder:
-    strategy = group.strategy
+    strategy = group.dealing_strategy
     exist_size = group.exist_size
     prefer_size = group.preferred_size
     if prefer_size is None:
         raise ValueError(f"'{group.name}': 'preferred_size' is None.")
     if strategy == AssetDealingStrategy.NO_TRADE:
         if abs(prefer_size - exist_size) > 1e-8:
-            raise ValueError(f"'{group.name}': strategy 'NO_TRADE' cannot buy/sell; preferred_size: {prefer_size:.2f} != "
+            raise ValueError(f"'{group.name}': dealing strategy 'NO_TRADE' cannot buy/sell; preferred_size: {prefer_size:.2f} != "
                              f"exist_size: {exist_size:.2f}.")
         return TradeOrder(action=BuySellAction.PASS)
     if strategy == AssetDealingStrategy.BUY_HOLD:
         if prefer_size < exist_size and abs(prefer_size - exist_size) > 1e-8:
-            raise ValueError(f"'{group.name}': strategy 'BUY_HOLD' cannot sell; preferred_size: {prefer_size:.2f} < "
+            raise ValueError(f"'{group.name}': dealing strategy 'BUY_HOLD' cannot sell; preferred_size: {prefer_size:.2f} < "
                              f"exist_size: {exist_size:.2f}.")
     if prefer_size > group.current_size:  # buy
         if group.purchase_method == AssetPurchaseMethod.SCALE_UP_EXISTING and abs(group.exist_size) < 1e-8:
@@ -84,7 +84,7 @@ def _make_trade_orders_on_best_effort(groups: list[_AllocationGroup], total_size
     require_sizes = []
     size_corridors = []
     for g in groups:
-        strategy = g.strategy
+        strategy = g.dealing_strategy
         exist_size = g.exist_size
         prefer_size = g.preferred_size
         lower, _, upper = g.size_triplet
@@ -135,12 +135,12 @@ def _make_trade_orders_on_best_effort(groups: list[_AllocationGroup], total_size
 
 def _make_trade_order_on_require_size(group: _AllocationGroup, require_size: float) -> TradeOrder:
 
-    strategy = group.strategy
+    strategy = group.dealing_strategy
     purchase_method = group.purchase_method
     current_size, exist_size, profile_size = group.current_size, group.exist_size, group.profile_size
     if strategy == AssetDealingStrategy.NO_TRADE:
         if abs(require_size - exist_size) > 1e-8:
-            warnings.warn(f"'{group.name}': strategy 'NO_TRADE', can not rebalance to another size; "
+            warnings.warn(f"'{group.name}': dealing strategy 'NO_TRADE', can not rebalance to another size; "
                           f"require={require_size:,.2f}; exist={exist_size:,.2f}.")
             return TradeOrder(action=BuySellAction.EXCEPTION)
         return TradeOrder(action=BuySellAction.PASS)
@@ -164,7 +164,7 @@ def _make_trade_order_on_require_size(group: _AllocationGroup, require_size: flo
     if strategy == AssetDealingStrategy.BUY_HOLD:
         if require_size <= exist_size:
             if abs(require_size - exist_size) > 1e-8:
-                warnings.warn(f"'{group.name}': strategy 'BUY_HOLD', can not sell; "
+                warnings.warn(f"'{group.name}': dealing strategy 'BUY_HOLD', can not sell; "
                               f"require={require_size:,.2f}; exist={exist_size:,.2f}.")
                 return TradeOrder(action=BuySellAction.EXCEPTION)
             return TradeOrder(action=BuySellAction.PASS)
@@ -197,7 +197,7 @@ def _make_sorted_alloc_groups(
         if name in ag_kwargs:
             raise KeyError(f"Duplicate allocation group name: '{name}'.")
         ag_kwargs[name] = {
-            "strategy": params.strategy,
+            "dealing_strategy": params.dealing_strategy,
             "weight_triplet": params.weight_triplet,
             "rebalance_preference": params.rebalance_preference,
             "purchase_method": params.purchase_method,
@@ -225,8 +225,8 @@ def _make_sorted_alloc_groups(
 
 
 def _process_unconstrain_group(group: _AllocationGroup, fill_size: float, tolerance: float) -> None:
-    if group.strategy != AssetDealingStrategy.UNCONSTRAIN:
-        raise ValueError(f"'{group.name}': invalid strategy '{group.strategy}', expected 'UNCONSTRAIN'.")
+    if group.dealing_strategy != AssetDealingStrategy.UNCONSTRAIN:
+        raise ValueError(f"'{group.name}': invalid strategy '{group.dealing_strategy}', expected 'UNCONSTRAIN'.")
 
     if abs(fill_size) <= tolerance:
         return
