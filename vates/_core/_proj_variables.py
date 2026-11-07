@@ -261,7 +261,7 @@ class TDimVariable(ProjVariable):
             return hit
         if not isinstance(max_t, int):
             raise TypeError(f"Invalid type of 'max_t': {type(max_t)}, expected 'int'.")
-        if max_t <= 0:
+        if max_t < 0:
             raise ValueError(f"Invalid value of 'max_t': {max_t}, expected positive.")
         if start_date is not None and not isinstance(start_date, pd.Period):
             raise TypeError(f"Invalid type of 'start_date': {type(start_date)}, expected 'pd.Period'.")

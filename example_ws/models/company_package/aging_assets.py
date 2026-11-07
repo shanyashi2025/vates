@@ -57,7 +57,7 @@ class AgingEquity:
             local_classification=getattr(equity, 'local_classification'),
             stat_classification=getattr(equity, 'stat_classification'),
             market_value=equity.market_value,
-            purchase_cost=equity.purchase_cost or 0.0,
+            purchase_cost=equity.purchase_cost,
             equity_index_id=getattr(equity, '_equity_index').index_id,
             purchase_date=equity.purchase_date,
         )

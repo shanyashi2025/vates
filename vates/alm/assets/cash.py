@@ -41,7 +41,7 @@ class Cash(Asset):
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
-        self._nominal: float = nominal
+        self._nominal: float = self._ensure_non_zero(nominal)
         self._purchase_proceeds: float = 0.0
         self._disposal_proceeds: float = 0.0
 
@@ -83,6 +83,7 @@ class Cash(Asset):
             amount (float): Amount to invest.
         """
         self._nominal += amount
+        self._nominal = self._ensure_non_zero(self._nominal)
         if amount > 0.0:
             self._purchase_proceeds += amount
         else:
@@ -133,6 +134,14 @@ class Cash(Asset):
     def cash_flow(self) -> float:
         """float: Cash flow in period"""
         return 0.0
+
+    @property
+    def purchase_proceeds(self) -> float:
+        return self._purchase_proceeds
+
+    @property
+    def disposal_proceeds(self) -> float:
+        return self._disposal_proceeds
 
     @property
     def arr_cash_flow(self) -> TDimVariable:

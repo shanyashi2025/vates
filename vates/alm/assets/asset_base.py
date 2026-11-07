@@ -36,6 +36,7 @@ class Asset(ABC):
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
     _mutable_attr_check: CheckLevel = CheckLevel.ERROR
+    _VALUE_ZERO_TOL = 1e-8
 
     __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', '_lc', '_asset_id', '_is_profile',
                  '_purchase_date', '_currency', '_attr_aliases',)
@@ -132,9 +133,17 @@ class Asset(ABC):
 
     @property
     @abstractmethod
-    def arr_cash_flow(self):
+    def disposal_proceeds(self) -> float:
         """
-        Abstract method to get the cash flow for the asset.
+        Abstract method to get the proceeds from selling (proportion of) the asset (disposal) in period.
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def purchase_proceeds(self) -> float:
+        """
+        Abstract method to get the proceeds to buy (proportion of) the asset (purchase) in period.
         """
         pass
 
@@ -206,3 +215,7 @@ class Asset(ABC):
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.asset_id}'"
+
+    @classmethod
+    def _ensure_non_zero(cls, val: float) -> float:
+        return cls._VALUE_ZERO_TOL if abs(val) < cls._VALUE_ZERO_TOL else val

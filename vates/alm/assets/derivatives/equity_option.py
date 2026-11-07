@@ -291,6 +291,14 @@ class EquityOption(Asset):
         return self._cash_flow
 
     @property
+    def purchase_proceeds(self) -> float:
+        return self._purchase_proceeds
+
+    @property
+    def disposal_proceeds(self) -> float:
+        return self._disposal_proceeds
+
+    @property
     def arr_cash_flow(self) -> TDimVariable:
         """TDepVariable: Cash flow array"""
         return self.tdv_cash_flow

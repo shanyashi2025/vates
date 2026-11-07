@@ -16,13 +16,12 @@ class Equity(Asset):
     Attributes:
         _equity_index (EquityIndex): Associated equity index.
         _mv (float): Market value of the equity asset.
-        _purchase_cost (float | None): Purchase cost of the equity asset.
+        _purchase_cost (float): Purchase cost of the equity asset.
         tdv_dividend (float): Dividend for the current period.
     """
     __slots__ = ('_equity_index', '_mv', '_purchase_cost', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', '_n_clone',
                  'tdv_cash_flow', 'tdv_dividend', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_cost_bd',
-                 'tdv_purchase_cost_ad',
-                 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
+                 'tdv_purchase_cost_ad', 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
 
     def __init__(
         self,
@@ -53,14 +52,9 @@ class Equity(Asset):
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, )
         self._equity_index: EquityIndex = equity_index
-        self._mv: float = market_value
-        self._purchase_cost: float | None = purchase_cost
+        self._mv: float = self._ensure_non_zero(market_value)
+        self._purchase_cost: float = self._ensure_non_zero(purchase_cost) if purchase_cost is not None else self._mv
         self._n_clone: int = 0
-
-        if abs(self._mv) < 1e-8:
-            self._mv = 1e-8  # to prevent crash when proportionally buy new asset
-        if self._purchase_cost is not None and abs(self._purchase_cost) < 1e-8:
-            self._purchase_cost = 1e-8
 
         self._cash_flow: float = 0.0
         self._purchase_proceeds: float = 0.0
@@ -114,10 +108,11 @@ class Equity(Asset):
         if propn < 0:
             warnings.warn(f"Buying equity '{self._asset_id}' with a negative proportion: {propn:.4f}.")
         amount = self._mv * propn
+        self._purchase_proceeds += amount  # record the amount of money spent to buy (proportion of) the equity
         self._mv += amount
-        if self._purchase_cost is not None:
-            self._purchase_cost += amount  # the difference between market value and purchase cost doesn't change (in dollar amount)
-        self._purchase_proceeds += amount
+        self._mv = self._ensure_non_zero(self._mv)  # ensure that the value doesn't mathematically drop to zero
+        self._purchase_cost += amount
+        self._purchase_cost = self._ensure_non_zero(self._purchase_cost)
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
@@ -131,18 +126,17 @@ class Equity(Asset):
             warnings.warn(f"Selling equity '{self._asset_id}' with a proportion: {propn:.4f}, "
                           f"normally expected: 0 < proportion <=1.")
         amount = self._mv * propn
+        self._disposal_proceeds += amount  # record the amount of money received from selling (proportion of) the equity
         self._mv -= amount
-        if self._purchase_cost is not None:
-            self._purchase_cost -= amount  # the difference between market value and purchase cost doesn't change (in dollar amount)
-        self._disposal_proceeds += amount  # record the amount of money received when selling (proportion of) the equity
+        self._mv = self._ensure_non_zero(self._mv)  # ensure that the value doesn't mathematically drop to zero
+        self._purchase_cost *= (1 - propn)
+        self._purchase_cost = self._ensure_non_zero(self._purchase_cost)
 
     @property
-    @transition(require_all=AssetPhase.CLOSED)
     def purchase_proceeds(self) -> float:
         return self._purchase_proceeds
 
     @property
-    @transition(require_all=AssetPhase.CLOSED)
     def disposal_proceeds(self) -> float:
         return self._disposal_proceeds
 
@@ -198,7 +192,7 @@ class Equity(Asset):
         return self._mv
 
     @property
-    def purchase_cost(self) -> float | None:
+    def purchase_cost(self) -> float:
         """float: Purchase cost of the equity asset."""
         return self._purchase_cost
 

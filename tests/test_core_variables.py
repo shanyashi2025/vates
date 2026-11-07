@@ -115,8 +115,8 @@ class TestTDimVariable:
         with pytest.raises(TypeError):
             v = TDimVariable("t", owner="o", group="g", max_t=bad, start_date=pd.Period("1999-12", "M"))
 
-    @pytest.mark.parametrize("bad", [0, -1, -24])
-    def test_wrong_non_postive_max_t_raises(self, bad):
+    @pytest.mark.parametrize("bad", [-1, -24])
+    def test_wrong_negative_max_t_raises(self, bad):
         with pytest.raises(ValueError):
             v = TDimVariable("t", owner="o", group="g", max_t=bad, start_date=pd.Period("1999-12", "M"))
 

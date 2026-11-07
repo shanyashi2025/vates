@@ -89,14 +89,6 @@ class Liab(ABC):
         """
         pass
 
-    @property
-    @abstractmethod
-    def arr_cash_flow(self):
-        """
-        Abstract method to get the cash flow for the liability.
-        """
-        pass
-
     def require_lifecycle(self, phase: LiabPhase, t: int | None = None):
         t = t if t is not None else self.time
         maybe_raise_if_ne(self._lc[phase], t)

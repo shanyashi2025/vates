@@ -15,6 +15,7 @@ class _FALLBACK:
     @classmethod
     def make_engine(cls) -> ProjModelEngine:
         engine = ProjModelEngine(slug="fallback").configure_run(start_year=cls.start_year, end_year=cls.end_year)
+        engine.time = 0  # let the engine and synchronizer have `time` and `period`
         cls.engine = engine
         cls.synchronizer = engine.time_synchronizer
         return engine

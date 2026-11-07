@@ -411,6 +411,14 @@ class BondFixed(Asset):
         self._n_clone += 1
         return clone
 
+    @property
+    def purchase_proceeds(self) -> float:
+        return self._purchase_proceeds
+
+    @property
+    def disposal_proceeds(self) -> float:
+        return self._disposal_proceeds
+
     @transition(require_all=AssetPhase.ROLLED, mark=AssetPhase.CLOSED)
     def close_dealing(self) -> None:
         """
