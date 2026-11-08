@@ -1,7 +1,8 @@
+import math
 import numpy as np
 import pandas as pd
 from enum import Enum, unique
-from typing import Self, NamedTuple
+from typing import Any, Self, NamedTuple
 
 from vates import ProjModelEngine
 from vates.alm import (create_asset, Asset, Cash, BondFixed, Equity, EquityOption, YieldCurve, Spread, DefaultRisk,
@@ -197,7 +198,7 @@ class AssetMaster:
         df_dict: dict[str, pd.DataFrame],
         *,
         model_engine: ProjModelEngine,
-        econs: dict[str, ...] | EconMaster,
+        econs: dict[str, Any] | EconMaster,
         fund_id: str | None = None,
     ) -> Self:
         """
@@ -724,6 +725,7 @@ class AssetMaster:
                 rf_curve=rf_curve,
                 std_dev=row["std_dev"],
                 is_pay_dividend=(row["is_pay_dividend"].lower() in ('y', 'yes')),
+                q=math.log(1 + 0.2 / 100),  # implement the logic
                 is_profile=False,
                 dynamic_setattrs={
                     'ifrs_classification': ifrs_classification,

@@ -1,4 +1,3 @@
-import math
 import numpy as np
 import pandas as pd
 import warnings
@@ -263,8 +262,10 @@ class EconMaster:
             date_col (str): Date column.
             esg_step (int): esg step.
         """
+        obj: EquityIndex = ctx.econ_obj
+
         if date_col is None:
-            ctx.econ_obj.update(apply_compound_growth=True)
+            obj.update(apply_compound_growth=True)
             return
 
         esg_vars = ctx.esg_vars
@@ -273,25 +274,19 @@ class EconMaster:
         var = esg_vars["total_return_index"]
         ipos_date = var.data.key_to_pos("date_col", date_col)
         total_return_index = var.data[var.ipos_term, ipos_date] / var.divby
-        if esg_step != 1:  # convert 'index as at period end' to 'index as at first month of the period'
-            equity_index = ctx.econ_obj
-            p = equity_index.period
-            mon_tot_ret = (total_return_index / equity_index.tdv_tot_return_index[p - 1]) ** (1 / esg_step)
-            total_return_index = equity_index.tdv_tot_return_index[p - 1] * mon_tot_ret
 
-        # 2. dividend_yield
-        var = esg_vars["dividend_yield"]
-        dvy = var.data[var.ipos_term, ipos_date] / var.divby
-        if var.compound_freq == 'annual':
-            dividend_yield_pa = dvy
-        elif var.compound_freq == 'monthly':
-            dividend_yield_pa = (1 + dvy) ** 12 - 1
-        elif var.compound_freq == 'continuous':
-            dividend_yield_pa = math.exp(dvy * 12) - 1
-        else:
-            raise ValueError(f"{var.descr}: {var.compound_freq=} not defined.")
+        # 2. price_return_index
+        var = esg_vars["price_return_index"]
+        price_return_index = var.data[var.ipos_term, ipos_date] / var.divby
 
-        ctx.econ_obj.update(total_return_index=total_return_index, dividend_yield_pa=dividend_yield_pa)
+        # convert 'index as at period end' to 'index as at first month of the period'
+        if esg_step != 1:
+            g = (total_return_index / obj.total_return_index_prev) ** (1 / esg_step)
+            total_return_index = obj.total_return_index_prev * g
+            g = (price_return_index / obj.price_return_index_prev) ** (1 / esg_step)
+            price_return_index = obj.price_return_index_prev * g
+
+        obj.update(total_return_index=total_return_index, price_return_index=price_return_index)
 
     @staticmethod
     def update_currency(ctx: EconContext, date_col: str | None) -> None:
@@ -368,7 +363,7 @@ class EconMaster:
             esg_params=esg_params.get("equity_indices"),
             esg_df=esg_df,
             variable_spec={"total_return_index": ["measure"],
-                           "dividend_yield": ["measure", "divby", "compound_freq"]}
+                           "price_return_index": ["measure"]}
         )
         currencies = cls.build_esg_context(
             model_engine=model_engine,

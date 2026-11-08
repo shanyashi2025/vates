@@ -33,6 +33,7 @@ class EquityOptionBuilder:
         equity_index: EquityIndex,
         rf_curve: YieldCurve,
         is_pay_dividend: bool,
+        q: float = float("nan"),
         attr_aliases: Mapping[str, str] | None = None,
         price: float | None = None,
         std_dev: float | None = None,
@@ -58,6 +59,7 @@ class EquityOptionBuilder:
             rf_curve (YieldCurve): Risk-free curve.
             std_dev (float): Standard deviation, i.e. volatility.
             is_pay_dividend (bool): True if paying dividend, otherwise False.
+            q (float): Dividend yield assumption (continuously compounded).
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
@@ -72,7 +74,8 @@ class EquityOptionBuilder:
         self.equity_index: EquityIndex = equity_index
         self.rf_curve: YieldCurve = rf_curve
         self.is_pay_dividend: bool = is_pay_dividend
-        if self.os_term_m <= 0: raise ValueError(f'Equity option {self.asset_id} has alreay expired, can not be built.')
+        self.q: float = q if is_pay_dividend else 0
+        if self.os_term_m <= 0: raise ValueError(f'Equity option {self.asset_id} has already expired, can not be built.')
 
         self.price: float | None = price
         self.std_dev: float | None = std_dev
@@ -90,8 +93,7 @@ class EquityOptionBuilder:
         self.price = BlackScholesCalculator.price(
             call_put=self.call_put, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
-            q=math.log(1 + self.equity_index.dividend_yield_pa) if self.is_pay_dividend else 0.0, # continuously compounded
-            sigma=self.std_dev, tau=self.os_term_m / 12
+            q=self.q, sigma=self.std_dev, tau=self.os_term_m / 12
         )
 
         return self
@@ -105,8 +107,7 @@ class EquityOptionBuilder:
         self.std_dev = BlackScholesCalculator.implied_volatility(
             call_put=self.call_put, price=self.price, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
-            q=math.log(1 + self.equity_index.dividend_yield_pa) if self.is_pay_dividend else 0.0, # continuously compounded
-            tau=self.os_term_m / 12
+            q=self.q, tau=self.os_term_m / 12
         )
 
         return self
@@ -148,5 +149,6 @@ class EquityOptionBuilder:
             equity_index=self.equity_index,
             rf_curve=self.rf_curve,
             std_dev=self.std_dev,
-            is_pay_dividend=self.is_pay_dividend
+            is_pay_dividend=self.is_pay_dividend,
+            q=self.q,
         )

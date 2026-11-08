@@ -25,6 +25,7 @@ class EquityOption(Asset):
         _rf_curve (YieldCurve): Risk-free curve.
         _std_dev (float): Standard deviation, i.e. volatility.
         _is_pay_dividend (bool): True if paying dividend, otherwise False.
+        _q (float): Dividend yield assumption (continuously compounded).
     """
     __slots__ = ('_qty', '_call_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
                  '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds',
@@ -43,6 +44,7 @@ class EquityOption(Asset):
         rf_curve: YieldCurve,
         std_dev: float = float("nan"),
         is_pay_dividend: bool = False,
+        q: float = float("nan"),
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,
@@ -69,6 +71,7 @@ class EquityOption(Asset):
             rf_curve (YieldCurve): Risk-free curve.
             std_dev (float): Standard deviation, i.e. volatility.
             is_pay_dividend (bool): True if paying dividend, otherwise False.
+            q (float): Dividend yield assumption (continuously compounded).
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             purchase_date (pd.Period | None): Purchase date, default to initialization date.
         """
@@ -84,19 +87,17 @@ class EquityOption(Asset):
         self._rf_curve: YieldCurve = rf_curve
         self._std_dev: float = std_dev
         self._is_pay_dividend: bool = is_pay_dividend
+        self._q: float = q if is_pay_dividend else 0
         self._cash_flow: float = 0.0
         self._purchase_proceeds: float = 0.0
         self._disposal_proceeds: float = 0.0
         self._n_clone: int = 0
 
         if not _bypass_init_validation:
-            if self.time is None:
-                warnings.warn(f"'time' is None, can\'t perform init validation.")
             calc_price = BlackScholesCalculator.price(
                 call_put=self._call_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-                q=math.log(1 + self._equity_index.dividend_yield_pa) if self._is_pay_dividend else 0.0,
-                sigma=self._std_dev, tau=self.os_term_m / 12
+                q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12
             )
             if not math.isclose(self._price, calc_price, rel_tol=1e-6, abs_tol=1e-8):
                 raise ValueError(f"Equity option {self.asset_id} price {price:.4f} != calculated {calc_price:.4f}.")
@@ -132,6 +133,14 @@ class EquityOption(Asset):
         self._std_dev = value
 
     @property
+    def q(self) -> float:
+        return self._q
+
+    @q.setter
+    def q(self, value: float) -> None:
+        self._q = value
+
+    @property
     def os_term_m(self) -> int:
         return max((self._exercise_date - self.period).n, 0)
 
@@ -144,9 +153,14 @@ class EquityOption(Asset):
         self._disposal_proceeds = 0.0
 
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
-    def roll_forward(self, **kwargs) -> None:
+    def roll_forward(self, std_dev: float | None = None, q: float | None = None, **kwargs) -> None:
         """
         Roll the equity option asset forward one period.
+
+        Args:
+            std_dev (float): Standard deviation, i.e. volatility; if None, previous value is used; defaults to None.
+            q (float): Dividend yield assumption (continuously compounded); if None, previous value is used; defaults to None.
+
         """
         t = self.time
 
@@ -156,19 +170,20 @@ class EquityOption(Asset):
             self._cash_flow = 0
             return
 
+        self._std_dev = std_dev if std_dev is not None else self.std_dev
+
         if self._is_pay_dividend:
             self._stock_price = self._stock_price * (1 + self._equity_index.price_return)
-            q = math.log(1 + self._equity_index.dividend_yield_pa) # obtain continuously compounded dividend assumption
+            self._q = q if q is not None else self._q
         else:
             self._stock_price = self._stock_price * (1 + self._equity_index.total_return)
-            q = 0.0
 
         if self.is_alive("end"):
             self._cash_flow = 0.0
             self._price = BlackScholesCalculator.price(
                 call_put=self._call_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-                q=q, sigma=self._std_dev, tau=self.os_term_m / 12
+                q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12
             )
         else:  # exercise at this month
             payoff = max(self._stock_price - self._strike_price, 0.0) if self._call_put == CallPut.CALL else \
@@ -192,8 +207,7 @@ class EquityOption(Asset):
         return BlackScholesCalculator.greeks(
             call_put=self._call_put, s=self._stock_price, k=self._strike_price,
             r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-            q=math.log(1 + self._equity_index.dividend_yield_pa) if self._is_pay_dividend else 0.0,
-            sigma=self._std_dev, tau=self.os_term_m / 12
+            q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12
         )
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)

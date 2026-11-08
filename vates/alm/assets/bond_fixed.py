@@ -2,7 +2,6 @@ import math
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import warnings
 from collections.abc import Mapping
 from typing import Literal
 
@@ -129,8 +128,6 @@ class BondFixed(Asset):
                        f"mv_price={self._mv_price_dirty:.4f}")
 
         if not _bypass_init_validation:
-            if self.time is None:
-                warnings.warn(f"'time' is None, can\'t perform init validation.")
             calc_price = self.pricer.calculate_market_price(self.period, self.ra_spots)
             if not math.isclose(self._mv_price_dirty, calc_price, rel_tol=1e-6, abs_tol=1e-8):
                 raise ValueError(f"Bond {asset_id} mv_price {self._mv_price_dirty:.4f} != calculated {calc_price:.4f}.")

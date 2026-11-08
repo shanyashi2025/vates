@@ -30,8 +30,8 @@
   },
   "equity_indices": {
     "variable_default_attribute": {
-      "total_return_index": {"measure": "RET_IDX"},
-      "dividend_yield": {"measure": "RNY_PC", "divby": 100, "compound_freq": "monthly"}
+      "total_return_index": {"measure": "TOT_RET_IDX"},
+      "price_return_index": {"measure": "PRI_RET_IDX"}
     },
     "instruments": [
       {"index_id": "cny_equity", "economy": "CNY", "class": "EQUITY"},
