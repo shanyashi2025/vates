@@ -211,7 +211,8 @@ class ProjModelEngine:
 
         if self.time is not None:
             msg = f"'time={self.time} will be reset to iterate from 0 to {self.MAX_T}."
-            warnings.warn(msg); self._append_traced_message(f"WARNING: {msg}")
+            warnings.warn(msg)
+            self._append_traced_message(f"WARNING: {msg}")
 
         exec_start_time = datetime.now()
         try:
@@ -249,7 +250,8 @@ class ProjModelEngine:
                         os.remove(f)
                     else:
                         msg = f"Exsiting file NOT deleted: '{f}'."
-                        warnings.warn(msg); self._append_traced_message(f"INFO: {msg}")
+                        warnings.warn(msg)
+                        self._append_traced_message(f"INFO: {msg}")
         else:
             os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
         self._write_projection_result()
@@ -312,11 +314,13 @@ class ProjModelEngine:
         is_file_exist = output_file.is_file()
         if output_mode == 'w' and is_file_exist:
             msg = f"stoch_result_file_mode='w': existing '{output_file}' will be overwritten."
-            warnings.warn(msg); self._append_traced_message(msg)
+            warnings.warn(msg)
+            self._append_traced_message(msg)
         elif output_mode == 'a' and not is_file_exist:
             output_mode = 'w'
             msg = f"stoch_result_file_mode='a': but 'w' mode will be used because '{output_file}' does not exist."
-            warnings.warn(msg); self._append_traced_message(msg)
+            warnings.warn(msg)
+            self._append_traced_message(msg)
 
         with open(output_file, output_mode, newline='', encoding='utf-8-sig') as csvfile:
             writer = csv.writer(csvfile)
@@ -457,7 +461,8 @@ class ProjModelEngine:
                 msg = (f"Duplicate input file '{filename}' found in multiple input directories; "
                        f"using '{chosen}' (first per input_directories order). Ignored: {ignored}. "
                        f"Reorder 'input_directories' to change precedence.")
-                warnings.warn(msg); self._append_traced_message(f"WARNING: {msg}")
+                warnings.warn(msg)
+                self._append_traced_message(f"WARNING: {msg}")
         return self._cached_filepath[filename][0]
 
     def _search_filepath(self, filename: str) -> tuple[Path | None, list[Path]]:

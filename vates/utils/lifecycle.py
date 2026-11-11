@@ -65,7 +65,7 @@ class Lifecycle(Generic[T]):
     """
     __slots__ = ("_last",)
 
-    def __init__(self, *, created_at: int | None = None, created_phase: T | None = None) -> None:
+    def __init__(self, *, created_at: int = 0, created_phase: T | None = None) -> None:
         self._last: dict[T, int] = {}
         if created_phase is not None:
             self._validate_time(created_at)
