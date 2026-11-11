@@ -66,7 +66,7 @@ def make_hkrbc_pcr_module(*, submodule: str | None = None) -> RiskTree:
     }
 
     tree = RiskTree.from_structure(structure=structure, is_lock_structure=True,
-                                   is_zeroize=True)
+                                   is_zerofill=True)
 
     if submodule is None:
         return tree

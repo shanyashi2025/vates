@@ -621,7 +621,7 @@ class RiskNode:
             chars = "_" + chars
         return chars
 
-    def zeroize(self) -> None:
+    def zerofill(self) -> None:
         """Set the risk capital of every leaf of this node's subtree -- the node
         itself when it has no children -- to ``0.0``.
         """
@@ -1076,9 +1076,9 @@ class RiskTree:
                 raise TypeError(f"Invalid {type(v)=}, expected ('float', 'dict').")
         return flattened
 
-    def zeroize(self) -> None:
+    def zerofill(self) -> None:
         """Set the risk capital of every leaf of the tree to ``0.0``."""
-        self._root.zeroize()
+        self._root.zerofill()
 
     def duplicate(self, *, with_value: bool = True, is_lock_structure: bool | None = None) -> Self:
         """
@@ -1176,7 +1176,7 @@ class RiskTree:
 
     @classmethod
     def from_structure(cls, structure: dict[str, dict | RiskNodeSpec], *,
-                       is_lock_structure: bool = True, is_zeroize: bool = True) -> Self:
+                       is_lock_structure: bool = True, is_zerofill: bool = True) -> Self:
         """
         Build a tree from a spec dictionary. A convenience for building the hierarchy.
 
@@ -1187,7 +1187,7 @@ class RiskTree:
             structure: Mapping of node paths to their spec, as
                 produced by :meth:`export_structure`.
             is_lock_structure: If ``True`` (default), lock the tree once built.
-            is_zeroize: If ``True`` (default), set the capital of every leaf to ``0.0``.
+            is_zerofill: If ``True`` (default), set the capital of every leaf to ``0.0``.
 
         Returns:
             RiskTree: The built tree.
@@ -1196,8 +1196,8 @@ class RiskTree:
         tree = RiskTree(root)
         if is_lock_structure:
             tree.lock_structure()
-        if is_zeroize:
-            tree.zeroize()
+        if is_zerofill:
+            tree.zerofill()
         return tree
 
 

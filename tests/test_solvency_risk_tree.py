@@ -482,7 +482,7 @@ class TestCapitalAggregation:
         assert node.children == () and child.parent is None
 
     def test_zeroize_sets_every_leaf_to_zero(self, tree):
-        tree.zeroize()
+        tree.zerofill()
         assert all(leaf.capital == 0.0 for leaf in tree.get_leaf_nodes())
         assert tree.get_capital() == 0.0
 
@@ -803,7 +803,7 @@ class TestLockStructure:
         tree.set_capital("M/E", 10.0)
         tree.set_capitals({"M/F": 20.0, "L/H": 40.0})
         assert tree.get_capital() == 70.0
-        tree.zeroize()
+        tree.zerofill()
         assert tree.get_capital() == 0.0
 
     def test_reads_are_unaffected_by_the_lock(self, tree):
@@ -897,7 +897,7 @@ class TestStructureSpec:
         assert tree.is_structure_locked is True
         tree = RiskTree.from_structure(tree_structure, is_lock_structure=False)
         assert tree.is_structure_locked is False
-        tree = RiskTree.from_structure(tree_structure, is_zeroize=True)
+        tree = RiskTree.from_structure(tree_structure, is_zerofill=True)
         assert tree.get_capital() == 0.0
 
     def test_structure_can_replicate_tree(self, tree):
@@ -962,7 +962,7 @@ class TestSolvencyModules:
         for leaf in leaves:
             leaf.capital = 1_000_000.0
         assert tree.get_capital() > 0.0
-        tree.zeroize()
+        tree.zerofill()
         assert tree.get_capital() == 0.0
 
     @pytest.mark.parametrize("make_module", BUILDERS, ids=BUILDER_IDS)

@@ -170,27 +170,29 @@ class Fund:
     def record_free_proceeds(self, timing: Literal["bd", "ad", "end"]):
         self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance, timing)
 
-    def get_total_asset_attr(self, attr_name: str, /, *, allow_undefined: bool | None = None) -> float:
+    def get_total_asset_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
         """ Get the sum of a numeric attribute of total assets
 
         Args:
             attr_name (str): Requested attribute name.
-            allow_undefined (bool): True if allow undefined attribute and return 0.0, defaults to False.
+            on_undefined (Literal["zerofill", "error"]): Zerofill or raise for undefined attribute, defaults to "zerofill".
 
         """
-        allow_undefined = (GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS) if allow_undefined is None else allow_undefined
-        return self._assets.sum_attr(attr_name, allow_undefined=allow_undefined)
+        if on_undefined is None:
+            on_undefined = "zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error"
+        return self._assets.sum_attr(attr_name, on_undefined=on_undefined)
 
-    def get_total_liability_attr(self, attr_name: str, /, *, allow_undefined: bool | None = None) -> float:
+    def get_total_liability_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
         """ Get the sum of a numeric attribute of total liabilities
 
         Args:
             attr_name (str): Requested attribute name.
-            allow_undefined (bool): True if allow undefined attribute and return 0.0, defaults to False.
+            on_undefined (Literal["zerofill", "error"]): Zerofill or raise for undefined attribute, defaults to "zerofill".
 
         """
-        allow_undefined = (GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS) if allow_undefined is None else allow_undefined
-        return self._liabs.sum_attr(attr_name, allow_undefined=allow_undefined)
+        if on_undefined is None:
+            on_undefined = "zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error"
+        return self._liabs.sum_attr(attr_name, on_undefined=on_undefined)
 
     def record_after_dealing(self, scope: Literal["assets", "liabs"] | list[Literal["assets", "liabs"]]) -> None:
         scope = scope if isinstance(scope, list) else [scope]

@@ -70,7 +70,7 @@ def make_cross2_mc_module(*, submodule: str | None = None, nonlife_mc_k: float =
         "C-ROSS MC/Credit": {"children": ("Spread", "Counterparty Default"), "agg_func": _credit_risk_agg},
     }
 
-    tree = RiskTree.from_structure(structure=structure, is_lock_structure=True, is_zeroize=True)
+    tree = RiskTree.from_structure(structure=structure, is_lock_structure=True, is_zerofill=True)
 
     if submodule is None:
         return tree
