@@ -13,26 +13,26 @@ class ObjList[T](list[T]):
         ...
 
     @overload
-    def sum_attr(self, attr_name: list[str], /, *, on_undefined: Literal["zerofill", "error"] = "error") -> np.ndarray:
+    def sum_attr(self, attr_name: list[str] | tuple[str], /, *, on_undefined: Literal["zerofill", "error"] = "error") -> np.ndarray:
         ...
 
     @overload
-    def sum_attr(self, attr_name: str, /, *, group_by: str, group_keys: str | list[str] | None = None,
+    def sum_attr(self, attr_name: str, /, *, group_by: str, group_keys: str | list[str] | tuple[str] | None = None,
                  on_undefined: Literal["zerofill", "error"] = "error") -> dict[str, float]:
         ...
 
     @overload
-    def sum_attr(self, attr_name: list[str], /, *, group_by: str, group_keys: str | list[str] | None = None,
+    def sum_attr(self, attr_name: list[str] | tuple[str], /, *, group_by: str, group_keys: str | list[str] | tuple[str] | None = None,
                  on_undefined: Literal["zerofill", "error"] = "error") -> dict[str, np.ndarray]:
         ...
 
     def sum_attr(
         self,
-        attr_name: str | list[str],
+        attr_name: str | list[str] | tuple[str],
         /,
         *,
         group_by: str | None = None,
-        group_keys: str | list[str] | None = None,
+        group_keys: str | list[str] | tuple[str] | None = None,
         on_undefined: Literal["zerofill", "error"] = "error",
     ) -> float | np.ndarray | dict[str, float | np.ndarray]:
         if group_by is None:
@@ -42,7 +42,7 @@ class ObjList[T](list[T]):
                                       on_undefined=on_undefined)
 
 
-def _require_attr(objs: Iterable, attr_name: str | list[str]) -> None:
+def _require_attr(objs: Iterable, attr_name: str | list[str] | tuple[str]) -> None:
     attr_name = attr_name if isinstance(attr_name, list) else [attr_name]
     for name in attr_name:
         for obj in objs:
@@ -53,15 +53,16 @@ def _require_attr(objs: Iterable, attr_name: str | list[str]) -> None:
 def _sum_attr(objs: Iterable, *, attr_name: str, on_undefined: Literal["zerofill", "error"] = "error") -> float: ...
 
 @overload
-def _sum_attr(objs: Iterable, *, attr_name: list[str], on_undefined: Literal["zerofill", "error"] = "error") -> np.ndarray: ...
+def _sum_attr(objs: Iterable, *, attr_name: list[str] | tuple[str], on_undefined: Literal["zerofill", "error"] = "error"
+              ) -> np.ndarray: ...
 
 @overload
-def _sum_attr(objs: Iterable, *, attr_name: str | list[str], on_undefined: Literal["zerofill", "error"] = "error"
+def _sum_attr(objs: Iterable, *, attr_name: str | list[str] | tuple[str], on_undefined: Literal["zerofill", "error"] = "error"
               ) -> float | np.ndarray: ...
 
-def _sum_attr(objs: Iterable, *, attr_name: str | list[str], on_undefined: Literal["zerofill", "error"] = "error"
+def _sum_attr(objs: Iterable, *, attr_name: str | list[str] | tuple[str], on_undefined: Literal["zerofill", "error"] = "error"
               ) -> float | np.ndarray:
-    if not isinstance(attr_name, (str, list)):
+    if not isinstance(attr_name, (str, list, tuple)):
         raise TypeError(f"Invalid type of name {type(attr_name)}, expected 'str' or 'list[str]'.")
     if on_undefined == "error":
         _require_attr(objs, attr_name)
@@ -76,21 +77,21 @@ def _sum_attr(objs: Iterable, *, attr_name: str | list[str], on_undefined: Liter
 
 
 @overload
-def _sum_attr_by_group(objs: Iterable, *, attr_name: str, group_by: str, group_keys: str | list[str] | None = None,
+def _sum_attr_by_group(objs: Iterable, *, attr_name: str, group_by: str, group_keys: str | list[str] | tuple[str] | None = None,
                        on_undefined: Literal["zerofill", "error"] = "error") -> dict[str, float]: ...
 
 @overload
-def _sum_attr_by_group(objs: Iterable, *, attr_name: list[str], group_by: str, group_keys: str | list[str] | None = None,
+def _sum_attr_by_group(objs: Iterable, *, attr_name: list[str] | tuple[str], group_by: str, group_keys: str | list[str] | tuple[str] | None = None,
                        on_undefined: Literal["zerofill", "error"] = "error") -> dict[str, np.ndarray]: ...
 
 @overload
-def _sum_attr_by_group(objs: Iterable, *, attr_name: str | list[str], group_by: str,
-                       group_keys: str | list[str] | None = None, on_undefined: Literal["zerofill", "error"] = "error",
-                       ) -> dict[str, float | np.ndarray]: ...
+def _sum_attr_by_group(objs: Iterable, *, attr_name: str | list[str] | tuple[str], group_by: str,
+                       group_keys: str | list[str] | tuple[str] | None = None,
+                       on_undefined: Literal["zerofill", "error"] = "error",) -> dict[str, float | np.ndarray]: ...
 
-def _sum_attr_by_group(objs: Iterable, *, attr_name: str | list[str], group_by: str,
-                       group_keys: str | list[str] | None = None, on_undefined: Literal["zerofill", "error"] = "error",
-                       ) -> dict[str, float | np.ndarray]:
+def _sum_attr_by_group(objs: Iterable, *, attr_name: str | list[str] | tuple[str], group_by: str,
+                       group_keys: str | list[str] | tuple[str] | None = None,
+                       on_undefined: Literal["zerofill", "error"] = "error",) -> dict[str, float | np.ndarray]:
     """
     Returns:
         dict[str, float]: if type of `attr_name` is str
@@ -98,7 +99,7 @@ def _sum_attr_by_group(objs: Iterable, *, attr_name: str | list[str], group_by: 
     """
     if not isinstance(group_by, str):
         raise TypeError(f"Invalid type of 'group_by': {type(group_by)}, expected 'str'.")
-    if not isinstance(attr_name, (str, list)):
+    if not isinstance(attr_name, (str, list, tuple)):
         raise TypeError(f"Invalid type of name {type(attr_name)}, expected 'str' or 'list[str]'.")
     if group_keys is None:
         filtered = objs
