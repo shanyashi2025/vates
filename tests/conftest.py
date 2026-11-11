@@ -1,10 +1,15 @@
 """Shared fixtures for the `vates._core` test suite."""
-import pandas as pd
 import warnings
 
 import pytest
 
-from vates import ConstVariable, ProjModelEngine, TDimVariable
+from vates import (
+    ConstArrayVariable,
+    ProjModelEngine,
+    ScalarVariable,
+    TDimArrayVariable,
+    TDimVariable,
+)
 
 # A multi-year window is required so that `max_t > 0`: several behaviors
 # (e.g. the `time`/`period` "interior" values, and `TDimVariable` indexing of a
@@ -44,9 +49,8 @@ def make_configured(make_engine):
     """Factory returning an engine configured to write results into `tmp_path`.
 
     `configure_run` is called before any variable is constructed, because
-    `TDimVariable`/`ConstVariable` read `model_engine._run_config` at construction
-    time. The result directory is a subdirectory of the test's `tmp_path`, so no
-    writes leak into the repo.
+    Variables are created after configuration. The result directory is a
+    subdirectory of the test's `tmp_path`, so no writes leak into the repo.
     """
 
     def _make(tmp_path, slug="m", *, start_year=DEFAULT_START_YEAR,
@@ -76,14 +80,18 @@ def engine(make_configured):
 
 @pytest.fixture
 def add_variables():
-    """Helper that attaches a scalar `ConstVariable` and a scalar `TDimVariable`
+    """Helper that attaches a scalar `ScalarVariable` and a scalar `TDimVariable`
     to an engine (must be called after `configure_run`)."""
 
     def _add(*, owner="owner", group="group",
              const_name="const_var", tdim_name="tdim_var"):
-        cvar = ConstVariable(const_name, owner=owner, group=group)
-        tvar = TDimVariable(tdim_name, owner=owner, group=group, max_t=(DEFAULT_END_YEAR - DEFAULT_START_YEAR) * 12,
-                            start_date=pd.Period(f"{DEFAULT_END_YEAR}-12", freq="M"))
+        cvar = ScalarVariable(const_name, owner=owner, group=group)
+        tvar = TDimVariable(
+            tdim_name,
+            owner=owner,
+            group=group,
+            max_t=(DEFAULT_END_YEAR - DEFAULT_START_YEAR) * 12,
+        )
         return cvar, tvar
 
     return _add
@@ -91,7 +99,10 @@ def add_variables():
 
 @pytest.fixture(autouse=True)
 def clean_variable_cached():
-    ConstVariable._dims_cache = set()
-    TDimVariable._dims_cache = set()
-    TDimVariable._meta_cache = set()
+    ScalarVariable._ng_cache = set()
+    ConstArrayVariable._ng_cache = set()
+    ConstArrayVariable._dims_cache = set()
+    TDimVariable._ng_cache = set()
+    TDimArrayVariable._ng_cache = set()
+    TDimArrayVariable._dims_cache = set()
     yield

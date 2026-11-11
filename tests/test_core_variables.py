@@ -1,17 +1,17 @@
-"""Tests for `ConstVariable` and `TDimVariable`.
-
-`ProjVariable` subclasses read `model_engine._run_config` at construction time,
-so every variable here is created *after* `configure_run` (see `make_configured`).
-"""
-
-import numpy as np
-import pandas as pd
-import pytest
-import weakref
+"""Tests for the four projection variable types and their factory."""
 
 from enum import Enum
 
-from vates import ConstVariable, TDimVariable, make_proj_variable
+import numpy as np
+import pytest
+
+from vates import (
+    ConstArrayVariable,
+    ScalarVariable,
+    TDimArrayVariable,
+    TDimVariable,
+    make_proj_variable,
+)
 from vates._core.tools import _FALLBACK
 
 
@@ -26,202 +26,167 @@ def configured(make_configured, tmp_path):
     return make_configured(tmp_path)
 
 
-class TestConstVariable:
+class TestScalarVariable:
     def test_scalar_storage(self):
-        v = ConstVariable("c", owner="o", group="g")
+        v = ScalarVariable("c", owner="o", group="g")
         v[...] = 42
         assert v.result == 42
         assert v.is_constant is True
-        assert v.ndim == 0
-        assert v.dims is ()
         v.result = 21
         assert v.result == 21
-        assert v.is_constant is True
-        assert v.ndim == 0
-        assert v.dims is ()
-
-    def test_array_storage(self):
-        v = ConstVariable("c", owner="o", group="g",
-                          dims=[["A", "B"]])
-        v[...] = np.array([1.0, 2.0])
-        assert v.ndim == 1
-        assert v.is_constant is True
-        v.result = np.array([11.0, 12.0])
-        assert v.ndim == 1
-        assert v.is_constant is True
 
     def test_string_storage(self):
-        v = ConstVariable("s", owner="o", group="g")
+        v = ScalarVariable("s", owner="o", group="g")
         v[...] = "hello"
         assert v.result == "hello"
-        assert v.is_constant is True
         v.result = "world"
         assert v.result == "world"
+
+
+class TestConstArrayVariable:
+    def test_array_storage_and_slice(self):
+        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B", "C"]])
+        v[...] = np.array([1.0, 2.0, 3.0])
+
+        assert v.ndim == 1
         assert v.is_constant is True
+        assert v[1] == 2.0
+        np.testing.assert_array_equal(v[1:], [2.0, 3.0])
+
+        v[1:] = [12.0, 13.0]
+        np.testing.assert_array_equal(v.result, [1.0, 12.0, 13.0])
+
+    def test_result_setter(self):
+        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
+        v.result = np.array([11.0, 12.0])
+        np.testing.assert_array_equal(v.result, [11.0, 12.0])
 
     def test_dims_from_enum(self):
-        v = ConstVariable("e", owner="o", group="g",
-                          dims=[_AssetType])
-        assert v.dims == (("EQUITY", "BOND"), )
+        v = ConstArrayVariable("e", owner="o", group="g", dims=[_AssetType])
+        assert v.dims == (("EQUITY", "BOND"),)
 
     def test_int_labels_coerced_to_str(self):
-        v = ConstVariable("i", owner="o", group="g",
-                          dims=[[0, 1]])
-        assert v.dims == (("0", "1"), )
+        v = ConstArrayVariable("i", owner="o", group="g", dims=[[0, 1]])
+        assert v.dims == (("0", "1"),)
 
-    def test_max_three_dims(self):
-        dims = [["a", "b"], ["c"], ["d"]]
-        v = ConstVariable("3d", owner="o", group="g", dims=dims)
+    def test_multiple_dimensions(self):
+        v = ConstArrayVariable("3d", owner="o", group="g", dims=[["a", "b"], ["c"], ["d"]])
         assert v.ndim == 3
-        assert v.dims == (("a", "b"), ("c", ), ("d", ))
+        assert v.dims == (("a", "b"), ("c",), ("d",))
 
     @pytest.mark.parametrize("bad", ["foo", 42, 3.14])
     def test_dims_must_be_list_or_tuple(self, bad):
         with pytest.raises(TypeError):
-            ConstVariable("bad", owner="o", group="g", dims=bad)
+            ConstArrayVariable("bad", owner="o", group="g", dims=bad)
 
     @pytest.mark.parametrize("bad", [int, 42, "foo"])
     def test_wrong_dim_type_raises(self, bad):
-        # must be list, tuple or subclass of Enum, else raises
         with pytest.raises(TypeError):
-            ConstVariable("bad", owner="o", group="g", dims=[bad])
+            ConstArrayVariable("bad", owner="o", group="g", dims=[bad])
 
 
 class TestTDimVariable:
-    def test_size_from_run_config(self, configured):
-        # 2026-12 .. 2028-12 -> max_t = 24, internal array has max_t + 1 rows
-        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        assert v._result.shape == (configured.MAX_T + 1,)
-        assert v._meta[2] == configured.MAX_T
-        assert v._meta[3] == configured.START_DATE
-
-    def test_unassigned_read_returns_zero(self, configured):
-        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
+    def test_size_and_default_values(self, configured):
+        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T)
+        assert v.result.shape == (configured.MAX_T + 1,)
         assert v[0] == 0.0
         assert v[configured.MAX_T] == 0.0
 
-    def test_write_then_read(self, configured):
-        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
+    def test_write_and_slice(self, configured):
+        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T)
         v[3] = 9.5
+        v[4:6] = [10.5, 11.5]
         assert v[3] == 9.5
+        np.testing.assert_array_equal(v[3:6], [9.5, 10.5, 11.5])
 
-    def test_period_indexing(self, configured):
-        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        v[6] = 1.0
-        assert v[configured.START_DATE + 6] == 1.0
-
-    @pytest.mark.parametrize("bad", [None, "foo", 3.14, pd.Period("1999-12", "M")])
-    def test_wrong_type_max_t_raises(self, bad):
-        with pytest.raises(TypeError):
-            v = TDimVariable("t", owner="o", group="g", max_t=bad, start_date=pd.Period("1999-12", "M"))
-
-    @pytest.mark.parametrize("bad", [-1, -24])
-    def test_wrong_negative_max_t_raises(self, bad):
-        with pytest.raises(ValueError):
-            v = TDimVariable("t", owner="o", group="g", max_t=bad, start_date=pd.Period("1999-12", "M"))
-
-    @pytest.mark.parametrize("bad", ["foo", 3.14, 123])
-    def test_wrong_type_start_date_raises(self, bad):
-        with pytest.raises(TypeError):
-            v = TDimVariable("t", owner="o", group="g", max_t=24, start_date=bad)
-
-    def test_period_index_raises_while_start_date_is_none(self):
-        v = TDimVariable("t", owner="o", group="g", max_t=24, start_date=None)
-        assert v._meta[3] is None
-        v = TDimVariable("t", owner="o", group="g", max_t=24)
-        assert v._meta[3] is None
-        with pytest.raises(ValueError, match="cannot index by 'pd.Period'"):
-            v[pd.Period("1999-12", "M")]
-
-    @pytest.mark.parametrize("bad", [-1, 9999])  # 9999 is way beyond max_t=24
-    def test_out_of_range_index_raises(self, configured, bad):
-        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
+    def test_period_indexing_is_not_supported(self, configured):
+        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T)
         with pytest.raises(IndexError):
-            v[bad]
-
-    @pytest.mark.parametrize("bad", ["x", 1.5])
-    def test_wrong_type_index_raises(self, configured, bad):
-        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        with pytest.raises(TypeError):
-            v[bad]
-
-    def test_far_period_index_raises(self, configured):
-        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        with pytest.raises(IndexError):
-            v[configured.END_DATE + 1]
-
-    def test_ndim_returns_copy(self, configured):
-        v = TDimVariable("t", owner="o", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE,
-                         dims=[["A", "B"]])
-        v[0] = np.array([1.0, 2.0])
-        got = v[0]
-        got[0] = 999.0
-        assert v[0][0] == 1.0  # read returned a copy, not a view
-
-    def test_cached_meta(self, configured):
-        assert len(TDimVariable._meta_cache) == 0
-        v = TDimVariable("t", owner="o1", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        assert len(TDimVariable._meta_cache) == 1
-        v = TDimVariable("t", owner="o2", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        assert len(TDimVariable._meta_cache) == 1
-        v = TDimVariable("t1", owner="o1", group="g", max_t=configured.MAX_T, start_date=configured.START_DATE)
-        assert len(TDimVariable._meta_cache) == 2
-        v = TDimVariable("t", owner="o1", group="g", max_t=120, start_date=configured.START_DATE)
-        assert len(TDimVariable._meta_cache) == 3
-        v = TDimVariable("t", owner="o1", group="g", max_t=configured.MAX_T, start_date=pd.Period("1999-12", "M"))
-        assert len(TDimVariable._meta_cache) == 4
+            v[configured.START_DATE]
 
 
-class TestCachedDims:
-    def test_cached_dims(self):
-        assert len(ConstVariable._dims_cache) == 0
-        assert len(TDimVariable._dims_cache) == 0
-        assert not (ConstVariable._dims_cache is TDimVariable._dims_cache)
-        v = ConstVariable("t", owner="o", group="g", dims=[["A", "B"]])
-        assert len(ConstVariable._dims_cache) == 1
-        v = ConstVariable("t", owner="o", group="g", dims=[["A", "B"], ("C", "D")])
-        assert len(ConstVariable._dims_cache) == 2
-        v = TDimVariable("t", owner="o", group="g", dims=[["A", "B"]], max_t=24, start_date = pd.Period("1999-12", "M"))
-        assert len(ConstVariable._dims_cache) == 2
-        assert len(TDimVariable._dims_cache) == 1
+class TestTDimArrayVariable:
+    def test_dimensions_and_time_slices(self, configured):
+        v = TDimArrayVariable(
+            "t",
+            owner="o",
+            group="g",
+            dims=[["A", "B"]],
+            max_t=configured.MAX_T,
+        )
+        v[0] = [1.0, 2.0]
+        v[1:3] = [[3.0, 4.0], [5.0, 6.0]]
+
+        assert v.dims == (("A", "B"),)
+        assert v.ndim == 1
+        np.testing.assert_array_equal(v[0], [1.0, 2.0])
+        np.testing.assert_array_equal(v[1:3], [[3.0, 4.0], [5.0, 6.0]])
 
 
-class TestMakeVariable:
+class TestVariableCaches:
+    def test_dimension_caches_are_per_array_class(self):
+        assert ConstArrayVariable._dims_cache is not TDimArrayVariable._dims_cache
+        ConstArrayVariable("c1", owner="o", group="g", dims=[["A", "B"]])
+        ConstArrayVariable("c2", owner="o", group="g", dims=[["A", "B"], ("C", "D")])
+        TDimArrayVariable("t", owner="o", group="g", dims=[["A", "B"]], max_t=24)
+        assert len(ConstArrayVariable._dims_cache) == 2
+        assert len(TDimArrayVariable._dims_cache) == 1
 
+
+class TestMakeProjVariable:
     @pytest.mark.parametrize("bad", [None, 1, 3.14, []])
     def test_wrong_variable_type_type(self, bad):
         with pytest.raises(TypeError, match="expected 'str'"):
-            v = make_proj_variable("t", variable_type=bad, owner="o", group="g")
+            make_proj_variable("t", variable_type=bad, owner="o", group="g")
 
     @pytest.mark.parametrize("bad", ["Nope", "42"])
     def test_wrong_variable_type_value(self, bad):
         with pytest.raises(ValueError, match=r"expected \('const', 'tdim'\)"):
-            v = make_proj_variable("t", variable_type=bad, owner="o", group="g")
+            make_proj_variable("t", variable_type=bad, owner="o", group="g")
 
-    def test_make_const_variable(self, configured):
-        v = make_proj_variable("c", variable_type="c", owner="o", group="g", dims=[["A", "B"]], model_engine=configured)
-        assert isinstance(v, ConstVariable)
+    def test_const_scalar_factory(self, configured):
+        v = make_proj_variable("c", variable_type="c", owner="o", group="g", model_engine=configured)
+        assert isinstance(v, ScalarVariable)
         assert v.name == "c"
         assert v.owner == "o"
         assert v.group == "g"
-        assert v.dims == (("A", "B"), )
         assert v in configured.proj_variable_manager
+
+    def test_const_array_factory(self, configured):
+        v = make_proj_variable(
+            "c",
+            variable_type="const",
+            owner="o",
+            group="g",
+            dims=[["A", "B"]],
+            model_engine=configured,
+        )
+        assert isinstance(v, ConstArrayVariable)
+        assert v.dims == (("A", "B"),)
 
     @pytest.mark.parametrize("good", ["c", "const", "CoNsT"])
     def test_correct_const_var_type_value(self, configured, good):
         v = make_proj_variable("c", variable_type=good, owner="o", group="g", model_engine=configured)
-        assert isinstance(v, ConstVariable)
+        assert isinstance(v, ScalarVariable)
 
-    def test_make_tdim_variable(self, configured):
-        v = make_proj_variable("t", variable_type="t", owner="o", group="g", dims=[["A", "B"]], model_engine=configured)
+    def test_tdim_scalar_factory(self, configured):
+        v = make_proj_variable("t", variable_type="t", owner="o", group="g", model_engine=configured)
         assert isinstance(v, TDimVariable)
-        assert v.name == "t"
-        assert v.owner == "o"
-        assert v.group == "g"
-        assert v.dims == (("A", "B"), )
-        assert v.max_t == configured.MAX_T
-        assert v.start_date == configured.START_DATE
+        assert v.result.shape == (configured.MAX_T + 1,)
         assert v in configured.proj_variable_manager
+
+    def test_tdim_array_factory(self, configured):
+        v = make_proj_variable(
+            "t",
+            variable_type="t",
+            owner="o",
+            group="g",
+            dims=[["A", "B"]],
+            model_engine=configured,
+        )
+        assert isinstance(v, TDimArrayVariable)
+        assert v.dims == (("A", "B"),)
+        assert v.result.shape == (configured.MAX_T + 1, 2)
 
     @pytest.mark.parametrize("good", ["t", "tdim", "time_DiMeNSioned"])
     def test_correct_tdim_var_type_value(self, configured, good):
@@ -235,36 +200,25 @@ class TestMakeVariable:
     def test_no_engine_uses_fallback(self):
         v1 = make_proj_variable("c", variable_type="c", owner="o", group="g")
         fallback = _FALLBACK.engine
-        assert isinstance(v1, ConstVariable)
         v2 = make_proj_variable("c", variable_type="c", owner="o", group="g", model_engine=None)
-        assert isinstance(v2, ConstVariable)
         v3 = make_proj_variable("t", variable_type="t", owner="o", group="g")
-        assert isinstance(v3, TDimVariable)
-        assert v3.max_t == fallback.MAX_T
-        assert v3.start_date == fallback.START_DATE
         v4 = make_proj_variable("t", variable_type="t", owner="o", group="g", model_engine=None)
+        assert isinstance(v1, ScalarVariable)
+        assert isinstance(v2, ScalarVariable)
+        assert isinstance(v3, TDimVariable)
         assert isinstance(v4, TDimVariable)
-        assert v4.start_date == fallback.START_DATE
         assert all(v in fallback.proj_variable_manager for v in (v1, v2, v3, v4))
 
     def test_engine_has_no_max_t_raises(self):
         class NoMaxTEngine:
-            ...
-        engine = NoMaxTEngine()
+            pass
+
         with pytest.raises(AttributeError, match="MAX_T"):
-            v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
+            make_proj_variable("t", owner="o", group="g", model_engine=NoMaxTEngine())
 
-    def test_engine_has_no_start_date_defaults_to_none(self):
-        class NoStartDateEngine:
-            MAX_T = 24
-        engine = NoStartDateEngine()
-        with pytest.raises(AttributeError, match="START_DATE"):
-            v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
-
-    def test_engine_has_no_attach_silently_leaves(self):
+    def test_engine_without_attach_method_leaves_variable_unattached(self):
         class NoAttachEngine:
             MAX_T = 24
-            START_DATE = None
-        engine = NoAttachEngine()
-        v = make_proj_variable("t", owner="o", group="g", model_engine=engine)
+
+        v = make_proj_variable("t", owner="o", group="g", model_engine=NoAttachEngine())
         assert isinstance(v, TDimVariable)

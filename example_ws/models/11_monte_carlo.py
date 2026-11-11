@@ -57,15 +57,15 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
         for _, port_var in model.portfolios.items():
             port_var['asset_amount'] += port_var['asset_amount'] * r
             port_var['rfa_amount'] += port_var['rfa_amount'] * m_rf_rate
-            port_var['balance'][p] = sum(port_var['asset_amount']) + port_var['rfa_amount']
-            ret = port_var['balance'][p] / port_var['balance'][p - 1] - 1
-            port_var['return'][p] = ret
+            port_var['balance'][t] = sum(port_var['asset_amount']) + port_var['rfa_amount']
+            ret = port_var['balance'][t] / port_var['balance'][t - 1] - 1
+            port_var['return'][t] = ret
             port_var['sum_ret'] += ret
             port_var['sum_sqret'] += ret ** 2
 
             if p.month % (12 // port_var['rebalance_freq']) == 0:  # reblance at this month
-                port_var['asset_amount'] = port_var['balance'][p] * port_var['weight']
-                port_var['rfa_amount'] = port_var['balance'][p] * port_var['rfawgt']
+                port_var['asset_amount'] = port_var['balance'][t] * port_var['weight']
+                port_var['rfa_amount'] = port_var['balance'][t] * port_var['rfawgt']
 
     if t == model.MAX_T:
         for port_name, port_var in model.portfolios.items():

@@ -44,13 +44,14 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
   reads `model.time` / `model.period` (and read-only constants `START_DATE`, `END_DATE`, `MAX_T`,
   `SCENARIO`, `SIMULATION`, ...) and mutates output variables.
 
-- **`variables`** — bound functions write results into `ConstVariable` (scalar/array, constant) or
-  `TDimVariable` (indexed by `t`/`pd.Period`) instances. Variables self-register with the engine via
-  `attach_proj_variable`, can also use the syntactic sugar `@` operator `variable @ engine` or 
-  `variable @ engine.proj_variable_manager`. On run, the engine serializes them to `{slug}.proj.csv`. Each
-  variable carries `group`/`owner`/`name` and up to 3 labeled `dims` (lists, tuples or Enums), which become
-  row labels like `name[a:b:c]`. Use `proj_result(...)` (`vates/_core/_proj_result_reader.py`) to read `.proj.csv`
-  back into a DataFrame or a single cell `(group, owner, variable [, date])` value.
+- **`variables`** — use `ScalarVariable` or `ConstArrayVariable` for constant values, and
+  `TDimVariable` or `TDimArrayVariable` for values indexed by time. Time variables use integer `t`
+  indices and slices, not `pd.Period` indices. Array variables carry up to 3 labeled `dims` (lists,
+  tuples or Enums), which become row labels like `name[a:b:c]`. Variables self-register with the engine
+  via `attach_proj_variable`, or the syntactic sugar `variable @ engine` /
+  `variable @ engine.proj_variable_manager`. On run, the engine serializes them to `{slug}.proj.csv`.
+  Use `proj_result(...)` (`vates/_core/_proj_result_reader.py`) to read `.proj.csv` back into a DataFrame
+  or a single cell `(group, owner, variable [, date])` value.
 
 - **`StochExecutor`** — multiprocessing wrapper over `ProjModelEngine` for stochastic runs.
   `configure_run` takes `simulations` (a string like `"1-10,13"`) and `max_workers`. It splits

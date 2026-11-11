@@ -4,8 +4,10 @@ from vates._core import (
     StochExecutor,
     time_synchronized,
     make_proj_variable,
-    ConstVariable,
+    ScalarVariable,
+    ConstArrayVariable,
     TDimVariable,
+    TDimArrayVariable,
     proj_result,
 )
 from vates import alm
@@ -24,7 +26,10 @@ __all__ = [
     'StochExecutor',
     'time_synchronized',
     'make_proj_variable',
-    'ConstVariable',
+    'ScalarVariable',
+    'ConstArrayVariable',
+    'TDimVariable',
+    'TDimArrayVariable',
     'TDimVariable',
     'proj_result',
     # utils

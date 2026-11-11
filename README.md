@@ -103,18 +103,21 @@ The runlog can be found in `results\my_model.runlog.json` file.
 
 #### 2. Add Variables for Model Output
 
-You can set up instances of `TDimVariable` and/or `ConstVariable`, and the `@` operator tells `model` to output the 
-projected results, which can be read by `model.proj_result`.
+Use `ScalarVariable` and `TDimVariable` for values without labeled dimensions.
+Use `ConstArrayVariable` and `TDimArrayVariable` when a value has labeled
+dimensions. The `@` operator attaches each variable to the model for output,
+which can be read by `model.proj_result`. Time-dimensioned variables are indexed
+by integer time steps or slices; use `model.time` rather than `model.period` as
+an index.
 
 ```python
-from vates import ProjModelEngine, ConstVariable, TDimVariable
+from vates import ProjModelEngine, ScalarVariable, TDimVariable
 
 model = ProjModelEngine(slug='my_model', description='example model')
 model.configure_run(start_year=2025, end_year=2026)
 
-const_var = ConstVariable('const_var', owner="owner", group="group") @ model
-tdim_var = TDimVariable('tdim_var', owner="owner", group="group",
-                        max_t=model.MAX_T, start_date=model.START_DATE) @ model
+const_var = ScalarVariable('const_var', owner="owner", group="group") @ model
+tdim_var = TDimVariable('tdim_var', owner="owner", group="group", max_t=model.MAX_T) @ model
 
 @model.bind_projection
 def my_projection(m: ProjModelEngine):

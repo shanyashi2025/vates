@@ -9,7 +9,7 @@ import json
 import pandas as pd
 import pytest
 
-from vates import ConstVariable, ProjModelEngine, TDimVariable, proj_result
+from vates import ProjModelEngine, ScalarVariable, TDimVariable, proj_result
 
 
 class TestWriteToggles:
@@ -49,8 +49,8 @@ def _bind_write_project(make_configured, tmp_path, slug="m"):
         model.tdim[model.time] = float(model.time)
 
     m.bind_projection(proj)
-    m.const = ConstVariable("const", owner="owner", group="group") @ m
-    m.tdim = TDimVariable("tdim", owner="owner", group="group", max_t=m.MAX_T, start_date=m.START_DATE) @ m
+    m.const = ScalarVariable("const", owner="owner", group="group") @ m
+    m.tdim = TDimVariable("tdim", owner="owner", group="group", max_t=m.MAX_T) @ m
     m.run()
     return m
 
@@ -103,7 +103,7 @@ class TestProjResultWrite:
         m2 = ProjModelEngine(slug="m")
         m2.configure_run(start_year=2026, end_year=2028, workspace_directory=str(tmp_path),
                          results_directory="results/base", enable_write_proj_result=False)
-        m2.const = ConstVariable("const", owner="owner", group="group") @ m2
+        m2.const = ScalarVariable("const", owner="owner", group="group") @ m2
 
         def proj(model: ProjModelEngine):
             model.const[...] = 7.0

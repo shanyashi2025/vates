@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from enum import Enum, auto
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
+from vates._core import ProjModelEngine, time_synchronized, TDimVariable, TDimArrayVariable, make_proj_variable
 from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
 from vates.alm._utils import ObjList
@@ -92,27 +92,27 @@ class AssetRecorder:
             # dims = asset_report_bases
             create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund',
                                                       dims=[asset_report_bases])
-            self.tdv_totass_rv_bd: TDimVariable = create_tdv("totass_rep_value_bd")
-            self.tdv_totass_rv_ad: TDimVariable = create_tdv("totass_rep_value_ad")
-            self.tdv_totass_ret_bd: TDimVariable = create_tdv("totass_inv_ret_bd")
-            self.tdv_totass_ror_pc_bd: TDimVariable = create_tdv("totass_ror_pc_bd")
-            self.tdv_totass_ret_ad: TDimVariable = create_tdv("totass_inv_ret_ad")
-            self.tdv_totass_ror_pc_ad: TDimVariable = create_tdv("totass_ror_pc_ad")
+            self.tdv_totass_rv_bd: TDimArrayVariable = create_tdv("totass_rep_value_bd")
+            self.tdv_totass_rv_ad: TDimArrayVariable = create_tdv("totass_rep_value_ad")
+            self.tdv_totass_ret_bd: TDimArrayVariable = create_tdv("totass_inv_ret_bd")
+            self.tdv_totass_ror_pc_bd: TDimArrayVariable = create_tdv("totass_ror_pc_bd")
+            self.tdv_totass_ret_ad: TDimArrayVariable = create_tdv("totass_inv_ret_ad")
+            self.tdv_totass_ror_pc_ad: TDimArrayVariable = create_tdv("totass_ror_pc_ad")
         if asset_categories:
             # dims = asset_categories
             create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund',
                                                       dims=[asset_categories])
-            self.tdv_catass_cf: TDimVariable = create_tdv("asset_cash_flow")
+            self.tdv_catass_cf: TDimArrayVariable = create_tdv("asset_cash_flow")
         if asset_categories and asset_report_bases:
             # dims = asset_categories, asset_report_bases
             create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund',
                                                       dims=[asset_categories, asset_report_bases])
-            self.tdv_catass_rv_bd: TDimVariable = create_tdv("asset_rep_value_bd")
-            self.tdv_catass_rv_ad: TDimVariable = create_tdv("asset_rep_value_ad")
-            self.tdv_catass_ret_bd: TDimVariable = create_tdv("asset_inv_ret_bd")
-            self.tdv_catass_ror_pc_bd: TDimVariable = create_tdv("asset_ror_pc_bd")
-            self.tdv_catass_ret_ad: TDimVariable = create_tdv("asset_inv_ret_ad")
-            self.tdv_catass_ror_pc_ad: TDimVariable = create_tdv("asset_ror_pc_ad")
+            self.tdv_catass_rv_bd: TDimArrayVariable = create_tdv("asset_rep_value_bd")
+            self.tdv_catass_rv_ad: TDimArrayVariable = create_tdv("asset_rep_value_ad")
+            self.tdv_catass_ret_bd: TDimArrayVariable = create_tdv("asset_inv_ret_bd")
+            self.tdv_catass_ror_pc_bd: TDimArrayVariable = create_tdv("asset_ror_pc_bd")
+            self.tdv_catass_ret_ad: TDimArrayVariable = create_tdv("asset_inv_ret_ad")
+            self.tdv_catass_ror_pc_ad: TDimArrayVariable = create_tdv("asset_ror_pc_ad")
 
         # rate of return indexers
         self.rate_of_return_bd: _RateOfReturnIndexer = _RateOfReturnIndexer(

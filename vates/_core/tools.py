@@ -3,7 +3,7 @@ from typing import Literal, overload
 
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core._time_synchronizer import ProjectionTimeSynchronizer
-from vates._core._proj_variables import ConstVariable, TDimVariable
+from vates._core._proj_variables import make_variable, ScalarVariable, ConstArrayVariable, TDimVariable, TDimArrayVariable
 
 
 class _FALLBACK:
@@ -91,8 +91,20 @@ def make_proj_variable(
     variable_type: Literal["const", "c"],
     owner: str,
     group: str,
-    dims: list | None = None,
-) -> ConstVariable:
+) -> ScalarVariable:
+    ...
+
+@overload
+def make_proj_variable(
+    name: str,
+    /,
+    *,
+    model_engine: ProjModelEngine | None = None,
+    variable_type: Literal["const", "c"],
+    owner: str,
+    group: str,
+    dims: list | tuple,
+) -> ConstArrayVariable:
     ...
 
 @overload
@@ -104,8 +116,20 @@ def make_proj_variable(
     variable_type: Literal["t", "time_dimensioned"] = "t",
     owner: str,
     group: str,
-    dims: list | None = None,
 ) -> TDimVariable:
+    ...
+
+@overload
+def make_proj_variable(
+    name: str,
+    /,
+    *,
+    model_engine: ProjModelEngine | None = None,
+    variable_type: Literal["t", "time_dimensioned"] = "t",
+    owner: str,
+    group: str,
+    dims: list | tuple,
+) -> TDimArrayVariable:
     ...
 
 def make_proj_variable(
@@ -116,19 +140,15 @@ def make_proj_variable(
     variable_type: Literal["const", "c", "tdim", "t", "time_dimensioned"] = "t",
     owner: str,
     group: str,
-    dims: list | None = None,
-) -> ConstVariable | TDimVariable:
+    dims: list | tuple | None = None,
+) -> ScalarVariable | ConstArrayVariable | TDimVariable | TDimArrayVariable:
     if not isinstance(variable_type, str):
         raise TypeError(f"Invalid type of 'variable_type': '{type(variable_type)}', expected 'str'.")
     if variable_type.lower() not in ("const", "c", "tdim", "t", "time_dimensioned"):
         raise ValueError(f"Invalid value of 'variable_type': '{variable_type}', expected ('const', 'tdim').")
 
     model_engine = model_engine or get_fallback_engine()
-
-    if variable_type.lower() in ("const", "c"):
-        var = ConstVariable(name, owner=owner, group=group, dims=dims)
-    else:
-        var = TDimVariable(name, owner=owner, group=group, dims=dims,
-                           max_t=model_engine.MAX_T, start_date=model_engine.START_DATE)
+    max_t = model_engine.MAX_T if not variable_type.lower() in ("const", "c") else None
+    var = make_variable(name, owner=owner, group=group, max_t=max_t, dims=dims)
 
     return var @ model_engine
