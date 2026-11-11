@@ -71,13 +71,12 @@ class ProjVariable(ABC):
     dims: tuple[tuple[str, ...], ...]
     result: float | int | np.ndarray | None
 
-    def resolve_dim_indices(self, keys: tuple | DimElemItem | Enum, /) -> tuple[int, ...]:
+    def resolve_dim_indices(self, *args: DimElemItem | Enum) -> tuple[int, ...]:
         dims = self.dims
-        keys = keys if isinstance(keys, tuple) else (keys, )
-        if len(keys) != len(dims):
-            raise ValueError(f"'{self.name}': {len(keys)} key(s) provided, expected {len(dims)}.")
+        if len(args) != len(dims):
+            raise ValueError(f"'{self.name}': {len(args)} key(s) provided, expected {len(dims)}.")
         indices: list[int] = []
-        for axis, arg in enumerate(keys):
+        for axis, arg in enumerate(args):
             try:
                 indices.append(dims[axis].index(_maybe_convert_to_str(arg)))
             except ValueError:

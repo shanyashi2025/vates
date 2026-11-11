@@ -74,6 +74,22 @@ class TestConstArrayVariable:
         assert v.ndim == 3
         assert v.dims == (("a", "b"), ("c",), ("d",))
 
+    def test_label_based_access(self):
+        v = ConstArrayVariable(
+            "c",
+            owner="o",
+            group="g",
+            dims=[["A", "B"], _AssetType],
+        )
+        v[...] = [[1.0, 2.0], [3.0, 4.0]]
+
+        indices = v.resolve_dim_indices("B", _AssetType.BOND)
+        assert indices == (1, 1)
+        assert v[...][indices] == 4.0
+
+        v[...][indices] = 9.0
+        assert v[1, 1] == 9.0
+
     @pytest.mark.parametrize("bad", ["foo", 42, 3.14])
     def test_dims_must_be_list_or_tuple(self, bad):
         with pytest.raises(TypeError):
@@ -121,6 +137,83 @@ class TestTDimArrayVariable:
         assert v.ndim == 1
         np.testing.assert_array_equal(v[0], [1.0, 2.0])
         np.testing.assert_array_equal(v[1:3], [[3.0, 4.0], [5.0, 6.0]])
+
+    def test_multidimensional_time_slice_and_assignment(self, configured):
+        v = TDimArrayVariable(
+            "t",
+            owner="o",
+            group="g",
+            dims=[["A", "B", "C"], ["x", "y", "z"]],
+            max_t=configured.MAX_T,
+        )
+        values = np.arange((configured.MAX_T + 1) * 9).reshape(configured.MAX_T + 1, 3, 3)
+        v.result[:] = values
+
+        np.testing.assert_array_equal(v[1:3, 2], values[1:3, 2])
+        v[1:3, 2] = [[100.0, 101.0, 102.0], [200.0, 201.0, 202.0]]
+        np.testing.assert_array_equal(
+            v[1:3, 2],
+            [[100.0, 101.0, 102.0], [200.0, 201.0, 202.0]],
+        )
+        assert v[1, 2, 0] == 100.0
+        assert v[2, 2, 2] == 202.0
+
+    def test_label_based_access_after_time_index(self, configured):
+        v = TDimArrayVariable(
+            "t",
+            owner="o",
+            group="g",
+            dims=[["A", "B"], _AssetType],
+            max_t=configured.MAX_T,
+        )
+        v[3] = [[1.0, 2.0], [3.0, 4.0]]
+
+        indices = v.resolve_dim_indices("B", _AssetType.BOND)
+        assert indices == (1, 1)
+        assert v[3][indices] == 4.0
+
+        v[3][indices] = 9.0
+        assert v[3, 1, 1] == 9.0
+
+
+class TestResolveDimIndices:
+    @pytest.mark.parametrize(
+        ("keys", "expected"),
+        [
+            (("B", "Y"), (1, 2)),
+            (("B", 2), (1, 1)),
+        ],
+    )
+    def test_resolves_labels(self, keys, expected):
+        v = ConstArrayVariable(
+            "c",
+            owner="o",
+            group="g",
+            dims=[["A", "B"], ["X", 2, "Y"]],
+        )
+        assert v.resolve_dim_indices(*keys) == expected
+
+    def test_single_key_for_one_dimension(self):
+        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
+        assert v.resolve_dim_indices("A") == (0,)
+
+    def test_resolves_enum_labels(self):
+        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"], _AssetType])
+        assert v.resolve_dim_indices("B", _AssetType.BOND) == (1, 1)
+
+    def test_empty_dimensions_resolve_to_empty_tuple(self):
+        v = TDimVariable("t", owner="o", group="g", max_t=2)
+        assert v.resolve_dim_indices() == ()
+
+    def test_wrong_number_of_keys_raises(self):
+        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A"], ["X"]])
+        with pytest.raises(ValueError, match="expected 2"):
+            v.resolve_dim_indices("A")
+
+    def test_unknown_label_raises_key_error(self):
+        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
+        with pytest.raises(KeyError, match="not in dims"):
+            v.resolve_dim_indices("missing")
 
 
 class TestVariableCaches:
