@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import warnings
-from typing import Any, Self
+from typing import Any, overload
 
 
 _MISSING: object = object()
@@ -87,7 +87,13 @@ class KeyedArray:
         """Mapping from keys to integer-position indices for each dimension."""
         return self._at.key_pos_pairs
 
-    def key_to_pos(self, dim: int | str, key: Any, default = _MISSING) -> int:
+    @overload
+    def key_to_pos(self, dim: int | str, key: Any) -> int: ...
+
+    @overload
+    def key_to_pos(self, dim: int | str, key: Any, *, default: object) -> int | object: ...
+
+    def key_to_pos(self, dim: int | str, key: Any, *, default: object = _MISSING) -> int | object:
         """Return the integer-position index mapped from the key of the dimension.
 
         Args:
@@ -269,7 +275,13 @@ class _AtIndexer:
             return default
         return dim_names
 
-    def _parse_pos_tuple(self, keys, default = _MISSING) -> tuple[int, ...]:
+    @overload
+    def _parse_pos_tuple(self, keys, /) -> tuple[int, ...]: ...
+
+    @overload
+    def _parse_pos_tuple(self, keys, /, *, default: object) -> tuple[int, ...] | object: ...
+
+    def _parse_pos_tuple(self, keys, /, *, default: object = _MISSING) -> tuple[int, ...] | object:
         """Convert a tuple of keys into a tuple of integer-position indices.
 
         Args:
@@ -333,7 +345,7 @@ class _AtIndexer:
         Returns:
             The element at the specified keys, or `default_value` if lookup fails.
         """
-        pos_tuple = self._parse_pos_tuple(args, None)
+        pos_tuple = self._parse_pos_tuple(args, default=None)
         if pos_tuple is None:
             return default_value
         return self._nparray[pos_tuple]
