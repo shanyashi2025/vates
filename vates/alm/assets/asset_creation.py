@@ -1,7 +1,9 @@
-from typing import Any
+from typing import Any, Literal, overload
 
 from vates.alm.assets.cash import Cash
+from vates.alm.assets.bond_fixed import BondFixed
 from vates.alm.assets.equity import Equity
+from vates.alm.assets.derivatives.equity_option import EquityOption
 from vates.alm.assets.builders.bond_fixed_builder import BondFixedBuilder
 from vates.alm.assets.builders.equity_option_builder import EquityOptionBuilder
 
@@ -14,9 +16,34 @@ _DEFAULT_CREATOR_CLASS_DICT = {
     "equity_option": EquityOptionBuilder,
 }
 
+@overload
+def create_asset(asset_cls: Literal["cash"], /, *, build_pipeline: list[str | tuple[str, dict]] | None = None,
+                 creator_class_dict: dict[str, Any] | None = None, dynamic_setattrs: dict[str, Any] | None = None,
+                 **kwargs) -> Cash: ...
 
-def create_asset(asset_cls, /, *, build_pipeline: list[str | tuple[str, dict]] | None = None,
-                 creator_class_dict: dict[str, Any] = None, dynamic_setattrs: dict[str, Any] | None = None, **kwargs):
+@overload
+def create_asset(asset_cls: Literal["equity"], /, *, build_pipeline: list[str | tuple[str, dict]] | None = None,
+                 creator_class_dict: dict[str, Any] | None = None, dynamic_setattrs: dict[str, Any] | None = None,
+                 **kwargs) -> Equity: ...
+
+@overload
+def create_asset(asset_cls: Literal["bond", "bond_fixed", "fixed_bond"], /, *, build_pipeline: list[str | tuple[str, dict]] | None = None,
+                 creator_class_dict: dict[str, Any] | None = None, dynamic_setattrs: dict[str, Any] | None = None,
+                 **kwargs) -> BondFixed: ...
+
+@overload
+def create_asset(asset_cls: Literal["equity_option"], /, *, build_pipeline: list[str | tuple[str, dict]] | None = None,
+                 creator_class_dict: dict[str, Any] | None = None, dynamic_setattrs: dict[str, Any] | None = None,
+                 **kwargs) -> EquityOption: ...
+
+@overload
+def create_asset(asset_cls: str, /, *, build_pipeline: list[str | tuple[str, dict]] | None = None,
+                 creator_class_dict: dict[str, Any] | None = None, dynamic_setattrs: dict[str, Any] | None = None,
+                 **kwargs) -> object: ...
+
+def create_asset(asset_cls: str, /, *, build_pipeline: list[str | tuple[str, dict]] | None = None,
+                 creator_class_dict: dict[str, Any] | None = None, dynamic_setattrs: dict[str, Any] | None = None,
+                 **kwargs) -> object:
     """
     Factory function to create an asset.
 
@@ -36,6 +63,8 @@ def create_asset(asset_cls, /, *, build_pipeline: list[str | tuple[str, dict]] |
     """
     if creator_class_dict is None:
         creator_class_dict = _DEFAULT_CREATOR_CLASS_DICT
+    else:
+        creator_class_dict = _DEFAULT_CREATOR_CLASS_DICT | creator_class_dict
 
     creator_class = creator_class_dict.get(asset_cls) or asset_cls
 
@@ -43,7 +72,7 @@ def create_asset(asset_cls, /, *, build_pipeline: list[str | tuple[str, dict]] |
         obj = creator_class(**kwargs).build(build_pipeline)
     else:
         if build_pipeline:
-            raise ValueError(f"{asset_cls}: build_pipeline is provided ({build_pipeline}), "
+            raise ValueError(f"{asset_cls}: 'build_pipeline' is provided ({build_pipeline}), "
                              f"but creator class {creator_class} doesn't have 'build' method.")
         obj = creator_class(**kwargs)  # directly construct
 

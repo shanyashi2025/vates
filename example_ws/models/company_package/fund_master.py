@@ -178,20 +178,19 @@ def fund_rebalance(model_engine: ProjModelEngine, fund: Fund, rebalance_params: 
 
 def get_fund_size(fund: Fund, size_type: str, *, asset_size_basis: str) -> float:
     if size_type == "FUND":
-        return fund.get_total(key=f"asset.{asset_size_basis}") + fund.free_proceeds
-        # return fund.get_total(func=lambda x, y: x + y, key=(f"asset.{asset_size_basis}", "uninvested_proceeds"))
+        return fund.get_total_asset_attr(asset_size_basis) + fund.free_proceeds
     elif size_type == "MATH_RES":
-        return fund.get_total(key="liab.math_res_if")
+        return fund.get_total_liability_attr("math_res_if")
     elif size_type == "SURR_VALUE":
-        return fund.get_total(key="liab.surr_val_if")
+        return fund.get_total_liability_attr("surr_val_if")
     elif size_type == "ACCT_VALUE":
-        return fund.get_total(key="liab.acct_val_if")
+        return fund.get_total_liability_attr("acct_val_if")
     elif size_type == "ASSET_SHARE":
-        return fund.get_total(key="liab.asset_share_if_bd")
+        return fund.get_total_liability_attr("asset_share_if_bd")
     elif size_type == "MAX_AS_MATH":
-        return fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+        return max(fund.get_total_liability_attr("asset_share_if_bd"), fund.get_total_liability_attr("math_res_if"))
     elif size_type == "MAX_AS_CSV":
-        return fund.get_total(func=lambda x, y: max(x, y), key=("liab.asset_share_if_bd", "liab.math_res_if"))
+        return max(fund.get_total_liability_attr("asset_share_if_bd"), fund.get_total_liability_attr("surr_val_if"))
     else:
         raise ValueError(f"Invalid {size_type=}.")
 

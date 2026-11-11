@@ -385,39 +385,63 @@ class ProjModelEngine:
             "INTERPRETER": sys.executable,
         }
 
+    @overload
+    def load_json(self, filename: str, /, *, allow_not_found: Literal[False] = False, **kwargs) -> dict: ...
+
+    @overload
+    def load_json(self, filename: str, /, *, allow_not_found: Literal[True], **kwargs) -> dict | None: ...
+
+    @overload
+    def load_json(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> dict | None: ...
+
     def load_json(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> dict | None:
         filepath = self.get_filepath(filename)
         if filepath:
             with open(filepath, 'r', **kwargs) as jsonfile:
                 return json.load(jsonfile)
-        elif allow_not_found:
+        if allow_not_found:
             self._append_traced_message(f"INFO: JSON file '{filename}' not found, 'None' is return.")
             return None
-        else:
-            ext_warn = "" if filename.lower().endswith('.json') else "You might forget to include '.json' in filename."
-            raise FileNotFoundError(f"JSON file '{filename}' not exists in input directories. {ext_warn}")
+        ext_warn = "" if filename.lower().endswith('.json') else "You might forget to include '.json' in filename."
+        raise FileNotFoundError(f"JSON file '{filename}' not exists in input directories. {ext_warn}")
+
+    @overload
+    def read_csv(self, filename: str, /, *, allow_not_found: Literal[False] = False, **kwargs) -> pd.DataFrame: ...
+
+    @overload
+    def read_csv(self, filename: str, /, *, allow_not_found: Literal[True], **kwargs) -> pd.DataFrame | None: ...
+
+    @overload
+    def read_csv(self, filename: str, /, *, allow_not_found: bool = ..., **kwargs) -> pd.DataFrame | None: ...
 
     def read_csv(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
         filepath = self.get_filepath(filename)
         if filepath:
             return pd.read_csv(filepath, **kwargs)
-        elif allow_not_found:
+        if allow_not_found:
             self._append_traced_message(f"INFO: CSV file '{filename}' not found, 'None' is return.")
             return None
-        else:
-            ext_warn = "" if filename.lower().endswith('.csv') else "You might forget to include '.csv' in filename."
-            raise FileNotFoundError(f"CSV file '{filename}' does not exist in input directories. {ext_warn}")
+        ext_warn = "" if filename.lower().endswith('.csv') else "You might forget to include '.csv' in filename."
+        raise FileNotFoundError(f"CSV file '{filename}' does not exist in input directories. {ext_warn}")
+
+    @overload
+    def read_excel(self, filename: str, /, *, allow_not_found: Literal[False] = False, **kwargs) -> pd.DataFrame: ...
+
+    @overload
+    def read_excel(self, filename: str, /, *, allow_not_found: Literal[True], **kwargs) -> pd.DataFrame: ...
+
+    @overload
+    def read_excel(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None: ...
 
     def read_excel(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
         filepath = self.get_filepath(filename)
         if filepath:
             return pd.read_excel(filepath, **kwargs)
-        elif allow_not_found:
+        if allow_not_found:
             self._append_traced_message(f"INFO: Excel file '{filename}' not found, 'None' is return.")
             return None
-        else:
-            ext_warn = "" if filename.lower().endswith('.xlsx') else "You might forget to include '.xlsx' in filename."
-            raise FileNotFoundError(f"Excel file '{filename}' does not exist in input directories. {ext_warn}")
+        ext_warn = "" if filename.lower().endswith('.xlsx') else "You might forget to include '.xlsx' in filename."
+        raise FileNotFoundError(f"Excel file '{filename}' does not exist in input directories. {ext_warn}")
 
     def get_filepath(self, filename: str, /) -> Path | None:
         """Return the path of `filename` in the input directories, first match wins.

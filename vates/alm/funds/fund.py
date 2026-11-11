@@ -1,7 +1,9 @@
 import pandas as pd
 import warnings
-from typing import Callable, Self, Literal
+from collections.abc import Iterable
+from typing import Literal
 
+from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 from vates._core import ProjModelEngine, time_synchronized
 from vates.alm.allocator import ProceedsKeeper
 from vates.alm.assets import Asset, Cash
@@ -88,7 +90,7 @@ class Fund:
         return self._free_proceeds_keeper
 
     @property
-    def liabs(self) -> ObjList[Liab]:
+    def liabilities(self) -> ObjList[Liab]:
         return self._liabs
 
     @property
@@ -96,7 +98,7 @@ class Fund:
         return self._asset_rec.total_cash_flow
 
     @property
-    def total_liab_cash_flow(self) -> float:
+    def total_liability_cash_flow(self) -> float:
         return self._liab_rec.total_cash_flow
 
     @property
@@ -107,49 +109,33 @@ class Fund:
     def rate_of_return_ad(self) -> _RateOfReturnIndexer:
         return self._asset_rec.rate_of_return_ad
 
-    def assemble_on_start(self, *, existing_assets: Asset | list[Asset] | None,
-                          existing_liabs: Liab | list[Liab] | None = None) -> None:
-        """Assemble the fund.
-
-        Aggregates asset and liability values, and marks the fund as assembled.
+    def add_asset(self, obj: Asset | Iterable[Asset], /) -> None:
+        """Add asset object(s) to the fund.
 
         Args:
-            existing_assets (Asset | list[Asset] | None): Existing assets to be included.
-            existing_liabs (Liab | list[Liab] | None): Existing liabilities to be included.
+            obj (Asset | Iterable[Asset]): Asset(s) to be included.
 
         """
-        if existing_assets is None:
-            pass
-        elif isinstance(existing_assets, list):
-            self._assets.extend(existing_assets)
+        if isinstance(obj, Iterable):
+            self._assets.extend(obj)
         else:
-            self._assets.append(existing_assets)
+            self._assets.append(obj)
 
-        if existing_liabs is None:
-            pass
-        elif isinstance(existing_liabs, list):
-            self._liabs.extend(existing_liabs)
+    def add_liability(self, obj: Liab | Iterable[Liab], /) -> None:
+        """Add liability object(s) to the fund.
+
+        Args:
+            obj (Liab | Iterable[Liab]): Liability(s) to be included.
+
+        """
+        if isinstance(obj, Iterable):
+            self._liabs.extend(obj)
         else:
-            self._liabs.append(existing_liabs)
+            self._liabs.append(obj)
 
-        # validate if any duplicate asset objects
-        assets_set = set(self._assets)
-        if len(self._assets) != len(assets_set):
-            dup_lst = [x for x in assets_set if self._assets.count(x) > 1]
-            warnings.warn(f"{dup_lst} duplicate asset objects, including '{dup_lst[:min(5, len(dup_lst))]}'.")
-
-        # validate if any duplicate liability objects
-        liabs_set = set(self._liabs)
-        if len(self._liabs) != len(liabs_set):
-            dup_lst = [x for x in liabs_set if self._liabs.count(x) > 1]
-            warnings.warn(f"{dup_lst} duplicate liability objects, including '{dup_lst[:min(5, len(dup_lst))]}'.")
-
-        # validate if any profile asset objects
-        for asset in self._assets:
-            if asset.is_profile:
-                warnings.warn(f"Unexpected profile asset '{asset}'")
-
-        # record
+    def record_on_start(self) -> None:
+        """ Record on projection start, typically at `time 0`
+        """
         self._asset_rec.record_before_dealing(require_cash_flow=False, require_investment_return=False)
         self._asset_rec.record_after_dealing(require_investment_return=False)
         self._liab_rec.record_before_dealing(require_cash_flow=False)
@@ -184,49 +170,27 @@ class Fund:
     def record_free_proceeds(self, timing: Literal["bd", "ad", "end"]):
         self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance, timing)
 
-    def get_total(self, *, func: Callable | None = None, key: str | tuple[str, ...] | dict[str, str],
-                  allow_not_exist: bool = False) -> float:
-        """ Get the fund total value of the requested key
+    def get_total_asset_attr(self, attr_name: str, /, *, allow_undefined: bool | None = None) -> float:
+        """ Get the sum of a numeric attribute of total assets
 
         Args:
-            func (Callable | None): Function, defaults to None.
-            key (str | tuple[str, ...] | dict[str, str]): Requested key, use `asset.<attr_name>` and/or `liab.<attr_name>`
-                to indicate an attribute of assets or liabilities.
-            allow_not_exist (bool): True if allow not-exist attribute and return 0.0, defaults to False.
-
-        Examples:
-            1. get_total(key="liab.math_res_if")
-            2. get_total(func=lambda x, y: max(x, y), key=("liab.surr_val_bd", "liab.math_res_if")
-            3. get_total(func=lambda x, y: max(x, y), key={"x": "liab.surr_val_bd", "y": "liab.math_res_if"})
-            4. get_total(func=lambda x, y: x + y, key=(f"asset.FAV", "uninvested_proceeds"))
+            attr_name (str): Requested attribute name.
+            allow_undefined (bool): True if allow undefined attribute and return 0.0, defaults to False.
 
         """
-        if func is None:
-            return self._get_total(key, allow_not_exist)
-        if isinstance(key, str):
-            return func(self._get_total(key, allow_not_exist))
-        elif isinstance(key, tuple):
-            args = tuple([self._get_total(x, allow_not_exist) for x in key])
-            return func(*args)
-        elif isinstance(key, dict):
-            kwargs = {k: self._get_total(v, allow_not_exist) for k, v in key.items()}
-            return func(**kwargs)
-        raise TypeError(f"Invalid {type(key)=}, expected 'str', 'tuple', 'dict'.")
+        allow_undefined = (GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS) if allow_undefined is None else allow_undefined
+        return self._assets.sum_attr(attr_name, allow_undefined=allow_undefined)
 
-    def _get_total(self, key: str, allow_not_exist: bool = False) -> float:
-        if not isinstance(key, str):
-            raise TypeError(f"Invalid {type(key)=}, expected 'str'.")
+    def get_total_liability_attr(self, attr_name: str, /, *, allow_undefined: bool | None = None) -> float:
+        """ Get the sum of a numeric attribute of total liabilities
 
-        if "." not in key:
-            return getattr(self, key, 0.0 if allow_not_exist else None)
+        Args:
+            attr_name (str): Requested attribute name.
+            allow_undefined (bool): True if allow undefined attribute and return 0.0, defaults to False.
 
-        obj_name, attr_name, *_ = key.split(".")
-        if obj_name in ("asset", "assets"):
-            return self._assets.sum_attr(attr_name, allow_not_exist=allow_not_exist)
-        elif obj_name in ("liab", "liabs", "liability", 'liabilities'):
-            return self._liabs.sum_attr(attr_name, allow_not_exist=allow_not_exist)
-        else:
-            raise ValueError(f"Invalid '{key}', expected 'asset.attr' or 'liab.attr'.")
+        """
+        allow_undefined = (GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS) if allow_undefined is None else allow_undefined
+        return self._liabs.sum_attr(attr_name, allow_undefined=allow_undefined)
 
     def record_after_dealing(self, scope: Literal["assets", "liabs"] | list[Literal["assets", "liabs"]]) -> None:
         scope = scope if isinstance(scope, list) else [scope]

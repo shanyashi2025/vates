@@ -62,11 +62,12 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             existing_assets = AssetMaster.existing_from_df(
                 assets_df_dict, model_engine=model, econs=model.econ_master, fund_id=fund_id
             ).all
+            fund.add_asset(existing_assets)
             if fund is not model.fund_master.sh_fund:
                 existing_liabs = build_liabs(model_engine=model, df=liabs_df, epl_df=epl_df, fund_id=fund_id, currencies=[])
-            else:
-                existing_liabs = None
-            fund.assemble_on_start(existing_assets=existing_assets, existing_liabs=existing_liabs)
+                fund.add_liability(existing_liabs)
+
+            fund.record_on_start()
             model.liab_cf[fund] = np.zeros(model.MAX_T + 1)
 
     else:  # t > 1
@@ -104,7 +105,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             # step 2: liabs roll forward
             inv_ret_bd = fund.rate_of_return_bd[t, "FAV"]
             as_cf_ret = 0  # # specify the rate
-            for liab in fund.liabs:
+            for liab in fund.liabilities:
                 liab.roll_forward(inv_ret_bd=inv_ret_bd, as_cf_ret=as_cf_ret)
             fund.record_before_dealing(scope="liabs")
 
@@ -120,7 +121,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
 
             # step 4: liabs update after dealing (ad)
             inv_ret_ad = fund.rate_of_return_ad[t, "FAV"]
-            for liab in fund.liabs:
+            for liab in fund.liabilities:
                 liab.close_dealing(inv_ret_ad=inv_ret_ad)
             fund.record_after_dealing(scope="liabs")
 
@@ -129,7 +130,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             fund.record_free_proceeds("end")
 
             # step 6: store liability cash flow
-            model.liab_cf[fund][t] = fund.total_liab_cash_flow
+            model.liab_cf[fund][t] = fund.total_liability_cash_flow
 
     if t == model.MAX_T:
         model.bel_dict = {}

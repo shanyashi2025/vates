@@ -2,7 +2,7 @@ import math
 import numpy as np
 import pandas as pd
 from enum import Enum, unique
-from typing import Any, Self, NamedTuple
+from typing import Any, NamedTuple
 
 from vates import ProjModelEngine
 from vates.alm import (create_asset, Asset, Cash, BondFixed, Equity, EquityOption, YieldCurve, Spread, DefaultRisk,
@@ -135,7 +135,7 @@ class AssetMaster:
         model_engine: ProjModelEngine,
         econs: dict[str, object] | EconMaster,
         fund_id: str | None = None
-    ) -> Self:
+    ) -> 'AssetMaster':
         """
         Build existing assets objects from a dictionary of DataFrame and add them to a fund if provided.
 
@@ -149,17 +149,17 @@ class AssetMaster:
             An AssetMaster object.
         """
         if isinstance(econs, EconMaster):
-            currencies = [item.econ_obj for item in econs.currencies]
-            equity_indices = [item.econ_obj for item in econs.equity_indices]
-            yield_curves = [item.econ_obj for item in econs.yield_curves]
-            spreads = [item.econ_obj for item in econs.spreads]
-            default_risks = [item.econ_obj for item in econs.default_risks]
+            currencies: list[Currency] = [item.econ_obj for item in econs.currencies]
+            equity_indices: list[EquityIndex] = [item.econ_obj for item in econs.equity_indices]
+            yield_curves: list[YieldCurve] = [item.econ_obj for item in econs.yield_curves]
+            spreads: list[Spread] = [item.econ_obj for item in econs.spreads]
+            default_risks: list[DefaultRisk] = [item.econ_obj for item in econs.default_risks]
         elif isinstance(econs, dict):
-            currencies = econs['currencies']
-            equity_indices = econs['equity_indices']
-            yield_curves = econs['yield_curves']
-            spreads = econs['spreads']
-            default_risks = econs['default_risks']
+            currencies: list[Currency] = econs['currencies']
+            equity_indices: list[EquityIndex] = econs['equity_indices']
+            yield_curves: list[YieldCurve] = econs['yield_curves']
+            spreads: list[Spread] = econs['spreads']
+            default_risks: list[DefaultRisk] = econs['default_risks']
         else:
             raise TypeError(f"Invalid type of 'econs': {type(econs)}, expected 'dict' or 'EsgMaster'.")
 
@@ -200,7 +200,7 @@ class AssetMaster:
         model_engine: ProjModelEngine,
         econs: dict[str, Any] | EconMaster,
         fund_id: str | None = None,
-    ) -> Self:
+    ) -> 'AssetMaster':
         """
         Build profile assets objects from a dictionary of DataFrame.
 
@@ -352,6 +352,8 @@ class AssetMaster:
             provided_cash_flow_id = row["provided_cash_flow_id"]
             is_cash_flow_provided = provided_cash_flow_id.lower() != 'none'
             if is_cash_flow_provided:
+                if provided_cash_flow_df is None:
+                    raise ValueError(f"Require provided_cash_flow_id: '{provided_cash_flow_id}', but data is not provided.")
                 fixed_cash_flow = cls.get_provided_bond_cash_flow_from_df(
                     df=provided_cash_flow_df,
                     provided_cash_flow_id=provided_cash_flow_id,
@@ -599,7 +601,7 @@ class AssetMaster:
         df: pd.DataFrame,
         *,
         model_engine: ProjModelEngine,
-        fund_id: str,
+        fund_id: str | None,
         currencies: list['Currency'],
         equity_indices: list['EquityIndex']
     ) -> list:
@@ -619,7 +621,8 @@ class AssetMaster:
         equity_list = []
 
         df_flt: pd.DataFrame = df.copy()
-        df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
+        if fund_id is not None:
+            df_flt = df_flt.loc[(df["fund_id"] == fund_id)]
         p: pd.Period = model_engine.period
         str_cal_ym = str(p.year * 100 + p.month)
 
@@ -701,12 +704,16 @@ class AssetMaster:
             ifrs_classification = row["ifrs_classification"]
             local_classification = row["local_classification"]
             stat_classification = row["stat_classification"]
+            if "build_pipeline" in df.columns:
+                build_pipeline: list[str] | None = str(row["build_pipeline"]).split(cls.pipe_operator)
+            else:
+                build_pipeline = None
 
             # create instance
             equity_option = create_asset(
                 "equity_option",
                 model_engine=model_engine,
-                build_pipeline=row["build_pipeline"].split(cls.pipe_operator) if "build_pipeline" in df.columns else None,
+                build_pipeline=build_pipeline,
                 asset_id=asset_id,
                 attr_aliases=AssetReportItems.get_report_items(
                     asset_cls="equity_option",
