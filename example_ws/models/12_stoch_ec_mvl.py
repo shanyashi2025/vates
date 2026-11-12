@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from vates import StochExecutor, ProjModelEngine, make_proj_variable
 from vates.alm import Cash, BondFixed
 from vates.utils import KeyedArray
 from company_package import (
     run_with_json_config,
+    parse_int_list_from_str,
     load_file_df,
     EconMaster,
     AssetMaster,
@@ -141,7 +143,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
 
 
 def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str, max_workers: int,
-                 input_directories: list[str], workspace_directory: str | None = None, results_directory: str | None = None,
+                 input_directories: list[str], workspace_directory: str | None = None, results_directory: str = "",
                  slug: str = "stoch_ec_mvl", description: str = "Stochastic EC MVL model"):
     stoch = StochExecutor(
         slug=slug,
@@ -149,14 +151,14 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
                     f"from {start_year}/{start_month} to {end_year}/12."
     )
     stoch.configure_run(
-        simulations=simulations,
+        simulations=parse_int_list_from_str(simulations),
         start_year=start_year,
         start_month=start_month,
         end_year=end_year,
         end_month=12,
         scenario=scenario,
         max_workers=max_workers,
-        workspace_directory=workspace_directory,
+        workspace_directory=workspace_directory or Path.cwd(),
         input_directories=input_directories,
         results_directory=results_directory
     )

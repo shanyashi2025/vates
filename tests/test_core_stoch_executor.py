@@ -29,8 +29,8 @@ def _stoch_proj(model: ProjModelEngine):
     model.balance[model.time] = float(model.time)  # deterministic per sim
 
 
-def _make_executor(*, slug="stoch", tmp_path, input_directories=None,
-                   simulations="1-2", max_workers=MAX_WORKERS_DEFAULT):
+def _make_executor(*, slug="stoch", tmp_path, input_directories=(),
+                   simulations=(1, 2), max_workers=MAX_WORKERS_DEFAULT):
     executor = StochExecutor(slug=slug)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -47,10 +47,6 @@ def _make_executor(*, slug="stoch", tmp_path, input_directories=None,
 
 
 class TestConfigureRun:
-    def test_simulations_parsed(self, tmp_path):
-        se = _make_executor(tmp_path=tmp_path, simulations="1-10,13")
-        assert se.SIMULATIONS == list(range(1, 11)) + [13]
-
     def test_max_workers_defaults_to_one(self, tmp_path):
         se = _make_executor(tmp_path=tmp_path, max_workers=None)
         assert se._run_config.max_workers == 1
@@ -70,7 +66,7 @@ class TestConfigureRun:
     def test_double_configure_raises(self, tmp_path):
         se = _make_executor(tmp_path=tmp_path)
         with pytest.raises(ValueError, match="already set"):
-            se.configure_run(simulations="1-2", start_year=2026)
+            se.configure_run(simulations=(1, 2), start_year=2026)
 
     def test_relative_results_directory_resolved_against_workspace(self, tmp_path):
         se = _make_executor(tmp_path=tmp_path)
@@ -79,16 +75,6 @@ class TestConfigureRun:
     def test_relative_input_directories_resolved_against_workspace(self, tmp_path):
         se = _make_executor(tmp_path=tmp_path, input_directories=["inputs"])
         assert se._run_config.input_directory_paths == [(tmp_path / "inputs").resolve()]
-
-    def test_duplicate_input_file_warns_once(self, tmp_path):
-        for d in ("a", "b"):
-            (tmp_path / d).mkdir()
-            (tmp_path / d / "same.json").write_text("{}", encoding="utf-8")
-        se = _make_executor(tmp_path=tmp_path, input_directories=["a", "b"])
-        with pytest.warns(UserWarning, match="Duplicate input file 'same.json'") as record:
-            se.get_filepath("same.json")
-            se.get_filepath("same.json")
-        assert len(record) == 1
 
 
 class TestBindProjection:

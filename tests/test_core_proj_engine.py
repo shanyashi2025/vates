@@ -219,17 +219,6 @@ class TestFileSearch:
             df = m.read_csv("f.csv")
         assert df["x"].tolist() == [1]
 
-    def test_duplicate_warning_emitted_once(self, make_engine, tmp_path):
-        for d in ("a", "b", "c"):
-            (tmp_path / d).mkdir()
-            (tmp_path / d / "dup.csv").write_text("x\n1\n", encoding="utf-8")
-        m = self._configured(make_engine, tmp_path, ["a", "b", "c"])
-        with pytest.warns(UserWarning, match="Duplicate input file 'dup.csv'") as record:
-            first = m.get_filepath("dup.csv")
-            second = m.get_filepath("dup.csv")  # cached -> no second warning
-        assert len(record) == 1
-        assert first == second == (tmp_path / "a" / "dup.csv").resolve()
-
     def test_no_warning_when_unique(self, make_engine, tmp_path):
         (tmp_path / "a").mkdir()
         (tmp_path / "a" / "only.csv").write_text("x\n1\n", encoding="utf-8")
@@ -262,8 +251,8 @@ class TestFileSearch:
         (tmp_path / "a" / "f.csv").write_text("x\n1\n", encoding="utf-8")
         m = self._configured(make_engine, tmp_path, ["a"])
         m.get_filepath("f.csv")
-        cached = m._cached_filepath["f.csv"]
-        assert cached == ((tmp_path / "a" / "f.csv").resolve(), [(tmp_path / "a" / "f.csv").resolve()])
+        cached = m._filepath_cache["f.csv"]
+        assert cached == (tmp_path / "a" / "f.csv").resolve()
 
 
 class TestSetattrGuard:

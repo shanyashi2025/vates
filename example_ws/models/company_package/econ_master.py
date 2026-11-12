@@ -8,7 +8,8 @@ from vates import ProjModelEngine
 from vates._core import time_synchronized
 from vates.alm import YieldCurve, Spread, DefaultRisk, EquityIndex, Currency
 from vates.finmath import interpolate_interest_rates
-from vates.utils import KeyedArray, parse_int_list_from_str
+from vates.utils import KeyedArray
+from .utils import parse_int_list_from_str
 
 
 @dataclass(slots=True)

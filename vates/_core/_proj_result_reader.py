@@ -24,6 +24,18 @@ def proj_result(
 ) -> float:
     ...
 
+@overload
+def proj_result(
+    *,
+    results_directory: str | Path,
+    slug: str,
+    group: str | None = None,
+    owner: str | None = None,
+    variable: str | None = None,
+    date: str | int | pd.Period | None = None,
+) -> pd.DataFrame | Any:
+    ...
+
 def proj_result(
     *,
     results_directory: str | Path,

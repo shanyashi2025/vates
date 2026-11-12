@@ -4,7 +4,8 @@
     "start_month": 12,
     "end_year": 2124,
     "scenario": "base",
-    "input_directories": ["inputs/12_stoch_ec_mvl"],
     "simulations": "1-9",
+    "input_directories": ["inputs/12_stoch_ec_mvl"],
+    "results_directory": "results/base",
     "max_workers": 3
 }

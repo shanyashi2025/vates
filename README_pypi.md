@@ -50,7 +50,7 @@ time: 12, period: 2026-12
 Projection ended, END_DATE=2026-12
 ```
 
-The runlog can be found in `results\my_model.runlog.json` file.
+The runlog can be found in `my_model.runlog.json` file.
 
 
 #### 2. Add Variables for Model Output
@@ -95,7 +95,7 @@ val = model.proj_result(
 print(f"{val:.4f}")  # 202602.0200
 ```
 
-The projected results are saved on disk as a `.proj.csv` file - `results\my_model.proj.csv`, which can be read by 
+The projected results are saved on disk as a `.proj.csv` file - `my_model.proj.csv`, which can be read by 
 the function `proj_result`.
 
 ```python

@@ -12,8 +12,8 @@ class ProjectionTimeSynchronizer:
     """
 
     def __init__(self, time: int | None = None, period: pd.Period | None = None):
-        self.time: int | None = time
-        self.period: pd.Period | None = period
+        self.time: int = time
+        self.period: pd.Period = period
         self._listeners: weakref.WeakSet = weakref.WeakSet()
 
     def set(self, *, time: int | None = None, period: pd.Period | None = None) -> None:

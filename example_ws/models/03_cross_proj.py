@@ -1,5 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
+from pathlib import Path
 
 from vates import ProjModelEngine
 from vates.utils import KeyedArray
@@ -105,7 +106,7 @@ class MinCapContext:
             self.pv_la_lower_limit += epl.at[item, 'pv_la_lower_limit', date_col]
 
 def cross_model(start_year: int, start_month: int, end_year: int, scenario: str, input_directories: list[str],
-                workspace_directory: str | None = None, results_directory: str | None = None,
+                workspace_directory: str | None = None, results_directory: str = "",
                 slug: str = "cross_model", description: str = "C-ROSS minimum capital projection"):
     model = ProjModelEngine(
         slug=slug,
@@ -117,7 +118,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
         end_year=end_year,
         end_month=12,
         scenario=scenario,
-        workspace_directory=workspace_directory,
+        workspace_directory=workspace_directory or Path.cwd(),
         input_directories=input_directories,
         results_directory=results_directory
     )

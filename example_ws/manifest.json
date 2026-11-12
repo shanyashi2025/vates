@@ -39,7 +39,7 @@
                     },
                     "results_directory": {
                         "type": "string",
-                        "description": "If missing, `results/{scenario}/` will be used"
+                        "description": "If missing, workspace directory will be used"
                     }
                 },
                 "required": ["start_year", "start_month", "end_year", "scenario", "input_directories"]
@@ -85,7 +85,7 @@
                     },
                     "results_directory": {
                         "type": "string",
-                        "description": "If missing, `results/{scenario}/` will be used"
+                        "description": "If missing, workspace directory will be used"
                     }
                 },
                 "required": ["start_year", "start_month", "end_year", "scenario", "input_directories"]
@@ -131,7 +131,7 @@
                     },
                     "results_directory": {
                         "type": "string",
-                        "description": "If missing, `results/{scenario}/` will be used"
+                        "description": "If missing, workspace directory will be used"
                     }
                 },
                 "required": ["start_year", "start_month", "end_year", "scenario", "input_directories"]
@@ -177,7 +177,7 @@
                     },
                     "results_directory": {
                         "type": "string",
-                        "description": "If missing, `results/{scenario}/` will be used"
+                        "description": "If missing, workspace directory will be used"
                     }
                 },
                 "required": ["start_year", "start_month", "end_year", "scenario", "input_directories"]
@@ -233,7 +233,7 @@
                     },
                     "results_directory": {
                         "type": "string",
-                        "description": "If missing, `results/{scenario}/` will be used"
+                        "description": "If missing, workspace directory will be used"
                     }
                 },
                 "required": ["start_year", "start_month", "end_year", "scenario", "simulations", "input_directories"]
@@ -288,7 +288,7 @@
                     },
                     "results_directory": {
                         "type": "string",
-                        "description": "If missing, `results/{scenario}/` will be used"
+                        "description": "If missing, workspace directory will be used"
                     }
                 },
                 "required": ["start_year", "start_month", "end_year", "scenario", "simulations", "max_workers", "input_directories"]

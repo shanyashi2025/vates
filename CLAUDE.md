@@ -46,24 +46,23 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
 
 - **`variables`** — use `ScalarVariable` or `ConstArrayVariable` for constant values, and
   `TDimVariable` or `TDimArrayVariable` for values indexed by time. Time variables use integer `t`
-  indices and slices, not `pd.Period` indices. Array variables carry up to 3 labeled `dims` (lists,
-  tuples or Enums), which become row labels like `name[a:b:c]`. Variables self-register with the engine
-  via `attach_proj_variable`, or the syntactic sugar `variable @ engine` /
-  `variable @ engine.proj_variable_manager`. On run, the engine serializes them to `{slug}.proj.csv`.
-  Use `proj_result(...)` (`vates/_core/_proj_result_reader.py`) to read `.proj.csv` back into a DataFrame
-  or a single cell `(group, owner, variable [, date])` value.
+  indices and slices. Array variables carry labeled `dims` (lists, tuples or Enums), which become 
+  row labels like `name[a:b:c]`. Variables self-register with the engine via `attach_proj_variable`, 
+  or the syntactic sugar `variable @ engine` / `variable @ engine.proj_variable_manager`. On run, 
+  the engine serializes them to `{slug}.proj.csv`. Use `proj_result(...)` (`vates/_core/_proj_result_reader.py`) 
+  to read `.proj.csv` back into a DataFrame or a single cell `(group, owner, variable [, date])` value.
 
 - **`StochExecutor`** — multiprocessing wrapper over `ProjModelEngine` for stochastic runs.
-  `configure_run` takes `simulations` (a string like `"1-10,13"`) and `max_workers`. It splits
+  `configure_run` takes `simulations` (a list or tuple of int) and `max_workers`. It splits
   simulations into batches across a `ProcessPoolExecutor`; each batch runs simulations through a
   fresh engine instance, appending rows to per-batch `.stoch.csv` files. A `.stoch.stat.csv` is
   produced only when inputs include a `__stoch_setting__.json` with a `statistic` dict
-  (mean/std/median/max/min and `perc%`). Two caveats: the bound function is executed in worker
-  processes, so it must be top-level/picklable.
+  (mean/std/median/max/min and `perc%`). The bound function is executed in worker processes, 
+  so it must be top-level/picklable.
 
 - **`RunConfig`** (`vates/_core/_run_configuration.py`) — frozen dataclass with exhaustive validation
-  (`validate_number` / `validate_string` / `validate_period` / ...); created via `RunConfig.create`.
-  `max_t` is constrained to 0–2400, months capped 0–2400 steps, period range 1900-01 to 5999-12.
+  (`validate_number` / `validate_str` / `validate_period` / ...). `max_t` is a `cached_property` representing
+  the number of projection months, calculated as the difference between start date and end date.
 
 ### Time synchronization pattern
 
@@ -80,9 +79,8 @@ with the running projection. `vates/alm/assets/asset_base.py` is the canonical e
 
 High-level Asset–Liability Management building blocks that plug into the projection engine:
 
-- **`econs/`** — economic/ESG items: `YieldCurve` (spot-rate curve with a `last_update` time tag),
-  `Spread`, `DefaultRisk`, `EquityIndex`, `Currency`. These are updated each time-step 
-  by an ESG master before assets roll forward.
+- **`econs/`** — economic/ESG items: `YieldCurve`, `Spread`, `DefaultRisk`, `EquityIndex`, `Currency`. 
+  These shall be updated each time-step before assets roll forward.
 - **`assets/`** — asset classes (`Cash`, `Equity`, `BondFixed`, derivatives `EquityOption`) built on
   the `Asset` abstract base. Each asset implements a `roll_forward()` / `close_dealing()` lifecycle.
   Distinguishes *profile* (to-be-purchased) vs *existing* assets. 
@@ -91,10 +89,9 @@ High-level Asset–Liability Management building blocks that plug into the proje
   A builder performs a named `build_pipeline` of calibration steps (e.g. `derive_coupon_rate`, 
   `calculate_amort_rate`, `calibrate_market_spread`, `calculate_market_price`, `risk_neutralize`) 
   then validates required prices/spreads before constructing the asset.
-- **`funds/`** — fund accounting (`Fund`) with an asset allocator and fund recorder (fund value,
-  target weight / `AssetAllocationGroup`, `TargetWeight`).
+- **`funds/`** — fund (`Fund`) with recorders (`AssetRecorder`, `LiabRecorder`, `OtherRecorder`).
+- **`allocator/`** — `Rebalancer` realigns groups of assets.
 - **`liabs/`** — liability base class (`Liab`) and `ExternalLiab` for liabilities calculated externally.
-- **`enums.py`** — shared Enums (`AssetBuySellApproach`, `AssetPurchaseMethod`, ...).
 
 ### Financial math (`vates/finmath/`)
 
@@ -106,12 +103,11 @@ spreading/interpolation/extrapolation, Smith–Wilson extrapolation, Black–Sch
 
 ### Solvency (`vates/solvency/`)
 
-Currently a China C-ROSS (Phase-II) module (`cn_cross2/`: regulatory `rules.py` and `quant_risk_min_cap.py`). 
-Compute quantitative-risk minimum capital.
+A tree-based framework (`RiskNode` and `RiskTree`) is implemented for modeling solvency capital.
 
 ### `utils/`
 
-- `vates/utils/` — helpers: `lifecycle`, `numeric_dataclass`, `uncategorized`.
+- `vates/utils/` — helpers: `lifecycle`, `keyed_array`.
 
 ### Example workflows
 
@@ -133,7 +129,7 @@ outputs (`example_ws/results/`, `example_ws/intermediate/`) are git-ignored.
   `_initialized` flag set at the end of `__init__`. After arming: overwriting a class-level member
   raises `AttributeError` (except properties with a setter, e.g. `time`/`period`); adding a new
   underscore-prefixed member raises `AttributeError`; adding a new *public* member is allowed and
-  traced as `INFO: Add member: ...` in the runlog. Framework internals write through
+  traced as `[INFO] Add member: ...` in the runlog. Framework internals write through
   `super().__setattr__` (used in `bind_projection`/`configure_run`); the `_projection`/`_run_config`/
   `_proj_cls` fields are created lazily, so "is set" is tested with `hasattr`, not `is None`.
 - Dates are represented as monthly `pd.Period` objects; time steps are integers `t` from `0`.

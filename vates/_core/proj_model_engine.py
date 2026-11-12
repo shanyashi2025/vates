@@ -4,7 +4,6 @@ import glob
 import inspect
 import json
 import os
-import sys
 import pandas as pd
 import traceback
 import warnings
@@ -13,10 +12,13 @@ from pathlib import Path
 from types import MethodType
 from typing import Any, Callable, Literal, Self, get_type_hints, overload
 
+from vates._core._helper import get_environ, get_f_filename_lineno, search_file_in_dirs
 from vates._core._proj_result_reader import proj_result
 from vates._core._proj_variables import ProjVariable, ProjVariableManager
 from vates._core._run_configuration import RunConfiguration
 from vates._core._time_synchronizer import ProjectionTimeSynchronizer
+
+_MISSING: object = object()
 
 class ProjModelEngine:
     """Actuarial projection model engine.
@@ -43,7 +45,7 @@ class ProjModelEngine:
         # runtime stuffs
         self._time_synchronizer: ProjectionTimeSynchronizer = ProjectionTimeSynchronizer()
         self._proj_variable_manager: ProjVariableManager = ProjVariableManager()
-        self._cached_filepath: dict[str, tuple[Path | None, list[Path]]] = {}
+        self._filepath_cache: dict[str, Path | None] = {}
         self._result_files: set = set()
         self._messages: list[str] = []
         self._runlog: dict = {}
@@ -78,8 +80,9 @@ class ProjModelEngine:
 
         sig_params = inspect.signature(func).parameters
         if len(sig_params) == 0:
-            self._append_traced_message(f"INFO: Function '{func.__name__}' has no argument, it will be bound as a "
-                                        f"function instead of a method.")
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: [INFO] Function '{func.__name__}' has no argument, it will be bound as a "
+                                  f"function instead of a method.")
             super().__setattr__('_projection', func)
         else:
             try:
@@ -116,7 +119,8 @@ class ProjModelEngine:
                 )
             super().__setattr__('_projection',  MethodType(func, self))
 
-        self._append_traced_message(f"INFO: Function {func} has been bound to {self}.")
+        f, l = get_f_filename_lineno()
+        self._messages.append(f"{f}:{l}: [INFO] Function {func} has been bound to {self}.")
 
         return self
 
@@ -124,18 +128,18 @@ class ProjModelEngine:
         self,
         *,
         start_year: int,
-        start_month: int | None = None,
+        start_month: int = 12,
         end_year: int | None = None,
-        end_month: int | None = None,
-        scenario: str | None = None,
-        simulation: int | None = None,
-        workspace_directory: str | Path | None = None,
-        input_directories: list[str | Path] | None = None,
-        results_directory: str | Path | None = None,
+        end_month: int = 12,
+        scenario: str = "",
+        simulation: int = 0,
+        workspace_directory: str | Path = Path.cwd(),
+        input_directories: list[str | Path] | tuple[str | Path, ...] = (),
+        results_directory: str | Path = "",
         is_delete_existing_results: bool = True,
         enable_write_proj_result: bool = True,
-        stoch_result_file_mode: Literal['w', 'a', None] = None,
-        stoch_result_file_id: str | None = None,
+        stoch_result_file_mode: Literal['w', 'a', 'n'] = 'n',
+        stoch_result_file_id: str = "",
         enable_write_runlog: bool = True,
     ) -> Self:
         """Set the configuration for a run.
@@ -145,57 +149,42 @@ class ProjModelEngine:
             start_month (int, optional): Projection start month. Defaults to 12.
             end_year (int, optional): Projection end year. Defaults to `start_year`.
             end_month (int, optional): Projection end month. Defaults to 12.
-            scenario (str, optional): Scenario. Defaults to None.
-            simulation (int, optional): Simulation (stochastic). Defaults to None.
-            workspace_directory (str | Path, optional): Workspace directory, must be absolute path. Defaults to `{os.getcwd()}`.
-            input_directories (list[str | Path], optional): List of input directory, relative paths are resolved against `workspace_directory`. Defaults to None.
-            results_directory (str | Path, optional): Results directory, relative paths are resolved against `workspace_directory`. Defaults to 'results/`scenario`'.
+            scenario (str, optional): Scenario. Defaults to empty str `""`.
+            simulation (int, optional): Simulation (stochastic). Defaults to 0.
+            workspace_directory (str | Path, optional): Workspace directory, must be absolute path. Defaults to `{Path.cwd()}`.
+            input_directories (list[str | Path] | tuple[str | Path, ...], optional): List or tuple of input directory,
+                relative paths are resolved against `workspace_directory`. Defaults to empty tuple `()`.
+            results_directory (str | Path, optional): Results directory, relative paths are resolved against
+                `workspace_directory`. Defaults to `{Path.cwd()}`.
             is_delete_existing_results (bool, optional): Delete existing results if any. Defaults to True.
             enable_write_proj_result (bool, optional): Enable writing projection result. Defaults to True.
-            stoch_result_file_mode (Literal['w', 'a'], optional): Stochastic result writer mode. Defaults to None.
-            stoch_result_file_id (str, optional): Stochastic result id. Defaults to None.
+            stoch_result_file_mode (Literal['w', 'a', 'n'], optional): Stochastic result writer mode. Defaults to "n".
+            stoch_result_file_id (str, optional): Stochastic result id. Defaults to empty `""`.
             enable_write_runlog (bool, optional): Enable writing run log. Defaults to True.
         """
         if hasattr(self, '_run_config'):
             raise ValueError(f"Run configuration is already set.")
         if start_year is None:
             raise ValueError(f"start_year: value 'None' is not allowed.")
-
-        none_items: list[str] = []
-        workspace_directory = RunConfiguration.apply_default_if_none(
-            "workspace_directory", workspace_directory, os.getcwd(), record=none_items
-        )
+        start_date = pd.Period(f"{start_year}-{start_month}", freq='M')
+        end_date = pd.Period(f"{end_year or start_year}-{end_month}", freq='M')
         workspace_directory_path = Path(workspace_directory)
-        results_directory = RunConfiguration.apply_default_if_none(
-            "results_directory",
-            results_directory,
-            workspace_directory_path / "results" / (scenario or ""),
-            record=none_items
-        )
-        # `results_directory` and `input_directories` may be given relative to the workspace directory.
-        if not Path(results_directory).is_absolute():
-            results_directory = workspace_directory_path / results_directory
-        if input_directories:
-            input_directories = [workspace_directory_path / d for d in input_directories]
-        super().__setattr__('_run_config', RunConfiguration.create(
-            start_year=start_year,
-            start_month=RunConfiguration.apply_default_if_none("start_month", start_month, 12, record=none_items),
-            end_year=RunConfiguration.apply_default_if_none("end_year", end_year, start_year, record=none_items),
-            end_month=RunConfiguration.apply_default_if_none("end_month", end_month, 12, record=none_items),
+        super().__setattr__('_run_config', RunConfiguration(
+            start_date=start_date,
+            end_date=end_date,
             scenario=scenario,
             simulation=simulation,
-            workspace_directory=workspace_directory,
-            input_directories=input_directories,
-            results_directory=results_directory,
+            workspace_directory_path=workspace_directory_path,
+            input_directory_paths=[workspace_directory_path / d for d in input_directories],  # resolve against workspace_directory
+            results_directory_path=workspace_directory_path / Path(results_directory),  # resolve against workspace_directory
             is_delete_existing_results=is_delete_existing_results,
             enable_write_proj_result=enable_write_proj_result,
             stoch_result_file_mode=stoch_result_file_mode,
             stoch_result_file_id=stoch_result_file_id,
             enable_write_runlog=enable_write_runlog,
+            simulations=(),
+            max_workers=1,
         ))
-
-        if len(none_items) > 0:
-            self._append_traced_message(f"INFO: Default configuration items: {', '.join(none_items)}.")
         return self
 
     def run(
@@ -212,7 +201,8 @@ class ProjModelEngine:
         if self.time is not None:
             msg = f"'time={self.time} will be reset to iterate from 0 to {self.MAX_T}."
             warnings.warn(msg)
-            self._append_traced_message(f"WARNING: {msg}")
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: [WARNING] {msg}")
 
         exec_start_time = datetime.now()
         try:
@@ -249,9 +239,10 @@ class ProjModelEngine:
                     if f.endswith(remove_pattern):
                         os.remove(f)
                     else:
-                        msg = f"Exsiting file NOT deleted: '{f}'."
+                        msg = f"Existing file NOT deleted: '{f}'."
                         warnings.warn(msg)
-                        self._append_traced_message(f"INFO: {msg}")
+                        f, l = get_f_filename_lineno()
+                        self._messages.append(f"{f}:{l}: [INFO] {msg}")
         else:
             os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
         self._write_projection_result()
@@ -270,7 +261,7 @@ class ProjModelEngine:
         periods = pd.period_range(start=self.START_DATE, end=self.END_DATE, freq='M')
         period_col_list = list(map(lambda p: p.year * 100 + p.month, periods))
 
-        output_file = self._concat_output_file_path('.proj.csv')
+        output_file = self.RESULTS_DIRECTORY_PATH / f'{self._slug}.proj.csv'
         with open(output_file, 'w', newline='', encoding='utf-8-sig') as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(['group', 'owner', 'variable', 'constant'] + period_col_list)
@@ -300,7 +291,8 @@ class ProjModelEngine:
         periods = pd.period_range(start=self.START_DATE, end=self.END_DATE, freq='M')
         periods_m = pd.period_range(
             start=self.START_DATE, end=f'{min(self.START_YEAR + noy_mres, self.END_YEAR)}-{12}', freq='M')
-        periods_y = pd.period_range(start=self.START_YEAR, end=self.END_YEAR, freq='Y')
+        periods_y = pd.period_range(start=pd.Period(str(self.START_YEAR), freq='Y'),
+                                    end=pd.Period(str(self.END_YEAR), freq='Y'), freq='Y')
         dates = list(map(lambda p: p.year * 100 + p.month, periods))
         dates_m = list(map(lambda p: p.year * 100 + p.month, periods_m))
         dates_y = list(map(lambda p: p.year, periods_y))
@@ -308,19 +300,21 @@ class ProjModelEngine:
 
         file_id = self._run_config.stoch_result_file_id
         file_id += '.' if file_id else ''
-        output_file = self._concat_output_file_path(f'.{file_id}stoch.csv')
+        output_file = self.RESULTS_DIRECTORY_PATH / f'{self._slug}.{file_id}stoch.csv'
 
         output_mode = self._run_config.stoch_result_file_mode
         is_file_exist = output_file.is_file()
         if output_mode == 'w' and is_file_exist:
             msg = f"stoch_result_file_mode='w': existing '{output_file}' will be overwritten."
             warnings.warn(msg)
-            self._append_traced_message(msg)
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: {msg}")
         elif output_mode == 'a' and not is_file_exist:
             output_mode = 'w'
             msg = f"stoch_result_file_mode='a': but 'w' mode will be used because '{output_file}' does not exist."
             warnings.warn(msg)
-            self._append_traced_message(msg)
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: {msg}")
 
         with open(output_file, output_mode, newline='', encoding='utf-8-sig') as csvfile:
             writer = csv.writer(csvfile)
@@ -370,24 +364,16 @@ class ProjModelEngine:
                 "input_directories": [str(d) for d in self._run_config.input_directory_paths],
                 "results_directory": str(self.RESULTS_DIRECTORY_PATH),
             },
-            "environment": self._environ,
+            "environment": get_environ(),
             "results": list(map(str, self._result_files)),
             "messages": self._messages,
         })
 
         if self._run_config.enable_write_runlog:
             os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
-            with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
+            output_file = self.RESULTS_DIRECTORY_PATH / f'{self._slug}.runlog.json'
+            with open(output_file, 'w', encoding='utf-8') as jsonfile:
                 json.dump(self._runlog, jsonfile, indent=4)
-
-    @property
-    def _environ(self) -> dict[str, str]:
-        return {
-            "COMPUTERNAME": os.getenv("COMPUTERNAME"),
-            "USERNAME": os.getenv("USERNAME"),
-            "USERDOMAIN": os.getenv("USERDOMAIN"),
-            "INTERPRETER": sys.executable,
-        }
 
     @overload
     def load_json(self, filename: str, /, *, allow_not_found: Literal[False] = False, **kwargs) -> dict: ...
@@ -400,14 +386,15 @@ class ProjModelEngine:
 
     def load_json(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> dict | None:
         filepath = self.get_filepath(filename)
-        if filepath:
+        if filepath is not None:
             with open(filepath, 'r', **kwargs) as jsonfile:
                 return json.load(jsonfile)
         if allow_not_found:
-            self._append_traced_message(f"INFO: JSON file '{filename}' not found, 'None' is return.")
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: [INFO] JSON file '{filename}' not found, 'None' is return.")
             return None
-        ext_warn = "" if filename.lower().endswith('.json') else "You might forget to include '.json' in filename."
-        raise FileNotFoundError(f"JSON file '{filename}' not exists in input directories. {ext_warn}")
+        extra_msg = "" if filename.lower().endswith('.json') else "You perhaps forget to include '.json' in filename."
+        raise FileNotFoundError(f"JSON file '{filename}' not exists in input directories. {extra_msg}")
 
     @overload
     def read_csv(self, filename: str, /, *, allow_not_found: Literal[False] = False, **kwargs) -> pd.DataFrame: ...
@@ -420,13 +407,14 @@ class ProjModelEngine:
 
     def read_csv(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
         filepath = self.get_filepath(filename)
-        if filepath:
+        if filepath is not None:
             return pd.read_csv(filepath, **kwargs)
         if allow_not_found:
-            self._append_traced_message(f"INFO: CSV file '{filename}' not found, 'None' is return.")
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: [INFO] CSV file '{filename}' not found, 'None' is return.")
             return None
-        ext_warn = "" if filename.lower().endswith('.csv') else "You might forget to include '.csv' in filename."
-        raise FileNotFoundError(f"CSV file '{filename}' does not exist in input directories. {ext_warn}")
+        extra_msg = "" if filename.lower().endswith('.csv') else "You perhaps forget to include '.csv' in filename."
+        raise FileNotFoundError(f"CSV file '{filename}' does not exist in input directories. {extra_msg}")
 
     @overload
     def read_excel(self, filename: str, /, *, allow_not_found: Literal[False] = False, **kwargs) -> pd.DataFrame: ...
@@ -439,45 +427,33 @@ class ProjModelEngine:
 
     def read_excel(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
         filepath = self.get_filepath(filename)
-        if filepath:
+        if filepath is not None:
             return pd.read_excel(filepath, **kwargs)
         if allow_not_found:
-            self._append_traced_message(f"INFO: Excel file '{filename}' not found, 'None' is return.")
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: [INFO] Excel file '{filename}' not found, 'None' is return.")
             return None
-        ext_warn = "" if filename.lower().endswith('.xlsx') else "You might forget to include '.xlsx' in filename."
-        raise FileNotFoundError(f"Excel file '{filename}' does not exist in input directories. {ext_warn}")
+        extra_msg = "" if filename.lower().endswith('.xlsx') else "You perhaps forget to include '.xlsx' in filename."
+        raise FileNotFoundError(f"Excel file '{filename}' does not exist in input directories. {extra_msg}")
 
     def get_filepath(self, filename: str, /) -> Path | None:
         """Return the path of `filename` in the input directories, first match wins.
 
         When the same filename exists in more than one input directory, the first match
-        (per `input_directories` order) is returned and a warning is emitted once.
+        (per `input_directories` order) is returned.
         """
-        if filename not in self._cached_filepath:  # search and cache
-            chosen, matches = self._search_filepath(filename)
-            self._cached_filepath[filename] = (chosen, matches)
+        cache = self._filepath_cache
+        filepath = cache.get(filename, _MISSING)
+        if filepath is _MISSING:
+            matches = search_file_in_dirs(filename, dirs=self._run_config.input_directory_paths)
+            filepath = matches[0]
             if len(matches) > 1:
                 ignored = ", ".join(f"'{p}'" for p in matches[1:])
-                msg = (f"Duplicate input file '{filename}' found in multiple input directories; "
-                       f"using '{chosen}' (first per input_directories order). Ignored: {ignored}. "
-                       f"Reorder 'input_directories' to change precedence.")
-                warnings.warn(msg)
-                self._append_traced_message(f"WARNING: {msg}")
-        return self._cached_filepath[filename][0]
-
-    def _search_filepath(self, filename: str) -> tuple[Path | None, list[Path]]:
-        """Return `(chosen, matches)`: the first match per input-directory order and all matches."""
-        if (filepath := Path(filename)).is_absolute() and filepath.is_file():  # absolute path
-            return filepath, [filepath]
-        matches = []
-        for directory in self._run_config.input_directory_paths:  # search input_directory_paths sequentially
-            filepath = (directory / filename).resolve()
-            if filepath.is_file():
-                matches.append(filepath)
-        return (matches[0] if matches else None), matches
-
-    def _concat_output_file_path(self, filename: str, /) -> Path:
-        return self.RESULTS_DIRECTORY_PATH / f'{self._slug}{filename}'
+                f, l = get_f_filename_lineno()
+                self._messages.append(f"{f}:{l}: [INFO] '{filename}': duplicate found in multiple input directories; "
+                                      f"using '{filepath}' (first match); ignored: {ignored}.")
+            cache[filename] = filepath
+        return filepath
 
     @property
     def WORKSPACE_DIRECTORY_PATH(self) -> Path:
@@ -551,7 +527,7 @@ class ProjModelEngine:
         if not isinstance(value, int):
             raise TypeError(f"time: type {type(value)} is not allowed, expected 'int'.")
         if not 0 <= value <= self.MAX_T:
-            raise ValueError(f"time: value {value} is not allowed, execpted 0 to {self.MAX_T}.")
+            raise ValueError(f"time: value {value} is not allowed, expected 0 to {self.MAX_T}.")
         self._time_synchronizer.set(time=value, period=self.START_DATE + value)
 
     @property
@@ -575,12 +551,6 @@ class ProjModelEngine:
 
     def attach_proj_variable(self, proj_variable: ProjVariable, /) -> None:
         self._proj_variable_manager.attach_proj_variable(proj_variable)
-
-    def _append_traced_message(self, /, msg: str):
-        frame = inspect.currentframe().f_back
-        filename = os.path.abspath(frame.f_code.co_filename)
-        lineno = frame.f_lineno
-        self._messages.append(f"{filename}:{lineno}: {msg}")
 
     @overload
     def proj_result(self) -> pd.DataFrame:
@@ -606,5 +576,6 @@ class ProjModelEngine:
             elif name.startswith('_'):
                 raise AttributeError(f"Cannot add a private member (underscore-prefixed) '{name}'.")
             if not hasattr(self, name) and hasattr(self, "_messages"):
-                self._append_traced_message(f"INFO: Add member: '{name}' {type(value)}")
+                f, l = get_f_filename_lineno()
+                self._messages.append(f"{f}:{l}: [INFO] Add member: '{name}' {type(value)}")
         super().__setattr__(name, value)

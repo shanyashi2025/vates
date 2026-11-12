@@ -3,7 +3,6 @@ import glob
 import inspect
 import json
 import os
-import sys
 import pandas as pd
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -13,6 +12,7 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Any, Callable, Self, get_type_hints
 
+from vates._core._helper import get_environ, get_f_filename_lineno
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core._run_configuration import RunConfiguration
 
@@ -23,15 +23,12 @@ class StochExecutor:
     _proj_cls: type[ProjModelEngine]
     _projection: Callable
     _run_config: RunConfiguration
-    _sims_str: str
+    _n_sims: int
 
-    _append_traced_message = ProjModelEngine._append_traced_message
     load_json = ProjModelEngine.load_json
     read_csv = ProjModelEngine.read_csv
     read_excel = ProjModelEngine.read_excel
-    _concat_output_file_path = ProjModelEngine._concat_output_file_path
     get_filepath = ProjModelEngine.get_filepath
-    _search_filepath = ProjModelEngine._search_filepath
     proj_result = ProjModelEngine.proj_result
 
     def __init__(
@@ -44,7 +41,7 @@ class StochExecutor:
         self._description: str = str(description)
 
         # runtime stuffs
-        self._cached_filepath: dict[str, tuple[Path | None, list[Path]]] = {}
+        self._filepath_cache: dict[str, Path | None] = {}
         self._result_files: set = set()
         self._messages: list[str] = []
         self._sim_messages: list = []
@@ -112,22 +109,23 @@ class StochExecutor:
             )
         super().__setattr__('_proj_cls', proj_cls)
         super().__setattr__('_projection', func)
-        self._append_traced_message(f"INFO: Function {func} has been bound to {self}.")
+        f, l = get_f_filename_lineno()
+        self._messages.append(f"{f}:{l}: [INFO] Function {func} has been bound to {self}.")
         return self
 
     def configure_run(
         self,
         *,
-        start_year: int | None = None,
-        start_month: int | None = None,
+        start_year: int,
+        start_month: int = 12,
         end_year: int | None = None,
-        end_month: int | None = None,
-        scenario: str | None = None,
-        simulations: str,
-        workspace_directory: str | Path | None = None,
-        input_directories: list[str | Path] | None = None,
-        results_directory: str | Path | None = None,
-        max_workers: int | None = None,
+        end_month: int = 12,
+        scenario: str = "",
+        simulations: list[int] | tuple[int],
+        workspace_directory: str | Path = Path.cwd(),
+        input_directories: list[str | Path] | tuple[str | Path, ...] = (),
+        results_directory: str | Path ="",
+        max_workers: int = 1,
     ) -> Self:
         """Set the configuration for a run.
 
@@ -136,70 +134,56 @@ class StochExecutor:
             start_month (int, optional): Projection start month. Defaults to 12.
             end_year (int, optional): Projection end year. Defaults to `start_year`.
             end_month (int, optional): Projection end month. Defaults to 12.
-            scenario (str, optional): Scenario. Defaults to None.
-            simulations: (str, optional): Simulations.
-            workspace_directory (str | Path, optional): Workspace directory, must be absolute path. Defaults to `{os.getcwd()}`.
-            input_directories (list[str | Path], optional): List of input directory, relative paths are resolved against `workspace_directory`. Defaults to None.
-            results_directory (str | Path, optional): Results directory, relative paths are resolved against `workspace_directory`. Defaults to 'results/`scenario`'.
+            scenario (str, optional): Scenario. Defaults to empty str `""`.
+            simulations: (list[int] | tuple[int]): Simulations.
+            workspace_directory (str | Path, optional): Workspace directory, must be absolute path. Defaults to `{Path.cwd()}`.
+            input_directories (list[str | Path] | tuple[str | Path, ...], optional): List or tuple of input directory,
+                relative paths are resolved against `workspace_directory`. Defaults to empty tuple `()`.
+            results_directory (str | Path, optional): Results directory, relative paths are resolved against
+                `workspace_directory`. Defaults to `{Path.cwd()}`.
             max_workers (int, optional): Max workers. Defaults to 1.
         """
         if hasattr(self, '_run_config'):
             raise ValueError(f"Run configuration is already set.")
         if start_year is None:
             raise ValueError(f"start_year: value 'None' is not allowed.")
-
-        none_items: list[str] = []
-        workspace_directory = RunConfiguration.apply_default_if_none(
-            "workspace_directory", workspace_directory, os.getcwd(), record=none_items
-        )
+        start_date = pd.Period(f"{start_year}-{start_month}", freq='M')
+        end_date = pd.Period(f"{end_year or start_year}-{end_month}", freq='M')
         workspace_directory_path = Path(workspace_directory)
-        results_directory = RunConfiguration.apply_default_if_none(
-            "results_directory",
-            results_directory,
-            workspace_directory_path / "results" / (scenario or ""),
-            record=none_items
-        )
-        # `results_directory` and `input_directories` may be given relative to the workspace directory.
-        if not Path(results_directory).is_absolute():
-            results_directory = workspace_directory_path / results_directory
-        if input_directories:
-            input_directories = [workspace_directory_path / d for d in input_directories]
-        super().__setattr__('_sims_str', simulations)
-        super().__setattr__('_run_config', RunConfiguration.create(
-            start_year=start_year,
-            start_month=RunConfiguration.apply_default_if_none("start_month", start_month, 12, record=none_items),
-            end_year=RunConfiguration.apply_default_if_none("end_year", end_year, start_year, record=none_items),
-            end_month=RunConfiguration.apply_default_if_none("end_month", end_month, 12, record=none_items),
+        super().__setattr__('_n_sims', len(simulations))
+        super().__setattr__('_run_config', RunConfiguration(
+            start_date=start_date,
+            end_date=end_date,
             scenario=scenario,
             simulations=simulations,
-            workspace_directory=workspace_directory,
-            input_directories=input_directories,
-            results_directory=results_directory,
+            workspace_directory_path=workspace_directory_path,
+            input_directory_paths=[workspace_directory_path / d for d in input_directories],  # resolve against workspace_directory
+            results_directory_path=workspace_directory_path / Path(results_directory),  # resolve against workspace_directory
             is_delete_existing_results=True,
             enable_write_proj_result=False,
-            stoch_result_file_mode=None,
-            stoch_result_file_id=None,
+            stoch_result_file_mode="n",
+            stoch_result_file_id="",
             enable_write_runlog=True,
-            max_workers=self._apply_max_workers(
-                RunConfiguration.apply_default_if_none("max_workers", max_workers, 1, record=none_items)),
+            max_workers=self._apply_max_workers(max_workers),
+            simulation=0,
         ))
-
-        if len(none_items) > 0:
-            self._append_traced_message(f"INFO: Default configuration items: {', '.join(none_items)}.")
         return self
 
     def _apply_max_workers(self, requested_workers: int) -> int:
         if not isinstance(requested_workers, int):
-            self._append_traced_message(f"max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
             return 1
         if requested_workers <= 0:
-            self._append_traced_message(f"max_workers is set to 1: request={requested_workers}, exptect positive.")
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: max_workers is set to 1: request={requested_workers}, expected positive.")
             return 1
 
-        _cpu_count = cpu_count()
-        if requested_workers > _cpu_count:
-            self._append_traced_message(f"max_workers is set to {_cpu_count}: requested {requested_workers} > cpu_count.")
-        return min(requested_workers, _cpu_count)
+        n_cpu = cpu_count()
+        if requested_workers > n_cpu:
+            f, l = get_f_filename_lineno()
+            self._messages.append(f"{f}:{l}: max_workers is set to {n_cpu}: requested {requested_workers} > cpu_count.")
+        return min(requested_workers, n_cpu)
 
     def run(
         self,
@@ -220,7 +204,8 @@ class StochExecutor:
                 if f.endswith(remove_pattern):
                     os.remove(f)
                 else:
-                    self._append_traced_message(f"INFO: Exsiting file NOT deleted: '{f}'.")
+                    f, l = get_f_filename_lineno()
+                    self._messages.append(f"{f}:{l}: [INFO] Existing file NOT deleted: '{f}'.")
         else:
             os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
 
@@ -231,7 +216,7 @@ class StochExecutor:
         return self
 
     @staticmethod
-    def _create_batches(simulations: list[int], n_batches: int) -> list[tuple[int, ...]]:
+    def _create_batches(simulations: list[int] | tuple[int, ...], n_batches: int) -> list[tuple[int, ...]]:
         """Split simulations into batches for workers"""
         quotient, remainder = divmod(len(simulations), n_batches)
         batched_simulations = batched(simulations, n=quotient + (1 if remainder > 0 else 0))
@@ -339,13 +324,13 @@ class StochExecutor:
         stat_funcs: dict[str, Any] = {stat: stat for stat in ['mean', 'std', 'median', 'max', 'min'] if stat in stat_dict}
         if 'perc%' in stat_dict:
             for q in stat_dict['perc%']:
-                if not 0 < q < 100: raise ValueError(f"Invalidd perc%={q}, expected 0 to 100.")
+                if not 0 < q < 100: raise ValueError(f"Invalid perc%={q}, expected 0 to 100.")
                 stat_funcs[f"perc_{q}"] = lambda x, p=q: x.quantile(p / 100)
         agg_dict = {f"{col}:{stat}": (col, func) for col in time_cols for stat, func in stat_funcs.items()}
 
         statistic = df.groupby(meta_cols).agg(**agg_dict).reset_index()  # pandas 3.3.x might warn PerformanceWarning
 
-        output_file = self._concat_output_file_path('.stoch.stat.csv')
+        output_file = self.RESULTS_DIRECTORY_PATH / f'{self._slug}.stoch.stat.csv'
         statistic.to_csv(output_file, index=False)
         self._result_files.add(output_file)
 
@@ -379,29 +364,21 @@ class StochExecutor:
                 "end_year": self.END_YEAR,
                 "end_month": self.END_MONTH,
                 "scenario": self.SCENARIO,
-                "simulations": self._sims_str,
+                "n_simulations": self._n_sims,
                 "workspace_directory": str(self.WORKSPACE_DIRECTORY_PATH),
                 "input_directories": [str(d) for d in self._run_config.input_directory_paths],
                 "results_directory": str(self.RESULTS_DIRECTORY_PATH),
                 "max_workers": self._run_config.max_workers,
             },
-            "environment": self._environ,
+            "environment": get_environ(),
             "results": list(map(str, self._result_files)),
             "messages": self._messages + self._sim_messages,
         })
 
         if self._run_config.enable_write_runlog:
-            with open(self._concat_output_file_path(".runlog.json"), 'w', encoding='utf-8') as jsonfile:
+            output_file = self.RESULTS_DIRECTORY_PATH / f'{self._slug}.runlog.json'
+            with open(output_file, 'w', encoding='utf-8') as jsonfile:
                 json.dump(self._runlog, jsonfile, indent=4)
-
-    @property
-    def _environ(self) -> dict[str, str]:
-        return {
-            "COMPUTERNAME": os.getenv("COMPUTERNAME"),
-            "USERNAME": os.getenv("USERNAME"),
-            "USERDOMAIN": os.getenv("USERDOMAIN"),
-            "INTERPRETER": sys.executable,
-        }
 
     @property
     def WORKSPACE_DIRECTORY_PATH(self) -> Path:
@@ -422,7 +399,7 @@ class StochExecutor:
         return self._run_config.scenario
 
     @property
-    def SIMULATIONS(self) -> list[int]:
+    def SIMULATIONS(self) -> list[int] | tuple[int, ...]:
         """list[int]: Simulations for a stochastic run."""
         return self._run_config.simulations
 
@@ -468,5 +445,6 @@ class StochExecutor:
             elif name.startswith('_'):
                 raise AttributeError(f"Cannot add a private member (underscore-prefixed) '{name}'.")
             if not hasattr(self, name) and hasattr(self, "_messages"):
-                self._append_traced_message(f"INFO: Add member: '{name}' {type(value)}")
+                f, l = get_f_filename_lineno()
+                self._messages.append(f"{f}:{l}: [INFO] Add member: '{name}' {type(value)}")
         super().__setattr__(name, value)

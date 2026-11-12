@@ -4,5 +4,6 @@
     "start_month": 12,
     "end_year": 2026,
     "scenario": "base",
-    "input_directories": ["inputs/01_asset_proj"]
+    "input_directories": ["inputs/01_asset_proj"],
+    "results_directory": "results/base"
 }

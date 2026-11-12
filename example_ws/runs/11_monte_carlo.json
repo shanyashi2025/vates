@@ -4,7 +4,8 @@
     "start_month": 12,
     "end_year": 2034,
     "scenario": "base",
-    "input_directories": ["inputs/11_monte_carlo"],
     "simulations": "1-1000",
+    "input_directories": ["inputs/11_monte_carlo"],
+    "results_directory": "results/base",
     "max_workers": 4
 }

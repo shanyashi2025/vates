@@ -1,3 +1,4 @@
+from pathlib import Path
 from vates import ProjModelEngine
 from vates.alm import Cash
 from company_package import run_with_json_config, load_file_df, EconMaster, AssetMaster
@@ -11,7 +12,7 @@ except ImportError:
 
 
 def asset_model(start_year: int, start_month: int, end_year: int, scenario: str, input_directories: list[str],
-                workspace_directory: str | None = None, results_directory: str | None = None,
+                workspace_directory: str | None = None, results_directory: str = "",
                 slug: str = "asset_model", description: str = "Run off existing assets"):
     model = ProjModelEngine(
         slug=slug,
@@ -23,7 +24,7 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
         end_year=end_year,
         end_month=12,
         scenario=scenario,
-        workspace_directory=workspace_directory,
+        workspace_directory=workspace_directory or Path.cwd(),
         input_directories=input_directories,
         results_directory=results_directory
     )

@@ -13,7 +13,7 @@ except ImportError:
 
 import vates
 from vates import StochExecutor, ProjModelEngine, make_proj_variable
-from company_package import run_with_json_config
+from company_package import run_with_json_config, parse_int_list_from_str
 
 
 def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, sigma, corr_matrix, portfolio_params):
@@ -91,7 +91,7 @@ def port_monte_carlo_proj(model: ProjModelEngine, risk_free_rate, n_assets, mu, 
 
 def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, end_year: int, scenario: str,
                            input_directories: list[str], workspace_directory: str | None = None,
-                           results_directory: str | None = None, max_workers: int | None = None,
+                           results_directory: str = "", max_workers: int = 1,
                            slug: str = "monte_carlo", description: str = "Portfolio Monte Carlo simulation"):
     model = StochExecutor(
         slug=slug,
@@ -100,13 +100,13 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
     )
     model.bind_projection(port_monte_carlo_proj)
     model.configure_run(
-        simulations=simulations,
+        simulations=parse_int_list_from_str(simulations),
         start_year=start_year,
         start_month=start_month,
         end_year=end_year,
         end_month=12,
         scenario=scenario,
-        workspace_directory=workspace_directory,
+        workspace_directory=workspace_directory or Path.cwd(),
         input_directories=input_directories,
         results_directory=results_directory,
         max_workers=max_workers,
