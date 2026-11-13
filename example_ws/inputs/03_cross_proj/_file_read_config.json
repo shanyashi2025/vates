@@ -1,7 +1,7 @@
 {
     "funds": {"index_col": "fund_id"},
-    "bond_provided_cash_flow": {"allow_not_found": true, "keep_default_na": false},
-    "aging_assets_input_filelist": {"index_col": "date", "allow_not_found": true},
+    "bond_provided_cash_flow": {"optional": true, "keep_default_na": false},
+    "aging_assets_input_filelist": {"optional": true, "index_col": "date"},
     "epl": {"index_col": ["liab_id", "var_name"]},
     "cross_mc_factor": {"index_col": "date"}
 }

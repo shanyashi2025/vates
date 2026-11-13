@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -193,7 +194,7 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
         # --- (2) build asset objects that are in-force as at the time point ---
         aging_assets_df_dict = {
             item: model.read_csv(
-                aging_assets_input_filelist_df.at[date_index, item], keep_default_na=False, allow_not_found=True)
+                str(aging_assets_input_filelist_df.at[date_index, item]), keep_default_na=False, default=pd.DataFrame())
             for item in asset_filename_list
         }
         aging_assets_master_dict = {

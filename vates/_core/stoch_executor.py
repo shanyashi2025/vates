@@ -309,7 +309,7 @@ class StochExecutor:
         return exec_success
 
     def _write_stochastic_statistic(self):
-        stoch_setting = self.load_json('__stoch_setting__.json', allow_not_found=True)
+        stoch_setting = self.load_json('__stoch_setting__.json', default=None)
         if stoch_setting is None or stoch_setting.get('statistic', None) is None:
             return
 

@@ -1,11 +1,11 @@
 {
     "funds": {"index_col": "fund_id"},
     "assets_cash": {"index_col": "asset_id"},
-    "assets_equity": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
-    "assets_bond": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
-    "profile_equity": {"index_col": "_asset_id", "allow_not_found": true, "keep_default_na": false},
-    "profile_bond": {"index_col": "_asset_id", "allow_not_found": true, "keep_default_na": false},
-    "econ_asm": {"index_col": "item", "allow_not_found":  true},
-    "bond_provided_cash_flow": {"allow_not_found": true, "keep_default_na": false},
+    "assets_equity": {"optional": true, "index_col": "asset_id", "keep_default_na": false},
+    "assets_bond": {"optional": true, "index_col": "asset_id", "keep_default_na": false},
+    "profile_equity": {"optional": true, "index_col": "_asset_id", "keep_default_na": false},
+    "profile_bond": {"optional": true, "index_col": "_asset_id", "keep_default_na": false},
+    "econ_asm": {"optional": true, "index_col": "item"},
+    "bond_provided_cash_flow": {"optional": true, "keep_default_na": false},
     "aging_assets_output_config": {"index_col": "date"}
 }

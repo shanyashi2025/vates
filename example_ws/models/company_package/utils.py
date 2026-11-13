@@ -30,11 +30,14 @@ def load_file_df(read_func: Callable, filename_dict: dict[str, str], read_args: 
         if (include and key not in include) or (exclude and key in exclude):
             continue
 
-        kwargs = read_args.get(key) or {}
-        df = read_func(name, **kwargs)
-        if df is not None:
-            df = df.set_flags(allows_duplicate_labels=False)
-        file_df_dict[key] = df
+        kwargs = read_args.get(key, {})
+        if "optional" in kwargs:
+            optional: bool = kwargs["optional"]
+            kwargs.pop("optional")
+        else:
+            optional = False
+        df = read_func(name, default=pd.DataFrame(), **kwargs) if optional else read_func(name, **kwargs)
+        file_df_dict[key] = df.set_flags(allows_duplicate_labels=False)
 
     return file_df_dict
 

@@ -1,8 +1,8 @@
 {
     "assets_cash": {"index_col": "asset_id"},
-    "assets_equity": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
-    "assets_bond": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
-    "assets_equity_option": {"index_col": "asset_id", "allow_not_found": true, "keep_default_na": false},
-    "econ_asm": {"index_col": "item", "allow_not_found": true},
-    "bond_provided_cash_flow": {"allow_not_found": true, "keep_default_na": false}
+    "assets_equity": {"optional": true, "index_col": "asset_id", "keep_default_na": false},
+    "assets_bond": {"optional": true, "index_col": "asset_id", "keep_default_na": false},
+    "assets_equity_option": {"optional": true, "index_col": "asset_id", "keep_default_na": false},
+    "econ_asm": {"optional": true, "index_col": "item"},
+    "bond_provided_cash_flow": {"optional": true, "keep_default_na": false}
 }

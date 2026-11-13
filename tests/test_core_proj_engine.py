@@ -239,12 +239,14 @@ class TestFileSearch:
         m = self._configured(make_engine, tmp_path, ["a"])
         assert m.get_filepath("missing.csv") is None
 
-    def test_read_missing_raises_or_returns_none(self, make_engine, tmp_path):
+    def test_read_missing_raises_or_returns_default(self, make_engine, tmp_path):
         (tmp_path / "a").mkdir()
         m = self._configured(make_engine, tmp_path, ["a"])
         with pytest.raises(FileNotFoundError):
             m.read_csv("missing.csv")
-        assert m.read_csv("missing.csv", allow_not_found=True) is None
+        assert m.read_csv("missing.csv", default=None) is None
+        df = pd.DataFrame()
+        assert m.read_csv("missing.csv", default=df) is df
 
     def test_search_result_is_cached(self, make_engine, tmp_path):
         (tmp_path / "a").mkdir()

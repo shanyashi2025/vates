@@ -91,9 +91,9 @@ class KeyedArray:
     def key_to_pos(self, dim: int | str, key: Any) -> int: ...
 
     @overload
-    def key_to_pos(self, dim: int | str, key: Any, *, default: object) -> int | object: ...
+    def key_to_pos[T](self, dim: int | str, key: Any, *, default: T) -> int | T: ...
 
-    def key_to_pos(self, dim: int | str, key: Any, *, default: object = _MISSING) -> int | object:
+    def key_to_pos(self, dim: int | str, key: Any, *, default: Any = _MISSING) -> int | Any:
         """Return the integer-position index mapped from the key of the dimension.
 
         Args:
@@ -279,9 +279,9 @@ class _AtIndexer:
     def _parse_pos_tuple(self, keys, /) -> tuple[int, ...]: ...
 
     @overload
-    def _parse_pos_tuple(self, keys, /, *, default: object) -> tuple[int, ...] | object: ...
+    def _parse_pos_tuple[T](self, keys, /, *, default: T) -> tuple[int, ...] | T: ...
 
-    def _parse_pos_tuple(self, keys, /, *, default: object = _MISSING) -> tuple[int, ...] | object:
+    def _parse_pos_tuple(self, keys, /, *, default: Any = _MISSING) -> tuple[int, ...] | Any:
         """Convert a tuple of keys into a tuple of integer-position indices.
 
         Args:

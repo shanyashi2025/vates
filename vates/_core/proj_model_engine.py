@@ -253,7 +253,7 @@ class ProjModelEngine:
         if not self._run_config.enable_write_proj_result:
             return
         variables = self._proj_variable_manager.filter(
-            rule=self.load_json('__proj_variables__.json', allow_not_found=True))
+            rule=self.load_json('__proj_variables__.json', default=None))
         if not variables:
             return  # empty list
         variables.sort(key=lambda x: (x.group, x.owner, x.name))
@@ -277,7 +277,7 @@ class ProjModelEngine:
         """Write the stochastic result."""
         if not self._run_config.stoch_result_file_mode:
             return
-        rule = self.load_json('__stoch_variables__.json', allow_not_found=True)
+        rule = self.load_json('__stoch_variables__.json', default=None)
         if rule is None:
             return
         variables = self._proj_variable_manager.filter(rule)
@@ -285,8 +285,8 @@ class ProjModelEngine:
             return  # empty list
         variables.sort(key=lambda x: (x.group, x.owner, x.name))
 
-        stoch_setting = self.load_json('__stoch_setting__.json', allow_not_found=True)
-        noy_mres = stoch_setting.get('number_of_years_monthly_results_retained', 0) if stoch_setting else 0
+        stoch_setting = self.load_json('__stoch_setting__.json', default={})
+        noy_mres = stoch_setting.get('number_of_years_monthly_results_retained', 0)
 
         periods = pd.period_range(start=self.START_DATE, end=self.END_DATE, freq='M')
         periods_m = pd.period_range(
@@ -376,64 +376,49 @@ class ProjModelEngine:
                 json.dump(self._runlog, jsonfile, indent=4)
 
     @overload
-    def load_json(self, filename: str, /, *, allow_not_found: Literal[False] = False, **kwargs) -> dict: ...
+    def load_json[T](self, filename: str, /, *, default: T, **kwargs: Any) -> dict | T: ...
 
     @overload
-    def load_json(self, filename: str, /, *, allow_not_found: Literal[True], **kwargs) -> dict | None: ...
+    def load_json(self, filename: str, /, **kwargs: Any) -> dict: ...
 
-    @overload
-    def load_json(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> dict | None: ...
-
-    def load_json(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> dict | None:
+    def load_json(self, filename: str, /, *, default: Any = _MISSING, **kwargs: Any) -> dict | Any:
         filepath = self.get_filepath(filename)
         if filepath is not None:
             with open(filepath, 'r', **kwargs) as jsonfile:
                 return json.load(jsonfile)
-        if allow_not_found:
-            f, l = get_f_filename_lineno()
-            self._messages.append(f"{f}:{l}: [INFO] JSON file '{filename}' not found, 'None' is return.")
-            return None
-        extra_msg = "" if filename.lower().endswith('.json') else "You perhaps forget to include '.json' in filename."
+        if default is not _MISSING:
+            return default
+        extra_msg = "" if filename.lower().endswith('.json') else "Perhaps forget to include '.json' in `filename`."
         raise FileNotFoundError(f"JSON file '{filename}' not exists in input directories. {extra_msg}")
 
     @overload
-    def read_csv(self, filename: str, /, *, allow_not_found: Literal[False] = False, **kwargs) -> pd.DataFrame: ...
+    def read_csv[T](self, filename: str, /, *, default: T, **kwargs: Any) -> pd.DataFrame | T: ...
 
     @overload
-    def read_csv(self, filename: str, /, *, allow_not_found: Literal[True], **kwargs) -> pd.DataFrame | None: ...
+    def read_csv(self, filename: str, /, **kwargs: Any) -> pd.DataFrame: ...
 
-    @overload
-    def read_csv(self, filename: str, /, *, allow_not_found: bool = ..., **kwargs) -> pd.DataFrame | None: ...
-
-    def read_csv(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
+    def read_csv(self, filename: str, /, *, default: Any = _MISSING, **kwargs: Any) -> pd.DataFrame | Any:
         filepath = self.get_filepath(filename)
         if filepath is not None:
             return pd.read_csv(filepath, **kwargs)
-        if allow_not_found:
-            f, l = get_f_filename_lineno()
-            self._messages.append(f"{f}:{l}: [INFO] CSV file '{filename}' not found, 'None' is return.")
-            return None
-        extra_msg = "" if filename.lower().endswith('.csv') else "You perhaps forget to include '.csv' in filename."
+        if default is not _MISSING:
+            return default
+        extra_msg = "" if filename.lower().endswith('.csv') else "Perhaps forget to include '.csv' in `filename`."
         raise FileNotFoundError(f"CSV file '{filename}' does not exist in input directories. {extra_msg}")
 
     @overload
-    def read_excel(self, filename: str, /, *, allow_not_found: Literal[False] = False, **kwargs) -> pd.DataFrame: ...
+    def read_excel[T](self, filename: str, /, *, default: T, **kwargs: Any) -> pd.DataFrame | T: ...
 
     @overload
-    def read_excel(self, filename: str, /, *, allow_not_found: Literal[True], **kwargs) -> pd.DataFrame: ...
+    def read_excel(self, filename: str, /, **kwargs: Any) -> pd.DataFrame: ...
 
-    @overload
-    def read_excel(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None: ...
-
-    def read_excel(self, filename: str, /, *, allow_not_found: bool = False, **kwargs) -> pd.DataFrame | None:
+    def read_excel(self, filename: str, /, *, default: Any = _MISSING, **kwargs: Any) -> pd.DataFrame | Any:
         filepath = self.get_filepath(filename)
         if filepath is not None:
             return pd.read_excel(filepath, **kwargs)
-        if allow_not_found:
-            f, l = get_f_filename_lineno()
-            self._messages.append(f"{f}:{l}: [INFO] Excel file '{filename}' not found, 'None' is return.")
-            return None
-        extra_msg = "" if filename.lower().endswith('.xlsx') else "You perhaps forget to include '.xlsx' in filename."
+        if default is not _MISSING:
+            return default
+        extra_msg = "" if filename.lower().endswith('.xlsx') else "Perhaps forget to include '.xlsx' in `filename`."
         raise FileNotFoundError(f"Excel file '{filename}' does not exist in input directories. {extra_msg}")
 
     def get_filepath(self, filename: str, /) -> Path | None:
