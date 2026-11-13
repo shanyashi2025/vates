@@ -60,7 +60,7 @@ def _resolve_dims(dims: list[DimItem] | tuple[DimItem, ...],
     return resolved if cache is None else _maybe_hit_dim_cache(resolved, cache)
 
 
-class ProjVariable(ABC):
+class BaseProjVariable(ABC):
 
     __slots__ = ()
 
@@ -97,7 +97,7 @@ class ProjVariable(ABC):
         return self
 
 
-class ScalarVariable(ProjVariable):
+class ScalarVariable(BaseProjVariable):
     """Container for scalar variables.
 
     Holds a scalar that does not vary over time.
@@ -170,7 +170,7 @@ class ScalarVariable(ProjVariable):
         self._result = value
 
 
-class ConstArrayVariable(ProjVariable):
+class ConstArrayVariable(BaseProjVariable):
     """Container for constant array variables.
 
     Holds an array that does not vary over time.
@@ -261,7 +261,7 @@ class ConstArrayVariable(ProjVariable):
         self._result[index] = value
 
 
-class TDimVariable(ProjVariable):
+class TDimVariable(BaseProjVariable):
     """Container for time-dimensioned variables (indexed by the time).
 
     Values are stored for each `t` from 0 to `max_t` (inclusive).
@@ -336,7 +336,7 @@ class TDimVariable(ProjVariable):
         self._result[index] = value
 
 
-class TDimArrayVariable(ProjVariable):
+class TDimArrayVariable(BaseProjVariable):
     """Container for time-dimensioned array variables (indexed by the (time, dims)).
 
     Values are stored for each `t` from 0 to `max_t` (inclusive). Labeled dimensions (lists, tuples or Enums)
@@ -462,38 +462,38 @@ class ProjVariableManager:
     __slots__ = ("_proj_variables",)
 
     def __init__(self):
-        self._proj_variables: list[weakref.ref[ProjVariable]] = []
+        self._proj_variables: list[weakref.ref[BaseProjVariable]] = []
 
-    def attach_proj_variable(self, obj: ProjVariable, /) -> None:
+    def attach_proj_variable(self, obj: BaseProjVariable, /) -> None:
         """Attach a projection variable into `_proj_variables`
 
         Args:
-            obj (ProjVariable): Projection variable to be attached.
+            obj (BaseProjVariable): Projection variable to be attached.
 
         Raises:
             TypeError: Invalid type.
         """
-        if not isinstance(obj, ProjVariable):
+        if not isinstance(obj, BaseProjVariable):
             raise TypeError(f"Invalid type: {type(obj)}, expected 'ProjVariable'.")
         ref = weakref.ref(obj)
         if ref not in self._proj_variables:
             self._proj_variables.append(ref)
 
-    def __rmatmul__(self, other: ProjVariable) -> ProjVariable:
+    def __rmatmul__(self, other: BaseProjVariable) -> BaseProjVariable:
         self.attach_proj_variable(other)
         return other
 
     def clear_dead(self) -> None:
         self._proj_variables[:] = [ref for ref in self._proj_variables if ref() is not None]
 
-    def filter(self, rule: dict[str, dict] | None = None) -> list[ProjVariable]:
+    def filter(self, rule: dict[str, dict] | None = None) -> list[BaseProjVariable]:
         alive = (v for ref in self._proj_variables if (v := ref()) is not None)
         if rule is None:
             return list(alive)
         return [v for v in alive if self._is_kept(v, rule)]
 
     @classmethod
-    def _is_kept(cls, v: ProjVariable, rule: dict[str, dict]) -> bool:
+    def _is_kept(cls, v: BaseProjVariable, rule: dict[str, dict]) -> bool:
         group: dict[str, str | list] | None = rule.get(v.group, None)
         if group is None:
             return False
@@ -519,7 +519,7 @@ class ProjVariableManager:
         return True  # if neither 'include' nor 'exclude' provided, all variables in the group are included
 
     @classmethod
-    def iter_label_result(cls, v: ProjVariable, dim_joiner: str = ":", dim_bracket: tuple[str, str] = ("[", "]")
+    def iter_label_result(cls, v: BaseProjVariable, dim_joiner: str = ":", dim_bracket: tuple[str, str] = ("[", "]")
                           ) -> Iterator[tuple[str, float | np.ndarray | None]]:
         if len(v.dims) == 0:
             yield v.name, v.result

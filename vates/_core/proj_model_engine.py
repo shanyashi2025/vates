@@ -14,7 +14,7 @@ from typing import Any, Callable, Literal, Self, get_type_hints, overload
 
 from vates._core._helper import get_environ, get_f_filename_lineno, search_file_in_dirs
 from vates._core._proj_result_reader import proj_result
-from vates._core._proj_variables import ProjVariable, ProjVariableManager
+from vates._core._proj_variables import BaseProjVariable, ProjVariableManager
 from vates._core._run_configuration import RunConfiguration
 from vates._core._time_synchronizer import ProjectionTimeSynchronizer
 
@@ -534,7 +534,7 @@ class ProjModelEngine:
     def proj_variable_manager(self) -> ProjVariableManager:
         return self._proj_variable_manager
 
-    def attach_proj_variable(self, proj_variable: ProjVariable, /) -> None:
+    def attach_proj_variable(self, proj_variable: BaseProjVariable, /) -> None:
         self._proj_variable_manager.attach_proj_variable(proj_variable)
 
     @overload
