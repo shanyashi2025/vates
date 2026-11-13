@@ -82,7 +82,7 @@ High-level Asset–Liability Management building blocks that plug into the proje
 - **`econs/`** — economic/ESG items: `YieldCurve`, `Spread`, `DefaultRisk`, `EquityIndex`, `Currency`. 
   These shall be updated each time-step before assets roll forward.
 - **`assets/`** — asset classes (`Cash`, `Equity`, `BondFixed`, derivatives `EquityOption`) built on
-  the `Asset` abstract base. Each asset implements a `roll_forward()` / `close_dealing()` lifecycle.
+  the `BaseAsset` abstract base. Each asset implements a `roll_forward()` / `close_dealing()` lifecycle.
   Distinguishes *profile* (to-be-purchased) vs *existing* assets. 
   `create_asset(cls_or_name, build_pipeline, ...)` is the factory: plain classes construct directly,
   while `BondFixed`/`EquityOption` route through a **builder** (`vates/alm/assets/builders/`).
@@ -91,7 +91,7 @@ High-level Asset–Liability Management building blocks that plug into the proje
   then validates required prices/spreads before constructing the asset.
 - **`funds/`** — fund (`Fund`) with recorders (`AssetRecorder`, `LiabRecorder`, `OtherRecorder`).
 - **`allocator/`** — `Rebalancer` realigns groups of assets.
-- **`liabs/`** — liability base class (`Liab`) and `ExternalLiab` for liabilities calculated externally.
+- **`liabs/`** — liability base class (`BaseLiab`) and `ExternalLiab` for liabilities calculated externally.
 
 ### Financial math (`vates/finmath/`)
 

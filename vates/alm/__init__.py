@@ -13,7 +13,7 @@ from vates.alm.allocator import(
 # assets
 from vates.alm.assets import (
     create_asset,
-    Asset,
+    BaseAsset,
     Cash,
     BondFixed,
     Equity,
@@ -32,7 +32,7 @@ from vates.alm.econs import (
 )
 # liabs
 from vates.alm.liabs import (
-    Liab,
+    BaseLiab,
     ExternalLiab,
 )
 # funds
@@ -53,7 +53,7 @@ __all__ = [
     'Rebalancer',
     # assets
     'create_asset',
-    'Asset',
+    'BaseAsset',
     'Cash',
     'BondFixed',
     'Equity',
@@ -66,7 +66,7 @@ __all__ = [
     'Spread',
     'YieldCurve',
     # liabs
-    'Liab',
+    'BaseLiab',
     'ExternalLiab',
     # funds
     'Fund',

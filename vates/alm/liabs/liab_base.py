@@ -14,7 +14,7 @@ class LiabPhase(Enum):
 
 
 @time_synchronized("model_engine.time_synchronizer")
-class Liab(ABC):
+class BaseLiab(ABC):
     """
     Abstract base class for all liability types.
 
@@ -37,6 +37,7 @@ class Liab(ABC):
         currency: Currency | None,
         entry_date: pd.Period | None,
         attr_aliases: dict[str, str] | None,
+        **kwargs
     ):
         """
         Initialize a liability object.
@@ -54,6 +55,8 @@ class Liab(ABC):
         self._entry_date: pd.Period | None = entry_date
         self._attr_aliases: dict[str, str] | None = attr_aliases
         self._lc: Lifecycle[LiabPhase] = Lifecycle[LiabPhase](created_phase=LiabPhase.CLOSED, created_at=self.time or 0)
+        for key, val in kwargs.items():
+            setattr(self, key, val)
 
     @property
     def liab_id(self) -> str:

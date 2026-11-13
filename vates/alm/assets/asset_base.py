@@ -21,7 +21,7 @@ class AssetPhase(Enum):
 
 
 @time_synchronized("model_engine.time_synchronizer")
-class Asset(ABC):
+class BaseAsset(ABC):
     """
     Abstract base class for all financial assets.
 
@@ -50,6 +50,7 @@ class Asset(ABC):
         purchase_date: pd.Period | None,
         currency: Currency | None,
         attr_aliases: Mapping[str, str] | None,
+        **kwargs
     ):
         """
         Initialize the Asset.
@@ -69,6 +70,8 @@ class Asset(ABC):
         self._currency: Currency | None = currency
         self._attr_aliases: Mapping[str, str] | None = attr_aliases
         self._lc: Lifecycle[AssetPhase] = Lifecycle[AssetPhase]()
+        for key, val in kwargs.items():
+            setattr(self, key, val)
         if self._is_profile:
             self._lc.mark(AssetPhase.PROFILE, self.time or 0)
         else:

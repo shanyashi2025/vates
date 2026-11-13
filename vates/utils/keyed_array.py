@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from collections.abc import Hashable
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 
 _MISSING: object = object()
@@ -36,7 +36,7 @@ class KeyedArray:
             frozen (bool): True if frozen (`nparray.flags.writeable = False`).
             key_pos_pairs (list): A list of dictionaries mapping keys to integer-position indices
                 for each dimension. Length must match `nparray.ndim`.
-            dim_names (list, optional): A list of string storing dimension names.
+            dim_names (list, optional): A list of string storing dimension names; if not provided, "dimension1/2/..." will be used.
         """
         self._arr: np.ndarray = nparray
         self._arr.flags.writeable = not frozen
@@ -80,7 +80,7 @@ class KeyedArray:
         return self._at
 
     @property
-    def dim_names(self) -> list[str] | None:
+    def dim_names(self) -> list[str]:
         return self._at.dim_names
 
     @property
@@ -138,20 +138,7 @@ class KeyedArray:
         Raises:
             TypeError: If both positional keys (`*args`) and keyword keys (`**kwargs`) are provided.
         """
-        if args and kwargs:
-            raise TypeError("Cannot mix positional and keyword keys.")
-
-        if args:
-            return self._at.get(*args, default=default)
-
-        keys: list[Hashable] = [None] * self._arr.ndim
-        for dim, val in kwargs.items():
-            axis = self._at.dim_name_to_axis.get(dim, None)
-            if axis is None:
-                return default
-            keys[axis] = val
-
-        return self._at.get(*keys, default=default)
+        return self._at.get(*args, default=default, **kwargs)
 
     @classmethod
     def from_df(
@@ -220,50 +207,32 @@ class KeyedArray:
 class _AtIndexer:
     """Internal label-based indexer for KeyedArray."""
 
-    __slots__ = ('_nparray', '_key_pos_pairs', '_dim_names', '_dim_name_to_axis', '_key_pos_cache')
+    __slots__ = ('_arr', 'key_pos_pairs', 'dim_names', 'dim_name_to_axis')
 
-    def __init__(self, nparray: np.ndarray, key_pos_pairs: list[dict[Hashable, int]], dim_names: list[str] | None = None):
+    def __init__(self, arr: np.ndarray, key_pos_pairs: list[dict[Hashable, int]], dim_names: list[str] | None = None):
         """Initialize the indexer.
 
         Args:
-            nparray: Underlying NumPy array.
+            arr: Underlying NumPy array.
             key_pos_pairs: List of key-to-pos mappings per dimension.
-            dim_names: List of dimension names.
+            dim_names: List of dimension names; if not provided, "dimension1/2/..." will be used.
 
         Raises:
             TypeError: If `key_pos_pairs` is not a list.
             ValueError: If `key_pos_pairs` length does not match array dimensions.
         """
         if not isinstance(key_pos_pairs, list):
-            raise TypeError(
-                f"key_pos_pairs: type {type(key_pos_pairs)} is not allowed, expected 'list'."
-            )
-        if len(key_pos_pairs) != nparray.ndim:
-            raise ValueError(
-                f"key_pos_pairs length {len(key_pos_pairs)} does not match nparray ndim {nparray.ndim}."
-            )
+            raise TypeError(f"key_pos_pairs: type {type(key_pos_pairs)} is not allowed, expected 'list'.")
+        if len(key_pos_pairs) != arr.ndim:
+            raise ValueError(f"key_pos_pairs length {len(key_pos_pairs)} does not match nparray ndim {arr.ndim}.")
 
-        self._nparray: np.ndarray = nparray
-        self._dim_names: list[str] = self._validate_dim_names(dim_names)
-        self._dim_name_to_axis: dict[str, int] = {name: i for i, name in enumerate(self._dim_names)}
-        self._key_pos_pairs: list[dict[Hashable, int]] = key_pos_pairs
-        self._key_pos_cache: dict[tuple[int, Hashable], int | None] = {}
+        self._arr: np.ndarray = arr
+        self.dim_names: list[str] = self._resolve_dim_names(dim_names)
+        self.dim_name_to_axis: dict[str, int] = {name: i for i, name in enumerate(self.dim_names)}
+        self.key_pos_pairs: list[dict[Hashable, int]] = key_pos_pairs
 
-    @property
-    def dim_names(self) -> list[str]:
-        return self._dim_names
-
-    @property
-    def dim_name_to_axis(self) -> dict[str, int]:
-        return self._dim_name_to_axis
-
-    @property
-    def key_pos_pairs(self) -> list[dict[Hashable, int]]:
-        """Mapping from keys to integer-position indices for each dimension."""
-        return self._key_pos_pairs
-
-    def _validate_dim_names(self, dim_names: list[str] | None) -> list[str]:
-        ndim = self._nparray.ndim
+    def _resolve_dim_names(self, dim_names: list[str] | None) -> list[str]:
+        ndim = self._arr.ndim
         default = [f"dimension{i}" for i in range(1, ndim + 1)]
         if dim_names is None:
             return default
@@ -277,64 +246,72 @@ class _AtIndexer:
         return dim_names
 
     @overload
-    def _parse_pos_tuple(self, *keys: Hashable) -> tuple[int, ...]: ...
+    def _resolve_pos_indices(self, *keys: Hashable, on_fail_raise: Literal[True] = True) -> tuple[int, ...]: ...
 
     @overload
-    def _parse_pos_tuple[T](self, *keys: Hashable, default: T) -> tuple[int, ...] | T: ...
+    def _resolve_pos_indices(self, *keys: Hashable, on_fail_raise: Literal[False]) -> tuple[int, ...] | None: ...
 
-    def _parse_pos_tuple(self, *keys: Hashable, default: Any = _MISSING) -> tuple[int, ...] | Any:
+    def _resolve_pos_indices(self, *keys: Hashable, on_fail_raise: bool = True) -> tuple[int, ...] | None:
         """Convert a tuple of keys into a tuple of integer-position indices.
 
         Args:
             *keys (Hashable): Keys corresponding to each dimension.
-            default (Optional): Value to return if no match is found; raise if not provided.
+            on_fail_raise (bool): True if raise on fail to match; defaults to True.
 
         Returns:
             Tuple of integer indices.
 
         """
-        if len(keys) != self._nparray.ndim:
-            if self._nparray.ndim == 2 and len(keys) > 2:  # attempt to infer tuple of keys for 2D array
+        if len(keys) != self._arr.ndim:
+            if self._arr.ndim == 2 and len(keys) > 2:  # attempt to infer tuple of keys for 2D array
                 keys = keys[:-1], keys[-1]
             else:
-                msg = f"length of keys {len(keys)} does not match ndim {self._nparray.ndim}"
-                if default is _MISSING:
+                msg = f"length of keys {len(keys)} does not match ndim {self._arr.ndim}"
+                if on_fail_raise:
                     raise ValueError(msg)
                 warnings.warn(msg)
-                return default
+                return None
 
-        pos_list: list[int] = []
+        pos_indices: list[int] = []
         for axis, key in enumerate(keys):
-            pos = self._resolve_pos(axis, key)
+            pos = self.key_pos_pairs[axis].get(key, None)
             if pos is None:
-                if default is _MISSING:
+                if on_fail_raise:
                     raise KeyError(f"'{key}' is not a valid key in dimension '{self.dim_names[axis]}'")
-                return default
-            pos_list.append(pos)
+                return None
+            pos_indices.append(pos)
 
-        return tuple(pos_list)
+        return tuple(pos_indices)
 
-    def _resolve_pos(self, axis: int, key: Hashable) -> int | None:
-        pos = self._key_pos_cache.get((axis, key), _MISSING)
-        if pos is _MISSING:
-            pos = self._key_pos_pairs[axis].get(key, None)
-            self._key_pos_cache[(axis, key)] = pos
-        return pos
-
-    def get(self, *args: Hashable, default):
+    def get(self, *args: Hashable, default, **kwargs):
         """Return element by keys, or a default value if not found.
 
         Args:
-            *args (Hashable): Tuple of positional keys corresponding to each dimension.
+            *args (Hashable): Positional keys corresponding to each dimension.
             default: Value to return if lookup fails.
+            **kwargs: Keyword keys.
 
         Returns:
-            The element at the specified keys, or `default_value` if lookup fails.
+            The element at the specified keys, or `default` if lookup fails.
+
+        Raises:
+            TypeError: If both positional keys (`*args`) and keyword keys (`**kwargs`) are provided.
         """
-        pos_tuple = self._parse_pos_tuple(*args, default=None)
-        if pos_tuple is None:
+        if args and kwargs:
+            raise TypeError("Cannot mix positional and keyword keys.")
+        if args:
+            keys = args
+        else:
+            keys: list[Hashable] = [None] * self._arr.ndim
+            for dim, val in kwargs.items():
+                axis = self.dim_name_to_axis.get(dim, None)
+                if axis is None:
+                    return default
+                keys[axis] = val
+        indices = self._resolve_pos_indices(*keys, on_fail_raise=False)
+        if indices is None:
             return default
-        return self._nparray[pos_tuple]
+        return self._arr[indices]
 
     def __getitem__(self, keys: Hashable | tuple[Hashable, ...]):
         """Return element(s) using label-based indexing.
@@ -349,8 +326,8 @@ class _AtIndexer:
             KeyError: If keys are incorrect.
         """
         keys = keys if isinstance(keys, tuple) else (keys,)
-        pos_tuple = self._parse_pos_tuple(*keys)  # will raise if keys are invalid
-        return self._nparray[pos_tuple]
+        indices = self._resolve_pos_indices(*keys)  # will raise if keys are invalid
+        return self._arr[indices]
 
     def __setitem__(self, keys: Hashable | tuple[Hashable, ...], value):
         """Set element(s) using label-based indexing.
@@ -363,5 +340,5 @@ class _AtIndexer:
             KeyError: If keys are incorrect.
         """
         keys = keys if isinstance(keys, tuple) else (keys,)
-        pos_tuple = self._parse_pos_tuple(*keys)  # will raise if keys are invalid
-        self._nparray[pos_tuple] = value
+        indices = self._resolve_pos_indices(*keys)  # will raise if keys are invalid
+        self._arr[indices] = value

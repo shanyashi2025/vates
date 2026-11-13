@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
-from vates.alm.assets import Asset
+from vates.alm.assets import BaseAsset
 from vates.alm._utils import ObjList
 from vates.alm.allocator._enums import AssetDealingStrategy, AssetPurchaseMethod, RebalanceSizeKind
 
@@ -160,7 +160,7 @@ class _AllocationGroup:
         self,
         *,
         name: str,
-        exist_assets: ObjList[Asset],
+        exist_assets: ObjList[BaseAsset],
         dealing_strategy: AssetDealingStrategy,
         weight_triplet: tuple[float, float, float] | None,
         rebalance_preference: RebalancePreference,
@@ -168,12 +168,12 @@ class _AllocationGroup:
         priority: int,
         total_size: float,
         size_basis: str,
-        profile_assets: ObjList[Asset] | None,
+        profile_assets: ObjList[BaseAsset] | None,
     ):
         self.name: str = name
         if not isinstance(exist_assets, list):
             raise TypeError(f"Invalid type of 'exist_assets': {type(exist_assets)}, expected ('ObjList', 'list').")
-        self.exist: ObjList[Asset] = ObjList[Asset](exist_assets)
+        self.exist: ObjList[BaseAsset] = ObjList[BaseAsset](exist_assets)
         self.dealing_strategy: AssetDealingStrategy = dealing_strategy
         self.rebalance_preference: RebalancePreference = rebalance_preference
         self.purchase_method: AssetPurchaseMethod = purchase_method
@@ -182,12 +182,12 @@ class _AllocationGroup:
         self.size_basis: str = size_basis
         if profile_assets is not None and not isinstance(profile_assets, list):
             raise TypeError(f"Invalid type of 'profile_assets': {type(profile_assets)}, expected ('ObjList', 'list').")
-        self.profile: ObjList[Asset] = ObjList[Asset](profile_assets or [])
+        self.profile: ObjList[BaseAsset] = ObjList[BaseAsset](profile_assets or [])
 
         self.size_triplet: tuple[float, float, float] = self._compute_size_triplet(total_size, weight_triplet)
         self.profile_size: float = self.profile.sum_attr(self.size_basis, on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
 
-        self.staged: ObjList[Asset] = ObjList[Asset]()
+        self.staged: ObjList[BaseAsset] = ObjList[BaseAsset]()
         self._trade_orders: list[TradeOrder] = []
         self._free_proceeds: float = 0.0
 

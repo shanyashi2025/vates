@@ -4,12 +4,12 @@ from typing import Callable, Self
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
 from vates.alm.econs import Currency
-from vates.alm.liabs.liab_base import Liab, LiabPhase
+from vates.alm.liabs.liab_base import BaseLiab, LiabPhase
 
 _MISSING: object = object()
 
 
-class ExternalLiab(Liab):
+class ExternalLiab(BaseLiab):
     """
     Externally calculated liability.
     """
@@ -42,10 +42,7 @@ class ExternalLiab(Liab):
             output_attrs_ad (list[str] | tuple[str, ...]): List or tuple of attributes to output.
         """
         super().__init__(model_engine=model_engine, liab_id=liab_id, currency=currency,
-                         entry_date=entry_date, attr_aliases=attr_aliases)
-        for key, val in kwargs.items():
-            setattr(self, key, val)
-
+                         entry_date=entry_date, attr_aliases=attr_aliases, **kwargs)
         self._cash_flow: float = 0.0
         self.on_time_change_hook: list[Callable[[Self], None]] = []
         self.roll_forward_hook: list[Callable[[Self], None]] = []

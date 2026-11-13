@@ -7,8 +7,8 @@ from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 from vates.utils import Lifecycle, transition
 from vates.alm._utils import ObjList
 from vates.alm.funds._utils import _RateOfReturnIndexer
-from vates.alm.assets.asset_base import Asset, AssetPhase
-from vates.alm.liabs.liab_base import Liab
+from vates.alm.assets.asset_base import BaseAsset, AssetPhase
+from vates.alm.liabs.liab_base import BaseLiab
 
 class RecorderPhase(Enum):
     ASSET_REC_BD = auto()
@@ -56,12 +56,12 @@ class AssetRecorder:
         *,
         name: str,
         model_engine: ProjModelEngine | None = None,
-        assets: ObjList[Asset],
+        assets: ObjList[BaseAsset],
         asset_categories: list[str] | None,
         asset_category_attr: str,
         asset_report_bases: list[str] | None,
     ):
-        self._assets: ObjList[Asset] = assets
+        self._assets: ObjList[BaseAsset] = assets
         self.asset_categories: list[str] | None = asset_categories
         self.asset_category_attr: str = asset_category_attr
         self.asset_report_bases: list[str] | None = asset_report_bases
@@ -289,11 +289,11 @@ class LiabRecorder:
         *,
         name: str,
         model_engine: ProjModelEngine | None = None,
-        liabs: ObjList[Liab],
+        liabs: ObjList[BaseLiab],
         output_liab_attrs_bd: list[str],
         output_liab_attrs_ad: list[str],
     ):
-        self._liabs: ObjList[Liab] = liabs
+        self._liabs: ObjList[BaseLiab] = liabs
         self.output_liab_attrs_bd: list[str] = output_liab_attrs_bd
         self.output_liab_attrs_ad: list[str] = output_liab_attrs_ad
         self.totliab_cf: float | None = None

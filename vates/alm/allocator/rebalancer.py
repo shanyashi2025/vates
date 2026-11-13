@@ -6,7 +6,7 @@ from typing import Literal, Any
 
 from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
 from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
-from vates.alm.assets import Asset, Cash
+from vates.alm.assets import BaseAsset, Cash
 from vates.alm.allocator._allocation_group import _AllocationGroup, AssetAllocationParams, TradeOrder, BuySellAction
 from vates.alm.allocator._enums import AssetDealingStrategy, AssetPurchaseMethod
 from vates.alm.allocator.proceeds_keeper import ProceedsKeeper
@@ -185,8 +185,8 @@ def _make_trade_order_on_require_size(group: _AllocationGroup, require_size: flo
 
 def _make_sorted_alloc_groups(
     *,
-    exist_assets: list[Asset],
-    profile_assets: list[Asset] | None,
+    exist_assets: list[BaseAsset],
+    profile_assets: list[BaseAsset] | None,
     total_size: float,
     asset_size_basis: str,
     allocation_group_attr_name: str,
@@ -290,10 +290,10 @@ class Rebalancer:
 
     def __call__(
         self,
-        exist_assets: list[Asset],
+        exist_assets: list[BaseAsset],
         *,
         free_proceeds_keeper: ProceedsKeeper | None = None,
-        profile_assets: list[Asset] | None = None,
+        profile_assets: list[BaseAsset] | None = None,
         total_size: float,
         asset_size_basis: str,
         allocation_group_attr_name: str = "allocation_group",
@@ -306,7 +306,7 @@ class Rebalancer:
         """Rebalance assets in the fund to match the target allocation.
 
         Args:
-            exist_assets (list[Asset]): List of assets to be rebalanced.
+            exist_assets (list[BaseAsset]): List of assets to be rebalanced.
             free_proceeds_keeper (ProceedsKeeper | None): Free proceeds' keeper.
             profile_assets (list[Asset] | None): Profile assets for reference.
             total_size (float): Total size for allocation, shall correspond to `asset_size_basis`.

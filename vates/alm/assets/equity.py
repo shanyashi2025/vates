@@ -6,10 +6,10 @@ from typing import Literal
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
 from vates.alm.econs import Currency, EquityIndex
-from vates.alm.assets.asset_base import Asset, AssetPhase
+from vates.alm.assets.asset_base import BaseAsset, AssetPhase
 
 
-class Equity(Asset):
+class Equity(BaseAsset):
     """
     Represents an equity asset in the portfolio.
 
@@ -34,7 +34,8 @@ class Equity(Asset):
         asset_id: str = "",
         is_profile: bool = False,
         currency: Currency | None = None,
-        purchase_date: pd.Period | None = None
+        purchase_date: pd.Period | None = None,
+        **kwargs
     ):
         """
         Initialize an Equity asset.
@@ -50,7 +51,7 @@ class Equity(Asset):
             purchase_date (pd.Period | None): Purchase date, default to initialization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
-                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, )
+                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
         self._equity_index: EquityIndex = equity_index
         self._mv: float = self._ensure_non_zero(market_value)
         self._purchase_cost: float = self._ensure_non_zero(purchase_cost) if purchase_cost is not None else self._mv

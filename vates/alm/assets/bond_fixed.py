@@ -8,7 +8,7 @@ from typing import Literal
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
 from vates.alm.econs import Currency, YieldCurve, Spread, DefaultRisk, DefaultRiskParams
-from vates.alm.assets.asset_base import Asset, AssetPhase
+from vates.alm.assets.asset_base import BaseAsset, AssetPhase
 from vates.alm.assets._bond_fixed_component import (
     BondFixedParameters,
     BondFixedCashFlow,
@@ -19,7 +19,7 @@ from vates.alm.assets._bond_fixed_component import (
 from vates.alm.assets._utils import make_risk_adjusted_rates
 
 
-class BondFixed(Asset):
+class BondFixed(BaseAsset):
     """
     Represents a bond asset in the portfolio.
 
@@ -68,6 +68,7 @@ class BondFixed(Asset):
         default_risk: DefaultRisk | DefaultRiskParams | None = None,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
+        **kwargs
     ):
         """
         Initialize a Bond asset.
@@ -95,7 +96,7 @@ class BondFixed(Asset):
             _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
-                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
+                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
         self._qty: float = qty
         self._params: BondFixedParameters = BondFixedParameters(
             issue_date=issue_date,

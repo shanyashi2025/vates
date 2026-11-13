@@ -35,9 +35,8 @@ class EquityOptionBuilder:
         is_pay_dividend: bool,
         q: float = float("nan"),
         attr_aliases: Mapping[str, str] | None = None,
-        price: float | None = None,
-        std_dev: float | None = None,
-        *args,
+        price: float  = float("nan"),
+        std_dev: float  = float("nan"),
         **kwargs
     ):
         """
@@ -77,8 +76,9 @@ class EquityOptionBuilder:
         self.q: float = q if is_pay_dividend else 0
         if self.os_term_m <= 0: raise ValueError(f'Equity option {self.asset_id} has already expired, can not be built.')
 
-        self.price: float | None = price
-        self.std_dev: float | None = std_dev
+        self.price: float = price
+        self.std_dev: float = std_dev
+        self.extra_kwargs = kwargs
 
     @property
     def os_term_m(self) -> int:
@@ -88,7 +88,7 @@ class EquityOptionBuilder:
         """
         Calculate the market price using the volatility (standard deviation).
         """
-        if self.std_dev is None:
+        if math.isnan(self.std_dev):
             raise ValueError('std_dev is not yet set.')
         self.price = BlackScholesCalculator.price(
             call_put=self.call_put, s=self.stock_price, k=self.strike_price,
@@ -102,7 +102,7 @@ class EquityOptionBuilder:
         """
         Calculate the implied volatility.
         """
-        if self.price is None:
+        if math.isnan(self.price):
             raise ValueError('price is not yet set.')
         self.std_dev = BlackScholesCalculator.implied_volatility(
             call_put=self.call_put, price=self.price, s=self.stock_price, k=self.strike_price,
@@ -116,23 +116,23 @@ class EquityOptionBuilder:
         return self.calibrate_implied_volatility()
 
     def build(self, pipeline: list[str] | None = None) -> EquityOption:
-        if pipeline:
-            if not isinstance(pipeline, list):
-                raise TypeError(f"Invalid type of pipeline {type(pipeline)}, expected 'list'")
+        pipeline = pipeline or []
+        if not isinstance(pipeline, list):
+            raise TypeError(f"Invalid type of pipeline {type(pipeline)}, expected 'list'")
 
-            for step in pipeline:
-                name = step.lower()
-                if name in ('calculate_market_price', 'market_price'):
-                    self.calculate_market_price()
-                elif name in ('calibrate_implied_volatility', 'calculate_implied_volatility', 'implied_volatility'):
-                    self.calibrate_implied_volatility()
-                elif name in ('risk_neutralization', 'risk_neutralize'):
-                    self.risk_neutralize()
-                else:
-                    warnings.warn(f"{type(self).__name__}: '{name}' is ignored as no method matches.")
+        for step in pipeline:
+            name = step.lower()
+            if name in ('calculate_market_price', 'market_price'):
+                self.calculate_market_price()
+            elif name in ('calibrate_implied_volatility', 'calculate_implied_volatility', 'implied_volatility'):
+                self.calibrate_implied_volatility()
+            elif name in ('risk_neutralization', 'risk_neutralize'):
+                self.risk_neutralize()
+            else:
+                warnings.warn(f"{type(self).__name__}: '{name}' is ignored as no method matches.")
 
-        if self.price is None: raise ValueError("price is not yet set.")
-        if self.std_dev is None: raise ValueError("std_dev is not yet set.")
+        if math.isnan(self.price): raise ValueError("price is not yet set.")
+        if math.isnan(self.std_dev): raise ValueError("std_dev is not yet set.")
 
         return EquityOption(
             model_engine=self.model_engine,
@@ -151,4 +151,5 @@ class EquityOptionBuilder:
             std_dev=self.std_dev,
             is_pay_dividend=self.is_pay_dividend,
             q=self.q,
+            **self.extra_kwargs
         )

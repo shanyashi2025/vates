@@ -28,6 +28,7 @@ class BondFixedBuilder:
 
     def __init__(
         self,
+        *,
         model_engine: ProjModelEngine,
         asset_id: str,
         currency: Currency,
@@ -42,12 +43,11 @@ class BondFixedBuilder:
         is_profile: bool,
         attr_aliases: Mapping[str, str] | None = None,
         fixed_cash_flow: BondFixedCashFlow | dict[str, np.ndarray] | None = None,
-        coupon_rate: float | None = None,
-        abv_price: float | None = None,
-        amort_rate: float | None = None,
-        mv_price: float | None = None,
-        market_spread: float | None = None,
-        *args,
+        coupon_rate: float = float("nan"),
+        abv_price: float = float("nan"),
+        amort_rate: float = float("nan"),
+        mv_price: float = float("nan"),
+        market_spread: float = float("nan"),
         **kwargs
     ):
         """
@@ -97,15 +97,16 @@ class BondFixedBuilder:
         self.default_risk: DefaultRisk | DefaultRiskParams | None = default_risk
         self.is_profile: bool = is_profile
 
-        self.coupon_rate: float | None = coupon_rate
-        self.abv_price: float | None = abv_price
-        self.amort_rate: float | None = amort_rate
-        self.mv_price: float | None = mv_price
-        self.market_spread: float | None = market_spread
+        self.coupon_rate: float = coupon_rate
+        self.abv_price: float = abv_price
+        self.amort_rate: float = amort_rate
+        self.mv_price: float = mv_price
+        self.market_spread: float = market_spread
+        self.extra_kwargs: dict = kwargs
 
     @property
     def _params(self) -> BondFixedParameters:
-        if self.coupon_rate is None:
+        if math.isnan(self.coupon_rate):
             raise ValueError(f'{self.asset_id}: coupon_rate not specified.')
         return BondFixedParameters(
             issue_date=self.issue_date,
@@ -159,7 +160,7 @@ class BondFixedBuilder:
             self.coupon_rate = 0.0
             return self
 
-        if self.market_spread is None:
+        if math.isnan(self.market_spread):
             self.market_spread = 0.0
             warnings.warn(f'{self.asset_id}: market_spread not specified, set to 0.')
 
@@ -175,7 +176,7 @@ class BondFixedBuilder:
         """
         Calibrate the amortized rate using the set amortized book value price.
         """
-        if self.abv_price is None:
+        if math.isnan(self.abv_price):
             raise ValueError('abv_price need to be set first.')
         self.amort_rate = solve_ytm(
             target_pv=self.abv_price,
@@ -189,7 +190,7 @@ class BondFixedBuilder:
         """
         Calculate the market spread using the set market price.
         """
-        if self.mv_price is None:
+        if math.isnan(self.mv_price):
             raise ValueError('mv_price need to be set first.')
         self.market_spread = solve_z_spread(
             target_pv=self.mv_price,
@@ -210,7 +211,7 @@ class BondFixedBuilder:
         """
         Set market spread to zero and goal seek the face value that gives market price.
         """
-        if self.mv_price is None:
+        if math.isnan(self.mv_price):
             raise ValueError('mv_price need to be set first.')
         self.market_spread = 0.0
         pricer = self._make_pricer()
@@ -236,7 +237,7 @@ class BondFixedBuilder:
         """
         if isinstance(self.default_risk, DefaultRisk):
             raise ValueError(f"'{self.default_risk.default_risk_id}': 'DefaultRisk' object is not allowed to manually set parameters.")
-        if self.mv_price is None:
+        if math.isnan(self.mv_price):
             raise ValueError('mv_price need to be set first.')
         pricer = self._make_pricer()
         comprehensive_spread = solve_z_spread(target_pv=self.mv_price, cash_flows=self._make_cash_flow(),
@@ -259,38 +260,38 @@ class BondFixedBuilder:
         Raises:
             ValueError: If required data is missing or timing constraints are violated.
         """
-        if pipeline:
-            if not isinstance(pipeline, list):
-                raise TypeError(f"Invalid type of pipeline {type(pipeline)}, expected 'list' or 'str'")
+        pipeline = pipeline or []
+        if not isinstance(pipeline, list):
+            raise TypeError(f"Invalid type of pipeline {type(pipeline)}, expected 'list' or 'str'")
 
-            for step in pipeline:
-                if isinstance(step, str):
-                    name, kwargs = step.lower(), {}
-                elif isinstance(step, tuple):
-                    name, kwargs = step[0].lower(), step[1]
-                else:
-                    raise TypeError(f"Invalid type of pipeline {type(step)}, expected 'str' or 'dict'")
-                if name in ('calibrate_market_spread', 'calculate_market_spread', 'market_spread'):
-                    self.calibrate_market_spread()
-                elif name in ('calculate_market_price', 'market_price'):
-                    self.calculate_market_price()
-                elif name in ('calculate_amort_rate', 'amort_rate'):
-                    self.calculate_amort_rate()
-                elif name in ('derive_coupon_rate', 'calculate_coupon_rate', 'coupon_rate'):
-                    self.derive_coupon_rate()
-                elif name in ('risk_neutralization', 'risk_neutralize'):
-                    self.risk_neutralize()
-                elif name in ('calibrate_prob_of_default', 'prob_of_default'):
-                    self.calibrate_prob_of_default(**kwargs)
-                else:
-                    warnings.warn(f"{type(self).__name__}: '{name}' is ignored as no method matches.")
+        for step in pipeline:
+            if isinstance(step, str):
+                name, kwargs = step.lower(), {}
+            elif isinstance(step, tuple):
+                name, kwargs = step[0].lower(), step[1]
+            else:
+                raise TypeError(f"Invalid type of pipeline {type(step)}, expected 'str' or 'dict'")
+            if name in ('calibrate_market_spread', 'calculate_market_spread', 'market_spread'):
+                self.calibrate_market_spread()
+            elif name in ('calculate_market_price', 'market_price'):
+                self.calculate_market_price()
+            elif name in ('calculate_amort_rate', 'amort_rate'):
+                self.calculate_amort_rate()
+            elif name in ('derive_coupon_rate', 'calculate_coupon_rate', 'coupon_rate'):
+                self.derive_coupon_rate()
+            elif name in ('risk_neutralization', 'risk_neutralize'):
+                self.risk_neutralize()
+            elif name in ('calibrate_prob_of_default', 'prob_of_default'):
+                self.calibrate_prob_of_default(**kwargs)
+            else:
+                warnings.warn(f"{type(self).__name__}: '{name}' is ignored as no method matches.")
 
         # Validate required data
-        if self.coupon_rate is None: raise ValueError("coupon_rate is not yet set.")
-        if self.mv_price is None: raise ValueError("mv_price is not yet set.")
-        if self.market_spread is None: raise ValueError("market_spread is not yet set.")
-        if self.abv_price is None: raise ValueError("abv_price is not yet set.")
-        if self.amort_rate is None: self.calculate_amort_rate()
+        if math.isnan(self.coupon_rate): raise ValueError("coupon_rate is not yet set.")
+        if math.isnan(self.mv_price): raise ValueError("mv_price is not yet set.")
+        if math.isnan(self.market_spread): raise ValueError("market_spread is not yet set.")
+        if math.isnan(self.abv_price): raise ValueError("abv_price is not yet set.")
+        if math.isnan(self.amort_rate): self.calculate_amort_rate()
 
         # Validate initial price
         if self.is_profile and not math.isclose(self.abv_price, self.mv_price, rel_tol=1e-6, abs_tol=1e-8):
@@ -323,5 +324,6 @@ class BondFixedBuilder:
             rf_curve=self.rf_curve,
             spread=self.spread,
             default_risk=self.default_risk,
-            is_profile=self.is_profile
+            is_profile=self.is_profile,
+            **self.extra_kwargs
         )

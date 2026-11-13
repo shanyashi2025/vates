@@ -2,10 +2,10 @@ import math
 import numpy as np
 import pandas as pd
 from enum import Enum, unique
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 from vates import ProjModelEngine
-from vates.alm import (create_asset, Asset, Cash, BondFixed, Equity, EquityOption, YieldCurve, Spread, DefaultRisk,
+from vates.alm import (create_asset, BaseAsset, Cash, BondFixed, Equity, EquityOption, YieldCurve, Spread, DefaultRisk,
                        EquityIndex, Currency)
 from .econ_master import EconMaster
 
@@ -124,7 +124,7 @@ class AssetMaster:
         self.equity_option_ls: list[EquityOption] = equity_option_ls or []
 
     @property
-    def all(self) -> list[Asset]:
+    def all(self) -> list[BaseAsset]:
         return self.cash_ls + self.fixed_bond_ls + self.equity_ls + self.equity_option_ls
 
     @classmethod
@@ -133,7 +133,7 @@ class AssetMaster:
         df_dict: dict[str, pd.DataFrame],
         *,
         model_engine: ProjModelEngine,
-        econs: dict[str, object] | EconMaster,
+        econs: EconMaster,
         fund_id: str | None = None
     ) -> 'AssetMaster':
         """
@@ -142,26 +142,17 @@ class AssetMaster:
         Args:
             model_engine: Model engine object.
             df_dict (dict[str, pd.DataFrame]): Dictionary of DataFrame containing asset data.
-            econs (dict[str, ...] | EsgMaster): Economic variables.
+            econs (EsgMaster): Economic variables.
             fund_id (str | None): Fund id to filter the df, or None.
 
         Returns:
             An AssetMaster object.
         """
-        if isinstance(econs, EconMaster):
-            currencies: list[Currency] = [item.econ_obj for item in econs.currencies]
-            equity_indices: list[EquityIndex] = [item.econ_obj for item in econs.equity_indices]
-            yield_curves: list[YieldCurve] = [item.econ_obj for item in econs.yield_curves]
-            spreads: list[Spread] = [item.econ_obj for item in econs.spreads]
-            default_risks: list[DefaultRisk] = [item.econ_obj for item in econs.default_risks]
-        elif isinstance(econs, dict):
-            currencies: list[Currency] = econs['currencies']
-            equity_indices: list[EquityIndex] = econs['equity_indices']
-            yield_curves: list[YieldCurve] = econs['yield_curves']
-            spreads: list[Spread] = econs['spreads']
-            default_risks: list[DefaultRisk] = econs['default_risks']
-        else:
-            raise TypeError(f"Invalid type of 'econs': {type(econs)}, expected 'dict' or 'EsgMaster'.")
+        currencies: list[Currency] = [item.econ_obj for item in econs.currencies]
+        equity_indices: list[EquityIndex] = [item.econ_obj for item in econs.equity_indices]
+        yield_curves: list[YieldCurve] = [item.econ_obj for item in econs.yield_curves]
+        spreads: list[Spread] = [item.econ_obj for item in econs.spreads]
+        default_risks: list[DefaultRisk] = [item.econ_obj for item in econs.default_risks]
 
         cash_ls = cls.build_assets_cash_from_df(
             model_engine=model_engine, df=df_dict['assets_cash'].copy(), fund_id=fund_id,
@@ -198,7 +189,7 @@ class AssetMaster:
         df_dict: dict[str, pd.DataFrame],
         *,
         model_engine: ProjModelEngine,
-        econs: dict[str, Any] | EconMaster,
+        econs: EconMaster,
         fund_id: str | None = None,
     ) -> 'AssetMaster':
         """
@@ -207,26 +198,17 @@ class AssetMaster:
         Args:
             model_engine: Model engine object.
             df_dict (dict[str, pd.DataFrame]): Dictionary of DataFrame containing asset data.
-            econs (dict[str, ...] | EsgMaster): Economic variables.
+            econs (EsgMaster): Economic variables.
             fund_id (str): Fund id to filter the df.
 
         Returns:
-            dict[str, list[Asset]]: Dictionary of list of asset objects.
+            dict[str, list[BaseAsset]]: Dictionary of list of asset objects.
         """
-        if isinstance(econs, EconMaster):
-            currencies = [item.econ_obj for item in econs.currencies]
-            equity_indices = [item.econ_obj for item in econs.equity_indices]
-            yield_curves = [item.econ_obj for item in econs.yield_curves]
-            spreads = [item.econ_obj for item in econs.spreads]
-            default_risks = [item.econ_obj for item in econs.default_risks]
-        elif isinstance(econs, dict):
-            currencies = econs['currencies']
-            equity_indices = econs['equity_indices']
-            yield_curves = econs['yield_curves']
-            spreads = econs['spreads']
-            default_risks = econs['default_risks']
-        else:
-            raise TypeError(f"Invalid type of 'econs': {type(econs)}, expected 'dict' or 'EsgMaster'.")
+        currencies = [item.econ_obj for item in econs.currencies]
+        equity_indices = [item.econ_obj for item in econs.equity_indices]
+        yield_curves = [item.econ_obj for item in econs.yield_curves]
+        spreads = [item.econ_obj for item in econs.spreads]
+        default_risks = [item.econ_obj for item in econs.default_risks]
 
         equity_ls = []
         fixed_bond_ls = []
@@ -290,16 +272,14 @@ class AssetMaster:
                 ),
                 currency=currency,
                 nominal=row["nominal"],
-                dynamic_setattrs={
-                    "positive_cash_balance_ret_id": row["positive_cash_balance_ret_id"],
-                    "negative_cash_balance_ret_id": row["negative_cash_balance_ret_id"],
-                    'ifrs_classification': ifrs_classification,
-                    'local_classification': local_classification,
-                    'stat_classification': stat_classification,
-                    "category": ASSET_CATEGORY_MAPPING["cash"],
-                    "allocation_group": row["allocation_group"],
-                    "fund_id": row["fund_id"],
-                },
+                positive_cash_balance_ret_id=row["positive_cash_balance_ret_id"],
+                negative_cash_balance_ret_id=row["negative_cash_balance_ret_id"],
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                stat_classification=stat_classification,
+                category=ASSET_CATEGORY_MAPPING["cash"],
+                allocation_group=row["allocation_group"],
+                fund_id=row["fund_id"],
             )
             # append to list
             cash_list.append(cash)
@@ -401,15 +381,13 @@ class AssetMaster:
                 mv_price=row["mv_price_dirty"],
                 market_spread=row["market_spread"],
                 is_profile=False,
-                dynamic_setattrs={
-                    'ifrs_classification': ifrs_classification,
-                    'local_classification': local_classification,
-                    'stat_classification': stat_classification,
-                    "category": ASSET_CATEGORY_MAPPING["fixed_bond"],
-                    "allocation_group": row["allocation_group"],
-                    "fund_id": row["fund_id"],
-                    'provided_cash_flow_id': provided_cash_flow_id,
-                },
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                stat_classification=stat_classification,
+                category=ASSET_CATEGORY_MAPPING["fixed_bond"],
+                allocation_group=row["allocation_group"],
+                fund_id=row["fund_id"],
+                provided_cash_flow_id=provided_cash_flow_id,
             )
             # append to list
             fixed_bond_list.append(fixed_bond)
@@ -514,14 +492,12 @@ class AssetMaster:
                 mv_price=row["face_value"],
                 market_spread=row["market_spread"],
                 is_profile=True,
-                dynamic_setattrs={
-                    'ifrs_classification': ifrs_classification,
-                    'local_classification': local_classification,
-                    'stat_classification': stat_classification,
-                    "category": ASSET_CATEGORY_MAPPING["fixed_bond"],
-                    "allocation_group": row["allocation_group"],
-                    "fund_id": row["fund_id"],
-                },
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                stat_classification=stat_classification,
+                category=ASSET_CATEGORY_MAPPING["fixed_bond"],
+                allocation_group=row["allocation_group"],
+                fund_id=row["fund_id"],
             )
             # append to list
             fixed_bond_list.append(fixed_bond)
@@ -581,14 +557,12 @@ class AssetMaster:
                 purchase_cost=row["purchase_cost"],
                 equity_index=equity_index,
                 is_profile=False,
-                dynamic_setattrs={
-                    'ifrs_classification': ifrs_classification,
-                    'local_classification': local_classification,
-                    'stat_classification': stat_classification,
-                    "category": ASSET_CATEGORY_MAPPING["equity"],
-                    "allocation_group": row["allocation_group"],
-                    "fund_id": row["fund_id"],
-                },
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                stat_classification=stat_classification,
+                category=ASSET_CATEGORY_MAPPING["equity"],
+                allocation_group=row["allocation_group"],
+                fund_id=row["fund_id"],
             )
             # append to list
             equity_list.append(equity)
@@ -650,14 +624,12 @@ class AssetMaster:
                 market_value=row["amount"],
                 equity_index=equity_index,
                 is_profile=True,
-                dynamic_setattrs={
-                    'ifrs_classification': ifrs_classification,
-                    'local_classification': local_classification,
-                    'stat_classification': stat_classification,
-                    "category": ASSET_CATEGORY_MAPPING["equity"],
-                    "allocation_group": row["allocation_group"],
-                    "fund_id": row["fund_id"],
-                },
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                stat_classification=stat_classification,
+                category=ASSET_CATEGORY_MAPPING["equity"],
+                allocation_group=row["allocation_group"],
+                fund_id=row["fund_id"],
             )
             # append to list
             equity_list.append(equity)
@@ -734,14 +706,12 @@ class AssetMaster:
                 is_pay_dividend=(row["is_pay_dividend"].lower() in ('y', 'yes')),
                 q=math.log(1 + 0.2 / 100),  # implement the logic
                 is_profile=False,
-                dynamic_setattrs={
-                    'ifrs_classification': ifrs_classification,
-                    'local_classification': local_classification,
-                    'stat_classification': stat_classification,
-                    "category": ASSET_CATEGORY_MAPPING["equity_option"],
-                    "allocation_group": row["allocation_group"],
-                    "fund_id": row["fund_id"],
-                },
+                ifrs_classification=ifrs_classification,
+                local_classification=local_classification,
+                stat_classification=stat_classification,
+                category=ASSET_CATEGORY_MAPPING["equity_option"],
+                allocation_group=row["allocation_group"],
+                fund_id=row["fund_id"],
             )
             # append to list
             equity_option_list.append(equity_option)

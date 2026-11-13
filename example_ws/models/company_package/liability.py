@@ -2,7 +2,7 @@ import pandas as pd
 from typing import List
 
 from vates import ProjModelEngine
-from vates.alm import Currency, Liab, ExternalLiab
+from vates.alm import Currency, BaseLiab, ExternalLiab
 from vates.utils import KeyedArray
 
 def build_liabs(
@@ -12,7 +12,7 @@ def build_liabs(
     epl_df: pd.DataFrame,
     fund_id: str | None,
     currencies: List['Currency']
-) -> List['Liab']:
+) -> List['BaseLiab']:
     """
     Build liability objects from a DataFrame and add them to a fund if provided.
 

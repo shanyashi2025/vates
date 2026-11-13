@@ -8,10 +8,10 @@ from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
 from vates.finmath import CallPut, BlackScholesCalculator
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
-from vates.alm.assets.asset_base import Asset, AssetPhase
+from vates.alm.assets.asset_base import BaseAsset, AssetPhase
 
 
-class EquityOption(Asset):
+class EquityOption(BaseAsset):
     """
     Represents an equity option asset.
 
@@ -53,6 +53,7 @@ class EquityOption(Asset):
         attr_aliases: Mapping[str, str] | None = None,
         purchase_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
+        **kwargs
     ):
         """
         Initialize an EquityOption asset.
@@ -76,7 +77,7 @@ class EquityOption(Asset):
             purchase_date (pd.Period | None): Purchase date, default to initialization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
-                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
+                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
         self._qty: float = qty
         self._call_put: CallPut = CallPut[call_put.upper()] if isinstance(call_put, str) else call_put
         self._exercise_date: pd.Period = exercise_date

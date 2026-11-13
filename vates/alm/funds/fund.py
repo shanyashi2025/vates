@@ -6,8 +6,8 @@ from typing import Literal
 from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 from vates._core import ProjModelEngine, time_synchronized
 from vates.alm.allocator import ProceedsKeeper
-from vates.alm.assets import Asset, Cash
-from vates.alm.liabs import Liab
+from vates.alm.assets import BaseAsset, Cash
+from vates.alm.liabs import BaseLiab
 from vates.alm._utils import ObjList
 from vates.alm.funds._recorder import AssetRecorder, LiabRecorder, OtherRecorder
 from vates.alm.funds._utils import _RateOfReturnIndexer
@@ -61,8 +61,8 @@ class Fund:
         """
         self.fund_id = fund_id
         # Asset and liab collections
-        self._assets: ObjList[Asset] = ObjList[Asset]()
-        self._liabs: ObjList[Liab] = ObjList[Liab]()
+        self._assets: ObjList[BaseAsset] = ObjList[BaseAsset]()
+        self._liabs: ObjList[BaseLiab] = ObjList[BaseLiab]()
         self._free_proceeds_keeper: ProceedsKeeper = ProceedsKeeper()
         self._primary_cash_asset: Cash | None = None
         asset_report_bases: list[str] = asset_report_bases or []
@@ -78,7 +78,7 @@ class Fund:
         self._other_rec: OtherRecorder = OtherRecorder(name=fund_id, model_engine=model_engine)
 
     @property
-    def assets(self) -> ObjList[Asset]:
+    def assets(self) -> ObjList[BaseAsset]:
         return self._assets
 
     @property
@@ -90,7 +90,7 @@ class Fund:
         return self._free_proceeds_keeper
 
     @property
-    def liabilities(self) -> ObjList[Liab]:
+    def liabilities(self) -> ObjList[BaseLiab]:
         return self._liabs
 
     @property
@@ -109,11 +109,11 @@ class Fund:
     def rate_of_return_ad(self) -> _RateOfReturnIndexer:
         return self._asset_rec.rate_of_return_ad
 
-    def add_asset(self, obj: Asset | Iterable[Asset], /) -> None:
+    def add_asset(self, obj: BaseAsset | Iterable[BaseAsset], /) -> None:
         """Add asset object(s) to the fund.
 
         Args:
-            obj (Asset | Iterable[Asset]): Asset(s) to be included.
+            obj (BaseAsset | Iterable[Asset]): Asset(s) to be included.
 
         """
         if isinstance(obj, Iterable):
@@ -121,11 +121,11 @@ class Fund:
         else:
             self._assets.append(obj)
 
-    def add_liability(self, obj: Liab | Iterable[Liab], /) -> None:
+    def add_liability(self, obj: BaseLiab | Iterable[BaseLiab], /) -> None:
         """Add liability object(s) to the fund.
 
         Args:
-            obj (Liab | Iterable[Liab]): Liability(s) to be included.
+            obj (BaseLiab | Iterable[Liab]): Liability(s) to be included.
 
         """
         if isinstance(obj, Iterable):

@@ -5,10 +5,10 @@ from typing import Literal
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition
 from vates.alm.econs import Currency
-from vates.alm.assets.asset_base import Asset, AssetPhase
+from vates.alm.assets.asset_base import BaseAsset, AssetPhase
 
 
-class Cash(Asset):
+class Cash(BaseAsset):
     """
     Represents a cash asset in the portfolio.
 
@@ -27,7 +27,8 @@ class Cash(Asset):
         asset_id: str = "",
         currency: Currency | None = None,
         attr_aliases: Mapping[str, str] | None = None,
-        purchase_date: pd.Period | None = None
+        purchase_date: pd.Period | None = None,
+        **kwargs
     ):
         """
         Initialize a Cash asset.
@@ -40,7 +41,7 @@ class Cash(Asset):
             purchase_date (pd.Period | None): Purchase date, default to initialization date.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False,
-                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases)
+                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
         self._nominal: float = self._ensure_non_zero(nominal)
         self._purchase_proceeds: float = 0.0
         self._disposal_proceeds: float = 0.0
