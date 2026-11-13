@@ -71,7 +71,7 @@ class BaseProjVariable(ABC):
     dims: tuple[tuple[str, ...], ...]
     result: float | int | np.ndarray | None
 
-    def resolve_dim_indices(self, *args: DimElemItem | Enum) -> tuple[int, ...]:
+    def resolve_indices(self, *args: DimElemItem | Enum) -> tuple[int, ...]:
         dims = self.dims
         if len(args) != len(dims):
             raise ValueError(f"'{self.name}': {len(args)} key(s) provided, expected {len(dims)}.")

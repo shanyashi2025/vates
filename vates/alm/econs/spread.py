@@ -2,7 +2,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from vates import TDimVariable
+from vates import TDimVariable, TDimArrayVariable
 from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
 from vates.utils import maybe_raise_if_ne
 
@@ -84,7 +84,7 @@ class Spread:
         self._store_tdv(tdv=self.tdv_propn, var=self._proportional)
         self._last_update = self.time
 
-    def _store_tdv(self, tdv: TDimVariable, var: float | npt.NDArray[np.float64]) -> None:
+    def _store_tdv(self, tdv: TDimVariable | TDimArrayVariable, var: float | npt.NDArray[np.float64]) -> None:
         t = self.time
         arr_len = len(var) if isinstance(var, np.ndarray) else 0
         tdv_term_dim = [int(i) for i in tdv.dims[0]] if tdv.dims else None

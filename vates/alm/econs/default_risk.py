@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 from dataclasses import dataclass
 
@@ -51,6 +52,7 @@ class DefaultRisk:
         default_risk_id: str,
         *,
         model_engine: ProjModelEngine | None = None,
+        pd_affects_decrement: bool = True
     ) -> None:
         """
         Initialize a DefaultRisk object.
@@ -60,7 +62,7 @@ class DefaultRisk:
         """
         self.default_risk_id: str = default_risk_id
         self._params: DefaultRiskParams = DefaultRiskParams(marginal_prob_of_default=0.0, loss_given_default=1.0,
-                                                            pd_affects_decrement=True)
+                                                            pd_affects_decrement=pd_affects_decrement)
         tdv_kwargs = {"model_engine": model_engine, "owner": default_risk_id, "group": 'default_risk'}
         self.tdv_mpd = make_proj_variable("MPD", **tdv_kwargs)
         self.tdv_lgd = make_proj_variable("LGD", **tdv_kwargs)
@@ -99,15 +101,15 @@ class DefaultRisk:
             pd_affects_decrement (bool): True if PD affects decrement.
             loss_given_default (float): Loss Given Default (LGD).
         """
-        tup = (marginal_prob_of_default, loss_given_default, pd_affects_decrement)
-        if all(x is None for x in tup):
+        if all(x is None for x in (marginal_prob_of_default, loss_given_default, pd_affects_decrement)):
             pass
-        elif any(x is None for x in tup):
+        elif marginal_prob_of_default is None or loss_given_default is None:
             raise ValueError(f"One or more parameters are None.")
         else:
             self._params.marginal_prob_of_default = marginal_prob_of_default
             self._params.loss_given_default = loss_given_default
-            self._params.pd_affects_decrement = pd_affects_decrement
+            if pd_affects_decrement is not None:
+                self._params.pd_affects_decrement = pd_affects_decrement
 
         t = self.time
         self.tdv_mpd[t] = self._params.marginal_prob_of_default

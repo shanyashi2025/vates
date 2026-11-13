@@ -94,7 +94,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 fund.record_before_dealing(scope="assets")
 
                 # step 2: liabs roll forward
-                inv_ret_bd = fund.rate_of_return_bd[t, "FAV"]
+                inv_ret_bd = fund.report_rate_of_return_bd("FAV")
                 as_cf_ret = 0  # specify the rate
                 for liab in fund.liabilities:
                     liab.roll_forward(inv_ret_bd=inv_ret_bd, as_cf_ret=as_cf_ret)
@@ -111,7 +111,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 )
 
                 # step 4: liabs update after dealing (ad)
-                inv_ret_ad = fund.rate_of_return_ad[t, "FAV"]
+                inv_ret_ad = fund.report_rate_of_return_ad("FAV")
                 for liab in fund.liabilities:
                     liab.close_dealing(inv_ret_ad=inv_ret_ad)
                 fund.record_after_dealing(scope="liabs")
@@ -132,7 +132,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 assets=all_assets,
                 df_config=aging_assets_output_config_df,
                 date_index=p.year * 100 + p.month,
-                out_rootfolder=str(model.WORKSPACE_DIRECTORY_PATH)
+                output_rootpath=model.WORKSPACE_DIRECTORY_PATH
             )
 
     model.run()

@@ -4,7 +4,7 @@ import pandas as pd
 import warnings
 from typing import Literal
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
+from vates._core import ProjModelEngine, time_synchronized, TDimArrayVariable, make_proj_variable
 from vates.finmath import InterestRateTermStructure
 from vates.utils import maybe_raise_if_ne
 
@@ -39,8 +39,8 @@ class YieldCurve:
             curve_id (str): Unique identifier for this yield curve.
             tdv_term_dim (list[int] | None): List of terms (in months) to be output.
         """
-        self.curve_id = curve_id
-        self._curve: InterestRateTermStructure | None = None
+        self.curve_id: str = curve_id
+        self._curve: InterestRateTermStructure = None
 
         if tdv_term_dim is not None:
             for value in tdv_term_dim:
@@ -54,8 +54,8 @@ class YieldCurve:
                     break
         tdv_term_dim = tdv_term_dim or [*range(12, 61, 12), *range(120, 601, 120)] # default: 1/2/3/4/5/10/20/30/40/50Y
 
-        self.tdv_spot_rates = make_proj_variable("spot_rate", owner=curve_id, group='yield_curve',
-                                                 dims=[tdv_term_dim], model_engine=model_engine)
+        self.tdv_spot_rates: TDimArrayVariable = make_proj_variable("spot_rate", owner=curve_id, group='yield_curve',
+                                                                    dims=[tdv_term_dim], model_engine=model_engine)
         self._last_update: int = self.time or 0
 
     def update(self, *, from_kind: Literal["spot_rates", "forward_rates", "discount_factors"] | None = None,

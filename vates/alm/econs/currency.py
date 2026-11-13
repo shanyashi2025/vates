@@ -15,8 +15,6 @@ class Currency:
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
-    _fx_rate: float
-    _fx_rate_prev: float
 
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', "_last_update",
                  'currency_id', '_fx_rate', '_fx_rate_prev', 'tdv_fx_rate', )
@@ -26,15 +24,18 @@ class Currency:
         currency_id: str,
         *,
         model_engine: ProjModelEngine | None = None,
+        fx_rate: float = float("nan"),
     ) -> None:
         """
         Initialize a Currency object.
 
         Args:
             currency_id (str): Currency identifier.
+            fx_rate (float): FX rate.
         """
         self.currency_id: str = currency_id
-        self._fx_rate = 1.0
+        self._fx_rate: float = fx_rate
+        self._fx_rate_prev: float = float("nan")
         self.tdv_fx_rate = make_proj_variable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
         self._last_update: int = self.time or 0
 
@@ -47,7 +48,6 @@ class Currency:
     @property
     def fx_rate_prev(self) -> float:
         """float: Previous FX rate"""
-        maybe_raise_if_ne(self._last_update, self.time)
         return self._fx_rate_prev
 
     @property
@@ -55,7 +55,7 @@ class Currency:
         """TDimVariable: FX rates."""
         return self.tdv_fx_rate
 
-    def update(self, *, fx_rate: float | None = None, apply_compound_growth: bool = False) -> None:
+    def update(self, *, fx_rate: float = float("nan"), apply_compound_growth: bool = False) -> None:
         """
         Update the FX rate for the current time step.
 
@@ -64,16 +64,10 @@ class Currency:
             apply_compound_growth (bool): True if applying compound growth, defaults to False.
         """
         if apply_compound_growth:
-            if fx_rate is not None:
-                raise ValueError(f"apply_compound_growth=True but 'fx_rate' is provided.")
-            if self._fx_rate_prev == 0:
-                raise ZeroDivisionError(f"{self.currency_id}: previous fx rate is zero.")
             growth = self._fx_rate / self._fx_rate_prev
             self._fx_rate_prev = self._fx_rate
             self._fx_rate *= growth
         else:
-            if fx_rate is None:
-                raise ValueError(f"fx_rate is None.")
             self._fx_rate, self._fx_rate_prev = fx_rate, self._fx_rate
 
         t = self.time

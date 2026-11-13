@@ -83,7 +83,7 @@ class TestConstArrayVariable:
         )
         v[...] = [[1.0, 2.0], [3.0, 4.0]]
 
-        indices = v.resolve_dim_indices("B", _AssetType.BOND)
+        indices = v.resolve_indices("B", _AssetType.BOND)
         assert indices == (1, 1)
         assert v[...][indices] == 4.0
 
@@ -168,7 +168,7 @@ class TestTDimArrayVariable:
         )
         v[3] = [[1.0, 2.0], [3.0, 4.0]]
 
-        indices = v.resolve_dim_indices("B", _AssetType.BOND)
+        indices = v.resolve_indices("B", _AssetType.BOND)
         assert indices == (1, 1)
         assert v[3][indices] == 4.0
 
@@ -191,29 +191,29 @@ class TestResolveDimIndices:
             group="g",
             dims=[["A", "B"], ["X", 2, "Y"]],
         )
-        assert v.resolve_dim_indices(*keys) == expected
+        assert v.resolve_indices(*keys) == expected
 
     def test_single_key_for_one_dimension(self):
         v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
-        assert v.resolve_dim_indices("A") == (0,)
+        assert v.resolve_indices("A") == (0,)
 
     def test_resolves_enum_labels(self):
         v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"], _AssetType])
-        assert v.resolve_dim_indices("B", _AssetType.BOND) == (1, 1)
+        assert v.resolve_indices("B", _AssetType.BOND) == (1, 1)
 
     def test_empty_dimensions_resolve_to_empty_tuple(self):
         v = TDimVariable("t", owner="o", group="g", max_t=2)
-        assert v.resolve_dim_indices() == ()
+        assert v.resolve_indices() == ()
 
     def test_wrong_number_of_keys_raises(self):
         v = ConstArrayVariable("c", owner="o", group="g", dims=[["A"], ["X"]])
         with pytest.raises(ValueError, match="expected 2"):
-            v.resolve_dim_indices("A")
+            v.resolve_indices("A")
 
     def test_unknown_label_raises_key_error(self):
         v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
         with pytest.raises(KeyError, match="not in dims"):
-            v.resolve_dim_indices("missing")
+            v.resolve_indices("missing")
 
 
 class TestVariableCaches:

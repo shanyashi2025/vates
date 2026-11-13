@@ -10,7 +10,6 @@ from vates.alm.assets import BaseAsset, Cash
 from vates.alm.liabs import BaseLiab
 from vates.alm._utils import ObjList
 from vates.alm.funds._recorder import AssetRecorder, LiabRecorder, OtherRecorder
-from vates.alm.funds._utils import _RateOfReturnIndexer
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -98,16 +97,46 @@ class Fund:
         return self._asset_rec.total_cash_flow
 
     @property
+    def total_asset_market_value_bd(self) -> float:
+        return self._asset_rec.total_market_value_bd
+
+    @property
+    def total_asset_market_value_ad(self) -> float:
+        return self._asset_rec.total_market_value_ad
+
+    def asset_cash_flow(self, category: str | None = None) -> float:
+        return self._asset_rec.cash_flow(category)
+
+    def report_asset_value_bd(self, basis: str, category: str | None = None) -> float:
+        return self._asset_rec.report_bd("report_value", basis=basis, category=category)
+
+    def report_investment_return_bd(self, basis: str, category: str | None = None) -> float:
+        return self._asset_rec.report_bd("investment_return", basis=basis, category=category)
+
+    def report_rate_of_return_bd(self, basis: str, category: str | None = None) -> float:
+        return self._asset_rec.report_bd("rate_of_return", basis=basis, category=category)
+
+    def report_asset_value_ad(self, basis: str, category: str | None = None) -> float:
+        return self._asset_rec.report_ad("report_value", basis=basis, category=category)
+
+    def report_investment_return_ad(self, basis: str, category: str | None = None) -> float:
+        return self._asset_rec.report_ad("investment_return", basis=basis, category=category)
+
+    def report_rate_of_return_ad(self, basis: str, category: str | None = None) -> float:
+        return self._asset_rec.report_ad("rate_of_return", basis=basis, category=category)
+
+    def retrieve_rate_of_return(self, t: int, basis: str, when: Literal["bd", "ad"], category: str | None = None
+                                ) -> float:
+        if when == "bd":
+            return self._asset_rec.retrieve(t, kind="rate_of_return_bd", basis=basis, category=category)
+        elif when == "ad":
+            return self._asset_rec.retrieve(t, kind="rate_of_return_ad", basis=basis, category=category)
+        else:
+            raise ValueError(f"Unexpected when: {when}, expecting ('bd', 'ad').")
+
+    @property
     def total_liability_cash_flow(self) -> float:
         return self._liab_rec.total_cash_flow
-
-    @property
-    def rate_of_return_bd(self) -> _RateOfReturnIndexer:
-        return self._asset_rec.rate_of_return_bd
-
-    @property
-    def rate_of_return_ad(self) -> _RateOfReturnIndexer:
-        return self._asset_rec.rate_of_return_ad
 
     def add_asset(self, obj: BaseAsset | Iterable[BaseAsset], /) -> None:
         """Add asset object(s) to the fund.
@@ -125,7 +154,7 @@ class Fund:
         """Add liability object(s) to the fund.
 
         Args:
-            obj (BaseLiab | Iterable[Liab]): Liability(s) to be included.
+            obj (BaseLiab | Iterable[BaseLiab]): Liability(s) to be included.
 
         """
         if isinstance(obj, Iterable):
@@ -167,8 +196,8 @@ class Fund:
             else:
                 raise ValueError(f"Invalid scope '{item}', expected ('assets', 'liabs').")
 
-    def record_free_proceeds(self, timing: Literal["bd", "ad", "end"]):
-        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance, timing)
+    def record_free_proceeds(self, when: Literal["bd", "ad", "end"]):
+        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance, when)
 
     def get_total_asset_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
         """ Get the sum of a numeric attribute of total assets

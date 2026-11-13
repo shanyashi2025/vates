@@ -91,9 +91,10 @@ def par_cd_roll_forward_hook(obj) -> None:
     as_cf_ret = getattr(obj, "as_cf_ret", None)
     if as_cf_ret is None:
         as_cf_ret = obj.inv_ret_bd
-    obj.cash_flow = (obj.prem_inc - obj.comm_out - obj.exp_out - obj.death_out - obj.crben_out - obj.ann_out
+    cash_flow = (obj.prem_inc - obj.comm_out - obj.exp_out - obj.death_out - obj.crben_out - obj.ann_out
                      - obj.surr_out - obj.mat_out - obj.div_out - obj.invexp_out)
-    obj.asset_share_if_bd = obj.asset_share_prev * (1 + obj.inv_ret_bd) + obj.cash_flow * (1 + as_cf_ret)
+    obj.cash_flow = cash_flow
+    obj.asset_share_if_bd = obj.asset_share_prev * (1 + obj.inv_ret_bd) + cash_flow * (1 + as_cf_ret)
 
 def par_cd_close_dealing_hook(obj) -> None:
     ret_diff = obj.inv_ret_ad - obj.inv_ret_bd

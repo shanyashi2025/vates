@@ -15,12 +15,6 @@ class EquityIndex:
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
-    _total_return_index: float
-    _total_return_index_prev: float
-    _price_return_index: float
-    _price_return_index_prev: float
-    _total_return: float
-    _price_return: float
 
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_last_update', 'index_id',
                  '_total_return_index', '_total_return_index_prev', '_price_return_index', '_price_return_index_prev',
@@ -82,7 +76,6 @@ class EquityIndex:
     @property
     def total_return_index_prev(self) -> float:
         """float: Previous total return index."""
-        maybe_raise_if_ne(self._last_update, self.time)
         return self._total_return_index_prev
 
     @property
@@ -94,7 +87,6 @@ class EquityIndex:
     @property
     def price_return_index_prev(self) -> float:
         """float: Previous price return index."""
-        maybe_raise_if_ne(self._last_update, self.time)
         return self._price_return_index_prev
 
     @property

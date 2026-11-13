@@ -105,7 +105,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             fund.record_before_dealing(scope="assets")
 
             # step 2: liabs roll forward
-            inv_ret_bd = fund.rate_of_return_bd[t, "FAV"]
+            inv_ret_bd = fund.report_rate_of_return_bd("FAV")
             as_cf_ret = 0  # # specify the rate
             for liab in fund.liabilities:
                 liab.roll_forward(inv_ret_bd=inv_ret_bd, as_cf_ret=as_cf_ret)
@@ -122,7 +122,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             )
 
             # step 4: liabs update after dealing (ad)
-            inv_ret_ad = fund.rate_of_return_ad[t, "FAV"]
+            inv_ret_ad = fund.report_rate_of_return_ad("FAV")
             for liab in fund.liabilities:
                 liab.close_dealing(inv_ret_ad=inv_ret_ad)
             fund.record_after_dealing(scope="liabs")

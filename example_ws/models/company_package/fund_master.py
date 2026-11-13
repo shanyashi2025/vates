@@ -139,7 +139,7 @@ def _rebalance_this_month(cal_month: int, rebalance_freq: int) -> bool:
 
 
 def fund_rebalance(model_engine: ProjModelEngine, fund: Fund, rebalance_params: FundRebalanceParams,
-                   assets_df_dict: dict, econs: dict | EconMaster, asset_mix_df: pd.DataFrame):
+                   assets_df_dict: dict, econs: EconMaster, asset_mix_df: pd.DataFrame):
     fund_id = fund.fund_id
     period = fund.period
 

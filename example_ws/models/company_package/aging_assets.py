@@ -20,7 +20,7 @@ class AgingCash:
 
     @classmethod
     def from_asset_object(cls, cash: Cash) -> Self:
-        return AgingCash(
+        return cls(
             asset_id=cash.asset_id,
             currency_id='none' if cash.currency is None else cash.currency.currency_id,
             fund_id=getattr(cash, "fund_id"),
@@ -43,11 +43,11 @@ class AgingEquity:
     market_value: float
     purchase_cost: float
     equity_index_id: str
-    purchase_date: pd.Period
+    purchase_date: pd.Period | None
 
     @classmethod
     def from_asset_object(cls, equity: Equity) -> Self:
-        return AgingEquity(
+        return cls(
             asset_id=equity.asset_id,
             is_profile=equity.is_profile,
             currency_id='none' if equity.currency is None else equity.currency.currency_id,
@@ -86,7 +86,7 @@ class AgingBond:
     rf_curve_id: str
     spread_id: str
     default_risk_id: str
-    purchase_date: pd.Period
+    purchase_date: pd.Period | None
 
     @classmethod
     def from_asset_object(cls, bond: BondFixed) -> Self:
@@ -94,7 +94,7 @@ class AgingBond:
         spread = getattr(bond, '_spread', None)
         default_risk = getattr(bond, '_default_risk', None)
 
-        return AgingBond(
+        return cls(
             asset_id=bond.asset_id,
             is_profile=bond.is_profile,
             qty=bond.qty,
@@ -123,11 +123,12 @@ class AgingBond:
 class AgingAssetFileManager:
 
     def __init__(self, output_file_path: Path | str, is_delete_existing: bool = True):
-        self.output_file_path: Path = self.get_output_file_path_ready(output_file_path, is_delete_existing)
+        self.output_file_path: Path = self.make_output_file_path_ready(output_file_path, is_delete_existing)
         self._is_file_created: bool = False
 
     @staticmethod
-    def get_output_file_path_ready(output_file_path: Path | str, is_delete_existing: bool) -> Path:
+    def make_output_file_path_ready(output_file_path: Path | str, is_delete_existing: bool) -> Path:
+        output_file_path = Path(output_file_path)
         if not str(output_file_path).lower().endswith('.csv'):
             output_file_path = Path(str(output_file_path) + '.csv')
         output_file_path.resolve().parent.mkdir(parents=True, exist_ok=True)
@@ -135,7 +136,7 @@ class AgingAssetFileManager:
             os.remove(output_file_path)
         return output_file_path
 
-    def writerow(self, asset_dataclass_obj: dataclass):
+    def writerow(self, asset_dataclass_obj):
         if self.output_file_path is None:
             raise ValueError(f"output_file_path is not specified.")
 
@@ -150,7 +151,7 @@ class AgingAssetFileManager:
             writer = csv.writer(csvfile)
             writer.writerow(astuple(asset_dataclass_obj))
 
-def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int | str, out_rootfolder: str,
+def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int | str, output_rootpath: Path | str,
                         is_delete_existing: bool = True) -> None:
     aging_asset_dataclasses: dict[type[Cash | Equity | BondFixed], type[AgingCash, AgingEquity, AgingBond]] = {
         Cash: AgingCash,
@@ -158,7 +159,7 @@ def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int |
         BondFixed: AgingBond,
     }
 
-    output_folder_path: Path = Path(out_rootfolder) / df_config.loc[date_index, 'output_folder']
+    output_dir_path: Path = Path(output_rootpath) / str(df_config.loc[date_index, 'output_folder'])
     aging_asset_file_managers: dict[type[Cash | Equity | BondFixed], AgingAssetFileManager] = {}
     asset_filename_map: dict[type[Cash | Equity | BondFixed], str] = {
         Cash: 'assets_cash',
@@ -168,7 +169,7 @@ def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int |
     for key, val in asset_filename_map.items():
         if val in df_config:
             aging_asset_file_managers[key] = AgingAssetFileManager(
-                output_file_path=output_folder_path / df_config.loc[date_index, val],
+                output_file_path=output_dir_path / str(df_config.loc[date_index, val]),
                 is_delete_existing=is_delete_existing
             )
 
@@ -180,10 +181,10 @@ def output_aging_assets(assets: list, df_config: pd.DataFrame, date_index: int |
         aging_asset_data_cls = aging_asset_dataclasses.get(asset_type)
         aging_asset_file_mgr = aging_asset_file_managers.get(asset_type)
         if aging_asset_data_cls is None:
-            warnings.warn(f"Asset class '{asset_type}' not defined, output ingnored.")
+            warnings.warn(f"Asset class '{asset_type}' not defined, output ignored.")
             continue
         if aging_asset_file_mgr is None:
-            warnings.warn(f"Aging asset file not specified for '{asset_filename_map[asset_type]}', output ingnored.")
+            warnings.warn(f"Aging asset file not specified for '{asset_filename_map[asset_type]}', output ignored.")
             continue
 
         aging_asset_file_mgr.writerow(aging_asset_data_cls.from_asset_object(asset))
