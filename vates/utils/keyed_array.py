@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import warnings
+from collections.abc import Hashable
 from typing import Any, overload
 
 
@@ -25,7 +26,7 @@ class KeyedArray:
         /,
         *,
         frozen: bool,
-        key_pos_pairs: list[dict[Any, int]],
+        key_pos_pairs: list[dict[Hashable, int]],
         dim_names: list[str] | None = None
     ):
         """Initialize a KeyedArray.
@@ -83,22 +84,22 @@ class KeyedArray:
         return self._at.dim_names
 
     @property
-    def key_pos_pairs(self) -> list[dict[Any, int]]:
+    def key_pos_pairs(self) -> list[dict[Hashable, int]]:
         """Mapping from keys to integer-position indices for each dimension."""
         return self._at.key_pos_pairs
 
     @overload
-    def key_to_pos(self, dim: int | str, key: Any) -> int: ...
+    def key_to_pos(self, dim: int | str, key: Hashable) -> int: ...
 
     @overload
-    def key_to_pos[T](self, dim: int | str, key: Any, *, default: T) -> int | T: ...
+    def key_to_pos[T](self, dim: int | str, key: Hashable, *, default: T) -> int | T: ...
 
-    def key_to_pos(self, dim: int | str, key: Any, *, default: Any = _MISSING) -> int | Any:
+    def key_to_pos(self, dim: int | str, key: Hashable, *, default: Any = _MISSING) -> int | Any:
         """Return the integer-position index mapped from the key of the dimension.
 
         Args:
             dim (int | str): Dimension, either dimension (int) or dimension name (str) is supported.
-            key: Key to lookup.
+            key (Hashable): Key to lookup.
             default (Optional): Value to return if no match is found; raise if not provided.
 
         Returns:
@@ -127,7 +128,7 @@ class KeyedArray:
         """Return element by keys, or a default value if not found.
 
         Args:
-            *args: Positional keys corresponding to each dimension.
+            *args (Hashable): Positional keys corresponding to each dimension.
             default: Value to return if any key is invalid.
             **kwargs: Keyword keys.
 
@@ -141,16 +142,16 @@ class KeyedArray:
             raise TypeError("Cannot mix positional and keyword keys.")
 
         if args:
-            return self._at.get(args, default_value=default)
+            return self._at.get(*args, default=default)
 
-        keys = [None] * self._arr.ndim
+        keys: list[Hashable] = [None] * self._arr.ndim
         for dim, val in kwargs.items():
             axis = self._at.dim_name_to_axis.get(dim, None)
             if axis is None:
                 return default
             keys[axis] = val
 
-        return self._at.get(tuple(keys), default_value=default)
+        return self._at.get(*keys, default=default)
 
     @classmethod
     def from_df(
@@ -221,7 +222,7 @@ class _AtIndexer:
 
     __slots__ = ('_nparray', '_key_pos_pairs', '_dim_names', '_dim_name_to_axis', '_key_pos_cache')
 
-    def __init__(self, nparray: np.ndarray, key_pos_pairs: list[dict[Any, int]], dim_names: list[str] | None = None):
+    def __init__(self, nparray: np.ndarray, key_pos_pairs: list[dict[Hashable, int]], dim_names: list[str] | None = None):
         """Initialize the indexer.
 
         Args:
@@ -245,8 +246,8 @@ class _AtIndexer:
         self._nparray: np.ndarray = nparray
         self._dim_names: list[str] = self._validate_dim_names(dim_names)
         self._dim_name_to_axis: dict[str, int] = {name: i for i, name in enumerate(self._dim_names)}
-        self._key_pos_pairs: list[dict[Any, int]] = key_pos_pairs
-        self._key_pos_cache: dict[tuple[int, Any], tuple[Any, bool, str]] = {}
+        self._key_pos_pairs: list[dict[Hashable, int]] = key_pos_pairs
+        self._key_pos_cache: dict[tuple[int, Hashable], int | None] = {}
 
     @property
     def dim_names(self) -> list[str]:
@@ -257,7 +258,7 @@ class _AtIndexer:
         return self._dim_name_to_axis
 
     @property
-    def key_pos_pairs(self) -> list[dict[Any, int]]:
+    def key_pos_pairs(self) -> list[dict[Hashable, int]]:
         """Mapping from keys to integer-position indices for each dimension."""
         return self._key_pos_pairs
 
@@ -276,24 +277,22 @@ class _AtIndexer:
         return dim_names
 
     @overload
-    def _parse_pos_tuple(self, keys, /) -> tuple[int, ...]: ...
+    def _parse_pos_tuple(self, *keys: Hashable) -> tuple[int, ...]: ...
 
     @overload
-    def _parse_pos_tuple[T](self, keys, /, *, default: T) -> tuple[int, ...] | T: ...
+    def _parse_pos_tuple[T](self, *keys: Hashable, default: T) -> tuple[int, ...] | T: ...
 
-    def _parse_pos_tuple(self, keys, /, *, default: Any = _MISSING) -> tuple[int, ...] | Any:
+    def _parse_pos_tuple(self, *keys: Hashable, default: Any = _MISSING) -> tuple[int, ...] | Any:
         """Convert a tuple of keys into a tuple of integer-position indices.
 
         Args:
-            keys: Keys corresponding to each dimension.
+            *keys (Hashable): Keys corresponding to each dimension.
             default (Optional): Value to return if no match is found; raise if not provided.
 
         Returns:
             Tuple of integer indices.
 
         """
-        if not isinstance(keys, tuple):
-            keys = (keys,)
         if len(keys) != self._nparray.ndim:
             if self._nparray.ndim == 2 and len(keys) > 2:  # attempt to infer tuple of keys for 2D array
                 keys = keys[:-1], keys[-1]
@@ -306,8 +305,8 @@ class _AtIndexer:
 
         pos_list: list[int] = []
         for axis, key in enumerate(keys):
-            pos, valid, _ = self._resolve_key(axis, key)
-            if not valid:
+            pos = self._resolve_pos(axis, key)
+            if pos is None:
                 if default is _MISSING:
                     raise KeyError(f"'{key}' is not a valid key in dimension '{self.dim_names[axis]}'")
                 return default
@@ -315,46 +314,33 @@ class _AtIndexer:
 
         return tuple(pos_list)
 
-    def _resolve_key(self, axis: int, key) -> tuple[Any, bool, str]:
-        resolved = self._key_pos_cache.get((axis, key), None)
-        if resolved is not None:
-            return resolved
+    def _resolve_pos(self, axis: int, key: Hashable) -> int | None:
+        pos = self._key_pos_cache.get((axis, key), _MISSING)
+        if pos is _MISSING:
+            pos = self._key_pos_pairs[axis].get(key, None)
+            self._key_pos_cache[(axis, key)] = pos
+        return pos
 
-        pos = self._key_pos_pairs[axis].get(key, None)
-
-        if pos is None:
-            return pos, False, f"key {key} does not exist in dimension '{self.dim_names[axis]}'"
-
-        if not isinstance(pos, int):
-            return pos, False, f"position type {type(pos)} is not valid, must be 'int'"
-
-        if not 0 <= pos <= self._nparray.shape[axis] - 1:
-            return pos, False, f"position {pos} is out of bounds range(0, {self._nparray.shape[axis]})"
-
-        resolved = pos, True, ""
-        self._key_pos_cache[(axis, key)] = resolved
-        return resolved
-
-    def get(self, args, /, *, default_value):
+    def get(self, *args: Hashable, default):
         """Return element by keys, or a default value if not found.
 
         Args:
-            args: Tuple of positional keys corresponding to each dimension.
-            default_value: Value to return if lookup fails.
+            *args (Hashable): Tuple of positional keys corresponding to each dimension.
+            default: Value to return if lookup fails.
 
         Returns:
             The element at the specified keys, or `default_value` if lookup fails.
         """
-        pos_tuple = self._parse_pos_tuple(args, default=None)
+        pos_tuple = self._parse_pos_tuple(*args, default=None)
         if pos_tuple is None:
-            return default_value
+            return default
         return self._nparray[pos_tuple]
 
-    def __getitem__(self, keys):
+    def __getitem__(self, keys: Hashable | tuple[Hashable, ...]):
         """Return element(s) using label-based indexing.
 
         Args:
-            keys: Keys corresponding to each dimension.
+            keys (keys: Hashable | tuple[Hashable, ...]): Keys corresponding to each dimension.
 
         Returns:
             Element(s) from the underlying array.
@@ -362,18 +348,20 @@ class _AtIndexer:
         Raises:
             KeyError: If keys are incorrect.
         """
-        pos_tuple = self._parse_pos_tuple(keys)  # will raise if keys are invalid
+        keys = keys if isinstance(keys, tuple) else (keys,)
+        pos_tuple = self._parse_pos_tuple(*keys)  # will raise if keys are invalid
         return self._nparray[pos_tuple]
 
-    def __setitem__(self, keys, value):
+    def __setitem__(self, keys: Hashable | tuple[Hashable, ...], value):
         """Set element(s) using label-based indexing.
 
         Args:
-            keys: Keys corresponding to each dimension.
+            keys (Hashable | tuple[Hashable, ...]): Keys corresponding to each dimension.
             value: Value to assign.
 
         Raises:
             KeyError: If keys are incorrect.
         """
-        pos_tuple = self._parse_pos_tuple(keys)  # will raise if keys are invalid
+        keys = keys if isinstance(keys, tuple) else (keys,)
+        pos_tuple = self._parse_pos_tuple(*keys)  # will raise if keys are invalid
         self._nparray[pos_tuple] = value
