@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Literal
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
-from vates.utils import transition
+from vates.utils import transition, maybe_raise_on_compare
 from vates.alm.econs import Currency, YieldCurve, Spread, DefaultRisk, DefaultRiskParams
 from vates.alm.assets.asset_base import BaseAsset, AssetPhase
 from vates.alm.assets._bond_fixed_component import (
@@ -329,11 +329,6 @@ class BondFixed(BaseAsset):
         """float: Cash flow in period"""
         return self._cash_flow
 
-    @property
-    def arr_cash_flow(self) -> TDimVariable:
-        """TDepVariable: Cash flow array"""
-        return self.tdv_cash_flow
-
     def buy_propn(self, *args, **kwargs) -> None:
         """
         Not allowed for bonds. Raises ValueError.
@@ -428,3 +423,7 @@ class BondFixed(BaseAsset):
         self.tdv_abv_ad[t] = self.amortized_book_value
         self.tdv_purchase_proceeds[t] = self._purchase_proceeds
         self.tdv_disposal_proceeds[t] = self._disposal_proceeds
+
+    def retrieve_cash_flow(self, t: int) -> float:
+        maybe_raise_on_compare(t, must_ge=0, must_le=self.time)
+        return self.tdv_cash_flow[t]

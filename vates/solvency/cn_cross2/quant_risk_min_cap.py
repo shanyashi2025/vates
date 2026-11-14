@@ -3,7 +3,7 @@ import pandas as pd
 from functools import partial
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
-from vates.utils import maybe_raise_if_ne
+from vates.utils import maybe_raise_on_compare
 from vates.solvency.risk_tree import  RiskTree, risk_aggregation
 from vates.solvency.cn_cross2.rules import (
     MC_CORR_MATRIX,
@@ -134,28 +134,28 @@ class MinCapUnit:
 
     @property
     def risk_module(self) -> RiskTree:
-        maybe_raise_if_ne(self._last_calculate, self.time)
+        maybe_raise_on_compare(self._last_calculate, self.time)
         return self._risk_module
 
     @property
     def loss_absorbency(self) -> float:
         if not self.require_loss_absorbency:
             return 0.0
-        maybe_raise_if_ne(self._last_calculate, self.time)
+        maybe_raise_on_compare(self._last_calculate, self.time)
         return self._loss_absorbency
 
     @property
     def la_pv_base(self) -> float:
         if not self.require_loss_absorbency:
             return 0.0
-        maybe_raise_if_ne(self._last_calculate, self.time)
+        maybe_raise_on_compare(self._last_calculate, self.time)
         return self._la_pv_base
 
     @property
     def la_pv_lower_limit(self) -> float:
         if not self.require_loss_absorbency:
             return 0.0
-        maybe_raise_if_ne(self._last_calculate, self.time)
+        maybe_raise_on_compare(self._last_calculate, self.time)
         return self._la_pv_lower_limit
 
     def get_risk_capital(self, path: str | None = None, /) -> float:
@@ -228,12 +228,12 @@ class MinCapConsolidator:
 
     @property
     def minimum_capital(self) -> float:
-        maybe_raise_if_ne(self._last_calculate, self.time)
+        maybe_raise_on_compare(self._last_calculate, self.time)
         return self._risk_module.get_capital() -  self._loss_absorbency
 
     @property
     def loss_absorbency(self) -> float:
-        maybe_raise_if_ne(self._last_calculate, self.time)
+        maybe_raise_on_compare(self._last_calculate, self.time)
         return self._loss_absorbency
 
     def get_risk_capital(self, path: str | None = None, /) -> float:

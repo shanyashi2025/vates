@@ -4,7 +4,7 @@ import pandas as pd
 
 from vates import TDimVariable, TDimArrayVariable
 from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
-from vates.utils import maybe_raise_if_ne
+from vates.utils import maybe_raise_on_compare
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -54,13 +54,13 @@ class Spread:
     @property
     def additive(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Additive spread as at period end."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._additive
 
     @property
     def proportional(self) -> float | npt.NDArray[np.float64]:
         """npt.NDArray[np.float64]: Proportional spread (multiplied by risk-free rates) as at period end."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._proportional
 
     def update(self, *, additive: float | npt.NDArray[np.float64] | None = None,

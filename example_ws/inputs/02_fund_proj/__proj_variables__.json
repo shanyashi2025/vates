@@ -1,6 +1,6 @@
 {
   "cash": {
-    "exclude": ["cash_flow"]
+    "include": "__ALL__"
   },
   "bond": {
     "include": "__ALL__"

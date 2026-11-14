@@ -5,7 +5,7 @@ from typing import Literal
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable, TDimArrayVariable, make_proj_variable
 from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
-from vates.utils import Lifecycle, transition
+from vates.utils import Lifecycle, transition, maybe_raise_on_compare
 from vates.alm._utils import ObjList
 from vates.alm.assets.asset_base import BaseAsset, AssetPhase
 from vates.alm.liabs.liab_base import BaseLiab
@@ -182,8 +182,7 @@ class AssetRecorder:
             "investment_return_bd", "investment_return_ad", "rate_of_return_bd", "rate_of_return_ad"],
         basis: str | None = None, category: str | None = None
     ) -> float:
-        if t > self.time:
-            raise ValueError(f"Cannot retrieve a future time {t}; current time is {self.time}.")
+        maybe_raise_on_compare(t, must_ge=0, must_le=self.time)
         bas_idx = self.report_bases.index(basis) if basis else len(self.report_bases) + 1
         if category is None:
             if kind == "cash_flow": return self.tdv_tot_cf[t]

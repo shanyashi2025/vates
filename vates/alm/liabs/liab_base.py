@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 
 from vates._core import ProjModelEngine, time_synchronized
-from vates.utils import Lifecycle, maybe_raise_if_ne
+from vates.utils import Lifecycle, maybe_raise_on_compare
 from vates.alm.econs import Currency
 
 class LiabPhase(Enum):
@@ -95,7 +95,7 @@ class BaseLiab(ABC):
 
     def require_lifecycle(self, phase: LiabPhase, t: int | None = None):
         t = t if t is not None else self.time
-        maybe_raise_if_ne(self._lc[phase], t)
+        maybe_raise_on_compare(self._lc[phase], t)
 
     def __getattr__(self, name):
         try:

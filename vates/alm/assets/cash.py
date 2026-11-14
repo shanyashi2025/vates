@@ -17,7 +17,7 @@ class Cash(BaseAsset):
 
     """
     __slots__ = ('_nominal', '_purchase_proceeds', '_disposal_proceeds',
-                 'tdv_cash_flow', 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
+                 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
 
     def __init__(
         self,
@@ -47,7 +47,6 @@ class Cash(BaseAsset):
         self._disposal_proceeds: float = 0.0
 
         create_tdv = lambda name: make_proj_variable(name, model_engine=model_engine, owner=asset_id, group='cash')
-        self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
         self.tdv_purchase_proceeds: TDimVariable = create_tdv("purchase_proceeds")
@@ -73,7 +72,6 @@ class Cash(BaseAsset):
         """
         t = self.time
         self._nominal = self._nominal * (1 + rate_of_return)
-        self.tdv_cash_flow[t] = 0.0
         self.tdv_mv_bd[t] = self._nominal
 
     def buy_amount(self, amount: float) -> None:
@@ -144,7 +142,5 @@ class Cash(BaseAsset):
     def disposal_proceeds(self) -> float:
         return self._disposal_proceeds
 
-    @property
-    def arr_cash_flow(self) -> TDimVariable:
-        """TDepVariable: Cash flow array"""
-        return self.tdv_cash_flow
+    def retrieve_cash_flow(self, *args) -> float:
+        return 0.0

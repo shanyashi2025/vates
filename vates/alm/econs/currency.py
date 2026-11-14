@@ -1,7 +1,7 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
-from vates.utils import maybe_raise_if_ne
+from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
+from vates.utils import maybe_raise_on_compare
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -11,13 +11,12 @@ class Currency:
 
     Attributes:
         currency_id (str): Currency identifier.
-        tdv_fx_rate (TDimVariable): Current FX rate.
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', "_last_update",
-                 'currency_id', '_fx_rate', '_fx_rate_prev', 'tdv_fx_rate', )
+                 'currency_id', '_fx_rate', '_fx_rate_prev', '_appreciate', 'tdv_fx_rate', )
 
     def __init__(
         self,
@@ -36,13 +35,14 @@ class Currency:
         self.currency_id: str = currency_id
         self._fx_rate: float = fx_rate
         self._fx_rate_prev: float = float("nan")
+        self._appreciate: float = 0
         self.tdv_fx_rate = make_proj_variable("fx_rate", model_engine=model_engine, owner=currency_id, group='currency')
         self._last_update: int = self.time or 0
 
     @property
     def fx_rate(self) -> float:
         """float: Current FX rate"""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._fx_rate
 
     @property
@@ -51,9 +51,13 @@ class Currency:
         return self._fx_rate_prev
 
     @property
-    def arr_fx_rate(self) -> TDimVariable:
-        """TDimVariable: FX rates."""
-        return self.tdv_fx_rate
+    def appreciate(self) -> float:
+        """float: Currency appreciation over the period"""
+        maybe_raise_on_compare(self._last_update, self.time)
+        return self._appreciate
+
+    def _on_time_change(self) -> None:
+        self._fx_rate_prev = self._fx_rate
 
     def update(self, *, fx_rate: float = float("nan"), apply_compound_growth: bool = False) -> None:
         """
@@ -64,11 +68,10 @@ class Currency:
             apply_compound_growth (bool): True if applying compound growth, defaults to False.
         """
         if apply_compound_growth:
-            growth = self._fx_rate / self._fx_rate_prev
-            self._fx_rate_prev = self._fx_rate
-            self._fx_rate *= growth
+            self._fx_rate = self._fx_rate_prev * (1 + self._appreciate)
         else:
-            self._fx_rate, self._fx_rate_prev = fx_rate, self._fx_rate
+            self._fx_rate = fx_rate
+            self._appreciate = self._fx_rate / self._fx_rate_prev - 1
 
         t = self.time
         self.tdv_fx_rate[t] = fx_rate
@@ -76,3 +79,7 @@ class Currency:
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.currency_id}'"
+
+    def retrieve_fx_rate(self, t: int) -> float:
+        maybe_raise_on_compare(t, must_ge=0, must_le=self.time)
+        return self.tdv_fx_rate[t]

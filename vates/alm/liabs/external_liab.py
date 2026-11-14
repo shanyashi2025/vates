@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Callable, Self
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
-from vates.utils import transition
+from vates.utils import transition, maybe_raise_on_compare
 from vates.alm.econs import Currency
 from vates.alm.liabs.liab_base import BaseLiab, LiabPhase
 
@@ -107,7 +107,6 @@ class ExternalLiab(BaseLiab):
     def cash_flow(self, value: float) -> None:
         self._cash_flow = value
 
-    @property
-    def arr_cash_flow(self) -> TDimVariable:
-        """TDepVariable: Cash flow array"""
-        return self.tdv_cash_flow
+    def retrieve_cash_flow(self, t: int) -> float:
+        maybe_raise_on_compare(t, must_ge=0, must_le=self.time)
+        return self.tdv_cash_flow[t]

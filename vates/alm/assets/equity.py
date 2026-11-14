@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Literal
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
-from vates.utils import transition
+from vates.utils import transition, maybe_raise_on_compare
 from vates.alm.econs import Currency, EquityIndex
 from vates.alm.assets.asset_base import BaseAsset, AssetPhase
 
@@ -203,7 +203,6 @@ class Equity(BaseAsset):
         """float: Cash flow in period"""
         return self._cash_flow
 
-    @property
-    def arr_cash_flow(self) -> TDimVariable:
-        """TDepVariable: Cash flow array"""
-        return self.tdv_cash_flow
+    def retrieve_cash_flow(self, t: int) -> float:
+        maybe_raise_on_compare(t, must_ge=0, must_le=self.time)
+        return self.tdv_cash_flow[t]

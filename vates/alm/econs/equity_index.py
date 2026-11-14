@@ -1,7 +1,7 @@
 import pandas as pd
 
-from vates._core import ProjModelEngine, time_synchronized, TDimVariable, make_proj_variable
-from vates.utils import maybe_raise_if_ne
+from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
+from vates.utils import maybe_raise_on_compare
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -52,25 +52,25 @@ class EquityIndex:
     @property
     def total_return(self) -> float:
         """float: Total return in period."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._total_return
 
     @property
     def price_return(self) -> float:
         """float: Price return (capital gain or loss) in period."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._price_return
 
     @property
     def dividend_yield(self) -> float:
         """float: Effective dividend yield over the period."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._total_return - self._price_return
 
     @property
     def total_return_index(self) -> float:
         """float: Current total return index."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._total_return_index
 
     @property
@@ -81,23 +81,13 @@ class EquityIndex:
     @property
     def price_return_index(self) -> float:
         """float: Current price return index."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._price_return_index
 
     @property
     def price_return_index_prev(self) -> float:
         """float: Previous price return index."""
         return self._price_return_index_prev
-
-    @property
-    def arr_total_return_index(self) -> TDimVariable:
-        """TDimVariable: Total return index."""
-        return self.tdv_tot_return_index
-
-    @property
-    def arr_price_return_index(self) -> TDimVariable:
-        """TDimVariable: Price return index."""
-        return self.tdv_pri_return_index
 
     def _on_time_change(self) -> None:
         self._total_return_index_prev = self._total_return_index
@@ -131,3 +121,11 @@ class EquityIndex:
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.index_id}'"
+
+    def retrieve_total_return_index(self, t: int) -> float:
+        maybe_raise_on_compare(t, must_ge=0, must_le=self.time)
+        return self.tdv_tot_return_index[t]
+
+    def retrieve_price_return_index(self, t: int) -> float:
+        maybe_raise_on_compare(t, must_ge=0, must_le=self.time)
+        return self.tdv_pri_return_index[t]

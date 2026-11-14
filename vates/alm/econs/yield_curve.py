@@ -6,7 +6,7 @@ from typing import Literal
 
 from vates._core import ProjModelEngine, time_synchronized, TDimArrayVariable, make_proj_variable
 from vates.finmath import InterestRateTermStructure
-from vates.utils import maybe_raise_if_ne
+from vates.utils import maybe_raise_on_compare
 
 
 @time_synchronized("model_engine.time_synchronizer")
@@ -87,25 +87,25 @@ class YieldCurve:
     @property
     def spot_rates(self) -> npt.NDArray[np.float64]:
         """npt.NDArray[np.float64] | None: Spot rates, or None if the curve has not been initialized."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._curve.spotac
 
     @property
     def discount_factors(self) -> npt.NDArray[np.float64]:
         """npt.NDArray[np.float64] | None: Discount factors, or None if the curve has not been initialized."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._curve.discount
 
     @property
     def forward_rates(self) -> npt.NDArray[np.float64]:
         """npt.NDArray[np.float64] | None: Forward rates, or None if the curve has not been initialized."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._curve.forwardac
 
     @property
     def par_yields(self) -> dict[int, npt.NDArray[np.float64]]:
         """dict[int, npt.NDArray[np.float64]] | None: Par yields, or None if the curve has not been initialized."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._curve.parac
 
     def _on_exit_update(self) -> None:

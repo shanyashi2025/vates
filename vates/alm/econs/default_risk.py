@@ -1,9 +1,8 @@
-import math
 import pandas as pd
 from dataclasses import dataclass
 
 from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
-from vates.utils import maybe_raise_if_ne
+from vates.utils import maybe_raise_on_compare
 
 
 @dataclass(slots=True)
@@ -37,8 +36,6 @@ class DefaultRisk:
     Attributes:
         default_risk_id (str): default risk identifier.
         _params (DefaultRiskParams): default risk parameters.
-        tdv_mpd (float): Marginal Probability of Default (MPD).
-        tdv_lgd (float): Loss Given Default (LGD).
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
@@ -71,7 +68,7 @@ class DefaultRisk:
     @property
     def marginal_prob_of_default(self) -> float:
         """float: Marginal Probability of Default (MPD)."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._params.marginal_prob_of_default
 
     @property
@@ -82,13 +79,13 @@ class DefaultRisk:
     @property
     def loss_given_default(self) -> float:
         """float: Loss Given Default (LGD)."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._params.loss_given_default
 
     @property
     def recovery_rate(self) -> float:
         """float: Recovery Rate (RR)."""
-        maybe_raise_if_ne(self._last_update, self.time)
+        maybe_raise_on_compare(self._last_update, self.time)
         return self._params.recovery_rate
 
     def update(self, *, marginal_prob_of_default: float | None = None, loss_given_default: float | None = None,
