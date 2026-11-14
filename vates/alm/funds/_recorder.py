@@ -4,11 +4,13 @@ from enum import Enum, auto
 from typing import Literal
 
 from vates._core import ProjModelEngine, time_synchronized, TDimVariable, TDimArrayVariable, make_proj_variable
-from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
+from vates.global_conf import GLOBAL_CHECK_MODE, CheckMode
 from vates.utils import Lifecycle, transition, maybe_raise_on_compare
 from vates.alm._utils import ObjList
 from vates.alm.assets.asset_base import BaseAsset, AssetPhase
 from vates.alm.liabs.liab_base import BaseLiab
+
+_on_undefined = "zerofill" if GLOBAL_CHECK_MODE == CheckMode.BYPASS else "error"
 
 class RecorderPhase(Enum):
     ASSET_REC_BD = auto()
@@ -210,14 +212,11 @@ class AssetRecorder:
 
         # Aggregate asset cash flow
         if require_cash_flow:
-            self.tot_cf = self._objs.sum_attr(
-                "cash_flow",
-                on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+            self.tot_cf = self._objs.sum_attr("cash_flow", on_undefined=_on_undefined)
             self.tdv_tot_cf[t] = self.tot_cf
         if self.categories:
-            val_dict = self._objs.sum_attr(
-                "cash_flow", group_by=self.category_attr, group_keys=self.categories,
-                on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+            val_dict = self._objs.sum_attr("cash_flow", group_by=self.category_attr, group_keys=self.categories,
+                                           on_undefined=_on_undefined)
             self.cat_cf = np.array([val_dict.get(cat, 0.0) for cat in self.categories])
             self.tdv_cat_cf[t] = self.cat_cf
 
@@ -287,15 +286,13 @@ class AssetRecorder:
             ValueError: If an asset is not rolled or updated for the current period, or if timing is invalid.
         """
         t = self.time
-        if GLOBAL_CHECK_LEVEL != CheckLevel.BYPASS:
+        if GLOBAL_CHECK_MODE != CheckMode.BYPASS:
             phase = AssetPhase.ROLLED if when == "bd" else AssetPhase.CLOSED
             for obj in self._objs:
                 obj.require_lifecycle(phase=phase)
 
         # 1. always calculate total asset market value
-        tot_mv = self._objs.sum_attr(
-            "market_value",
-            on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+        tot_mv = self._objs.sum_attr("market_value", on_undefined=_on_undefined)
         if when == "bd":
             self.tot_mv_bd, self.tdv_tot_mv_bd[t] = tot_mv, tot_mv
         elif when == "ad":
@@ -305,9 +302,8 @@ class AssetRecorder:
 
         # 2. category asset market value, shape = (categories, )
         if self.category_attr:
-            val_dict = self._objs.sum_attr(
-                "market_value", group_by=self.category_attr, group_keys=self.categories,
-                on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+            val_dict = self._objs.sum_attr("market_value", group_by=self.category_attr, group_keys=self.categories,
+                                           on_undefined=_on_undefined)
             cat_mv = np.array([val_dict.get(cat, 0.0) for cat in self.categories])
             if when == "bd":
                 self.cat_mv_bd, self.tdv_cat_mv_bd[t] = cat_mv, cat_mv
@@ -318,9 +314,7 @@ class AssetRecorder:
 
         # 3. total asset reported values, shape = (report_bases, )
         if self.report_bases:
-            tot_rv = self._objs.sum_attr(
-                self.report_bases,
-                on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+            tot_rv = self._objs.sum_attr(self.report_bases, on_undefined=_on_undefined)
             if when == "bd":
                 self.tot_rv_bd, self.tdv_tot_rv_bd[t] = tot_rv, tot_rv
             elif when == "ad":
@@ -330,9 +324,8 @@ class AssetRecorder:
 
         # 4. category asset reported values, shape = (categories, report_bases)
         if self.report_bases and self.categories:
-            val_dict = self._objs.sum_attr(
-                self.report_bases, group_by=self.category_attr, group_keys=self.categories,
-                on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+            val_dict = self._objs.sum_attr(self.report_bases, group_by=self.category_attr, group_keys=self.categories,
+                                           on_undefined=_on_undefined)
             cat_rv = np.array([val_dict.get(cat, np.zeros(len(self.report_bases))) for cat in self.categories])
             if when == "bd":
                 self.cat_rv_bd, self.tdv_cat_rv_bd[t] = cat_rv, cat_rv

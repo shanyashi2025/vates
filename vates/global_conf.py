@@ -4,9 +4,9 @@ from enum import Enum, auto
 
 load_dotenv()
 
-class CheckLevel(Enum):
+class CheckMode(Enum):
     BYPASS = auto()
     WARN = auto()
     ERROR = auto()
 
-GLOBAL_CHECK_LEVEL = CheckLevel[os.getenv("VATES_GLOBAL_CHECK_LEVEL", "BYPASS").upper()]
+GLOBAL_CHECK_MODE = CheckMode[os.getenv("VATES_GLOBAL_CHECK_MODE", "BYPASS").upper()]

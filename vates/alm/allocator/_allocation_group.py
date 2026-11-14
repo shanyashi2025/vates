@@ -2,11 +2,12 @@ import warnings
 from dataclasses import dataclass
 from enum import Enum
 
-from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
+from vates.global_conf import GLOBAL_CHECK_MODE, CheckMode
 from vates.alm.assets import BaseAsset
 from vates.alm._utils import ObjList
 from vates.alm.allocator._enums import AssetDealingStrategy, AssetPurchaseMethod, RebalanceSizeKind
 
+_on_undefined = "zerofill" if GLOBAL_CHECK_MODE == CheckMode.BYPASS else "error"
 
 class BuySellAction(Enum):
     """Enum for asset buy/sell action. Must correspond to methods of asset classes"""
@@ -185,7 +186,7 @@ class _AllocationGroup:
         self.profile: ObjList[BaseAsset] = ObjList[BaseAsset](profile_assets or [])
 
         self.size_triplet: tuple[float, float, float] = self._compute_size_triplet(total_size, weight_triplet)
-        self.profile_size: float = self.profile.sum_attr(self.size_basis, on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+        self.profile_size: float = self.profile.sum_attr(self.size_basis, on_undefined=_on_undefined)
 
         self.staged: ObjList[BaseAsset] = ObjList[BaseAsset]()
         self._trade_orders: list[TradeOrder] = []
@@ -226,18 +227,15 @@ class _AllocationGroup:
 
     @property
     def exist_size(self) -> float:
-        return self.exist.sum_attr(self.size_basis,
-                                   on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+        return self.exist.sum_attr(self.size_basis, on_undefined=_on_undefined)
 
     @property
     def exist_market_value(self) -> float:
-        return self.exist.sum_attr("market_value",
-                                   on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+        return self.exist.sum_attr("market_value", on_undefined=_on_undefined)
 
     @property
     def staged_size(self) -> float:
-        return self.staged.sum_attr(self.size_basis,
-                                    on_undefined="zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error")
+        return self.staged.sum_attr(self.size_basis, on_undefined=_on_undefined)
 
     @property
     def preferred_size(self) -> float | None:

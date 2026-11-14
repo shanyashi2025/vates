@@ -5,7 +5,7 @@ import warnings
 from typing import Literal, Any
 
 from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
-from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
+from vates.global_conf import CheckMode, GLOBAL_CHECK_MODE
 from vates.alm.assets import BaseAsset, Cash
 from vates.alm.allocator._allocation_group import _AllocationGroup, AssetAllocationParams, TradeOrder, BuySellAction
 from vates.alm.allocator._enums import AssetDealingStrategy, AssetPurchaseMethod
@@ -15,13 +15,13 @@ from vates.alm.allocator.proceeds_keeper import ProceedsKeeper
 def _rebalance_alloc_groups(
     groups: list[_AllocationGroup],
     total_size: float,
-    check_level: CheckLevel,
+    check_mode: CheckMode,
 ) -> None:
     """Rebalance assets to match the target allocation.
 
     Args:
         total_size (float): Total size for allocation, shall correspond to `asset_size_basis`.
-        check_level (CheckLevel): Check level for validation against allocation.
+        check_mode (CheckMode): Check mode for validation against allocation.
 
     """
     for ag in groups[:-1]:
@@ -52,7 +52,7 @@ def _rebalance_alloc_groups(
             if abs(total_size) > 1e-8:
                 curr, lower, upper = ag.current_size/total_size, ref_sizes[0]/total_size, ref_sizes[1]/total_size
                 msg += f" actual: {ag.current_size/total_size:.4%}; (lower, upper): ({lower:.4%}, {upper:.4%})"
-            if check_level == CheckLevel.ERROR:
+            if check_mode == CheckMode.ERROR:
                 raise ValueError(msg)
             warnings.warn(msg)
 
@@ -300,7 +300,7 @@ class Rebalancer:
         allocation_group_params: dict[str, AssetAllocationParams],
         min_size_tol: float = 0.0001,
         on_negative_size: Literal["zero", "pass", "as_is"] = "zero",
-        check_level: CheckLevel = GLOBAL_CHECK_LEVEL,
+        check_mode: CheckMode = GLOBAL_CHECK_MODE,
         **kwargs
     ) -> float:
         """Rebalance assets in the fund to match the target allocation.
@@ -315,7 +315,7 @@ class Rebalancer:
             allocation_group_params (dict[str, AssetAllocationGroupParams]): Parameters for each allocation group.
             min_size_tol (float): Tolerance of minimum size, normally to prevent ZeroDivisionError; defaults to 0.0001.
             on_negative_size (Literal["zero", "pass", "as_is"]): When size is negative; defaults to "zero".
-            check_level (CheckLevel): Check level for validation against allocation, defaults to `GLOBAL_CHECK_LEVEL`.
+            check_mode (CheckMode): Check mode for validation against allocation, defaults to `GLOBAL_CHECK_MODE`.
 
         Returns:
             float: Free proceeds after the rebalancing: proceeds received from disposal (sell), minus proceeds spent
@@ -349,7 +349,7 @@ class Rebalancer:
         self.tdv_ag_size_bd[t] = np.array(sizes)
         self.tdv_ag_wgt_pc_bd[t] = np.array([v / total_size for v in sizes]) * 100
 
-        _rebalance_alloc_groups(groups=groups, total_size=total_size, check_level=check_level)
+        _rebalance_alloc_groups(groups=groups, total_size=total_size, check_mode=check_mode)
 
         _free_proceeds_keeper = free_proceeds_keeper or ProceedsKeeper()
         for ag in groups:

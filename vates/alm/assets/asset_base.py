@@ -9,10 +9,10 @@ from typing import Self, Literal
 
 from vates._core import ProjModelEngine, time_synchronized
 from vates.utils import Lifecycle, maybe_raise_on_compare
-from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
+from vates.global_conf import CheckMode, GLOBAL_CHECK_MODE
 from vates.alm.econs import Currency
 
-_IMMUTABLE = (type(None), bool, int, float, str, bytes, tuple, frozenset)
+_IMMUTABLE = (type(None), bool, int, float, str, bytes, tuple, frozenset, pd.Period)
 
 class AssetPhase(Enum):
     PROFILE = auto()
@@ -35,7 +35,7 @@ class BaseAsset(ABC):
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
-    _mutable_attr_check: CheckLevel = GLOBAL_CHECK_LEVEL
+    _mutable_attr_check: CheckMode = GLOBAL_CHECK_MODE
     _VALUE_ZERO_TOL = 1e-8
     _default_attr_aliases: dict[str, str] = {}
 
@@ -170,23 +170,23 @@ class BaseAsset(ABC):
         """Return a new, non-profile asset scaled by `scale`; leave self unchanged."""
         pass
 
-    def _copy_dynamic_attrs_to(self, clone, *, check_level: CheckLevel | None = None) -> None:
+    def _copy_dynamic_attrs_to(self, clone, *, check_mode: CheckMode | None = None) -> None:
         if clone is self:
             warnings.warn("Ignore copying attributes to self.")
             return
 
-        if check_level is None:
-            check_level = self._mutable_attr_check
+        if check_mode is None:
+            check_mode = self._mutable_attr_check
 
         for key, val in self.__dict__.items():
-            if check_level == CheckLevel.BYPASS:
+            if check_mode == CheckMode.BYPASS:
                 pass
             elif not isinstance(val, _IMMUTABLE):
                 msg = (f"Dynamic attribute '{key}' on profile '{self._asset_id}' is {type(val).__name__}, which is mutable. "
                        f"Profiles must stay immutable; store mutable metadata elsewhere or register it as shared.")
-                if check_level == CheckLevel.ERROR:
+                if check_mode == CheckMode.ERROR:
                     raise TypeError(msg)
-                if check_level == CheckLevel.WARN:
+                if check_mode == CheckMode.WARN:
                     warnings.warn(msg)
             setattr(clone, key, val)
 

@@ -2,7 +2,7 @@ import numpy as np
 import warnings
 from collections.abc import Iterable
 
-from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
+from vates.global_conf import GLOBAL_CHECK_MODE, CheckMode
 
 def new_business_convolve(nb_profile: np.ndarray, nb_premium: float, sales_file: np.ndarray,
                           output_len: int | None = None) -> np.ndarray:
@@ -12,8 +12,8 @@ def new_business_convolve(nb_profile: np.ndarray, nb_premium: float, sales_file:
 
 def maybe_raise_on_compare(v, /, must_eq = None, *, must_ne = None, must_lt = None, must_le = None,
                            must_gt = None, must_ge = None, must_in: Iterable | None = None, must_ni: Iterable | None = None,
-                           check_level: CheckLevel = GLOBAL_CHECK_LEVEL) -> None:
-    if check_level == CheckLevel.BYPASS:
+                           check_mode: CheckMode = GLOBAL_CHECK_MODE) -> None:
+    if check_mode == CheckMode.BYPASS:
         return
 
     errors = []
@@ -40,11 +40,11 @@ def maybe_raise_on_compare(v, /, must_eq = None, *, must_ne = None, must_lt = No
 
     msg = "; ".join(errors)
 
-    if check_level == CheckLevel.WARN:
+    if check_mode == CheckMode.WARN:
         warnings.warn(msg)
         return
 
-    raise ValueError(msg)  # CheckLevel.ERROR
+    raise ValueError(msg)  # CheckMode.ERROR
 
 
 class class_lazy_property:

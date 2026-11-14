@@ -3,7 +3,7 @@ import warnings
 from collections.abc import Iterable
 from typing import Literal
 
-from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
+from vates.global_conf import GLOBAL_CHECK_MODE, CheckMode
 from vates._core import ProjModelEngine, time_synchronized
 from vates.alm.allocator import ProceedsKeeper
 from vates.alm.assets import BaseAsset, Cash
@@ -11,6 +11,8 @@ from vates.alm.liabs import BaseLiab
 from vates.alm._utils import ObjList
 from vates.alm.funds._recorder import AssetRecorder, LiabRecorder, OtherRecorder
 
+
+_default_on_undefined = "zerofill" if GLOBAL_CHECK_MODE == CheckMode.BYPASS else "error"
 
 @time_synchronized("model_engine.time_synchronizer")
 class Fund:
@@ -207,9 +209,7 @@ class Fund:
             on_undefined (Literal["zerofill", "error"]): Zerofill or raise for undefined attribute, defaults to "zerofill".
 
         """
-        if on_undefined is None:
-            on_undefined = "zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error"
-        return self._assets.sum_attr(attr_name, on_undefined=on_undefined)
+        return self._assets.sum_attr(attr_name, on_undefined=on_undefined or _default_on_undefined)
 
     def get_total_liability_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
         """ Get the sum of a numeric attribute of total liabilities
@@ -219,9 +219,7 @@ class Fund:
             on_undefined (Literal["zerofill", "error"]): Zerofill or raise for undefined attribute, defaults to "zerofill".
 
         """
-        if on_undefined is None:
-            on_undefined = "zerofill" if GLOBAL_CHECK_LEVEL == CheckLevel.BYPASS else "error"
-        return self._liabs.sum_attr(attr_name, on_undefined=on_undefined)
+        return self._liabs.sum_attr(attr_name, on_undefined=on_undefined or _default_on_undefined)
 
     def record_after_dealing(self, scope: Literal["assets", "liabs"] | list[Literal["assets", "liabs"]]) -> None:
         scope = scope if isinstance(scope, list) else [scope]

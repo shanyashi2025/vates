@@ -28,10 +28,10 @@ Example:
             ...  # works for rolled assets *and* assets spawned this period.
 
 Notes:
-    :func:`transition` resolves the check level at *decoration time*. When the
-    resolved level is ``CheckLevel.BYPASS`` it returns the decorated function
+    :func:`transition` resolves the check mode at *decoration time*. When the
+    resolved mode is ``CheckMode.BYPASS`` it returns the decorated function
     unchanged, so production pays no dispatch cost and no phases are recorded.
-    This assumes ``CHECK_LEVEL`` is fixed at import (it is read from the
+    This assumes ``CHECK_MODE`` is fixed at import (it is read from the
     environment once); do not toggle it at runtime, and do not branch production
     logic on ``did``/``snapshot``.
 """
@@ -43,7 +43,7 @@ import warnings
 from enum import Enum
 from typing import Generic, Iterable, TypeVar
 
-from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
+from vates.global_conf import GLOBAL_CHECK_MODE, CheckMode
 
 __all__ = ["Lifecycle", "transition"]
 
@@ -103,18 +103,18 @@ class Lifecycle(Generic[T]):
 
     # ------------------------------------------------------------------ guards
     def require_all(self, phases: T | Iterable[T], t: int, *,
-                    check_level: CheckLevel | None = None) -> None:
+                    check_mode: CheckMode | None = None) -> None:
         """Assert that every phase in ``phases`` was performed at period ``t``.
         """
-        self._require(self._normalize(phases), t, all_=True, check_level=check_level)
+        self._require(self._normalize(phases), t, all_=True, check_mode=check_mode)
 
     def require_any(self, phases: T | Iterable[T], t: int, *,
-                    check_level: CheckLevel | None = None) -> None:
+                    check_mode: CheckMode | None = None) -> None:
         """Assert that at least one phase in ``phases`` was performed at ``t``."""
-        self._require(self._normalize(phases), t, all_=False, check_level=check_level)
+        self._require(self._normalize(phases), t, all_=False, check_mode=check_mode)
 
     def require_not_yet(self, phase: T, t: int, *,
-                        check_level: CheckLevel | None = None) -> None:
+                        check_mode: CheckMode | None = None) -> None:
         """Assert that ``phase`` has NOT already been performed at period ``t``.
 
         Guards against a phase being performed twice within the same period
@@ -123,13 +123,13 @@ class Lifecycle(Generic[T]):
         self._validate_phase(phase)
         self._validate_time(t)
 
-        level = self._resolve_level(check_level)
-        if level is CheckLevel.BYPASS:
+        mode = self._resolve_mode(check_mode)
+        if mode is CheckMode.BYPASS:
             return
         if self._last.get(phase) != t:
             return
 
-        self._emit(f"Phase {phase.name} already performed at t={t}.", level)
+        self._emit(f"Phase {phase.name} already performed at t={t}.", mode)
 
     # ------------------------------------------------------------------- dunder
     def __repr__(self) -> str:
@@ -138,10 +138,10 @@ class Lifecycle(Generic[T]):
 
     # ---------------------------------------------------------------- internals
     def _require(self, phases: tuple[T, ...], t: int, *, all_: bool,
-                 check_level: CheckLevel | None) -> None:
+                 check_mode: CheckMode | None) -> None:
         self._validate_time(t)
-        level = self._resolve_level(check_level)
-        if level is CheckLevel.BYPASS:
+        mode = self._resolve_mode(check_mode)
+        if mode is CheckMode.BYPASS:
             return
 
         if all_:
@@ -153,7 +153,7 @@ class Lifecycle(Generic[T]):
 
         quantifier = "all of" if all_ else "one of"
         self._emit(f"Expected {quantifier} {self._describe(phases)} at t={t}; "
-                   f"actual {self._describe_actual()}.", level)
+                   f"actual {self._describe_actual()}.", mode)
 
     @classmethod
     def _normalize(cls, phases: T | Iterable[T]) -> tuple[T, ...]:
@@ -172,16 +172,16 @@ class Lifecycle(Generic[T]):
         return items
 
     @staticmethod
-    def _resolve_level(check_level: CheckLevel | None) -> CheckLevel:
-        level = GLOBAL_CHECK_LEVEL if check_level is None else check_level
-        if not isinstance(level, CheckLevel):
-            raise TypeError(f"Invalid type of 'check_level': {type(level).__name__}, "
-                            f"expected 'CheckLevel'.")
-        return level
+    def _resolve_mode(check_mode: CheckMode | None) -> CheckMode:
+        mode = GLOBAL_CHECK_MODE if check_mode is None else check_mode
+        if not isinstance(mode, CheckMode):
+            raise TypeError(f"Invalid type of 'check_mode': {type(mode).__name__}, "
+                            f"expected 'CheckMode'.")
+        return mode
 
     @staticmethod
-    def _emit(message: str, level: CheckLevel) -> None:
-        if level is CheckLevel.WARN:
+    def _emit(message: str, mode: CheckMode) -> None:
+        if mode is CheckMode.WARN:
             warnings.warn(message, stacklevel=3)
             return
         raise ValueError(message)
@@ -233,16 +233,16 @@ def transition(*, require_all: T | Iterable[T] | None = None,
                require_any: T | Iterable[T] | None = None,
                require_not: T | None = None, require_offset: int = 0,
                mark: T | None = None, lifecycle_attr: str = "_lc",
-               check_level: CheckLevel | None = None):
+               check_mode: CheckMode | None = None):
     """Enforce and record a :class:`Lifecycle` transition around a method.
 
     The decorated method must live on an object exposing the current period as
     ``obj.time`` and a :class:`Lifecycle` at ``obj.<lifecycle_attr>`` (default
     ``obj._lc``).
 
-    When the resolved check level is ``CheckLevel.BYPASS`` this returns the
+    When the resolved check mode is ``CheckMode.BYPASS`` this returns the
     function unchanged (no wrapper, no phase recording). Otherwise the phases
-    and the level are precomputed at decoration time, so the wrapper performs no
+    and the mode are precomputed at decoration time, so the wrapper performs no
     normalization or type checking on the hot path; bad phases fail at import.
 
     Args:
@@ -258,20 +258,20 @@ def transition(*, require_all: T | Iterable[T] | None = None,
         mark (T | None): Phase recorded at ``obj.time`` after the method returns.
         lifecycle_attr (str): Attribute holding the :class:`Lifecycle`,
             defaults to ``"_lc"``.
-        check_level (CheckLevel | None): Override for the check level, defaulting
-            to the global ``CHECK_LEVEL`` resolved at decoration time.
+        check_mode (CheckMode | None): Override for the check mode, defaulting
+            to the global ``CHECK_MODE`` resolved at decoration time.
     """
     if require_all is not None and require_any is not None:
         raise ValueError("Only one of 'require_all' and 'require_any' may be given.")
 
-    level = Lifecycle._resolve_level(check_level)
-    if level is CheckLevel.BYPASS:
+    mode = Lifecycle._resolve_mode(check_mode)
+    if mode is CheckMode.BYPASS:
         def identity(func):
             return func
         return identity
 
     # Precompute at decoration time so the hot path does no normalization, type
-    # validation or level resolution. An invalid phase now fails at import.
+    # validation or mode resolution. An invalid phase now fails at import.
     req_all = Lifecycle._normalize(require_all) if require_all is not None else None
     req_any = Lifecycle._normalize(require_any) if require_any is not None else None
     pred_all = _all_predicate(req_all) if req_all is not None else None
@@ -293,13 +293,13 @@ def transition(*, require_all: T | Iterable[T] | None = None,
             if pred_all is not None:
                 tt = t + require_offset
                 if not pred_all(last, tt):
-                    lifecycle.require_all(req_all, tt, check_level=level)
+                    lifecycle.require_all(req_all, tt, check_mode=mode)
             if pred_any is not None:
                 tt = t + require_offset
                 if not pred_any(last, tt):
-                    lifecycle.require_any(req_any, tt, check_level=level)
+                    lifecycle.require_any(req_any, tt, check_mode=mode)
             if require_not is not None and last.get(require_not) == t:
-                lifecycle.require_not_yet(require_not, t, check_level=level)
+                lifecycle.require_not_yet(require_not, t, check_mode=mode)
 
             result = func(obj, *args, **kwargs)
 

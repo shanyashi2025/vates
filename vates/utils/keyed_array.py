@@ -246,12 +246,12 @@ class _AtIndexer:
         return dim_names
 
     @overload
-    def _resolve_pos_indices(self, *keys: Hashable, on_fail_raise: Literal[True] = True) -> tuple[int, ...]: ...
+    def _resolve_indices(self, *keys: Hashable, on_fail_raise: Literal[True] = True) -> tuple[int, ...]: ...
 
     @overload
-    def _resolve_pos_indices(self, *keys: Hashable, on_fail_raise: Literal[False]) -> tuple[int, ...] | None: ...
+    def _resolve_indices(self, *keys: Hashable, on_fail_raise: Literal[False]) -> tuple[int, ...] | None: ...
 
-    def _resolve_pos_indices(self, *keys: Hashable, on_fail_raise: bool = True) -> tuple[int, ...] | None:
+    def _resolve_indices(self, *keys: Hashable, on_fail_raise: bool = True) -> tuple[int, ...] | None:
         """Convert a tuple of keys into a tuple of integer-position indices.
 
         Args:
@@ -308,7 +308,7 @@ class _AtIndexer:
                 if axis is None:
                     return default
                 keys[axis] = val
-        indices = self._resolve_pos_indices(*keys, on_fail_raise=False)
+        indices = self._resolve_indices(*keys, on_fail_raise=False)
         if indices is None:
             return default
         return self._arr[indices]
@@ -326,7 +326,7 @@ class _AtIndexer:
             KeyError: If keys are incorrect.
         """
         keys = keys if isinstance(keys, tuple) else (keys,)
-        indices = self._resolve_pos_indices(*keys)  # will raise if keys are invalid
+        indices = self._resolve_indices(*keys)  # will raise if keys are invalid
         return self._arr[indices]
 
     def __setitem__(self, keys: Hashable | tuple[Hashable, ...], value):
@@ -340,5 +340,5 @@ class _AtIndexer:
             KeyError: If keys are incorrect.
         """
         keys = keys if isinstance(keys, tuple) else (keys,)
-        indices = self._resolve_pos_indices(*keys)  # will raise if keys are invalid
+        indices = self._resolve_indices(*keys)  # will raise if keys are invalid
         self._arr[indices] = value

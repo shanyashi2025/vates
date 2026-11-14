@@ -125,6 +125,9 @@ outputs (`example_ws/results/`, `example_ws/intermediate/`) are git-ignored.
 - Model/engine configuration follows a defensive-typing style: methods take keyword-only args, raise
   on double-binding/double-configuration, and reject invalid types via explicit checks. `warnings.warn`
   is used only for informational notices (defaults applied, files not deleted), not for errors.
+- `CheckMode` and `GLOBAL_CHECK_MODE` (`vates/global_conf.py`) control the default behavior of project
+  checks. `VATES_GLOBAL_CHECK_MODE` in the environment (including `.env`) selects `BYPASS` (default),
+  `WARN`, or `ERROR`; APIs that accept `check_mode` may override it. The setting is read at import time.
 - `ProjModelEngine` and `StochExecutor` guard attribute assignment via `__setattr__`, armed by an
   `_initialized` flag set at the end of `__init__`. After arming: overwriting a class-level member
   raises `AttributeError` (except properties with a setter, e.g. `time`/`period`); adding a new
