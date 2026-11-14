@@ -130,7 +130,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 all_assets.extend(fund.assets)
             output_aging_assets(
                 assets=all_assets,
-                df_config=aging_assets_output_config_df,
+                config_df=aging_assets_output_config_df,
                 date_index=p.year * 100 + p.month,
                 output_rootpath=model.WORKSPACE_DIRECTORY_PATH
             )
