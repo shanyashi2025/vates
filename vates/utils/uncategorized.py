@@ -1,5 +1,6 @@
 import numpy as np
 import warnings
+from collections.abc import Iterable
 
 from vates.global_conf import GLOBAL_CHECK_LEVEL, CheckLevel
 
@@ -10,7 +11,8 @@ def new_business_convolve(nb_profile: np.ndarray, nb_premium: float, sales_file:
     return conv if output_len is None else conv[:, :output_len]
 
 def maybe_raise_on_compare(v, /, must_eq = None, *, must_ne = None, must_lt = None, must_le = None,
-                           must_gt = None, must_ge = None, check_level: CheckLevel = GLOBAL_CHECK_LEVEL) -> None:
+                           must_gt = None, must_ge = None, must_in: Iterable | None = None, must_ni: Iterable | None = None,
+                           check_level: CheckLevel = GLOBAL_CHECK_LEVEL) -> None:
     if check_level == CheckLevel.BYPASS:
         return
 
@@ -28,6 +30,10 @@ def maybe_raise_on_compare(v, /, must_eq = None, *, must_ne = None, must_lt = No
         errors.append(f"{v} <= {must_gt}")
     if must_ge is not None and v < must_ge:
         errors.append(f"{v} < {must_ge}")
+    if must_in is not None and v not in must_in:
+        errors.append(f"{v} not in {must_in}")
+    if must_ni is not None and v in must_ni:
+        errors.append(f"{v} in {must_ni}")
 
     if not errors:
         return

@@ -238,7 +238,7 @@ def _process_unconstrain_group(group: _AllocationGroup, fill_size: float, tolera
         # Utilize cash asset to safely proceed
         _fallback_cash: Cash | None = None
         for asset in group.exist:
-            if isinstance(asset, Cash) and asset.is_alive("end"):
+            if isinstance(asset, Cash) and asset.is_alive("eop"):
                 _fallback_cash = asset
                 break
         if _fallback_cash is not None:
@@ -285,8 +285,8 @@ class Rebalancer:
         tdv_kwargs = {"model_engine": model_engine, "owner": self.name, "group": 'rebalance', 'dims': [self.group_names]}
         self.tdv_ag_size_bd = make_proj_variable("size_bd", **tdv_kwargs)
         self.tdv_ag_size_ad = make_proj_variable("size_ad", **tdv_kwargs)
-        self.tdv_ag_wgt_pc_bd = make_proj_variable("weight_pc_bd", **tdv_kwargs)
-        self.tdv_ag_wgt_pc_ad = make_proj_variable("weight_pc_ad", **tdv_kwargs)
+        self.tdv_ag_wgt_pc_bd = make_proj_variable("%weight_bd", **tdv_kwargs)
+        self.tdv_ag_wgt_pc_ad = make_proj_variable("%weight_ad", **tdv_kwargs)
 
     def __call__(
         self,

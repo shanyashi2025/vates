@@ -145,8 +145,9 @@ class EquityOption(BaseAsset):
     def os_term_m(self) -> int:
         return max((self._exercise_date - self.period).n, 0)
 
-    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
-        return (self.period < self._exercise_date) if at == "end" else (self.period <= self._exercise_date)
+    def is_alive(self, at: Literal["bop", "eop"], /) -> bool:
+        maybe_raise_on_compare(at, must_in=("bop", "eop"))
+        return (self.period < self._exercise_date) if at == "eop" else (self.period <= self._exercise_date)
 
     def _on_time_change(self) -> None:
         self._cash_flow = 0.0
@@ -165,7 +166,7 @@ class EquityOption(BaseAsset):
         """
         t = self.time
 
-        if not self.is_alive("begin"):
+        if not self.is_alive("bop"):
             self._qty = 0
             self._price = 0
             self._cash_flow = 0
@@ -179,7 +180,7 @@ class EquityOption(BaseAsset):
         else:
             self._stock_price = self._stock_price * (1 + self._equity_index.total_return)
 
-        if self.is_alive("end"):
+        if self.is_alive("eop"):
             self._cash_flow = 0.0
             self._price = BlackScholesCalculator.price(
                 call_put=self._call_put, s=self._stock_price, k=self._strike_price,

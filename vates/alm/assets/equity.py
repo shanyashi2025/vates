@@ -75,7 +75,7 @@ class Equity(BaseAsset):
         self.tdv_mv_ad[t] = self._mv
         self.tdv_purchase_cost_ad[t] = self._purchase_cost
 
-    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
+    def is_alive(self, at: Literal["bop", "eop"], /) -> bool:
         return True
 
     def _on_time_change(self) -> None:

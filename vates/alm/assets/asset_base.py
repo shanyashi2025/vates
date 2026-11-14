@@ -96,12 +96,12 @@ class BaseAsset(ABC):
         return self._entry_date
 
     @abstractmethod
-    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
+    def is_alive(self, at: Literal["bop", "eop"], /) -> bool:
         """
         Abstract method for whether asset is alive at the beginning or end of the current period.
 
         Args:
-            at (Literal["begin", "end"]): "end"/"begin" tests if the asset is alive at the
+            at (Literal["bop", "eop"]): "bop"/"eop" tests if the asset is alive at the
                 end/beginning of the current period.
 
         Returns:

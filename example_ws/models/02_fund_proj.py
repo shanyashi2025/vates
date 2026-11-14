@@ -120,7 +120,7 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
                 if not is_sh_fund:
                     amount = fund.take_out_free_proceeds()
                     fund_master.sh_fund.receive_free_proceeds(amount)
-                fund.record_free_proceeds("end")
+                fund.record_free_proceeds("eop")
 
         # --- output aging assets ---
         if aging_assets_output_config_df is not None and (

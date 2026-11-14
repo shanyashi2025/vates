@@ -97,9 +97,9 @@ class AssetRecorder:
             self.tdv_tot_rv_bd: TDimArrayVariable = create_tdv("totass_rep_value_bd")
             self.tdv_tot_rv_ad: TDimArrayVariable = create_tdv("totass_rep_value_ad")
             self.tdv_tot_ret_bd: TDimArrayVariable = create_tdv("totass_inv_ret_bd")
-            self.tdv_tot_ror_pc_bd: TDimArrayVariable = create_tdv("totass_ror_pc_bd")
+            self.tdv_tot_ror_pc_bd: TDimArrayVariable = create_tdv("%totass_ror_bd")
             self.tdv_tot_ret_ad: TDimArrayVariable = create_tdv("totass_inv_ret_ad")
-            self.tdv_tot_ror_pc_ad: TDimArrayVariable = create_tdv("totass_ror_pc_ad")
+            self.tdv_tot_ror_pc_ad: TDimArrayVariable = create_tdv("%totass_ror_ad")
         if asset_categories:
             # dims = asset_categories
             create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund',
@@ -114,15 +114,9 @@ class AssetRecorder:
             self.tdv_cat_rv_bd: TDimArrayVariable = create_tdv("asset_rep_value_bd")
             self.tdv_cat_rv_ad: TDimArrayVariable = create_tdv("asset_rep_value_ad")
             self.tdv_cat_ret_bd: TDimArrayVariable = create_tdv("asset_inv_ret_bd")
-            self.tdv_cat_ror_pc_bd: TDimArrayVariable = create_tdv("asset_ror_pc_bd")
+            self.tdv_cat_ror_pc_bd: TDimArrayVariable = create_tdv("%asset_ror_bd")
             self.tdv_cat_ret_ad: TDimArrayVariable = create_tdv("asset_inv_ret_ad")
-            self.tdv_cat_ror_pc_ad: TDimArrayVariable = create_tdv("asset_ror_pc_ad")
-
-        # # rate of return indexers
-        # self.rate_of_return_bd: _RateOfReturnIndexer = _RateOfReturnIndexer(
-        #     self.tdv_tot_ror_pc_bd, divby=100)
-        # self.rate_of_return_ad: _RateOfReturnIndexer = _RateOfReturnIndexer(
-        #     self.tdv_tot_ror_pc_ad, divby=100)
+            self.tdv_cat_ror_pc_ad: TDimArrayVariable = create_tdv("%asset_ror_ad")
 
     @property
     @transition(require_all=RecorderPhase.ASSET_REC_BD)
@@ -462,7 +456,7 @@ class OtherRecorder:
 
     __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name',
                  'tax_paid', 'capital_received', 'dividends_paid',
-                 'tdv_free_proceeds_bd', 'tdv_free_proceeds_ad', 'tdv_free_proceeds_end',
+                 'tdv_free_proceeds_bd', 'tdv_free_proceeds_ad', 'tdv_free_proceeds_eop',
                  'tdv_proceeds_tran_in', 'tdv_proceeds_tran_out', 'tdv_proceeds_tran_net',
                  'tdv_tax_paid', 'tdv_capital_received', 'tdv_dividends_paid')
 
@@ -474,7 +468,7 @@ class OtherRecorder:
         create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund')
         self.tdv_free_proceeds_bd: TDimVariable = create_tdv("free_proceeds_bd")
         self.tdv_free_proceeds_ad: TDimVariable = create_tdv("free_proceeds_ad")
-        self.tdv_free_proceeds_end: TDimVariable = create_tdv("free_proceeds_end")
+        self.tdv_free_proceeds_eop: TDimVariable = create_tdv("free_proceeds_eop")
         self.tdv_proceeds_tran_in: TDimVariable = create_tdv("proceeds_transferred_in")
         self.tdv_proceeds_tran_out: TDimVariable = create_tdv("proceeds_transferred_out")
         self.tdv_proceeds_tran_net: TDimVariable = create_tdv("proceeds_transferred_net")
@@ -482,13 +476,13 @@ class OtherRecorder:
         self.tdv_capital_received: TDimVariable = create_tdv("capital_contribution_received")
         self.tdv_dividends_paid: TDimVariable = create_tdv("dividends_paid_to_shareholders")
 
-    def record_free_proceeds(self, value: float, when: Literal["bd", "ad", "end"]) -> None:
+    def record_free_proceeds(self, value: float, when: Literal["bd", "ad", "eop"]) -> None:
         if when == "bd":
             self.tdv_free_proceeds_bd[self.time] = value
         elif when == "ad":
             self.tdv_free_proceeds_ad[self.time] = value
-        elif when == "end":
-            self.tdv_free_proceeds_end[self.time] = value
+        elif when == "eop":
+            self.tdv_free_proceeds_eop[self.time] = value
         else:
             pass
 
@@ -518,4 +512,4 @@ class OtherRecorder:
         t = self.time
         self.tdv_free_proceeds_bd[t] = None  # set value to None, unless `record_free_proceeds` is actively called
         self.tdv_free_proceeds_ad[t] = None
-        self.tdv_free_proceeds_end[t] = None
+        self.tdv_free_proceeds_eop[t] = None

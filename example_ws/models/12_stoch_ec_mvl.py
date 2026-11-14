@@ -129,7 +129,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
 
             # step 5: transfer free proceeds to shareholder fund
             _ = fund.take_out_free_proceeds()  # just take out, shareholder fund is None
-            fund.record_free_proceeds("end")
+            fund.record_free_proceeds("eop")
 
             # step 6: store liability cash flow
             model.liab_cf[fund][t] = fund.total_liability_cash_flow

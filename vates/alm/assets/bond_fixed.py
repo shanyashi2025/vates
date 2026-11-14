@@ -216,8 +216,9 @@ class BondFixed(BaseAsset):
             return (self._params.maturity_date - self.period).n  # gives: n, n-1, ..., 1, 0 during lifespan
         return None
 
-    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
-        return (self._params.issue_date <= self.period < self._params.maturity_date) if at == "end" else (
+    def is_alive(self, at: Literal["bop", "eop"], /) -> bool:
+        maybe_raise_on_compare(at, must_in=("bop", "eop"))
+        return (self._params.issue_date <= self.period < self._params.maturity_date) if at == "eop" else (
                 self._params.issue_date < self.period <= self._params.maturity_date)
 
     def calculate_risk_metrics(self, eff_dur_delta: float = 0.001):
@@ -243,7 +244,7 @@ class BondFixed(BaseAsset):
         """
         t, p = self.time, self.period
 
-        if not self.is_alive("begin"):
+        if not self.is_alive("bop"):
             self._qty = 0
             self._mv_price_dirty = 0
             self._abv_price_dirty = 0

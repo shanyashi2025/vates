@@ -58,28 +58,28 @@ class YieldCurve:
                                                                     dims=[tdv_term_dim], model_engine=model_engine)
         self._last_update: int = self.time or 0
 
-    def update(self, *, from_kind: Literal["spot_rates", "forward_rates", "discount_factors"] | None = None,
+    def update(self, *, kind: Literal["spot_rates", "forward_rates", "discount_factors"] | None = None,
                value: npt.NDArray[np.float64] | None = None) -> None:
         """
         Update the yield curve for the current time step.
 
         Args:
-            from_kind (Literal["spot_rates", "forward_rates", "discount_factors"]): Update from.
+            kind (Literal["spot_rates", "forward_rates", "discount_factors"]): Update from.
             value (npt.NDArray[np.float64]): Updated value.
         """
-        if from_kind is None and value is None:
+        if kind is None and value is None:
             pass
-        elif from_kind is None or value is None:
+        elif kind is None or value is None:
             raise ValueError(f"`from_kind` or `value` is None.")
         else:
-            if from_kind == "spot_rates":
+            if kind == "spot_rates":
                 self._curve = InterestRateTermStructure.from_zeroac(value, interval_unit="M")
-            elif from_kind == "forward_rates":
+            elif kind == "forward_rates":
                 self._curve = InterestRateTermStructure.from_forwardac(value, interval_unit="M")
-            elif from_kind == "discount_factors":
+            elif kind == "discount_factors":
                 self._curve = InterestRateTermStructure.from_discount(value, interval_unit="M")
             else:
-                raise ValueError(f"Invalid {from_kind=}, expected: 'spot_rates', 'forward_rates' or 'discount_factors'.")
+                raise ValueError(f"Invalid {kind=}, expected: ('spot_rates', 'forward_rates', 'discount_factors').")
 
         self._on_exit_update()
         self._last_update = self.time

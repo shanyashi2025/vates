@@ -162,15 +162,15 @@ class EconMaster:
 
         # determine rate type and process curve data
         if var.measure == "PRICE":
-            from_kind = "discount_factors"
+            kind = "discount_factors"
             rates = np.insert(arr=rates, obj=0, values=1)  # let discount_factor = 1 at term 0
         elif var.measure == "SPOT":
-            from_kind = "spot_rates"
+            kind = "spot_rates"
             rates = np.insert(arr=rates, obj=0, values=0)  # let spot_rate = 0 at term 0
         else:
             raise ValueError(f"{var.descr}: invalid {var.measure=}")
 
-        ctx.econ_obj.update(from_kind=from_kind, value=interpolate_interest_rates(term, rates, interp_method=var.interp_method))
+        ctx.econ_obj.update(kind=kind, value=interpolate_interest_rates(term, rates, interp_method=var.interp_method))
 
     @staticmethod
     def update_spread(ctx: EconContext[Spread], date_col: str | None) -> None:

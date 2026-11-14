@@ -54,7 +54,7 @@ class Cash(BaseAsset):
 
         self.tdv_mv_ad[self.time] = self._nominal
 
-    def is_alive(self, at: Literal["begin", "end"], /) -> bool:
+    def is_alive(self, at: Literal["bop", "eop"], /) -> bool:
         return True
 
     @property

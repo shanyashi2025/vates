@@ -171,13 +171,13 @@ class Fund:
         self._liab_rec.record_after_dealing()
         self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"bd")
         self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"ad")
-        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"end")
+        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"eop")
 
     def _get_primary_cash_asset(self) -> Cash | None:
-        if self._primary_cash_asset is None or not self._primary_cash_asset.is_alive("end"):
+        if self._primary_cash_asset is None or not self._primary_cash_asset.is_alive("eop"):
             self._primary_cash_asset = None
             for asset in self._assets:
-                if isinstance(asset, Cash) and asset.is_alive("end"):
+                if isinstance(asset, Cash) and asset.is_alive("eop"):
                     self._primary_cash_asset = asset
                     break
             if self._primary_cash_asset is None:
@@ -196,7 +196,7 @@ class Fund:
             else:
                 raise ValueError(f"Invalid scope '{item}', expected ('assets', 'liabs').")
 
-    def record_free_proceeds(self, when: Literal["bd", "ad", "end"]):
+    def record_free_proceeds(self, when: Literal["bd", "ad", "eop"]):
         self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance, when)
 
     def get_total_asset_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
