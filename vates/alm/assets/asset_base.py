@@ -9,7 +9,7 @@ from typing import Self, Literal
 
 from vates._core import ProjModelEngine, time_synchronized
 from vates.utils import Lifecycle, maybe_raise_if_ne
-from vates.global_conf import CheckLevel
+from vates.global_conf import CheckLevel, GLOBAL_CHECK_LEVEL
 from vates.alm.econs import Currency
 
 _IMMUTABLE = (type(None), bool, int, float, str, bytes, tuple, frozenset)
@@ -29,17 +29,18 @@ class BaseAsset(ABC):
         _model_ref (weakref.ref[ProjModelEngine]): Model engine reference.
         _asset_id (str): Unique identifier for the asset.
         _is_profile (bool): Ture if profile asset, False if existing asset.
-        _purchase_date (pd.Period): Purchase date.
+        _entry_date (pd.Period): Purchase date.
         _currency (Currency): Currency of the asset.
         _attr_aliases (dict[str, str]): Dict of alias to named attribute, {"MV": "market_value"}
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
-    _mutable_attr_check: CheckLevel = CheckLevel.ERROR
+    _mutable_attr_check: CheckLevel = GLOBAL_CHECK_LEVEL
     _VALUE_ZERO_TOL = 1e-8
+    _default_attr_aliases: dict[str, str] = {}
 
     __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', '_lc', '_asset_id', '_is_profile',
-                 '_purchase_date', '_currency', '_attr_aliases',)
+                 '_entry_date', '_currency', '_attr_aliases',)
 
     def __init__(
         self,
@@ -47,7 +48,7 @@ class BaseAsset(ABC):
         model_engine: ProjModelEngine | None = None,  # will be referenced by decorator `time_synchronized`
         asset_id: str,
         is_profile: bool,
-        purchase_date: pd.Period | None,
+        entry_date: pd.Period | None,
         currency: Currency | None,
         attr_aliases: Mapping[str, str] | None,
         **kwargs
@@ -59,16 +60,16 @@ class BaseAsset(ABC):
             model_engine: Model engine object.
             asset_id (str): Asset identifier.
             is_profile (bool): Ture if profile asset, False if existing asset.
-            purchase_date (pd.Period): Purchase date.
+            entry_date (pd.Period): Entry date; defaults to the period at initialization.
             currency (Currency): Asset currency.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute, {"MV": "market_value"}
         """
         self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else (lambda: None)
         self._asset_id: str = asset_id or str(uuid.uuid4())
         self._is_profile: bool = is_profile
-        self._purchase_date: pd.Period | None = purchase_date
+        self._entry_date: pd.Period = entry_date or self.period
         self._currency: Currency | None = currency
-        self._attr_aliases: Mapping[str, str] | None = attr_aliases
+        self._attr_aliases: Mapping[str, str] = attr_aliases or self.__class__._default_attr_aliases
         self._lc: Lifecycle[AssetPhase] = Lifecycle[AssetPhase]()
         for key, val in kwargs.items():
             setattr(self, key, val)
@@ -91,8 +92,8 @@ class BaseAsset(ABC):
         return self._currency
 
     @property
-    def purchase_date(self) -> pd.Period | None:
-        return self._purchase_date
+    def entry_date(self) -> pd.Period:
+        return self._entry_date
 
     @abstractmethod
     def is_alive(self, at: Literal["begin", "end"], /) -> bool:

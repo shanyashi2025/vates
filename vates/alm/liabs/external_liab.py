@@ -36,7 +36,7 @@ class ExternalLiab(BaseLiab):
             liab_id (str): Liability identifier.
             fund_id (str): Fund identifier.
             currency (Currency): Currency of the liability.
-            entry_date (pd.Period): Entry date of the liability.
+            entry_date (pd.Period): Entry date of the liability; defaults to the period at initialization.
             attr_aliases (dict[str, str]): Dict of alias to named attribute.
             output_attrs_bd (list[str] | tuple[str, ...]): List or tuple of attributes to output.
             output_attrs_ad (list[str] | tuple[str, ...]): List or tuple of attributes to output.

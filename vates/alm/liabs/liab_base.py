@@ -25,6 +25,7 @@ class BaseLiab(ABC):
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
+    _default_attr_aliases: dict[str, str] = {}
 
     __slots__ = ('__dict__', '__weakref__', '_model_ref', 'time', 'period', '_lc', '_liab_id', '_currency',
                  '_entry_date', '_attr_aliases',)
@@ -46,14 +47,14 @@ class BaseLiab(ABC):
             model_engine: Model engine object.
             liab_id (str): Liability identifier.
             currency (Currency): Currency of the liability.
-            entry_date (pd.Period): Entry date of the liability.
+            entry_date (pd.Period): Entry date of the liability; defaults to the period at initialization.
             attr_aliases (dict[str, str]): Dict of alias to named attribute, {"MATH_RES": "math_reserve"}
         """
         self._model_ref: weakref.ref[ProjModelEngine] = weakref.ref(model_engine) if model_engine is not None else (lambda: None)
         self._liab_id: str = liab_id or str(uuid.uuid4())
         self._currency: Currency | None = currency
-        self._entry_date: pd.Period | None = entry_date
-        self._attr_aliases: dict[str, str] | None = attr_aliases
+        self._entry_date: pd.Period = entry_date or self.period
+        self._attr_aliases: dict[str, str] = attr_aliases or self.__class__._default_attr_aliases
         self._lc: Lifecycle[LiabPhase] = Lifecycle[LiabPhase](created_phase=LiabPhase.CLOSED, created_at=self.time or 0)
         for key, val in kwargs.items():
             setattr(self, key, val)
@@ -67,7 +68,7 @@ class BaseLiab(ABC):
         return self._currency
 
     @property
-    def entry_date(self) -> pd.Period | None:
+    def entry_date(self) -> pd.Period:
         return self._entry_date
 
     @abstractmethod

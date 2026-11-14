@@ -33,10 +33,11 @@ class EquityOptionBuilder:
         equity_index: EquityIndex,
         rf_curve: YieldCurve,
         is_pay_dividend: bool,
-        q: float = float("nan"),
+        entry_date: pd.Period | None = None,
         attr_aliases: Mapping[str, str] | None = None,
         price: float  = float("nan"),
         std_dev: float  = float("nan"),
+        q: float = float("nan"),
         **kwargs
     ):
         """
@@ -48,6 +49,7 @@ class EquityOptionBuilder:
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             currency (Currency): Asset currency.
             is_profile (bool): Ture if profile asset, False if existing asset.
+            entry_date (pd.Period | None): Entry date; defaults to the period at initialization.
             call_put (CallPut): Call or put option.
             exercise_date (pd.Period): Option exercise date.
             qty (float): Number of units, +ve/-ve represents long/short position.
@@ -65,6 +67,7 @@ class EquityOptionBuilder:
         self.attr_aliases: Mapping[str, str] | None = attr_aliases
         self.currency: Currency = currency
         self.is_profile: bool = is_profile
+        self.entry_date: pd.Period | None = entry_date
         self.call_put: CallPut = call_put
         self.exercise_date: pd.Period = exercise_date
         self.qty: float = qty
@@ -140,6 +143,7 @@ class EquityOptionBuilder:
             attr_aliases=self.attr_aliases,
             currency=self.currency,
             is_profile=self.is_profile,
+            entry_date=self.entry_date,
             call_put=self.call_put,
             exercise_date=self.exercise_date,
             qty=self.qty,

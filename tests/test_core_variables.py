@@ -31,7 +31,7 @@ class TestScalarVariable:
         v = ScalarVariable("c", owner="o", group="g")
         v[...] = 42
         assert v.result == 42
-        assert v.is_constant is True
+        assert v.is_tdim is False
         v.result = 21
         assert v.result == 21
 
@@ -49,7 +49,7 @@ class TestConstArrayVariable:
         v[...] = np.array([1.0, 2.0, 3.0])
 
         assert v.ndim == 1
-        assert v.is_constant is True
+        assert v.is_tdim is False
         assert v[1] == 2.0
         np.testing.assert_array_equal(v[1:], [2.0, 3.0])
 

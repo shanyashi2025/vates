@@ -10,6 +10,7 @@ from vates.alm import Cash, BondFixed, Equity
 
 @dataclass
 class AgingCash:
+    at_date: pd.Period
     asset_id: str
     currency_id: str
     fund_id: str
@@ -21,6 +22,7 @@ class AgingCash:
     @classmethod
     def from_asset_object(cls, cash: Cash) -> Self:
         return cls(
+            at_date=cash.period,
             asset_id=cash.asset_id,
             currency_id='none' if cash.currency is None else cash.currency.currency_id,
             fund_id=getattr(cash, "fund_id"),
@@ -32,6 +34,7 @@ class AgingCash:
 
 @dataclass
 class AgingEquity:
+    at_date: pd.Period
     asset_id: str
     is_profile: bool
     currency_id: str
@@ -43,11 +46,12 @@ class AgingEquity:
     market_value: float
     purchase_cost: float
     equity_index_id: str
-    purchase_date: pd.Period | None
+    entry_date: pd.Period
 
     @classmethod
     def from_asset_object(cls, equity: Equity) -> Self:
         return cls(
+            at_date=equity.period,
             asset_id=equity.asset_id,
             is_profile=equity.is_profile,
             currency_id='none' if equity.currency is None else equity.currency.currency_id,
@@ -59,11 +63,12 @@ class AgingEquity:
             market_value=equity.market_value,
             purchase_cost=equity.purchase_cost,
             equity_index_id=getattr(equity, '_equity_index').index_id,
-            purchase_date=equity.purchase_date,
+            entry_date=equity.entry_date,
         )
 
 @dataclass
 class AgingBond:
+    at_date: pd.Period
     asset_id: str
     is_profile: bool
     qty: float
@@ -86,7 +91,7 @@ class AgingBond:
     rf_curve_id: str
     spread_id: str
     default_risk_id: str
-    purchase_date: pd.Period | None
+    entry_date: pd.Period
 
     @classmethod
     def from_asset_object(cls, bond: BondFixed) -> Self:
@@ -95,6 +100,7 @@ class AgingBond:
         default_risk = getattr(bond, '_default_risk', None)
 
         return cls(
+            at_date=bond.period,
             asset_id=bond.asset_id,
             is_profile=bond.is_profile,
             qty=bond.qty,
@@ -115,7 +121,7 @@ class AgingBond:
             amort_rate=bond.amort_rate,
             spread_id='none' if spread is None else spread.spread_id,
             default_risk_id='none' if default_risk is None else default_risk.default_risk_id,
-            purchase_date=bond.purchase_date,
+            entry_date=bond.entry_date,
             coupon_rate=params.coupon_rate,
             rf_curve_id=getattr(bond, '_rf_curve').curve_id,
         )

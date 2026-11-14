@@ -269,7 +269,7 @@ class ProjModelEngine:
                 meta_col = [v.group, v.owner]
                 for label, result in self._proj_variable_manager.iter_label_result(
                         v, dim_joiner=":", dim_bracket=("[", "]")):
-                    result_ls = [result] if v.is_constant else ([''] + result.tolist())
+                    result_ls = ([''] + result.tolist()) if v.is_tdim else [result]
                     writer.writerow(meta_col + [label] + result_ls)
         self._result_files.add(output_file)
 
@@ -325,7 +325,7 @@ class ProjModelEngine:
                 meta_col = ([sim] if sim else []) + [v.group, v.owner]
                 for label, result in self._proj_variable_manager.iter_label_result(
                         v, dim_joiner=":", dim_bracket=("[", "]")):
-                    result_ls = [result] if v.is_constant else ([''] + result[indices].tolist())
+                    result_ls = ([''] + result[indices].tolist()) if v.is_tdim else [result]
                     writer.writerow(meta_col + [label] + result_ls)
 
         self._result_files.add(output_file)

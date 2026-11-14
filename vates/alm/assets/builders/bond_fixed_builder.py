@@ -41,6 +41,7 @@ class BondFixedBuilder:
         spread: Spread | None,
         default_risk: DefaultRisk | None,
         is_profile: bool,
+        entry_date: pd.Period | None = None,
         attr_aliases: Mapping[str, str] | None = None,
         fixed_cash_flow: BondFixedCashFlow | dict[str, np.ndarray] | None = None,
         coupon_rate: float = float("nan"),
@@ -57,6 +58,7 @@ class BondFixedBuilder:
             model_engine: Model engine object.
             is_profile (bool): Ture if profile asset, False if existing asset.
             asset_id (str): Asset identifier.
+            entry_date (pd.Period | None): Entry date; defaults to the period at initialization.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             currency (Currency): Currency.
             qty (float): Number of units.
@@ -96,6 +98,7 @@ class BondFixedBuilder:
         self.spread: Spread | None = spread
         self.default_risk: DefaultRisk | DefaultRiskParams | None = default_risk
         self.is_profile: bool = is_profile
+        self.entry_date: pd.Period | None = entry_date
 
         self.coupon_rate: float = coupon_rate
         self.abv_price: float = abv_price
@@ -325,5 +328,6 @@ class BondFixedBuilder:
             spread=self.spread,
             default_risk=self.default_risk,
             is_profile=self.is_profile,
+            entry_date=self.entry_date,
             **self.extra_kwargs
         )

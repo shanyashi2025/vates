@@ -27,7 +27,7 @@ class Cash(BaseAsset):
         asset_id: str = "",
         currency: Currency | None = None,
         attr_aliases: Mapping[str, str] | None = None,
-        purchase_date: pd.Period | None = None,
+        entry_date: pd.Period | None = None,
         **kwargs
     ):
         """
@@ -38,10 +38,10 @@ class Cash(BaseAsset):
             currency (Currency): Asset currency.
             nominal (float): Nominal value.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
-            purchase_date (pd.Period | None): Purchase date, default to initialization date.
+            entry_date (pd.Period | None): Entry date; defaults to the period at initialization.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=False,
-                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
+                         entry_date=entry_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
         self._nominal: float = self._ensure_non_zero(nominal)
         self._purchase_proceeds: float = 0.0
         self._disposal_proceeds: float = 0.0

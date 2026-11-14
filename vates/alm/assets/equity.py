@@ -34,7 +34,7 @@ class Equity(BaseAsset):
         asset_id: str = "",
         is_profile: bool = False,
         currency: Currency | None = None,
-        purchase_date: pd.Period | None = None,
+        entry_date: pd.Period | None = None,
         **kwargs
     ):
         """
@@ -48,10 +48,10 @@ class Equity(BaseAsset):
             purchase_cost (float | None): Purchase cost.
             equity_index (EquityIndex): Associated equity index.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
-            purchase_date (pd.Period | None): Purchase date, default to initialization date.
+            entry_date (pd.Period | None): Entry date; defaults to the period at initialization.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
-                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
+                         entry_date=entry_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
         self._equity_index: EquityIndex = equity_index
         self._mv: float = self._ensure_non_zero(market_value)
         self._purchase_cost: float = self._ensure_non_zero(purchase_cost) if purchase_cost is not None else self._mv
@@ -169,7 +169,7 @@ class Equity(BaseAsset):
             asset_id=new_asset_id,
             is_profile=False,
             currency=self._currency,
-            purchase_date=self.period,
+            entry_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)
         clone._purchase_proceeds = amount

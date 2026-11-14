@@ -66,7 +66,7 @@ class BondFixed(BaseAsset):
         fixed_cash_flow: BondFixedCashFlow | None = None,
         spread: Spread | None = None,
         default_risk: DefaultRisk | DefaultRiskParams | None = None,
-        purchase_date: pd.Period | None = None,
+        entry_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
         **kwargs
     ):
@@ -92,11 +92,11 @@ class BondFixed(BaseAsset):
             rf_curve (YieldCurve): Risk-free yield curve.
             spread (Spread | None): Spread.
             default_risk (DefaultRisk | DefaultRiskParams | None): Default risk.
-            purchase_date (pd.Period | None): Purchase date, default to initialization date.
+            entry_date (pd.Period | None): Entry date; defaults to the period at initialization.
             _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
-                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
+                         entry_date=entry_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
         self._qty: float = qty
         self._params: BondFixedParameters = BondFixedParameters(
             issue_date=issue_date,
@@ -402,7 +402,7 @@ class BondFixed(BaseAsset):
             fixed_cash_flow=self.cash_flow_gen.fixed_cash_flow,
             spread=self._spread,
             default_risk=self._default_risk,
-            purchase_date=self.period,
+            entry_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)
         clone._purchase_proceeds = clone._mv_price_dirty * qty

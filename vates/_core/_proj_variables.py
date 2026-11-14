@@ -62,12 +62,12 @@ def _resolve_dims(dims: list[DimItem] | tuple[DimItem, ...],
 
 class BaseProjVariable(ABC):
 
-    __slots__ = ()
+    __slots__ = ('__weakref__', )
 
     name: str
     owner: str
     group: str
-    is_constant: bool
+    is_tdim: bool
     dims: tuple[tuple[str, ...], ...]
     result: float | int | np.ndarray | None
 
@@ -108,8 +108,8 @@ class ScalarVariable(BaseProjVariable):
         _result: Stored scalar value.
     """
 
-    __slots__ = ('__weakref__', '_ng', '_owner', '_result',)
-    is_constant = True
+    __slots__ = ('_ng', '_owner', '_result',)
+    is_tdim = False
     _ng_cache: set[tuple[str, str]] = set()
     dims = ()
 
@@ -184,8 +184,8 @@ class ConstArrayVariable(BaseProjVariable):
         _result: Stored value.
     """
 
-    __slots__ = ('__weakref__', '_ng', '_owner', '_dims', '_ndim', '_result',)
-    is_constant = True
+    __slots__ = ('_ng', '_owner', '_dims', '_ndim', '_result',)
+    is_tdim = False
     _ng_cache: set[tuple[str, str]] = set()
     _dims_cache: set[tuple[tuple[str, ...], ...]] = set()
 
@@ -272,8 +272,8 @@ class TDimVariable(BaseProjVariable):
         _result (np.ndarray): Values across time and optional dimensions.
     """
 
-    __slots__ = ('__weakref__', '_ng', '_owner', '_result',)
-    is_constant = False
+    __slots__ = ('_ng', '_owner', '_result',)
+    is_tdim = True
     _ng_cache: set[tuple[str, str]] = set()
     dims = ()
 
@@ -350,8 +350,8 @@ class TDimArrayVariable(BaseProjVariable):
         _result (np.ndarray): Values across time and optional dimensions.
     """
 
-    __slots__ = ('__weakref__', '_ng', '_owner', '_dims', '_ndim', '_result',)
-    is_constant = False
+    __slots__ = ('_ng', '_owner', '_dims', '_ndim', '_result',)
+    is_tdim = True
     _ng_cache: set[tuple[str, str]] = set()
     _dims_cache: set[tuple[tuple[str, ...], ...]] = set()
 

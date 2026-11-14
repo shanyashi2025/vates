@@ -51,7 +51,7 @@ class EquityOption(BaseAsset):
         qty: float = 1.0,
         currency: Currency | None = None,
         attr_aliases: Mapping[str, str] | None = None,
-        purchase_date: pd.Period | None = None,
+        entry_date: pd.Period | None = None,
         _bypass_init_validation: bool = False,
         **kwargs
     ):
@@ -74,10 +74,10 @@ class EquityOption(BaseAsset):
             is_pay_dividend (bool): True if paying dividend, otherwise False.
             q (float): Dividend yield assumption (continuously compounded).
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
-            purchase_date (pd.Period | None): Purchase date, default to initialization date.
+            entry_date (pd.Period | None): Entry date; defaults to the period at initialization.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
-                         purchase_date=purchase_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
+                         entry_date=entry_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
         self._qty: float = qty
         self._call_put: CallPut = CallPut[call_put.upper()] if isinstance(call_put, str) else call_put
         self._exercise_date: pd.Period = exercise_date
@@ -272,7 +272,7 @@ class EquityOption(BaseAsset):
             is_profile=False,
             currency=self._currency,
             attr_aliases=self._attr_aliases,
-            purchase_date=self.period,
+            entry_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)
         clone._purchase_proceeds = clone._price * qty
