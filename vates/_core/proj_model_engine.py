@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from types import MethodType
-from typing import Any, Callable, Literal, Self, get_type_hints, overload
+from typing import Any, Callable, Self, get_type_hints, overload
 
 from vates._core._helper import get_environ, get_f_filename_lineno, search_file_in_dirs
 from vates._core._proj_result_reader import proj_result
@@ -138,10 +138,10 @@ class ProjModelEngine:
         input_directories: list[str | Path] | tuple[str | Path, ...] = (),
         results_directory: str | Path = "",
         is_delete_existing_results: bool = True,
-        enable_write_proj_result: bool = True,
-        stoch_result_file_mode: Literal['w', 'a', 'n'] = 'n',
+        is_write_proj_result: bool = True,
+        is_write_stoch_result: bool = False,
         stoch_result_file_id: str = "",
-        enable_write_runlog: bool = True,
+        is_write_runlog: bool = True,
     ) -> Self:
         """Set the configuration for a run.
 
@@ -158,10 +158,10 @@ class ProjModelEngine:
             results_directory (str | Path, optional): Results directory, relative paths are resolved against
                 `workspace_directory`. Defaults to `{Path.cwd()}`.
             is_delete_existing_results (bool, optional): Delete existing results if any. Defaults to True.
-            enable_write_proj_result (bool, optional): Enable writing projection result. Defaults to True.
-            stoch_result_file_mode (Literal['w', 'a', 'n'], optional): Stochastic result writer mode. Defaults to "n".
+            is_write_proj_result (bool, optional): Enable writing projection result. Defaults to True.
+            is_write_stoch_result (bool, optional): Enable writing stochastic result. Defaults to False.
             stoch_result_file_id (str, optional): Stochastic result id. Defaults to empty `""`.
-            enable_write_runlog (bool, optional): Enable writing run log. Defaults to True.
+            is_write_runlog (bool, optional): Enable writing run log. Defaults to True.
         """
         if hasattr(self, '_run_config'):
             raise ValueError(f"Run configuration is already set.")
@@ -170,7 +170,7 @@ class ProjModelEngine:
         start_date = pd.Period(f"{start_year}-{start_month}", freq='M')
         end_date = pd.Period(f"{end_year or start_year}-{end_month}", freq='M')
         workspace_directory_path = Path(workspace_directory)
-        super().__setattr__('_run_config', RunConfiguration(
+        super().__setattr__('_run_config', RunConfiguration.make_for_proj(
             start_date=start_date,
             end_date=end_date,
             scenario=scenario,
@@ -179,12 +179,10 @@ class ProjModelEngine:
             input_directory_paths=[workspace_directory_path / d for d in input_directories],  # resolve against workspace_directory
             results_directory_path=workspace_directory_path / Path(results_directory),  # resolve against workspace_directory
             is_delete_existing_results=is_delete_existing_results,
-            enable_write_proj_result=enable_write_proj_result,
-            stoch_result_file_mode=stoch_result_file_mode,
+            is_write_proj_result=is_write_proj_result,
+            is_write_stoch_result=is_write_stoch_result,
             stoch_result_file_id=stoch_result_file_id,
-            enable_write_runlog=enable_write_runlog,
-            simulations=(),
-            max_workers=1,
+            is_write_runlog=is_write_runlog,
         ))
         return self
 
@@ -251,7 +249,7 @@ class ProjModelEngine:
 
     def _write_projection_result(self) -> None:
         """Write the projection result."""
-        if not self._run_config.enable_write_proj_result:
+        if not self._run_config.is_write_proj_result:
             return
         variables = self._proj_variable_mgr.filter(rule=self.load_json('__proj_variables__.json', default=None))
         if not variables:
@@ -274,7 +272,7 @@ class ProjModelEngine:
 
     def _write_stochastic_result(self) -> None:
         """Write the stochastic result."""
-        if not self._run_config.stoch_result_file_mode:
+        if not self._run_config.is_write_stoch_result:
             return
         rule = self.load_json('__stoch_variables__.json', default=None)
         if rule is None:
@@ -300,25 +298,12 @@ class ProjModelEngine:
         file_id = self._run_config.stoch_result_file_id
         file_id += '.' if file_id else ''
         output_file = self.RESULTS_DIRECTORY_PATH / f'{self._slug}.{file_id}stoch.csv'
+        is_write_header = not output_file.is_file()
 
-        output_mode = self._run_config.stoch_result_file_mode
-        is_file_exist = output_file.is_file()
-        if output_mode == 'w' and is_file_exist:
-            msg = f"stoch_result_file_mode='w': existing '{output_file}' will be overwritten."
-            warnings.warn(msg)
-            f, l = get_f_filename_lineno()
-            self._messages.append(f"{f}:{l}: {msg}")
-        elif output_mode == 'a' and not is_file_exist:
-            output_mode = 'w'
-            msg = f"stoch_result_file_mode='a': but 'w' mode will be used because '{output_file}' does not exist."
-            warnings.warn(msg)
-            f, l = get_f_filename_lineno()
-            self._messages.append(f"{f}:{l}: {msg}")
-
-        with open(output_file, output_mode, newline='', encoding='utf-8-sig') as csvfile:
+        with open(output_file, "a", newline='', encoding='utf-8-sig') as csvfile:
             writer = csv.writer(csvfile)
             sim = self._run_config.simulation
-            if output_mode == 'w':  # write header
+            if is_write_header:
                 writer.writerow(['simulation', 'group', 'owner', 'variable', 'constant'] + dates_m + dates_y)
             for v in variables:
                 meta_col = ([sim] if sim else []) + [v.group, v.owner]
@@ -367,7 +352,7 @@ class ProjModelEngine:
             "messages": self._messages,
         })
 
-        if self._run_config.enable_write_runlog:
+        if self._run_config.is_write_runlog:
             os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
             output_file = self.RESULTS_DIRECTORY_PATH / f'{self._slug}.runlog.json'
             with open(output_file, 'w', encoding='utf-8') as jsonfile:

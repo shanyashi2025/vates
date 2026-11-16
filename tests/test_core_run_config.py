@@ -20,12 +20,12 @@ def _create(**overrides):
         workspace_directory_path=Path(WORKSPACE),
         results_directory_path=Path(WORKSPACE) / "results" / "base",
         is_delete_existing_results=True,
-        enable_write_proj_result=True,
-        enable_write_runlog=True,
+        is_write_proj_result=True,
+        is_write_runlog=True,
         simulations=(),
         simulation=0,
         input_directory_paths=(),
-        stoch_result_file_mode="n",
+        is_write_stoch_result=False,
         stoch_result_file_id="",
         max_workers=1,
     )
@@ -62,11 +62,6 @@ class TestRunConfigValidation:
         with pytest.raises(ValueError):
             _create(max_workers=1000)
         assert _create(max_workers=3).max_workers == 3
-
-    def test_stoch_file_mode_literal(self):
-        with pytest.raises(ValueError):
-            _create(stoch_result_file_mode="x")
-        assert _create(stoch_result_file_mode="w").stoch_result_file_mode == "w"
 
 
 class TestPathFields:

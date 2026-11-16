@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Self
 
 from vates import ProjModelEngine
 from vates.alm import Fund, AssetAllocationParams, Rebalancer
@@ -51,7 +51,7 @@ class FundMaster:
         *,
         model_engine: ProjModelEngine,
         asset_allocation_groups_df: pd.DataFrame
-    ) -> 'FundMaster':
+    ) -> Self:
         funds = []
         ph_funds = []
         sh_fund = None
@@ -62,32 +62,31 @@ class FundMaster:
             fund = Fund(
                 fund_id=fund_id,
                 model_engine=model_engine,
-                asset_categories=row["asset_categories"].split(';'),
-                asset_report_bases=row["asset_report_bases"].split(';') if row["asset_report_bases"] != 'none' else None,
-                output_liab_attrs_bd=row["output_liab_vars_bd"].split(';') if row["output_liab_vars_bd"] != 'none' else None,
-                output_liab_attrs_ad=row["output_liab_vars_ad"].split(';') if row["output_liab_vars_ad"] != 'none' else None,
+                asset_categories=str(row["asset_categories"]).split(';'),
+                asset_report_bases=str(row["asset_report_bases"]).split(';'),
+                output_liab_attrs_bd=str(row["output_liab_vars_bd"]).split(';') if row["output_liab_vars_bd"] != 'none' else (),
+                output_liab_attrs_ad=str(row["output_liab_vars_ad"]).split(';') if row["output_liab_vars_ad"] != 'none' else (),
             )
-            if "fund_type" in row:
-                if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
-                    ph_funds.append(fund)
-                else:
-                    if sh_fund is not None:
-                        raise ValueError("Duplicated shareholder fund.")
-                    sh_fund = fund
+            if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
+                ph_funds.append(fund)
+            else:
+                if sh_fund is not None:
+                    raise ValueError("Duplicated shareholder fund.")
+                sh_fund = fund
             funds.append(fund)
 
             allocation_params = cls.build_asset_allocation_params_from_df(asset_allocation_groups_df, fund_id=fund_id)
             allocation_group_names = list(allocation_params.keys())
             allocation_group_names.sort(key=lambda x: allocation_params[x].priority)  # sorted by priority
             rebalance_params_dict[fund_id] = FundRebalanceParams(
-                fund_size_type=row["fund_size_type"].upper(),
-                asset_size_basis=row["asset_size_basis"].upper(),
+                fund_size_type=str(row["fund_size_type"]).upper(),
+                asset_size_basis=str(row["asset_size_basis"]).upper(),
                 rebalance_freq=row["fund_rebalance_freq"],  # 1=A, 2=H, 4=Q, 12=M, 0=SKIP
                 allocation_params=allocation_params,
                 rebalance_func=Rebalancer(name=fund_id, model_engine=model_engine, allocation_group_names=allocation_group_names)
             )
 
-        return FundMaster(funds=funds, ph_funds=ph_funds, sh_fund=sh_fund, rebalance_params_dict=rebalance_params_dict)
+        return cls(funds=funds, ph_funds=ph_funds, sh_fund=sh_fund, rebalance_params_dict=rebalance_params_dict)
 
     @classmethod
     def build_asset_allocation_params_from_df(cls, df: pd.DataFrame, *, fund_id: str) -> dict[str, AssetAllocationParams]:

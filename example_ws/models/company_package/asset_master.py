@@ -2,7 +2,7 @@ import math
 import numpy as np
 import pandas as pd
 from enum import Enum, unique
-from typing import NamedTuple
+from typing import NamedTuple, Self
 
 from vates import ProjModelEngine
 from vates.alm import (create_asset, BaseAsset, Cash, BondFixed, Equity, EquityOption, YieldCurve, Spread, DefaultRisk,
@@ -136,7 +136,7 @@ class AssetMaster:
         model_engine: ProjModelEngine,
         econs: EconMaster,
         fund_id: str | None = None
-    ) -> 'AssetMaster':
+    ) -> Self:
         """
         Build existing assets objects from a dictionary of DataFrame and add them to a fund if provided.
 
@@ -182,7 +182,7 @@ class AssetMaster:
         else:
             equity_option_ls = []
 
-        return AssetMaster(cash_ls=cash_ls, fixed_bond_ls=fixed_bond_ls, equity_ls=equity_ls, equity_option_ls=equity_option_ls)
+        return cls(cash_ls=cash_ls, fixed_bond_ls=fixed_bond_ls, equity_ls=equity_ls, equity_option_ls=equity_option_ls)
 
     @classmethod
     def profile_from_df(
@@ -192,7 +192,7 @@ class AssetMaster:
         model_engine: ProjModelEngine,
         econs: EconMaster,
         fund_id: str | None = None,
-    ) -> 'AssetMaster':
+    ) -> Self:
         """
         Build profile assets objects from a dictionary of DataFrame.
 
@@ -225,7 +225,7 @@ class AssetMaster:
                 currencies=currencies, yield_curves=yield_curves, spreads=spreads, default_risks=default_risks
             )
 
-        return AssetMaster(fixed_bond_ls=fixed_bond_ls, equity_ls=equity_ls)
+        return cls(fixed_bond_ls=fixed_bond_ls, equity_ls=equity_ls)
 
     @classmethod
     def build_assets_cash_from_df(

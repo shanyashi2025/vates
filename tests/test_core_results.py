@@ -24,7 +24,7 @@ class TestWriteToggles:
     def test_no_runlog_when_disabled(self, tmp_path):
         m = ProjModelEngine(slug="m")
         m.configure_run(start_year=2026, end_year=2027, workspace_directory=str(tmp_path),
-                        results_directory="res", enable_write_runlog=False)
+                        results_directory="res", is_write_runlog=False)
         m.bind_projection(lambda: None)
         m.run()
         assert not (tmp_path / "res" / "m.runlog.json").exists()
@@ -102,7 +102,7 @@ class TestProjResultWrite:
         # rebuild with enable_write_proj_result disabled
         m2 = ProjModelEngine(slug="m")
         m2.configure_run(start_year=2026, end_year=2028, workspace_directory=str(tmp_path),
-                         results_directory="results/base", enable_write_proj_result=False)
+                         results_directory="results/base", is_write_proj_result=False)
         m2.const = ScalarVariable("const", owner="owner", group="group") @ m2
 
         def proj(model: ProjModelEngine):

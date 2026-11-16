@@ -1,5 +1,5 @@
-﻿ref_no,fund_id,cross_account_type
-1,trad_fund,trad
-2,cd1_fund,par
-3,cd2_fund,par
-4,sh_fund,sh
+﻿ref_no,fund_id,fund_type,cross_account_type
+1,trad_fund,Policyholder,trad
+2,cd1_fund,Policyholder,par
+3,cd2_fund,Policyholder,par
+4,sh_fund,Shareholder,sh

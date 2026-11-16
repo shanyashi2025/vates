@@ -125,8 +125,9 @@ class StochExecutor:
         simulations: list[int] | tuple[int],
         workspace_directory: str | Path = Path.cwd(),
         input_directories: list[str | Path] | tuple[str | Path, ...] = (),
-        results_directory: str | Path ="",
+        results_directory: str | Path = "",
         max_workers: int = 1,
+        is_write_runlog: bool = True,
     ) -> Self:
         """Set the configuration for a run.
 
@@ -143,6 +144,7 @@ class StochExecutor:
             results_directory (str | Path, optional): Results directory, relative paths are resolved against
                 `workspace_directory`. Defaults to `{Path.cwd()}`.
             max_workers (int, optional): Max workers. Defaults to 1.
+            is_write_runlog (bool, optional): Enable writing run log. Defaults to True.
         """
         if hasattr(self, '_run_config'):
             raise ValueError(f"Run configuration is already set.")
@@ -152,7 +154,7 @@ class StochExecutor:
         end_date = pd.Period(f"{end_year or start_year}-{end_month}", freq='M')
         workspace_directory_path = Path(workspace_directory)
         super().__setattr__('_n_sims', len(simulations))
-        super().__setattr__('_run_config', RunConfiguration(
+        super().__setattr__('_run_config', RunConfiguration.make_for_stoch(
             start_date=start_date,
             end_date=end_date,
             scenario=scenario,
@@ -160,30 +162,24 @@ class StochExecutor:
             workspace_directory_path=workspace_directory_path,
             input_directory_paths=[workspace_directory_path / d for d in input_directories],  # resolve against workspace_directory
             results_directory_path=workspace_directory_path / Path(results_directory),  # resolve against workspace_directory
-            is_delete_existing_results=True,
-            enable_write_proj_result=False,
-            stoch_result_file_mode="n",
-            stoch_result_file_id="",
-            enable_write_runlog=True,
+            is_write_runlog=is_write_runlog,
             max_workers=self._apply_max_workers(max_workers),
-            simulation=0,
         ))
         return self
 
     def _apply_max_workers(self, requested_workers: int) -> int:
         if not isinstance(requested_workers, int):
             f, l = get_f_filename_lineno()
-            self._messages.append(f"{f}:{l}: max_workers is set to 1: invalid type '{type(requested_workers)}', expect int.")
+            self._messages.append(f"{f}:{l}: 'max_workers' is set to 1; invalid type '{type(requested_workers)}', expect 'int'.")
             return 1
         if requested_workers <= 0:
             f, l = get_f_filename_lineno()
-            self._messages.append(f"{f}:{l}: max_workers is set to 1: request={requested_workers}, expected positive.")
+            self._messages.append(f"{f}:{l}: 'max_workers' is set to 1; requested={requested_workers}, expected positive.")
             return 1
 
-        n_cpu = cpu_count()
-        if requested_workers > n_cpu:
+        if requested_workers > (n_cpu := cpu_count()):
             f, l = get_f_filename_lineno()
-            self._messages.append(f"{f}:{l}: max_workers is set to {n_cpu}: requested {requested_workers} > cpu_count.")
+            self._messages.append(f"{f}:{l}: 'max_workers' is set to {n_cpu}; requested={requested_workers} > cpu_count.")
         return min(requested_workers, n_cpu)
 
     def run(
@@ -249,9 +245,9 @@ class StochExecutor:
                     self._projection
                 ).configure_run(
                     simulation=simulation,
+                    is_write_proj_result=(simulation == self._run_config.simulations[0]),
+                    is_write_stoch_result=True,
                     stoch_result_file_id=batch_id,
-                    stoch_result_file_mode='w' if simulation == simulation_batch[0] else 'a',
-                    enable_write_proj_result=(simulation == self._run_config.simulations[0]),
                     start_year=self.START_YEAR,
                     start_month=self.START_MONTH,
                     end_year=self.END_YEAR,
@@ -261,7 +257,7 @@ class StochExecutor:
                     input_directories=self._run_config.input_directory_paths,
                     results_directory=self.RESULTS_DIRECTORY_PATH,
                     is_delete_existing_results=False,
-                    enable_write_runlog=False,
+                    is_write_runlog=False,
                 )
             except Exception:
                 traceback.print_exc()
@@ -382,7 +378,7 @@ class StochExecutor:
             "messages": self._messages + self._sim_messages,
         })
 
-        if self._run_config.enable_write_runlog:
+        if self._run_config.is_write_runlog:
             output_file = self.RESULTS_DIRECTORY_PATH / f'{self._slug}.runlog.json'
             with open(output_file, 'w', encoding='utf-8') as jsonfile:
                 json.dump(self._runlog, jsonfile, indent=4)

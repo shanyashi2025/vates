@@ -43,22 +43,22 @@ class Fund:
         fund_id: str,
         *,
         model_engine: ProjModelEngine | None = None,
-        asset_report_bases: list[str] | None = None,
-        asset_categories: list[str] | None = None,
-        asset_category_attr: str = "category",
-        output_liab_attrs_bd: list[str] | None = None,
-        output_liab_attrs_ad: list[str] | None = None,
+        asset_report_bases: list[str] | tuple[str, ...] = (),
+        asset_categories: list[str] | tuple[str, ...] = (),
+        asset_category_attr_name: str = "category",
+        output_liab_attrs_bd: list[str] | tuple[str, ...] = (),
+        output_liab_attrs_ad: list[str] | tuple[str, ...] = (),
     ) -> None:
         """
         Initialize a Fund object.
 
         Args:
             fund_id (str): Fund identifier.
-            asset_report_bases (list[str]): Asset reporting bases.
-            asset_categories (list[str]): Asset categories to be reported.
-            asset_category_attr (str): Named attribute for asset category, defaults to "category".
-            output_liab_attrs_bd (list[str]): List of liability attributes to output.
-            output_liab_attrs_ad (list[str]): List of liability attributes to output.
+            asset_report_bases (list[str] | tuple[str, ...]): Asset reporting bases.
+            asset_categories (list[str] | tuple[str, ...]): Asset categories to be reported.
+            asset_category_attr_name (str): Named attribute for asset category, defaults to "category".
+            output_liab_attrs_bd (list[str] | tuple[str, ...]): List of liability attributes to output.
+            output_liab_attrs_ad (list[str] | tuple[str, ...]): List of liability attributes to output.
         """
         self.fund_id = fund_id
         # Asset and liab collections
@@ -66,15 +66,15 @@ class Fund:
         self._liabs: ObjList[BaseLiab] = ObjList[BaseLiab]()
         self._free_proceeds_keeper: ProceedsKeeper = ProceedsKeeper()
         self._primary_cash_asset: Cash | None = None
-        asset_report_bases: list[str] = asset_report_bases or []
 
         self._asset_rec: AssetRecorder = AssetRecorder(
             name=fund_id, model_engine=model_engine, assets=self._assets,
-            asset_report_bases=asset_report_bases, asset_categories=asset_categories, asset_category_attr=asset_category_attr,
+            asset_report_bases=asset_report_bases, asset_categories=asset_categories,
+            asset_category_attr_name=asset_category_attr_name,
         )
         self._liab_rec: LiabRecorder = LiabRecorder(
             name=fund_id, model_engine=model_engine, liabs=self._liabs,
-            output_liab_attrs_bd=output_liab_attrs_bd or [], output_liab_attrs_ad=output_liab_attrs_ad or []
+            output_liab_attrs_bd=output_liab_attrs_bd, output_liab_attrs_ad=output_liab_attrs_ad
         )
         self._other_rec: OtherRecorder = OtherRecorder(name=fund_id, model_engine=model_engine)
 

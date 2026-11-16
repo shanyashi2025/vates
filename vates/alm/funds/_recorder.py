@@ -34,7 +34,7 @@ class AssetRecorder:
 
     __slots__ = (
         '__weakref__', 'time', 'period', '_lc', '_objs',
-        'categories', 'category_attr', 'report_bases',
+        'categories', 'category_attr_name', 'report_bases',
         'tot_cf', 'cat_cf',
         'tot_mv_op', 'tot_mv_bd', 'tot_mv_ad', 'cat_mv_op', 'cat_mv_bd', 'cat_mv_ad',
         'tot_rv_op', 'tot_rv_bd', 'tot_rv_ad', 'cat_rv_op', 'cat_rv_bd', 'cat_rv_ad',
@@ -52,14 +52,14 @@ class AssetRecorder:
         name: str,
         model_engine: ProjModelEngine | None = None,
         assets: ObjList[BaseAsset],
-        asset_categories: list[str] | None,
-        asset_category_attr: str,
-        asset_report_bases: list[str] | None,
+        asset_categories: list[str] | tuple[str, ...],
+        asset_category_attr_name: str,
+        asset_report_bases: list[str] | tuple[str, ...] ,
     ):
         self._objs: ObjList[BaseAsset] = assets
-        self.categories: list[str] = asset_categories or []
-        self.category_attr: str = asset_category_attr
-        self.report_bases: list[str] = asset_report_bases or []
+        self.categories: list[str] | tuple[str, ...] = asset_categories
+        self.category_attr_name: str = asset_category_attr_name
+        self.report_bases: list[str] | tuple[str, ...] = asset_report_bases
         n_cat, n_bas = len(self.categories), len(self.report_bases)
         self.tot_cf: float = float("nan")
         self.cat_cf: np.ndarray = np.empty(n_cat)
@@ -215,7 +215,7 @@ class AssetRecorder:
             self.tot_cf = self._objs.sum_attr("cash_flow", on_undefined=_on_undefined)
             self.tdv_tot_cf[t] = self.tot_cf
         if self.categories:
-            val_dict = self._objs.sum_attr("cash_flow", group_by=self.category_attr, group_keys=self.categories,
+            val_dict = self._objs.sum_attr("cash_flow", group_by=self.category_attr_name, group_keys=self.categories,
                                            on_undefined=_on_undefined)
             self.cat_cf = np.array([val_dict.get(cat, 0.0) for cat in self.categories])
             self.tdv_cat_cf[t] = self.cat_cf
@@ -301,8 +301,8 @@ class AssetRecorder:
             raise ValueError(f"Unexpected when: {when}, expecting ('bd', 'ad').")
 
         # 2. category asset market value, shape = (categories, )
-        if self.category_attr:
-            val_dict = self._objs.sum_attr("market_value", group_by=self.category_attr, group_keys=self.categories,
+        if self.category_attr_name:
+            val_dict = self._objs.sum_attr("market_value", group_by=self.category_attr_name, group_keys=self.categories,
                                            on_undefined=_on_undefined)
             cat_mv = np.array([val_dict.get(cat, 0.0) for cat in self.categories])
             if when == "bd":
@@ -324,7 +324,7 @@ class AssetRecorder:
 
         # 4. category asset reported values, shape = (categories, report_bases)
         if self.report_bases and self.categories:
-            val_dict = self._objs.sum_attr(self.report_bases, group_by=self.category_attr, group_keys=self.categories,
+            val_dict = self._objs.sum_attr(self.report_bases, group_by=self.category_attr_name, group_keys=self.categories,
                                            on_undefined=_on_undefined)
             cat_rv = np.array([val_dict.get(cat, np.zeros(len(self.report_bases))) for cat in self.categories])
             if when == "bd":
@@ -374,12 +374,12 @@ class LiabRecorder:
         name: str,
         model_engine: ProjModelEngine | None = None,
         liabs: ObjList[BaseLiab],
-        output_liab_attrs_bd: list[str],
-        output_liab_attrs_ad: list[str],
+        output_liab_attrs_bd: list[str] | tuple[str, ...],
+        output_liab_attrs_ad: list[str] | tuple[str, ...],
     ):
         self._objs: ObjList[BaseLiab] = liabs
-        self.output_attrs_bd: list[str] = output_liab_attrs_bd
-        self.output_attrs_ad: list[str] = output_liab_attrs_ad
+        self.output_attrs_bd: list[str] | tuple[str, ...] = output_liab_attrs_bd
+        self.output_attrs_ad: list[str] | tuple[str, ...] = output_liab_attrs_ad
         self.tot_cf: float = float("nan")
 
         self._lc: Lifecycle[RecorderPhase] = Lifecycle[RecorderPhase]()

@@ -2,7 +2,7 @@ import pandas as pd
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Literal, Any
+from typing import Any, Self
 
 
 @dataclass(frozen=True)
@@ -16,10 +16,10 @@ class RunConfiguration:
     input_directory_paths: list[Path] | tuple[Path, ...]
     results_directory_path: Path
     is_delete_existing_results: bool
-    enable_write_proj_result: bool
-    stoch_result_file_mode: Literal['w', 'a', 'n']
+    is_write_proj_result: bool
+    is_write_stoch_result: bool
     stoch_result_file_id: str
-    enable_write_runlog: bool
+    is_write_runlog: bool
     max_workers: int
 
     def __post_init__(self):
@@ -36,15 +36,31 @@ class RunConfiguration:
             self.validate_path("input_directory", d, must_absolute=True)
         self.validate_path("results_directory_path", self.results_directory_path, must_absolute=True)
         self.validate_bool("is_delete_existing_results", self.is_delete_existing_results)
-        self.validate_bool("enable_write_proj_result", self.enable_write_proj_result)
-        self.validate_str("stoch_result_file_mode", self.stoch_result_file_mode, str_literal=['w', 'a', 'n'])
+        self.validate_bool("enable_write_proj_result", self.is_write_proj_result)
+        self.validate_bool("enable_write_stoch_result", self.is_write_stoch_result)
         self.validate_str("stoch_result_file_id", self.stoch_result_file_id)
-        self.validate_bool("enable_write_runlog", self.enable_write_runlog)
+        self.validate_bool("enable_write_runlog", self.is_write_runlog)
         self.validate_int("max_workers", self.max_workers, value_min=1, value_max=999)
 
     @cached_property
     def max_t(self) -> int:
         return (self.end_date - self.start_date).n
+
+    @classmethod
+    def make_for_proj(cls, **kwargs) -> Self:
+        not_applicable = dict(simulations = (), max_workers = 1)
+        return cls(**(not_applicable | kwargs))
+
+    @classmethod
+    def make_for_stoch(cls, **kwargs) -> Self:
+        not_applicable = dict(
+            is_delete_existing_results=True,
+            is_write_proj_result=False,
+            is_write_stoch_result=False,
+            stoch_result_file_id="",
+            simulation=0,
+        )
+        return cls(**(not_applicable | kwargs))
 
     @staticmethod
     def validate_bool(name: str, value, /) -> None:

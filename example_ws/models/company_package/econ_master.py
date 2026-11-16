@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Self
 
 from vates import ProjModelEngine
 from vates._core import time_synchronized
@@ -305,7 +305,7 @@ class EconMaster:
 
     def update_econ_asm(self, date_col: str | None) -> None:
         if (df := self.econ_asm_df) is not None:
-            econ_asm: dict[str, float] = {item: df.loc[item, date_col] for item in df.index}
+            econ_asm: dict[str, Any] = {str(item): df.at[item, date_col] for item in df.index}
         else:
             econ_asm = {}
 
@@ -329,7 +329,7 @@ class EconMaster:
         esg_params: dict,
         econ_asm_df: pd.DataFrame | None = None,
         esg_step_map: dict | Callable | None = None
-    ) -> 'EconMaster':
+    ) -> Self:
         yield_curves = cls.build_esg_context(
             model_engine=model_engine,
             econ_cls=YieldCurve,
@@ -374,7 +374,7 @@ class EconMaster:
             esg_df=esg_df,
             variable_spec={}
         )
-        obj = EconMaster(
+        obj = cls(
             yield_curves=yield_curves,
             spreads=spreads,
             default_risks=default_risks,
