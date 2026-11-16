@@ -37,8 +37,8 @@ The heart of the library. The public surface (`vates/__init__.py`) re-exports th
 variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `utils`.
 
 - **`ProjModelEngine`** — the deterministic, monthly-step engine. Usage contract is always:
-  1. construct with `slug`/`description`; 2. `configure_run(...)`; 3. `@model.bind_projection`
-  a function whose first parameter is the model (or a zero-arg function); 4. `model.run()`.
+  1. construct with `slug`/`description`; 2. `configure_run(...)`; 3. `model.bind_projection()`
+  a function whose first parameter is annotated with a compatible model engine type; 4. `model.run()`.
   During `run()` it iterates `t = 0 .. MAX_T`, advancing a `ProjectionTimeSynchronizer` that keeps
   `model.time` and `model.period` (a `pd.Period` with monthly freq) in lockstep. The bound function
   reads `model.time` / `model.period` (and read-only constants `START_DATE`, `END_DATE`, `MAX_T`,

@@ -143,7 +143,7 @@ model.configure_run(start_year=2025, end_year=2026)
 obj = MyClass(model, "my_obj")
 
 @model.bind_projection
-def my_projection():
+def my_projection(m: ProjModelEngine):
     obj.speak()
 
 model.run()

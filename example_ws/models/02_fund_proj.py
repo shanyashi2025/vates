@@ -56,20 +56,20 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
     aging_assets_output_config_df = file_df_dict.get("aging_assets_output_config")
 
     @model.bind_projection
-    def fund_projection():
-        t, p = model.time, model.period
+    def fund_projection(m: ProjModelEngine):
+        t, p = m.time, m.period
         econ_master.update()
 
         if t == 0:
-            epl_df = model.read_csv(filename_dict["epl"])
+            epl_df = m.read_csv(filename_dict["epl"])
             for fund in fund_master.funds:
                 fund_id = fund.fund_id
                 existing_assets = AssetMaster.existing_from_df(
-                    assets_df_dict, model_engine=model, econs=econ_master, fund_id=fund_id
+                    assets_df_dict, model_engine=m, econs=econ_master, fund_id=fund_id
                 ).all
                 fund.add_asset(existing_assets)
                 if fund is not fund_master.sh_fund:
-                    existing_liabs = build_liabs(model_engine=model, df=liabs_df, epl_df=epl_df, fund_id=fund_id, currencies=[])
+                    existing_liabs = build_liabs(model_engine=m, df=liabs_df, epl_df=epl_df, fund_id=fund_id, currencies=[])
                     fund.add_liability(existing_liabs)
 
                 fund.record_on_start()

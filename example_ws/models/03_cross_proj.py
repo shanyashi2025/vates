@@ -176,8 +176,8 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
     # ==================================================================================================================
     @model.bind_projection
-    def cross_min_cap_projection():
-        t, p = model.time, model.period
+    def cross_min_cap_projection(m: ProjModelEngine):
+        t, p = m.time, m.period
         econ_master.update()
         date_index = p.year * 100 + p.month
 
@@ -193,13 +193,13 @@ def cross_model(start_year: int, start_month: int, end_year: int, scenario: str,
 
         # --- (2) build asset objects that are in-force as at the time point ---
         aging_assets_df_dict = {
-            item: model.read_csv(
+            item: m.read_csv(
                 str(aging_assets_input_filelist_df.at[date_index, item]), keep_default_na=False, default=pd.DataFrame())
             for item in asset_filename_list
         }
         aging_assets_master_dict = {
             key: AssetMaster.existing_from_df(
-                aging_assets_df_dict, model_engine=model, econs=econ_master, fund_id=key)
+                aging_assets_df_dict, model_engine=m, econs=econ_master, fund_id=key)
             for key in mc_units.keys()
         }
 

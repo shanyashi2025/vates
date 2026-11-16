@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from types import MethodType
-from typing import Any, Callable, Self, get_type_hints, overload
+from typing import Any, Callable, Self, get_type_hints, overload, Concatenate, ParamSpec
 
 from vates._core._helper import get_environ, get_f_filename_lineno, search_file_in_dirs
 from vates._core._proj_result_reader import proj_result
@@ -19,7 +19,10 @@ from vates._core._proj_variables import BaseProjVariable, ProjVariableManager
 from vates._core._run_configuration import RunConfiguration
 from vates._core._time_synchronizer import ProjectionTimeSynchronizer
 
+
 _MISSING: object = object()
+_P = ParamSpec("_P")
+
 
 class ProjModelEngine:
     """Actuarial projection model engine.
@@ -55,7 +58,7 @@ class ProjModelEngine:
 
     def bind_projection(
         self,
-        func: Callable,
+        func: Callable[Concatenate[Self, _P], Any],
         /
     ) -> Self:
         """Bind the projection model to the engine.
@@ -65,6 +68,7 @@ class ProjModelEngine:
 
         Raises:
             ValueError: If `func` is already bound, not callable, or a class.
+            ValueError: If `func` has no arguments.
             ValueError: If the type hints of `func` cannot be resolved (e.g.
                 string/forward annotations referencing names that are not
                 importable at module scope).
@@ -81,44 +85,40 @@ class ProjModelEngine:
 
         sig_params = inspect.signature(func).parameters
         if len(sig_params) == 0:
-            f, l = get_f_filename_lineno()
-            self._messages.append(f"{f}:{l}: [INFO] Function '{func.__name__}' has no argument, it will be bound as a "
-                                  f"function instead of a method.")
-            super().__setattr__('_projection', func)
-        else:
-            try:
-                if inspect.isfunction(func) or inspect.ismethod(func):
-                    globalns = getattr(func, "__globals__", None)
-                else:
-                    globalns = getattr(func.__call__, "__globals__", None)
-                hints = get_type_hints(func, globalns=globalns)
-            except NameError as e:
-                raise ValueError(
-                    f"Function '{func.__name__}': type hints cannot be resolved. If you use string/forward "
-                    f"annotations (e.g. via 'from __future__ import annotations'), referenced names must be "
-                    f"importable at module scope. Cause: {e}"
-                ) from e
+            raise ValueError(f"Function '{func.__name__}' has no argument, cannot be bound.")
+        try:
+            if inspect.isfunction(func) or inspect.ismethod(func):
+                globalns = getattr(func, "__globals__", None)
+            else:
+                globalns = getattr(func.__call__, "__globals__", None)
+            hints = get_type_hints(func, globalns=globalns)
+        except NameError as e:
+            raise ValueError(
+                f"Function '{func.__name__}': type hints cannot be resolved. If you use string/forward "
+                f"annotations (e.g. via 'from __future__ import annotations'), referenced names must be "
+                f"importable at module scope. Cause: {e}"
+            ) from e
 
-            first_arg_name = list(sig_params.keys())[0]
-            if first_arg_name not in hints:
-                raise ValueError(
-                    f"Function '{func.__name__}' first argument '{first_arg_name}': must annotate with the "
-                    f"model engine type, e.g.: '{type(self).__name__}'. String/forward annotations (e.g. via "
-                    f"'from __future__ import annotations') are only resolved when the referenced name is "
-                    f"importable at module scope."
-                )
-            annotated = hints[first_arg_name]
-            if not isinstance(annotated, type):
-                raise ValueError(
-                    f"Function '{func.__name__}' first argument '{first_arg_name}': annotation must be a "
-                    f"class (the model engine type), got '{annotated}'."
-                )
-            if not issubclass(type(self), annotated):
-                raise ValueError(
-                    f"Function '{func.__name__}' first argument '{first_arg_name}': model engine type "
-                    f"'{type(self)}' is not a subclass of the annotated type '{annotated}'."
-                )
-            super().__setattr__('_projection',  MethodType(func, self))
+        first_arg_name = list(sig_params.keys())[0]
+        if first_arg_name not in hints:
+            raise ValueError(
+                f"Function '{func.__name__}' first argument '{first_arg_name}': must annotate with the "
+                f"model engine type, e.g.: '{type(self).__name__}'. String/forward annotations (e.g. via "
+                f"'from __future__ import annotations') are only resolved when the referenced name is "
+                f"importable at module scope."
+            )
+        annotated = hints[first_arg_name]
+        if not isinstance(annotated, type):
+            raise ValueError(
+                f"Function '{func.__name__}' first argument '{first_arg_name}': annotation must be a "
+                f"class (the model engine type), got '{annotated}'."
+            )
+        if not issubclass(type(self), annotated):
+            raise ValueError(
+                f"Function '{func.__name__}' first argument '{first_arg_name}': model engine type "
+                f"'{type(self)}' is not a subclass of the annotated type '{annotated}'."
+            )
+        super().__setattr__('_projection', MethodType(func, self))
 
         f, l = get_f_filename_lineno()
         self._messages.append(f"{f}:{l}: [INFO] Function {func} has been bound to {self}.")

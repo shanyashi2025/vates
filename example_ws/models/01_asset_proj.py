@@ -59,10 +59,10 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
     assets = []
 
     @model.bind_projection
-    def assets_projection():
+    def assets_projection(m: ProjModelEngine):
         econ_master.update()
-        if model.time == 0:
-            assets[:] = AssetMaster.existing_from_df(assets_df_dict, model_engine=model, econs=econ_master).all
+        if m.time == 0:
+            assets[:] = AssetMaster.existing_from_df(assets_df_dict, model_engine=m, econs=econ_master).all
         else:
             for asset in assets:
                 if isinstance(asset, Cash):

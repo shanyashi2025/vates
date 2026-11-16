@@ -11,11 +11,14 @@ from datetime import datetime
 from itertools import batched
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Any, Callable, Self, get_type_hints
+from typing import Any, Callable, Self, get_type_hints, Concatenate, ParamSpec
 
 from vates._core._helper import get_environ, get_f_filename_lineno
 from vates._core.proj_model_engine import ProjModelEngine
 from vates._core._run_configuration import RunConfiguration
+
+
+_P = ParamSpec("_P")
 
 
 class StochExecutor:
@@ -52,7 +55,7 @@ class StochExecutor:
 
     def bind_projection(
         self,
-        func: Callable,
+        func: Callable[Concatenate[ProjModelEngine, _P], Any],
         /
     ) -> Self:
         """Bind the projection model to the engine.

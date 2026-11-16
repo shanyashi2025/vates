@@ -12,12 +12,16 @@ import pytest
 from vates import ProjModelEngine, ScalarVariable, TDimVariable, proj_result
 
 
+def _noop_projection(model: ProjModelEngine):
+    pass
+
+
 class TestWriteToggles:
     def test_runlog_written_by_default(self, tmp_path):
         m = ProjModelEngine(slug="m")
         m.configure_run(start_year=2026, end_year=2027, workspace_directory=str(tmp_path),
                         results_directory="res")
-        m.bind_projection(lambda: None)
+        m.bind_projection(_noop_projection)
         m.run()
         assert (tmp_path / "res" / "m.runlog.json").is_file()
 
@@ -25,7 +29,7 @@ class TestWriteToggles:
         m = ProjModelEngine(slug="m")
         m.configure_run(start_year=2026, end_year=2027, workspace_directory=str(tmp_path),
                         results_directory="res", is_write_runlog=False)
-        m.bind_projection(lambda: None)
+        m.bind_projection(_noop_projection)
         m.run()
         assert not (tmp_path / "res" / "m.runlog.json").exists()
 
@@ -33,7 +37,7 @@ class TestWriteToggles:
         m = ProjModelEngine(slug="m")
         m.configure_run(start_year=2026, end_year=2027, workspace_directory=str(tmp_path),
                         results_directory="res")
-        m.bind_projection(lambda: None)
+        m.bind_projection(_noop_projection)
         m.run()
         runlog = m.runlog
         assert runlog["model"]["slug"] == "m"

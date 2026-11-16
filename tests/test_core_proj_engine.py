@@ -11,6 +11,10 @@ import pytest
 from vates import ProjModelEngine, ScalarVariable, TDimVariable
 
 
+def _noop_projection(model: ProjModelEngine):
+    pass
+
+
 class TestConstruction:
     def test_slug_and_description(self, make_engine):
         m = make_engine(slug="my_model", description="my description")
@@ -70,7 +74,7 @@ class TestRunGuardStates:
 
     def test_bound_but_unconfigured_raises(self, make_engine):
         m = make_engine()
-        m.bind_projection(zero_arg)
+        m.bind_projection(_noop_projection)
         with pytest.raises(ValueError, match="has not been set"):
             m.run()
 
@@ -92,7 +96,7 @@ class TestRunGuardStates:
 
     def test_runlog_has_execution_success(self, make_configured, tmp_path):
         m = make_configured(tmp_path)
-        m.bind_projection(lambda: None)  # zero-arg binds as a plain function
+        m.bind_projection(_noop_projection)
         m.run()
         runlog = m.runlog
         assert runlog["execution"]["success"] is True
@@ -102,19 +106,16 @@ class TestRunGuardStates:
 class TestBindProjection:
     def test_return_self(self, make_engine):
         m = make_engine()
-        assert m.bind_projection(zero_arg) is m
+        assert m.bind_projection(_noop_projection) is m
 
-    def test_bind_then_run_zero_arg(self, make_configured, tmp_path):
-        results = []
+    def test_no_arg_rejected(self, make_engine):
+        def proj():
+            pass
 
-        def zero_arg_proj():
-            results.append(1)
-
-        m = make_configured(tmp_path)
-        m.bind_projection(zero_arg_proj)
-        assert len(results) == 0
-        m.run()
-        assert len(results) == m.MAX_T + 1
+        m = make_engine()
+        with pytest.raises(ValueError, match="has no argument"):
+            m.bind_projection(proj)
+        assert not hasattr(m, "_projection")
 
     def test_annotated_function_bound_as_method(self, make_configured, tmp_path):
         called_with_self = []
@@ -130,9 +131,9 @@ class TestBindProjection:
 
     def test_double_bind_raises(self, make_engine):
         m = make_engine()
-        m.bind_projection(zero_arg)
+        m.bind_projection(_noop_projection)
         with pytest.raises(ValueError, match="already bound"):
-            m.bind_projection(zero_arg)
+            m.bind_projection(_noop_projection)
 
     def test_non_callable_raises(self, make_engine):
         m = make_engine()
@@ -354,6 +355,3 @@ class TestAttachProjVariable:
 
         m._proj_variable_mgr.clear_dead()
         assert len(m._proj_variable_mgr._proj_variables) == 4
-
-def zero_arg():
-    pass
