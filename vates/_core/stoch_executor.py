@@ -125,7 +125,7 @@ class StochExecutor:
         end_year: int | None = None,
         end_month: int = 12,
         scenario: str = "",
-        simulations: list[int] | tuple[int],
+        simulations: list[int] | tuple[int, ...],
         workspace_directory: str | Path = Path.cwd(),
         input_directories: list[str | Path] | tuple[str | Path, ...] = (),
         results_directory: str | Path = "",
@@ -341,7 +341,7 @@ class StochExecutor:
         self._result_files.add(output_file)
 
     @property
-    def runlog(self) -> dict[str, Any] | None:
+    def runlog(self) -> dict[str, Any]:
         return self._runlog
 
     def _dump_runlog(self, exec_success: bool, exec_start_time: datetime, exec_end_time: datetime) -> None:

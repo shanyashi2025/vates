@@ -314,7 +314,7 @@ class ProjModelEngine:
         self._result_files.add(output_file)
 
     @property
-    def runlog(self) -> dict[str, Any] | None:
+    def runlog(self) -> dict[str, Any]:
         return self._runlog
 
     def _dump_runlog(self, exec_success: bool, exec_start_time: datetime, exec_end_time: datetime) -> None:

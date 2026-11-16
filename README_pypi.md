@@ -59,14 +59,13 @@ Use `ScalarVariable` and `TDimVariable` for values without labeled dimensions.
 Use `ConstArrayVariable` and `TDimArrayVariable` when a value has labeled
 dimensions. The `@` operator attaches each variable to the model for output,
 which can be read by `model.proj_result`. Time-dimensioned variables are indexed
-by integer time steps or slices; use `model.time` rather than `model.period` as
-an index.
+by integer (`model.time`).
 
 ```python
 from vates import ProjModelEngine, ScalarVariable, TDimVariable
 
 model = ProjModelEngine(slug='my_model', description='example model')
-model.configure_run(start_year=2025, end_year=2026)
+model.configure_run(start_year=2025, end_year=2026, results_directory=r"results")
 
 const_var = ScalarVariable('const_var', owner="owner", group="group") @ model
 tdim_var = TDimVariable('tdim_var', owner="owner", group="group", max_t=model.MAX_T) @ model
@@ -95,7 +94,7 @@ val = model.proj_result(
 print(f"{val:.4f}")  # 202602.0200
 ```
 
-The projected results are saved on disk as a `.proj.csv` file - `my_model.proj.csv`, which can be read by 
+The projected results `results/my_model.proj.csv` are saved on disk, which can be read by 
 the function `proj_result`.
 
 ```python
@@ -134,8 +133,8 @@ class MyClass:
     def __init__(self, m, name):
         self.name = name
 
-    def speak(self):
-        print(f"{self.name}: my `time` and `period` are up-to-date: {self.time=}, {self.period=}")
+    def check_time(self):
+        print(f"{self.name}: time={self.time} and period={self.period} are up to date.")
 
 model = ProjModelEngine(slug='my_model', description='example model')
 model.configure_run(start_year=2025, end_year=2026)
@@ -144,17 +143,70 @@ obj = MyClass(model, "my_obj")
 
 @model.bind_projection
 def my_projection(m: ProjModelEngine):
-    obj.speak()
+    obj.check_time()
 
 model.run()
 ```
 
 Following will be printed:
 ```text
-my_obj: my `time` and `period` are up-to-date: self.time=0, self.period=Period('2025-12', 'M')
-my_obj: my `time` and `period` are up-to-date: self.time=1, self.period=Period('2026-01', 'M')
+my_obj: time=0 and period=2025-12 are up to date.
+my_obj: time=1 and period=2026-01 are up to date.
 ...
-my_obj: my `time` and `period` are up-to-date: self.time=12, self.period=Period('2026-12', 'M')
+my_obj: time=12 and period=2026-12 are up to date.
+```
+
+**Put them together: a simple monthly account-value projection**
+
+```python
+from vates import ProjModelEngine, TDimVariable, time_synchronized
+
+@time_synchronized("m")
+class Portfolio:
+
+    time: int
+
+    def __init__(self, m: ProjModelEngine, name: str, initial_value: float) -> None:
+        self.name = name
+        self.account_value = TDimVariable("account_value", owner=name, group="demo", max_t=m.MAX_T) @ m
+        t = self.time
+        self.account_value[t] = initial_value
+
+    def roll_forward(self, monthly_rate: float, monthly_contribution: float) -> None:
+        t = self.time
+        self.account_value[t] = self.account_value[t - 1] * (1 + monthly_rate) + monthly_contribution
+
+
+def projection(m: ProjModelEngine, portfolio_name: str, initial_account_value: float, monthly_contribution: float,
+               annual_effective_rate: float) -> None:
+    if m.time == 0:
+        m.portfolio = Portfolio(m, name=portfolio_name, initial_value=initial_account_value)
+    else:
+        monthly_rate = (1 + annual_effective_rate) ** (1 / 12) - 1
+        m.portfolio.roll_forward(monthly_rate=monthly_rate, monthly_contribution=monthly_contribution)
+
+
+def main() -> None:
+    model = ProjModelEngine(slug="first_projection", description="A simple monthly account-value projection")
+    model.configure_run(start_year=2025, start_month=12, end_year=2026, end_month=12)
+    model.bind_projection(projection)
+    projection_kwargs = dict(
+        portfolio_name = "portfolio",
+        initial_account_value = 1_000.0,
+        annual_effective_rate = 0.03,
+        monthly_contribution = 100.0,
+    )
+    model.run(projection_kwargs=projection_kwargs)
+
+    if not model.runlog["execution"]["success"]:
+        raise RuntimeError("The projection run failed; see the run log for details.")
+
+    ending_value = model.proj_result(group="demo", owner="portfolio", variable="account_value", date="202612")
+    print(f"Ending account value at 2026-12: {ending_value:.2f}")  # 2246.41
+
+    
+if __name__ == "__main__":
+    main()
 ```
 
 #### 4. Stochastic Model
@@ -179,7 +231,7 @@ def my_projection(m: ProjModelEngine):
 
 def stoch_model():
     model = StochExecutor(slug='my_stoch_model', description='example stochastic model')
-    model.configure_run(start_year=2025, end_year=2026, simulations="1-10", max_workers=2)
+    model.configure_run(start_year=2025, end_year=2026, simulations=list(range(1, 11)), max_workers=2)
     model.bind_projection(my_projection)
     model.run()
 
