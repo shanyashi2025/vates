@@ -74,7 +74,7 @@ def asset_model(start_year: int, start_month: int, end_year: int, scenario: str,
                   f"please install 'scipy' library (`pip install scipy`).")
 
     model.run(
-        projection_args={
+        projection_kwargs={
             "assets_df_dict": assets_df_dict,
             "econ_master": econ_master
         }

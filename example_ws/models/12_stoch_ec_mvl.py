@@ -175,7 +175,7 @@ def stoch_ec_mvl(simulations: str, start_year: int, start_month: int, end_year: 
     epl_df = file_df_dict["epl"]
 
     stoch.run(
-        projection_args={
+        projection_kwargs={
             "esg_params": stoch.load_json(filename_dict["esg_params"]),
             "esg_filename": filename_dict["esg"],
             "assets_df_dict": assets_df_dict,

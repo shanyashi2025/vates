@@ -5,6 +5,7 @@ import json
 import os
 import pandas as pd
 import traceback
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from itertools import batched
@@ -188,7 +189,7 @@ class StochExecutor:
     def run(
         self,
         *,
-        projection_args: dict[str, Any] | None = None,
+        projection_kwargs: Mapping[str, Any] | None = None,
     ) -> Self:
         if not hasattr(self, '_projection'):
             raise ValueError(f"Projection function has not been bound.")
@@ -196,7 +197,6 @@ class StochExecutor:
             raise ValueError(f"Projection model engine class is None.")
         if not hasattr(self, '_run_config'):
             raise ValueError("Run configuration has not been set.")
-        projection_args = projection_args or {}
 
         if self.RESULTS_DIRECTORY_PATH.is_dir():
             remove_pattern = ('.proj.csv', '.stoch.csv', 'stoch.stat.csv', '.runlog.json')
@@ -210,10 +210,17 @@ class StochExecutor:
             os.makedirs(self.RESULTS_DIRECTORY_PATH, exist_ok=True)
 
         exec_start_time = datetime.now()
-        exec_success = self._run_simulations_multiprocess(projection_args=projection_args)
+        exec_success = self._run_simulations_multiprocess(projection_kwargs=projection_kwargs)
         self._write_stochastic_statistic()
         self._dump_runlog(exec_success, exec_start_time, datetime.now())
         return self
+
+    def __call__(
+        self,
+        *,
+        projection_kwargs: Mapping[str, Any] | None = None,
+    ) -> Self:
+        return self.run(projection_kwargs=projection_kwargs)
 
     @staticmethod
     def _create_batches(simulations: list[int] | tuple[int, ...], n_batches: int) -> list[tuple[int, ...]]:
@@ -227,7 +234,7 @@ class StochExecutor:
         *,
         simulation_batch: tuple[int, ...],
         batch_id: str,
-        projection_args: dict[str, Any]
+        projection_kwargs: Mapping[str, Any] | None
     ) -> tuple[bool, list, list]:
         success: bool = True
         messages: list = []
@@ -263,7 +270,7 @@ class StochExecutor:
                 continue # `model_instance` is not successfully initialized, skip `.run()`
 
             try:
-                model_instance.run(projection_args=projection_args)
+                model_instance.run(projection_kwargs=projection_kwargs)
                 runlog = model_instance.runlog
                 messages.append(runlog)
                 output_files.extend(model_instance._result_files)
@@ -283,7 +290,7 @@ class StochExecutor:
     def _run_simulations_multiprocess(
         self,
         *,
-        projection_args: dict[str, Any]
+        projection_kwargs: Mapping[str, Any] | None
     ) -> bool:
         n_workers = min(self._run_config.max_workers, len(self._run_config.simulations))
         simulation_batches = self._create_batches(self._run_config.simulations, n_workers)
@@ -295,7 +302,7 @@ class StochExecutor:
                     self._run_simulation_batch,
                     simulation_batch=batch,
                     batch_id=str(i),
-                    projection_args=projection_args
+                    projection_kwargs=projection_kwargs
                 )
                 for i, batch in enumerate(simulation_batches, 1)
             ]

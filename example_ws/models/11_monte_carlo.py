@@ -156,7 +156,7 @@ def port_monte_carlo_stoch(simulations: str, start_year: int, start_month: int, 
         }
 
     model.run(
-        projection_args={
+        projection_kwargs={
             "risk_free_rate": risk_free_rate,
             "n_assets": n_assets,
             "mu": mu,

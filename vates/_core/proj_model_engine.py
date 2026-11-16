@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import traceback
 import warnings
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from types import MethodType
@@ -190,13 +191,13 @@ class ProjModelEngine:
     def run(
         self,
         *,
-        projection_args: dict[str, Any] | None = None,
+        projection_kwargs: Mapping[str, Any] | None = None,
     ) -> Self:
         if not hasattr(self, '_projection'):
             raise ValueError(f"Projection function has not been bound.")
         if not hasattr(self, '_run_config'):
             raise ValueError("Run configuration has not been set.")
-        projection_args = projection_args or {}
+        kwargs = projection_kwargs or {}
 
         if self.time is not None:
             msg = f"'time={self.time} will be reset to iterate from 0 to {self.MAX_T}."
@@ -212,7 +213,7 @@ class ProjModelEngine:
                     self._time_synchronizer.set(time=0, period=self.START_DATE)
                 else:
                     self._time_synchronizer.elapse(time_step)
-                self._projection(**projection_args)
+                self._projection(**kwargs)
             gc.collect()
             self._proj_variable_mgr.clear_dead()
             self._write_results()
@@ -227,9 +228,9 @@ class ProjModelEngine:
     def __call__(
         self,
         *,
-        projection_args: dict[str, Any] | None = None,
+        projection_kwargs: Mapping[str, Any] | None = None,
     ) -> Self:
-        return self.run(projection_args=projection_args)
+        return self.run(projection_kwargs=projection_kwargs)
 
     def _write_results(self) -> None:
         if self.RESULTS_DIRECTORY_PATH.is_dir():
