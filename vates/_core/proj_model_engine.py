@@ -44,7 +44,7 @@ class ProjModelEngine:
 
         # runtime stuffs
         self._time_synchronizer: ProjectionTimeSynchronizer = ProjectionTimeSynchronizer()
-        self._proj_variable_manager: ProjVariableManager = ProjVariableManager()
+        self._proj_variable_mgr: ProjVariableManager = ProjVariableManager()
         self._filepath_cache: dict[str, Path | None] = {}
         self._result_files: set = set()
         self._messages: list[str] = []
@@ -214,7 +214,7 @@ class ProjModelEngine:
                     self._time_synchronizer.elapse(time_step)
                 self._projection(**projection_args)
             gc.collect()
-            self._proj_variable_manager.clear_dead()
+            self._proj_variable_mgr.clear_dead()
             self._write_results()
             exec_success = True
         except Exception:
@@ -252,8 +252,7 @@ class ProjModelEngine:
         """Write the projection result."""
         if not self._run_config.enable_write_proj_result:
             return
-        variables = self._proj_variable_manager.filter(
-            rule=self.load_json('__proj_variables__.json', default=None))
+        variables = self._proj_variable_mgr.filter(rule=self.load_json('__proj_variables__.json', default=None))
         if not variables:
             return  # empty list
         variables.sort(key=lambda x: (x.group, x.owner, x.name))
@@ -267,8 +266,7 @@ class ProjModelEngine:
             writer.writerow(['group', 'owner', 'variable', 'constant'] + period_col_list)
             for v in variables:
                 meta_col = [v.group, v.owner]
-                for label, result in self._proj_variable_manager.iter_label_result(
-                        v, dim_joiner=":", dim_bracket=("[", "]")):
+                for label, result in self._proj_variable_mgr.iter_label_result(v):
                     result_ls = ([''] + result.tolist()) if v.is_tdim else [result]
                     writer.writerow(meta_col + [label] + result_ls)
         self._result_files.add(output_file)
@@ -280,7 +278,7 @@ class ProjModelEngine:
         rule = self.load_json('__stoch_variables__.json', default=None)
         if rule is None:
             return
-        variables = self._proj_variable_manager.filter(rule)
+        variables = self._proj_variable_mgr.filter(rule)
         if not variables:
             return  # empty list
         variables.sort(key=lambda x: (x.group, x.owner, x.name))
@@ -323,8 +321,7 @@ class ProjModelEngine:
                 writer.writerow(['simulation', 'group', 'owner', 'variable', 'constant'] + dates_m + dates_y)
             for v in variables:
                 meta_col = ([sim] if sim else []) + [v.group, v.owner]
-                for label, result in self._proj_variable_manager.iter_label_result(
-                        v, dim_joiner=":", dim_bracket=("[", "]")):
+                for label, result in self._proj_variable_mgr.iter_label_result(v):
                     result_ls = ([''] + result[indices].tolist()) if v.is_tdim else [result]
                     writer.writerow(meta_col + [label] + result_ls)
 
@@ -498,9 +495,8 @@ class ProjModelEngine:
         """int: Number of projection months."""
         return self._run_config.max_t
 
-    @property
-    def time_synchronizer(self) -> ProjectionTimeSynchronizer:
-        return self._time_synchronizer
+    def attach_time_listener(self, listener, /) -> None:
+        self._time_synchronizer.attach_time_listener(listener)
 
     @property
     def time(self) -> int:
@@ -531,11 +527,11 @@ class ProjModelEngine:
         self._time_synchronizer.set(period=value, time=(value - self.START_DATE).n)
 
     @property
-    def proj_variable_manager(self) -> ProjVariableManager:
-        return self._proj_variable_manager
+    def proj_variables(self) -> list[BaseProjVariable]:
+        return list(self._proj_variable_mgr)
 
     def attach_proj_variable(self, proj_variable: BaseProjVariable, /) -> None:
-        self._proj_variable_manager.attach_proj_variable(proj_variable)
+        self._proj_variable_mgr.attach_proj_variable(proj_variable)
 
     @overload
     def proj_result(self) -> pd.DataFrame:

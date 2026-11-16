@@ -290,43 +290,43 @@ class TestAttachProjVariable:
 
     def test_attach_proj_variable(self, make_configured, tmp_path):
         m = make_configured(tmp_path)
-        assert len(m.proj_variable_manager._proj_variables) == 0
+        assert len(m.proj_variables) == 0
         v1 = ScalarVariable("const", owner="owner", group="group")
         v2 = TDimVariable("tdim", owner="owner", group="group", max_t=m.MAX_T)
         m.attach_proj_variable(v1)
         m.attach_proj_variable(v2)
-        assert len(m.proj_variable_manager._proj_variables) == 2
-        assert v1 in m.proj_variable_manager
-        assert v2 in m.proj_variable_manager
+        assert len(m.proj_variables) == 2
+        assert v1 in m.proj_variables
+        assert v2 in m.proj_variables
 
     def test_duplicate_attach_ignored_silently(self, make_configured, tmp_path):
         m = make_configured(tmp_path)
-        assert len(m.proj_variable_manager._proj_variables) == 0
+        assert len(m.proj_variables) == 0
         v = ScalarVariable("const", owner="owner", group="group")
         m.attach_proj_variable(v)
-        assert len(m.proj_variable_manager._proj_variables) == 1
+        assert len(m.proj_variables) == 1
         m.attach_proj_variable(v)
-        assert len(m.proj_variable_manager._proj_variables) == 1
+        assert len(m.proj_variables) == 1
 
     @pytest.mark.parametrize("bad", [42, "foo", 3.14])
     def test_wrong_type_rejected(self, make_configured, tmp_path, bad):
         m = make_configured(tmp_path)
-        assert len(m.proj_variable_manager._proj_variables) == 0
+        assert len(m.proj_variables) == 0
         with pytest.raises(TypeError):
             m.attach_proj_variable(bad)
-        assert len(m.proj_variable_manager._proj_variables) == 0
+        assert len(m.proj_variables) == 0
 
     def test_rmatmul(self, make_configured, tmp_path):
         m = make_configured(tmp_path)
-        assert len(m.proj_variable_manager._proj_variables) == 0
+        assert len(m.proj_variables) == 0
         v1 = ScalarVariable("const", owner="owner", group="group")
-        v2 = v1 @ m.proj_variable_manager
+        v2 = v1 @ m
         assert v2 is v1
-        assert len(m.proj_variable_manager._proj_variables) == 1
+        assert len(m.proj_variables) == 1
         m.attach_proj_variable(v1)
-        assert len(m.proj_variable_manager._proj_variables) == 1
+        assert len(m.proj_variables) == 1
         v3 = ScalarVariable("const", owner="owner", group="group") @ m
-        assert len(m.proj_variable_manager._proj_variables) == 2
+        assert len(m.proj_variables) == 2
 
     def test_wrong_matmul(self, make_configured, tmp_path):
         m = make_configured(tmp_path)
@@ -340,15 +340,20 @@ class TestAttachProjVariable:
         m = make_configured(tmp_path)
         dead = ScalarVariable("const", owner="owner", group="group") @ m
         live = [ScalarVariable("const", owner="owner", group="group") @ m for _ in range(4)]
-        assert len([v for v in m.proj_variable_manager]) == 5
+        assert len(m.proj_variables) == 5
 
         del dead
         gc.collect()
-        assert len([v for v in m.proj_variable_manager]) == 4
+        assert len(m.proj_variables) == 4
+        assert len(m._proj_variable_mgr._proj_variables) == 5
 
         m.attach_proj_variable(ScalarVariable("const", owner="owner", group="group"))
         gc.collect()
-        assert len([v for v in m.proj_variable_manager]) == 4
+        assert len(m.proj_variables) == 4
+        assert len(m._proj_variable_mgr._proj_variables) == 6
+
+        m._proj_variable_mgr.clear_dead()
+        assert len(m._proj_variable_mgr._proj_variables) == 4
 
 def zero_arg():
     pass

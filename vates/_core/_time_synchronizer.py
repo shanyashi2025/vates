@@ -30,14 +30,14 @@ class ProjectionTimeSynchronizer:
             self.period += n
         self._emit_time_change()
 
-    def attach_listener(self, listener, /) -> None:
+    def attach_time_listener(self, listener, /) -> None:
         if isinstance(listener, weakref.ref):
             listener = listener()
         # WeakSet handles duplicate detection and dead-reference cleanup.
         if listener is not None:
             self._listeners.add(listener)
 
-    def detach_listener(self, listener, /) -> None:
+    def detach_time_listener(self, listener, /) -> None:
         if isinstance(listener, weakref.ref):
             listener = listener()
         if listener is not None:

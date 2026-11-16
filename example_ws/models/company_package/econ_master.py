@@ -72,7 +72,7 @@ class EconContext[T]:
                 raise TypeError(f"{v.descr}: invalid term type {type(v.term)}, expected 'int' or 'list'.")
 
 
-@time_synchronized("model_engine.time_synchronizer")
+@time_synchronized("model_engine")
 class EconMaster:
 
     time: int           # for type hint only, will be injected by decorator `add_projection_time_synchronizer`

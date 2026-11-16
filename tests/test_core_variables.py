@@ -243,7 +243,7 @@ class TestMakeProjVariable:
         assert v.name == "c"
         assert v.owner == "o"
         assert v.group == "g"
-        assert v in configured.proj_variable_manager
+        assert v in configured.proj_variables
 
     def test_const_array_factory(self, configured):
         v = make_proj_variable(
@@ -266,7 +266,7 @@ class TestMakeProjVariable:
         v = make_proj_variable("t", variable_type="t", owner="o", group="g", model_engine=configured)
         assert isinstance(v, TDimVariable)
         assert v.result.shape == (configured.MAX_T + 1,)
-        assert v in configured.proj_variable_manager
+        assert v in configured.proj_variables
 
     def test_tdim_array_factory(self, configured):
         v = make_proj_variable(
@@ -300,7 +300,7 @@ class TestMakeProjVariable:
         assert isinstance(v2, ScalarVariable)
         assert isinstance(v3, TDimVariable)
         assert isinstance(v4, TDimVariable)
-        assert all(v in fallback.proj_variable_manager for v in (v1, v2, v3, v4))
+        assert all(v in fallback.proj_variables for v in (v1, v2, v3, v4))
 
     def test_engine_has_no_max_t_raises(self):
         class NoMaxTEngine:

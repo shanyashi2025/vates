@@ -256,7 +256,7 @@ def _process_unconstrain_group(group: _AllocationGroup, fill_size: float, tolera
     group.execute_trade(trade_order, on_exception_raise=True)
 
 
-@time_synchronized("model_engine.time_synchronizer")
+@time_synchronized("model_engine")
 class Rebalancer:
     """Manages asset allocation and rebalancing for a fund.
 

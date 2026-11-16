@@ -9,7 +9,7 @@ from vates.finmath import InterestRateTermStructure
 from vates.utils import maybe_raise_on_compare
 
 
-@time_synchronized("model_engine.time_synchronizer")
+@time_synchronized("model_engine")
 class YieldCurve:
     """
     Represents a yield curve and its derived rates.

@@ -28,7 +28,7 @@ class DefaultRiskParams:
         return 1 - self.loss_given_default
 
 
-@time_synchronized("model_engine.time_synchronizer")
+@time_synchronized("model_engine")
 class DefaultRisk:
     """
     Represents default risk information for a financial instrument.

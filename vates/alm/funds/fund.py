@@ -14,7 +14,7 @@ from vates.alm.funds._recorder import AssetRecorder, LiabRecorder, OtherRecorder
 
 _default_on_undefined = "zerofill" if GLOBAL_CHECK_MODE == CheckMode.BYPASS else "error"
 
-@time_synchronized("model_engine.time_synchronizer")
+@time_synchronized("model_engine")
 class Fund:
     """Investment fund with assets and liabilities.
 

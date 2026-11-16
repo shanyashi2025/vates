@@ -17,14 +17,14 @@ class _FALLBACK:
         engine = ProjModelEngine(slug="fallback").configure_run(start_year=cls.start_year, end_year=cls.end_year)
         engine.time = 0  # let the engine and synchronizer have `time` and `period`
         cls.engine = engine
-        cls.synchronizer = engine.time_synchronizer
+        cls.synchronizer = engine._time_synchronizer
         return engine
 
 def get_fallback_engine() -> ProjModelEngine:
     return getattr(_FALLBACK, "engine", None) or _FALLBACK.make_engine()
 
 def get_fallback_synchronizer() -> ProjectionTimeSynchronizer:
-    return getattr(_FALLBACK, "synchronizer", None) or _FALLBACK.make_engine().time_synchronizer
+    return getattr(_FALLBACK, "synchronizer", None) or _FALLBACK.make_engine()._time_synchronizer
 
 def time_synchronized(key: str, /):
     """Attach the instance as a listener of `time_synchronizer`, and add two attributes `time` and `period`.
@@ -42,28 +42,25 @@ def time_synchronized(key: str, /):
     if not isinstance(key, str):
         raise TypeError(f"Invalid type of key: '{type(key)}', expected 'str'.")
 
-    if "." not in key:
-        engine_param, sync_param = None, key
-    else:
-        engine_param, sync_param = key.split(".")
+    params = key.split(".")
 
     def decorator(cls):
         orig_init = cls.__init__
         if orig_init is object.__init__:
             raise AttributeError(f"{cls.__name__}: '__init__' is not defined.")
         sig = inspect.signature(cls.__init__)
-        req_param = engine_param if engine_param is not None else sync_param
-        if req_param not in sig.parameters:
-            raise KeyError(f"time_synchronizer key '{key}': '{req_param}' doesn't match signature of '__init__'.")
+        if params[0] not in sig.parameters:
+            raise KeyError(f"time_synchronizer key '{key}': '{params[0]}' doesn't match signature of '__init__'.")
 
         def new_init(self, *args, **kwargs):
             bound = sig.bind(self, *args, **kwargs)
             bound.apply_defaults()
-            if engine_param is not None:
-                engine = bound.arguments.get(engine_param)
-                synchronizer = getattr(engine, sync_param, None)
-            else:
-                synchronizer = bound.arguments.get(sync_param)
+            synchronizer = bound.arguments.get(params[0])
+            if synchronizer is not None and len(params) > 1:
+                for param in params[1:]:
+                    synchronizer = getattr(synchronizer, param, None)
+                    if synchronizer is None:
+                        break
             if synchronizer is None:
                 synchronizer = get_fallback_synchronizer()
             if synchronizer is None:
@@ -74,7 +71,7 @@ def time_synchronized(key: str, /):
 
             orig_init(self, *args, **kwargs)
 
-            synchronizer.attach_listener(self)
+            synchronizer.attach_time_listener(self)
 
         cls.__init__ = new_init
         return cls

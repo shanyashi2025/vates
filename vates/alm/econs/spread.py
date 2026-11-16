@@ -7,7 +7,7 @@ from vates._core import ProjModelEngine, time_synchronized, make_proj_variable
 from vates.utils import maybe_raise_on_compare
 
 
-@time_synchronized("model_engine.time_synchronizer")
+@time_synchronized("model_engine")
 class Spread:
     """
     Represents spread information for a financial instrument.

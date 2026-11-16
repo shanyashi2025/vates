@@ -519,7 +519,7 @@ class ProjVariableManager:
         return True  # if neither 'include' nor 'exclude' provided, all variables in the group are included
 
     @classmethod
-    def iter_label_result(cls, v: BaseProjVariable, dim_joiner: str = ":", dim_bracket: tuple[str, str] = ("[", "]")
+    def iter_label_result(cls, v: BaseProjVariable, *, dim_joiner: str = ":", dim_bracket: tuple[str, str] = ("[", "]")
                           ) -> Iterator[tuple[str, float | np.ndarray | None]]:
         if len(v.dims) == 0:
             yield v.name, v.result

@@ -67,7 +67,7 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
 ### Time synchronization pattern
 
 `ProjectionTimeSynchronizer` broadcasts `time`/`period` changes to registered listeners via
-`attach_listener`, and `time_synchronized` is a class decorator. The decorator has a string argument
+`attach_time_listener`, and `time_synchronized` is a class decorator. The decorator has a string argument
 `key`: if the pattern is `foo.bar`, the decorator will get `engine` from the class's argument `foo`, 
 then get `synchronizer` by `getattr(engine, "bar")`; otherwise if the decorator will directly get 
 `synchronizer` from the class's argument `key`. Then the decorator wires the class to the synchronizer 

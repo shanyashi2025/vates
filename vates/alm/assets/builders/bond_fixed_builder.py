@@ -17,7 +17,7 @@ from vates.alm.assets._utils import make_risk_adjusted_rates
 
 _MISSING: object = object()
 
-@time_synchronized("model_engine.time_synchronizer")
+@time_synchronized("model_engine")
 class BondFixedBuilder:
     """
     Builder for creating and initializing BondFixed objects.
