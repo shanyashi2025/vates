@@ -66,14 +66,19 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
 
 ### Time synchronization pattern
 
-`ProjectionTimeSynchronizer` broadcasts `time`/`period` changes to registered listeners via
-`attach_time_listener`, and `time_synchronized` is a class decorator. The decorator has a string argument
-`key`: if the pattern is `foo.bar`, the decorator will get `engine` from the class's argument `foo`, 
-then get `synchronizer` by `getattr(engine, "bar")`; otherwise if the decorator will directly get 
-`synchronizer` from the class's argument `key`. Then the decorator wires the class to the synchronizer 
-so the object advances with the model. This is how economic/asset class objects stay in sync 
-with the running projection. `vates/alm/assets/asset_base.py` is the canonical example 
-(`@time_synchronized("model_engine.time_synchronizer") class Asset`).
+`ProjectionTimeSynchronizer` broadcasts `time`/`period` changes to weakly held listeners via
+`attach_time_listener` and `detach_time_listener`. `ProjModelEngine` exposes
+`attach_time_listener` as the public route to its synchronizer. `time_synchronized` is a class
+decorator whose `key` starts with an `__init__` parameter and may continue through any number of
+attributes separated by dots; for example, `"context.model.engine"` resolves the `engine` attribute
+from the `context` argument. The resolved object must expose `time`, `period`, and
+`attach_time_listener`, so it can be either a `ProjModelEngine` or a `ProjectionTimeSynchronizer`.
+If the root argument is `None`, the decorator uses the fallback synchronizer; if a non-`None` root
+does not resolve the full path, construction raises `AttributeError`. The decorator seeds the
+instance's cached `time`/`period` before calling its `__init__`, then registers it only after
+initialization succeeds. This keeps economic/asset class objects synchronized with the running
+projection. `vates/alm/assets/asset_base.py` is the canonical example
+(`@time_synchronized("model_engine")`).
 
 ### ALM library (`vates/alm/`)
 

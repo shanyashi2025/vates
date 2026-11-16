@@ -170,13 +170,13 @@ print(f"{val:.4f}")  # 202602.0200
 
 #### 3. Time Synchronization
 
-If a class needs the model's `time` and/or `period`, you can use `@time_synchronized` to decorate it. The decorator 
-wires the class to the model's `time_synchronizer` so the objects are automatically kept in sync.
+If a class needs the model's `time` and/or `period`, use `@time_synchronized` to decorate it. The decorator
+wires the instance to the model so its cached values are automatically kept in sync.
 
 ```python
 from vates import ProjModelEngine, time_synchronized
 
-@time_synchronized("m.time_synchronizer")
+@time_synchronized("m")
 class MyClass:
 
     def __init__(self, m, name):

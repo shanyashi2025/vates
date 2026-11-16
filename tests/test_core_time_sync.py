@@ -284,8 +284,8 @@ class TestAddProjectionTimeSynchronizer:
     instance; wiring is observed through the synchronizer's listener set.
     """
 
-    def test_dot_key_decorator_wires_to_engine_synchronizer(self, make_configured, tmp_path):
-        @time_synchronized("model_engine._time_synchronizer")
+    def test_engine_key_decorator_wires_through_public_listener_api(self, make_configured, tmp_path):
+        @time_synchronized("model_engine")
         class Asset:
             def __init__(self, model_engine):
                 pass
@@ -296,6 +296,25 @@ class TestAddProjectionTimeSynchronizer:
         assert asset in m._time_synchronizer._listeners
         assert asset.time is None
         assert asset.period is None
+
+        m.time = 3
+        assert asset.time == 3
+        assert asset.period == m.START_DATE + 3
+
+    def test_multi_dot_key_resolves_nested_engine(self, make_configured, tmp_path):
+        class Container:
+            pass
+
+        @time_synchronized("context.model.engine")
+        class Asset:
+            def __init__(self, context):
+                pass
+
+        m = make_configured(tmp_path)
+        context = Container()
+        context.model = Container()
+        context.model.engine = m
+        asset = Asset(context=context)
 
         m.time = 3
         assert asset.time == 3
@@ -429,16 +448,26 @@ class TestAddProjectionTimeSynchronizer:
         assert asset in _FALLBACK.synchronizer._listeners
         assert asset.period == _FALLBACK.synchronizer.period
 
-    def test_model_engine_without_synchronizer_uses_fallback(self, monkeypatch):
-        @time_synchronized("model_engine.time_synchronizer")
+    def test_unresolved_path_on_non_none_argument_raises(self):
+        @time_synchronized("model_engine.missing.synchronizer")
         class Asset:
             def __init__(self, model_engine):
                 pass
 
-        asset = Asset(model_engine=object())
-        assert asset in _FALLBACK.synchronizer._listeners
-        assert asset.time == _FALLBACK.synchronizer.time
-        assert asset.period == _FALLBACK.synchronizer.period
+        with pytest.raises(AttributeError, match="cannot resolve 'missing'"):
+            Asset(model_engine=object())
+
+    def test_path_resolving_to_none_raises(self):
+        class Container:
+            engine = None
+
+        @time_synchronized("context.engine")
+        class Asset:
+            def __init__(self, context):
+                pass
+
+        with pytest.raises(AttributeError, match="'engine' resolved to None"):
+            Asset(context=Container())
 
 
     def test_original_init_still_runs(self, make_configured, tmp_path):

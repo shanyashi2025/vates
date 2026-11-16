@@ -31,6 +31,7 @@ class ProjectionTimeSynchronizer:
         self._emit_time_change()
 
     def attach_time_listener(self, listener, /) -> None:
+        """Register a listener weakly for future time and period updates."""
         if isinstance(listener, weakref.ref):
             listener = listener()
         # WeakSet handles duplicate detection and dead-reference cleanup.
@@ -38,6 +39,7 @@ class ProjectionTimeSynchronizer:
             self._listeners.add(listener)
 
     def detach_time_listener(self, listener, /) -> None:
+        """Remove a listener; doing so is a no-op if it is not registered."""
         if isinstance(listener, weakref.ref):
             listener = listener()
         if listener is not None:
