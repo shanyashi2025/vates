@@ -56,7 +56,7 @@ The runlog can be found in `my_model.runlog.json` file.
 #### 2. Add Variables for Model Output
 
 Use `ScalarVariable` and `TDimVariable` for values without labeled dimensions.
-Use `ConstArrayVariable` and `TDimArrayVariable` when a value has labeled
+Use `ConstantArrayVariable` and `TDimArrayVariable` when a value has labeled
 dimensions. The `@` operator attaches each variable to the model for output,
 which can be read by `model.proj_result`. Time-dimensioned variables are indexed
 by integer (`model.time`).

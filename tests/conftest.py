@@ -3,7 +3,7 @@
 import pytest
 
 from vates import (
-    ConstArrayVariable,
+    ConstantArrayVariable,
     ProjModelEngine,
     ScalarVariable,
     TDimArrayVariable,
@@ -87,8 +87,8 @@ def add_variables():
 @pytest.fixture(autouse=True)
 def clean_variable_cached():
     ScalarVariable._ng_cache = set()
-    ConstArrayVariable._ng_cache = set()
-    ConstArrayVariable._dims_cache = set()
+    ConstantArrayVariable._ng_cache = set()
+    ConstantArrayVariable._dims_cache = set()
     TDimVariable._ng_cache = set()
     TDimArrayVariable._ng_cache = set()
     TDimArrayVariable._dims_cache = set()

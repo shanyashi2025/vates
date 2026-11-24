@@ -1,4 +1,4 @@
-from vates.alm.assets.asset_creation import create_asset
+from vates.alm.assets.create_asset import create_asset
 from vates.alm.assets.asset_base import BaseAsset
 from vates.alm.assets.cash import Cash
 from vates.alm.assets.equity import Equity

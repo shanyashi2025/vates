@@ -170,7 +170,7 @@ class ScalarVariable(BaseProjVariable):
         self._result = value
 
 
-class ConstArrayVariable(BaseProjVariable):
+class ConstantArrayVariable(BaseProjVariable):
     """Container for constant array variables.
 
     Holds an array that does not vary over time.
@@ -432,7 +432,7 @@ class TDimArrayVariable(BaseProjVariable):
 def make_variable(name: str, /, *, owner: str, group: str) -> ScalarVariable: ...
 
 @overload
-def make_variable(name: str, /, *, owner: str, group: str, dims: list | tuple) -> ConstArrayVariable: ...
+def make_variable(name: str, /, *, owner: str, group: str, dims: list | tuple) -> ConstantArrayVariable: ...
 
 @overload
 def make_variable(name: str, /, *, owner: str, group: str, max_t: int) -> TDimVariable: ...
@@ -442,14 +442,14 @@ def make_variable(name: str, /, *, owner: str, group: str, max_t: int, dims: lis
 
 @overload
 def make_variable(name: str, /, *, owner: str, group: str, max_t: int | None = None, dims: list | tuple | None = None,
-                  ) -> ScalarVariable | ConstArrayVariable | TDimVariable | TDimArrayVariable: ...
+                  ) -> ScalarVariable | ConstantArrayVariable | TDimVariable | TDimArrayVariable: ...
 
 def make_variable(name: str, /, *, owner: str, group: str, max_t: int | None = None, dims: list | tuple | None = None,
-                  ) -> ScalarVariable | ConstArrayVariable | TDimVariable | TDimArrayVariable:
+                  ) -> ScalarVariable | ConstantArrayVariable | TDimVariable | TDimArrayVariable:
     if max_t is None and dims is None:
         return ScalarVariable(name, owner=owner, group=group)
     if max_t is None and dims is not None:
-        return ConstArrayVariable(name, owner=owner, group=group, dims=dims)
+        return ConstantArrayVariable(name, owner=owner, group=group, dims=dims)
     if max_t is not None and dims is None:
         return TDimVariable(name, owner=owner, group=group, max_t=max_t)
     if max_t is not None and dims is not None:

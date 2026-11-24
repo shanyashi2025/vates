@@ -44,11 +44,11 @@ variables, and result reader, plus subpackages `alm`, `finmath`, `solvency`, `ut
   reads `model.time` / `model.period` (and read-only constants `START_DATE`, `END_DATE`, `MAX_T`,
   `SCENARIO`, `SIMULATION`, ...) and mutates output variables.
 
-- **`variables`** — use `ScalarVariable` or `ConstArrayVariable` for constant values, and
+- **`variables`** — use `ScalarVariable` or `ConstantArrayVariable` for constant values, and
   `TDimVariable` or `TDimArrayVariable` for values indexed by time. Time variables use integer `t`
-  indices and slices. Array variables carry labeled `dims` (lists, tuples or Enums), which become 
-  row labels like `name[a:b:c]`. Variables self-register with the engine via `attach_proj_variable`, 
-  or the syntactic sugar `variable @ engine` / `variable @ engine.proj_variable_manager`. On run, 
+  indices and slices. Array variables carry labeled `dims` (lists, tuples or Enums), which become
+  row labels like `name[a:b:c]`. Variables self-register with the engine via `attach_proj_variable`,
+  or the syntactic sugar `variable @ engine` / `variable @ engine.proj_variable_manager`. On run,
   the engine serializes them to `{slug}.proj.csv`. Use `proj_result(...)` (`vates/_core/_proj_result_reader.py`) 
   to read `.proj.csv` back into a DataFrame or a single cell `(group, owner, variable [, date])` value.
 

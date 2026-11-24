@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from vates import (
-    ConstArrayVariable,
+    ConstantArrayVariable,
     ScalarVariable,
     TDimArrayVariable,
     TDimVariable,
@@ -43,9 +43,9 @@ class TestScalarVariable:
         assert v.result == "world"
 
 
-class TestConstArrayVariable:
+class TestConstantArrayVariable:
     def test_array_storage_and_slice(self):
-        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B", "C"]])
+        v = ConstantArrayVariable("c", owner="o", group="g", dims=[["A", "B", "C"]])
         v[...] = np.array([1.0, 2.0, 3.0])
 
         assert v.ndim == 1
@@ -57,25 +57,25 @@ class TestConstArrayVariable:
         np.testing.assert_array_equal(v.result, [1.0, 12.0, 13.0])
 
     def test_result_setter(self):
-        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
+        v = ConstantArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
         v.result = np.array([11.0, 12.0])
         np.testing.assert_array_equal(v.result, [11.0, 12.0])
 
     def test_dims_from_enum(self):
-        v = ConstArrayVariable("e", owner="o", group="g", dims=[_AssetType])
+        v = ConstantArrayVariable("e", owner="o", group="g", dims=[_AssetType])
         assert v.dims == (("EQUITY", "BOND"),)
 
     def test_int_labels_coerced_to_str(self):
-        v = ConstArrayVariable("i", owner="o", group="g", dims=[[0, 1]])
+        v = ConstantArrayVariable("i", owner="o", group="g", dims=[[0, 1]])
         assert v.dims == (("0", "1"),)
 
     def test_multiple_dimensions(self):
-        v = ConstArrayVariable("3d", owner="o", group="g", dims=[["a", "b"], ["c"], ["d"]])
+        v = ConstantArrayVariable("3d", owner="o", group="g", dims=[["a", "b"], ["c"], ["d"]])
         assert v.ndim == 3
         assert v.dims == (("a", "b"), ("c",), ("d",))
 
     def test_label_based_access(self):
-        v = ConstArrayVariable(
+        v = ConstantArrayVariable(
             "c",
             owner="o",
             group="g",
@@ -93,12 +93,12 @@ class TestConstArrayVariable:
     @pytest.mark.parametrize("bad", ["foo", 42, 3.14])
     def test_dims_must_be_list_or_tuple(self, bad):
         with pytest.raises(TypeError):
-            ConstArrayVariable("bad", owner="o", group="g", dims=bad)
+            ConstantArrayVariable("bad", owner="o", group="g", dims=bad)
 
     @pytest.mark.parametrize("bad", [int, 42, "foo"])
     def test_wrong_dim_type_raises(self, bad):
         with pytest.raises(TypeError):
-            ConstArrayVariable("bad", owner="o", group="g", dims=[bad])
+            ConstantArrayVariable("bad", owner="o", group="g", dims=[bad])
 
 
 class TestTDimVariable:
@@ -185,7 +185,7 @@ class TestResolveDimIndices:
         ],
     )
     def test_resolves_labels(self, keys, expected):
-        v = ConstArrayVariable(
+        v = ConstantArrayVariable(
             "c",
             owner="o",
             group="g",
@@ -194,11 +194,11 @@ class TestResolveDimIndices:
         assert v.resolve_indices(*keys) == expected
 
     def test_single_key_for_one_dimension(self):
-        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
+        v = ConstantArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
         assert v.resolve_indices("A") == (0,)
 
     def test_resolves_enum_labels(self):
-        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"], _AssetType])
+        v = ConstantArrayVariable("c", owner="o", group="g", dims=[["A", "B"], _AssetType])
         assert v.resolve_indices("B", _AssetType.BOND) == (1, 1)
 
     def test_empty_dimensions_resolve_to_empty_tuple(self):
@@ -206,23 +206,23 @@ class TestResolveDimIndices:
         assert v.resolve_indices() == ()
 
     def test_wrong_number_of_keys_raises(self):
-        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A"], ["X"]])
+        v = ConstantArrayVariable("c", owner="o", group="g", dims=[["A"], ["X"]])
         with pytest.raises(ValueError, match="expected 2"):
             v.resolve_indices("A")
 
     def test_unknown_label_raises_key_error(self):
-        v = ConstArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
+        v = ConstantArrayVariable("c", owner="o", group="g", dims=[["A", "B"]])
         with pytest.raises(KeyError, match="not in dims"):
             v.resolve_indices("missing")
 
 
 class TestVariableCaches:
     def test_dimension_caches_are_per_array_class(self):
-        assert ConstArrayVariable._dims_cache is not TDimArrayVariable._dims_cache
-        ConstArrayVariable("c1", owner="o", group="g", dims=[["A", "B"]])
-        ConstArrayVariable("c2", owner="o", group="g", dims=[["A", "B"], ("C", "D")])
+        assert ConstantArrayVariable._dims_cache is not TDimArrayVariable._dims_cache
+        ConstantArrayVariable("c1", owner="o", group="g", dims=[["A", "B"]])
+        ConstantArrayVariable("c2", owner="o", group="g", dims=[["A", "B"], ("C", "D")])
         TDimArrayVariable("t", owner="o", group="g", dims=[["A", "B"]], max_t=24)
-        assert len(ConstArrayVariable._dims_cache) == 2
+        assert len(ConstantArrayVariable._dims_cache) == 2
         assert len(TDimArrayVariable._dims_cache) == 1
 
 
@@ -234,7 +234,7 @@ class TestMakeProjVariable:
 
     @pytest.mark.parametrize("bad", ["Nope", "42"])
     def test_wrong_variable_type_value(self, bad):
-        with pytest.raises(ValueError, match=r"expected \('const', 'tdim'\)"):
+        with pytest.raises(ValueError, match=r"expected \('constant', 'tdim'\)"):
             make_proj_variable("t", variable_type=bad, owner="o", group="g")
 
     def test_const_scalar_factory(self, configured):
@@ -248,16 +248,16 @@ class TestMakeProjVariable:
     def test_const_array_factory(self, configured):
         v = make_proj_variable(
             "c",
-            variable_type="const",
+            variable_type="constant",
             owner="o",
             group="g",
             dims=[["A", "B"]],
             model_engine=configured,
         )
-        assert isinstance(v, ConstArrayVariable)
+        assert isinstance(v, ConstantArrayVariable)
         assert v.dims == (("A", "B"),)
 
-    @pytest.mark.parametrize("good", ["c", "const", "CoNsT"])
+    @pytest.mark.parametrize("good", ["c", "constant", "CoNsTant"])
     def test_correct_const_var_type_value(self, configured, good):
         v = make_proj_variable("c", variable_type=good, owner="o", group="g", model_engine=configured)
         assert isinstance(v, ScalarVariable)
