@@ -48,19 +48,19 @@ class RunConfiguration:
 
     @classmethod
     def make_for_proj(cls, **kwargs) -> Self:
-        not_applicable = dict(simulations = (), max_workers = 1)
-        return cls(**(not_applicable | kwargs))
+        unused = dict(simulations = (), max_workers = 1)
+        return cls(**(unused | kwargs))
 
     @classmethod
     def make_for_stoch(cls, **kwargs) -> Self:
-        not_applicable = dict(
+        unused = dict(
             is_delete_existing_results=True,
             is_write_proj_result=False,
             is_write_stoch_result=False,
             stoch_result_file_id="",
             simulation=0,
         )
-        return cls(**(not_applicable | kwargs))
+        return cls(**(unused | kwargs))
 
     @staticmethod
     def validate_bool(name: str, value, /) -> None:

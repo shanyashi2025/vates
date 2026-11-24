@@ -1,7 +1,9 @@
 import math
 import warnings
 import numpy as np
+from functools import partial
 
+from vates.solvency.risk_tree import  RiskTree, risk_aggregation
 
 # --- Article 18, Rule No.2 ---
 # Correlation matrix (4 x 4) for minimum capital aggregation, indexed by:
@@ -173,3 +175,66 @@ def spread_interpolation(spread_start: float, spread_end: float = 0,
         w = (t - start) / (end - start)
         arr_spread[t] = spread_end * w + arr_spread[start] * (1 - w)
     return arr_spread
+
+
+def _max_at_zero(**capitals: float) -> float:
+    return max(max(capitals.values()), 0.0)
+
+def _floor_at_zero(*args: float) -> tuple[float, ...]:
+    return tuple([max(x, 0.0) for x in args])
+
+def _overall_risk_agg(life: float, non_life: float, market: float, credit: float) -> float:
+    return risk_aggregation(life, non_life, market, credit, corr_matrix=MC_CORR_MATRIX)
+
+def _life_risk_agg(loss: float, expense: float, lapse: float) -> float:
+    return risk_aggregation(loss, expense, lapse, corr_matrix=LIFE_MC_CORR_MATRIX)
+
+def _loss_risk_agg(mortality: float, catastrophe: float, longevity: float, morbidity: float, health: float, other: float
+                   ) -> float:
+    return risk_aggregation(*_floor_at_zero(mortality, catastrophe, longevity, morbidity, health, other),
+                            corr_matrix=LOSS_MC_CORR_MATRIX)
+
+def _nonlife_risk_agg(premium_reserve: float, catastrophe: float, k: float):
+    return math.sqrt(premium_reserve ** 2 + 2 * 0.25 * premium_reserve * catastrophe + catastrophe ** 2) * k
+
+def _morb_risk_agg(incidence: float, trend: float) -> float:
+    return risk_aggregation(incidence, trend, corr_matrix=MORB_MC_CORR_MATRIX)
+
+def _market_risk_agg(interest_rate: float, equity: float, real_estate: float, overseas_fixed_income: float,
+                     overseas_equity: float, exchange_rate: float) -> float:
+    return risk_aggregation(interest_rate, equity, real_estate, overseas_fixed_income, overseas_equity, exchange_rate,
+                         corr_matrix=MARKET_MC_CORR_MATRIX)
+
+def _credit_risk_agg(spread: float, counterparty_default: float) -> float:
+    return risk_aggregation(spread, counterparty_default, corr_matrix=CREDIT_MC_CORR_MATRIX)
+
+def make_mc_module(*, submodule: str | None = None, nonlife_mc_k: float = 1.0) -> RiskTree:
+    structure = {
+        "C-ROSS MC": {"children": ("Life", "Non-life", "Market", "Credit"), "agg_func": _overall_risk_agg},
+        "C-ROSS MC/Life": {"children": ("Loss", "Expense", "Lapse"), "agg_func": _life_risk_agg},
+        "C-ROSS MC/Life/Loss": {
+            "children": ("Mortality", "Catastrophe", "Longevity", "Morbidity", "Health", "Other"),
+            "agg_func": _loss_risk_agg},
+        "C-ROSS MC/Life/Loss/Morbidity": {"children": ("Incidence", "Trend"), "agg_func": _morb_risk_agg},
+        "C-ROSS MC/Life/Lapse": {"children": ("Lapse Rate", "Mass Lapse"), "agg_func": _max_at_zero},
+        "C-ROSS MC/Life/Lapse/Lapse Rate": {"children": ("Lapse Up", "Lapse Down"), "agg_func": _max_at_zero},
+        "C-ROSS MC/Non-life": {
+            "children": ("Premium Reserve", "Catastrophe"),
+            "agg_func": partial(_nonlife_risk_agg, k=nonlife_mc_k)},
+        "C-ROSS MC/Market": {
+            "children": ("Interest Rate", "Equity", "Real Estate", "Overseas Fixed-income", "Overseas Equity",
+                         "Exchange Rate"),
+            "agg_func": _market_risk_agg},
+        "C-ROSS MC/Market/Interest Rate": {
+            "children": ("Interest Rate Up", "Interest Rate Down"),
+            "agg_func": _max_at_zero},
+        "C-ROSS MC/Credit": {"children": ("Spread", "Counterparty Default"), "agg_func": _credit_risk_agg},
+    }
+
+    tree = RiskTree.from_structure(structure=structure, is_lock_structure=True, is_zerofill=True)
+
+    if submodule is None:
+        return tree
+    else:
+        return tree.get_subtree(submodule).duplicate()
+

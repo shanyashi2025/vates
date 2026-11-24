@@ -6,13 +6,15 @@ from pathlib import Path
 from vates import ProjModelEngine
 from vates.utils import KeyedArray
 from vates.finmath import convert_interest_rates, interpolate_interest_rates
-from vates.solvency.cn_cross2 import MinCapUnit, MinCapConsolidator, interest_risk_discount_curve
+from vates.solvency.cn_cross2 import interest_risk_discount_curve
 
 from company_package import (
     run_with_json_config,
     load_file_df,
     EconMaster,
     AssetMaster,
+    MinCapUnit,
+    MinCapConsolidator
 )
 
 

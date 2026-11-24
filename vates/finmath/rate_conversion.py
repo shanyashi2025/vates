@@ -504,7 +504,7 @@ class InterestRateTermStructure:
         forwardac[1:] = (discount[:-1] / discount[1:]) ** freq - 1.0
         forwardcc[1:] = np.log1p(forwardac[1:])
         zerocc[1:] = np.log1p(zeroac[1:])
-        return InterestRateTermStructure(
+        return cls(
             discount=discount,
             forwardac=forwardac,
             forwardcc=forwardcc,
@@ -539,7 +539,7 @@ class InterestRateTermStructure:
         forwardac[1:] = (discount[:-1] / discount[1:]) ** freq - 1.0
         forwardcc[1:] = np.log1p(forwardac[1:])
         zerocc[1:] = np.log1p(zeroac[1:])
-        return InterestRateTermStructure(
+        return cls(
             discount=discount,
             zeroac=zeroac,
             zerocc=zerocc,
@@ -574,7 +574,7 @@ class InterestRateTermStructure:
         discount[1:] = np.cumprod((1.0 + forwardac[1:]) ** (-1 / freq))
         zeroac[1:] = discount[1:] ** (-freq / time[1:]) - 1.0
         zerocc[1:] = np.log1p(zeroac[1:])
-        return InterestRateTermStructure(
+        return cls(
             discount=discount,
             zeroac=zeroac,
             zerocc=zerocc,

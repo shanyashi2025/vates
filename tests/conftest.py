@@ -1,5 +1,4 @@
 """Shared fixtures for the `vates._core` test suite."""
-import warnings
 
 import pytest
 
@@ -17,15 +16,6 @@ from vates import (
 # `max_t == 0`.
 DEFAULT_START_YEAR = 2026
 DEFAULT_END_YEAR = 2028
-
-
-@pytest.fixture(autouse=True)
-def _silence_default_fill_warnings():
-    """`configure_run`/`run` emit informational `UserWarning`s when filling
-    defaults or resetting `time`. They are not errors; keep the run log clean."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
-        yield
 
 
 @pytest.fixture
@@ -57,25 +47,22 @@ def make_configured(make_engine):
               end_year=DEFAULT_END_YEAR, scenario="base"):
         engine = make_engine(slug)
         results_dir = tmp_path / "results" / (scenario or "")
-        with warnings.catch_warnings():
-            # configure_run emits a UserWarning when it fills defaults
-            warnings.simplefilter("ignore", UserWarning)
-            engine.configure_run(
-                start_year=start_year,
-                end_year=end_year,
-                scenario=scenario,
-                workspace_directory=str(tmp_path),
-                results_directory=str(results_dir),
-            )
+        engine.configure_run(
+            start_year=start_year,
+            end_year=end_year,
+            scenario=scenario,
+            workspace_directory=str(tmp_path),
+            results_directory=str(results_dir),
+        )
         return engine
 
     return _make
 
 
 @pytest.fixture
-def engine(make_configured):
+def engine(make_configured, tmp_path):
     """A default configured engine writing into `tmp_path`."""
-    return make_configured
+    return make_configured(tmp_path)
 
 
 @pytest.fixture

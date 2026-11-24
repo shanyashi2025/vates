@@ -11,20 +11,14 @@ with the three builders.
 """
 
 import math
-from decimal import Decimal
-from fractions import Fraction
 
 import numpy as np
 import pytest
 
 from vates.solvency.risk_tree import RiskNode, RiskTree, preorder_traversal, risk_aggregation
-from vates.solvency.cn_cross2 import make_cross2_mc_module
-from vates.solvency.eu_solvency2 import make_solvency2_scr_module
-from vates.solvency.eu_solvency2.rules import CORR_MATRIX_LIFE, CORR_MATRIX_MARKET as SII_CORR_MARKET
-from vates.solvency.hk_rbc import make_hkrbc_pcr_module
-from vates.solvency.hk_rbc.rules import CORR_MATRIX_MARKET as HKRBC_CORR_MARKET
+from vates.solvency import cn_cross2, eu_solvency2, hk_rbc
 
-BUILDERS = [make_cross2_mc_module, make_solvency2_scr_module, make_hkrbc_pcr_module]
+BUILDERS = [cn_cross2.make_mc_module, eu_solvency2.make_scr_module, hk_rbc.make_pcr_module]
 BUILDER_IDS = ["cn_cross2", "eu_solvency2", "hk_rbc"]
 
 
@@ -131,11 +125,11 @@ class TestRiskAggregation:
 
     def test_a_regulatory_matrix_with_negative_correlations_is_accepted(self):
         # Solvency II life: mortality and longevity are correlated at -0.25.
-        assert np.any(CORR_MATRIX_LIFE < 0.0)  # the premise of this test
-        capitals = [1.0] * len(CORR_MATRIX_LIFE)
+        assert np.any(eu_solvency2.CORR_MATRIX_LIFE < 0.0)  # the premise of this test
+        capitals = [1.0] * len(eu_solvency2.CORR_MATRIX_LIFE)
         x = np.array(capitals)
-        assert risk_aggregation(*capitals, corr_matrix=CORR_MATRIX_LIFE) == pytest.approx(
-            math.sqrt(float(x @ CORR_MATRIX_LIFE @ x)))
+        assert risk_aggregation(*capitals, corr_matrix=eu_solvency2.CORR_MATRIX_LIFE) == pytest.approx(
+            math.sqrt(float(x @ eu_solvency2.CORR_MATRIX_LIFE @ x)))
 
     def test_a_non_positive_semidefinite_matrix_raises_value_error(self):
         # Every entry is a legal correlation, but the matrix is not positive
@@ -985,7 +979,7 @@ class TestSolvencyModules:
         # and down shocks), but `Market` also needs the two shocks themselves, since
         # they select its correlation matrix: the descendants scope lets one function
         # see both the sub-module and the risk factors below it.
-        tree = make_solvency2_scr_module()
+        tree = eu_solvency2.make_scr_module()
         tree.set_capital("Market/Interest Rate/Interest Rate Increase", 3.0)
         tree.set_capital("Market/Interest Rate/Interest Rate Decrease", 7.0)
         tree.set_capitals({"Market/Equity": 2.0, "Market/Property": 5.0, "Market/Spread": 4.0,
@@ -996,10 +990,10 @@ class TestSolvencyModules:
             node.identifier for node in market.descendants}
         assert tree.get_capital("Market/Interest Rate") == 7.0  # the larger shock
         assert tree.get_capital("Market") == pytest.approx(
-            risk_aggregation(7.0, 2.0, 5.0, 4.0, 6.0, 1.0, corr_matrix=SII_CORR_MARKET("decrease")))
+            risk_aggregation(7.0, 2.0, 5.0, 4.0, 6.0, 1.0, corr_matrix=eu_solvency2.CORR_MATRIX_MARKET("decrease")))
 
     def test_hkrbc_market_aggregates_over_the_nested_interest_rate_module(self):
-        tree = make_hkrbc_pcr_module()
+        tree = hk_rbc.make_pcr_module()
         tree.set_capital("Market/Interest Rate/Interest Rate Upward", 7.0)
         tree.set_capital("Market/Interest Rate/Interest Rate Downward", 3.0)
         tree.set_capitals({"Market/Credit Spread": 1.0, "Market/Equity": 2.0,
@@ -1007,4 +1001,4 @@ class TestSolvencyModules:
         assert tree.get_node("Market")._agg_scope == "descendants"
         assert tree.get_capital("Market/Interest Rate") == 7.0  # the larger shock
         assert tree.get_capital("Market") == pytest.approx(
-            risk_aggregation(7.0, 1.0, 2.0, 3.0, 4.0, corr_matrix=HKRBC_CORR_MARKET("upward")))
+            risk_aggregation(7.0, 1.0, 2.0, 3.0, 4.0, corr_matrix=hk_rbc.CORR_MATRIX_MARKET("upward")))

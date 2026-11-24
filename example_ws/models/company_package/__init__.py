@@ -1,8 +1,10 @@
 from .asset_master import AssetMaster
+from .asset_serialization import output_aging_assets
+from .cross_mc import MinCapUnit, MinCapConsolidator
 from .econ_master import EconMaster
 from .fund_master import FundMaster, FundRebalanceParams, fund_rebalance
 from .liability import build_liabs
-from .asset_serialization import output_aging_assets
+
 from .utils import run_with_json_config, load_file_df, parse_int_list_from_str
 
 __all__ = [
@@ -20,5 +22,8 @@ __all__ = [
 
     # calculations
     'output_aging_assets',
+
+    'MinCapUnit',
+    'MinCapConsolidator'
 
 ]
