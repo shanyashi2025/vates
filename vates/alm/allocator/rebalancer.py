@@ -360,7 +360,7 @@ class Rebalancer:
         self.tdv_ag_size_ad[t] = np.array(sizes)
         self.tdv_ag_wgt_pc_ad[t] = np.array([v / total_size for v in sizes]) * 100
 
-        return 0.0 if free_proceeds_keeper is not None else _free_proceeds_keeper.take_out()
+        return 0.0 if free_proceeds_keeper is not None else _free_proceeds_keeper.balance
 
     def _make_tdv_dim_indices(self, groups: list[_AllocationGroup]) -> list[int | None]:
         tdv_dim_indices: list[int | None] = [None] * len(self.group_names)

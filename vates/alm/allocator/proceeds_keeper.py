@@ -16,7 +16,3 @@ class ProceedsKeeper:
     def __isub__(self, amount: float):
         self._balance -= amount
         return self
-
-    def take_out(self) -> float:
-        amount, self._balance = self._balance, 0.0
-        return amount

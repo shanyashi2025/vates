@@ -136,8 +136,8 @@ class AssetRecorder:
         return self.tot_mv_ad
 
     @transition(require_all=RecorderPhase.ASSET_REC_BD)
-    def cash_flow(self, category: str | None = None) -> float:
-        return self.tot_cf if category is None else self.cat_cf[self.categories.index(category)]
+    def get_category_cash_flow(self, category: str) -> float:
+        return self.cat_cf[self.categories.index(category)]
 
     @transition(require_all=RecorderPhase.ASSET_REC_BD)
     def report_bd(self, kind: Literal["report_value", "investment_return", "rate_of_return"],
@@ -441,33 +441,25 @@ class LiabRecorder:
 
 @time_synchronized("model_engine")
 class OtherRecorder:
-    """Performs aggregation and performance calculations for a fund.
-
-    """
+    """Records free proceeds and registered account-level cash-flow kinds."""
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
-    __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name',
-                 'tax_paid', 'capital_received', 'dividends_paid',
+    __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name', 'other_cash_flow_dict',
                  'tdv_free_proceeds_bd', 'tdv_free_proceeds_ad', 'tdv_free_proceeds_eop',
-                 'tdv_proceeds_tran_in', 'tdv_proceeds_tran_out', 'tdv_proceeds_tran_net',
-                 'tdv_tax_paid', 'tdv_capital_received', 'tdv_dividends_paid')
+                 'tdv_other_cash_flow_dict')
 
-    def __init__(self, *, name: str, model_engine: ProjModelEngine | None = None):
-        self.tax_paid: float = 0.0
-        self.capital_received: float = 0.0
-        self.dividends_paid: float = 0.0
+    def __init__(self, *, name: str, model_engine: ProjModelEngine | None = None,
+                 other_cash_flow_kinds: list[str] | tuple[str, ...]):
+        self.other_cash_flow_dict: dict[str, float] = {kind: 0.0 for kind in other_cash_flow_kinds}
         # Initialize time-dimensioned variables for output
         create_tdv = lambda x: make_proj_variable(x, model_engine=model_engine, owner=name, group='fund')
+        self.tdv_other_cash_flow_dict: dict[str, TDimVariable] = {
+            kind: create_tdv(kind) for kind in other_cash_flow_kinds
+        }
         self.tdv_free_proceeds_bd: TDimVariable = create_tdv("free_proceeds_bd")
         self.tdv_free_proceeds_ad: TDimVariable = create_tdv("free_proceeds_ad")
         self.tdv_free_proceeds_eop: TDimVariable = create_tdv("free_proceeds_eop")
-        self.tdv_proceeds_tran_in: TDimVariable = create_tdv("proceeds_transferred_in")
-        self.tdv_proceeds_tran_out: TDimVariable = create_tdv("proceeds_transferred_out")
-        self.tdv_proceeds_tran_net: TDimVariable = create_tdv("proceeds_transferred_net")
-        self.tdv_tax_paid: TDimVariable = create_tdv("tax_paid")
-        self.tdv_capital_received: TDimVariable = create_tdv("capital_contribution_received")
-        self.tdv_dividends_paid: TDimVariable = create_tdv("dividends_paid_to_shareholders")
 
     def record_free_proceeds(self, value: float, when: Literal["bd", "ad", "eop"]) -> None:
         if when == "bd":
@@ -479,29 +471,17 @@ class OtherRecorder:
         else:
             pass
 
-    def record_free_proceeds_transfer(self, amount: float) -> None:
-        t = self.time
-        amt_in, amt_out = max(amount, 0.0), max(- amount, 0.0)
-        self.tdv_proceeds_tran_in[t] += amt_in
-        self.tdv_proceeds_tran_out[t] += amt_out
-        self.tdv_proceeds_tran_net[t] += amount
+    def record_other_cash_flow(self, kind: str, amount: float) -> None:
+        if kind in self.other_cash_flow_dict:
+            self.other_cash_flow_dict[kind] += amount
+            self.tdv_other_cash_flow_dict[kind][self.time] += amount
 
-    def record_pay_tax(self, amount: float) -> None:
-        self.tax_paid += amount
-        self.tdv_tax_paid[self.time] += amount
-
-    def record_receive_capital(self, amount: float) -> None:
-        self.capital_received += amount
-        self.tdv_capital_received[self.time] += amount
-
-    def record_pay_dividends(self, amount: float) -> None:
-        self.dividends_paid += amount
-        self.tdv_dividends_paid[self.time] += amount
+    def get_other_cash_flow(self, kind: str) -> float:
+        return self.other_cash_flow_dict.get(kind, float("nan"))
 
     def _on_time_change(self) -> None:
-        self.tax_paid: float = 0.0
-        self.capital_received: float = 0.0
-        self.dividends_paid: float = 0.0
+        for key in self.other_cash_flow_dict:
+            self.other_cash_flow_dict[key] = 0.0
         t = self.time
         self.tdv_free_proceeds_bd[t] = None  # set value to None, unless `record_free_proceeds` is actively called
         self.tdv_free_proceeds_ad[t] = None

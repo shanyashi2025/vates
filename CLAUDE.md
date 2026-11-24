@@ -94,7 +94,7 @@ High-level Asset–Liability Management building blocks that plug into the proje
   A builder performs a named `build_pipeline` of calibration steps (e.g. `derive_coupon_rate`, 
   `calculate_amort_rate`, `calibrate_market_spread`, `calculate_market_price`, `risk_neutralize`) 
   then validates required prices/spreads before constructing the asset.
-- **`funds/`** — fund (`Fund`) with recorders (`AssetRecorder`, `LiabRecorder`, `OtherRecorder`).
+- **`funds/`** — fund (`FundAccount`) with recorders (`AssetRecorder`, `LiabRecorder`, `OtherRecorder`).
 - **`allocator/`** — `Rebalancer` realigns groups of assets.
 - **`liabs/`** — liability base class (`BaseLiab`) and `ExternalLiab` for liabilities calculated externally.
 

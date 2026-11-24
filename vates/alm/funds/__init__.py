@@ -1,6 +1,6 @@
-from vates.alm.funds.fund import Fund
+from vates.alm.funds.fund_account import FundAccount
 
 
 __all__ = [
-    'Fund',
+    'FundAccount',
 ]

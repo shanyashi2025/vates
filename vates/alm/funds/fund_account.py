@@ -15,10 +15,12 @@ from vates.alm.funds._recorder import AssetRecorder, LiabRecorder, OtherRecorder
 _default_on_undefined = "zerofill" if GLOBAL_CHECK_MODE == CheckMode.BYPASS else "error"
 
 @time_synchronized("model_engine")
-class Fund:
-    """Investment fund with assets and liabilities.
+class FundAccount:
+    """Container for assets, liabilities, and account-level cash flows.
 
-    Handles asset/liability management, reporting, and rebalance strategies for actuarial projections.
+    Provides projection-time storage, aggregation, reporting, and interactions
+    with free proceeds for a fund account. Asset dealing and rebalancing are
+    intentionally handled outside this class.
 
     Attributes:
         fund_id (str): Fund identifier.
@@ -48,17 +50,21 @@ class Fund:
         asset_category_attr_name: str = "category",
         output_liab_attrs_bd: list[str] | tuple[str, ...] = (),
         output_liab_attrs_ad: list[str] | tuple[str, ...] = (),
+        other_cash_flow_kinds: list[str] | tuple[str, ...] = (),
     ) -> None:
         """
-        Initialize a Fund object.
+        Initialize a FundAccount.
 
         Args:
             fund_id (str): Fund identifier.
-            asset_report_bases (list[str] | tuple[str, ...]): Asset reporting bases.
-            asset_categories (list[str] | tuple[str, ...]): Asset categories to be reported.
-            asset_category_attr_name (str): Named attribute for asset category, defaults to "category".
-            output_liab_attrs_bd (list[str] | tuple[str, ...]): List of liability attributes to output.
-            output_liab_attrs_ad (list[str] | tuple[str, ...]): List of liability attributes to output.
+            model_engine (ProjModelEngine | None): Projection engine used to synchronize time and create output variables.
+            asset_report_bases (list[str] | tuple[str, ...]): Reported asset bases.
+            asset_categories (list[str] | tuple[str, ...]): Asset categories to report.
+            asset_category_attr_name (str): Asset attribute containing the category, defaults to "category".
+            output_liab_attrs_bd (list[str] | tuple[str, ...]): Liability attributes to output before dealing.
+            output_liab_attrs_ad (list[str] | tuple[str, ...]): Liability attributes to output after dealing.
+            other_cash_flow_kinds (list[str] | tuple[str, ...]): Registered account-level cash-flow kinds. A kind can
+                be recorded with `apply_other_cash_flow` and retrieved with `get_other_cash_flow`.
         """
         self.fund_id = fund_id
         # Asset and liab collections
@@ -70,13 +76,12 @@ class Fund:
         self._asset_rec: AssetRecorder = AssetRecorder(
             name=fund_id, model_engine=model_engine, assets=self._assets,
             asset_report_bases=asset_report_bases, asset_categories=asset_categories,
-            asset_category_attr_name=asset_category_attr_name,
-        )
+            asset_category_attr_name=asset_category_attr_name,)
         self._liab_rec: LiabRecorder = LiabRecorder(
             name=fund_id, model_engine=model_engine, liabs=self._liabs,
-            output_liab_attrs_bd=output_liab_attrs_bd, output_liab_attrs_ad=output_liab_attrs_ad
-        )
-        self._other_rec: OtherRecorder = OtherRecorder(name=fund_id, model_engine=model_engine)
+            output_liab_attrs_bd=output_liab_attrs_bd, output_liab_attrs_ad=output_liab_attrs_ad)
+        self._other_rec: OtherRecorder = OtherRecorder(
+            name=fund_id, model_engine=model_engine, other_cash_flow_kinds=other_cash_flow_kinds)
 
     @property
     def assets(self) -> ObjList[BaseAsset]:
@@ -95,19 +100,19 @@ class Fund:
         return self._liabs
 
     @property
-    def total_asset_cash_flow(self) -> float:
+    def asset_cash_flow(self) -> float:
         return self._asset_rec.total_cash_flow
 
     @property
-    def total_asset_market_value_bd(self) -> float:
+    def asset_market_value_bd(self) -> float:
         return self._asset_rec.total_market_value_bd
 
     @property
-    def total_asset_market_value_ad(self) -> float:
+    def asset_market_value_ad(self) -> float:
         return self._asset_rec.total_market_value_ad
 
-    def asset_cash_flow(self, category: str | None = None) -> float:
-        return self._asset_rec.cash_flow(category)
+    def get_asset_category_cash_flow(self, category: str) -> float:
+        return self._asset_rec.get_category_cash_flow(category)
 
     def report_asset_value_bd(self, basis: str, category: str | None = None) -> float:
         return self._asset_rec.report_bd("report_value", basis=basis, category=category)
@@ -127,21 +132,12 @@ class Fund:
     def report_rate_of_return_ad(self, basis: str, category: str | None = None) -> float:
         return self._asset_rec.report_ad("rate_of_return", basis=basis, category=category)
 
-    def retrieve_rate_of_return(self, t: int, basis: str, when: Literal["bd", "ad"], category: str | None = None
-                                ) -> float:
-        if when == "bd":
-            return self._asset_rec.retrieve(t, kind="rate_of_return_bd", basis=basis, category=category)
-        elif when == "ad":
-            return self._asset_rec.retrieve(t, kind="rate_of_return_ad", basis=basis, category=category)
-        else:
-            raise ValueError(f"Unexpected when: {when}, expecting ('bd', 'ad').")
-
     @property
-    def total_liability_cash_flow(self) -> float:
+    def liability_cash_flow(self) -> float:
         return self._liab_rec.total_cash_flow
 
     def add_asset(self, obj: BaseAsset | Iterable[BaseAsset], /) -> None:
-        """Add asset object(s) to the fund.
+        """Add asset object(s) to the fund account.
 
         Args:
             obj (BaseAsset | Iterable[Asset]): Asset(s) to be included.
@@ -153,7 +149,7 @@ class Fund:
             self._assets.append(obj)
 
     def add_liability(self, obj: BaseLiab | Iterable[BaseLiab], /) -> None:
-        """Add liability object(s) to the fund.
+        """Add liability object(s) to the fund account.
 
         Args:
             obj (BaseLiab | Iterable[BaseLiab]): Liability(s) to be included.
@@ -165,7 +161,9 @@ class Fund:
             self._liabs.append(obj)
 
     def record_on_start(self) -> None:
-        """ Record on projection start, typically at `time 0`
+        """Record the initial asset, liability, and free-proceeds values.
+
+        This is normally called at projection time 0.
         """
         self._asset_rec.record_before_dealing(require_cash_flow=False, require_investment_return=False)
         self._asset_rec.record_after_dealing(require_investment_return=False)
@@ -199,25 +197,30 @@ class Fund:
                 raise ValueError(f"Invalid scope '{item}', expected ('assets', 'liabs').")
 
     def record_free_proceeds(self, when: Literal["bd", "ad", "eop"]):
+        """Record free proceeds at the specified projection phase."""
         self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance, when)
 
-    def get_total_asset_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
-        """ Get the sum of a numeric attribute of total assets
+    def get_asset_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
+        """Get the sum of a numeric attribute across all assets.
 
         Args:
-            attr_name (str): Requested attribute name.
-            on_undefined (Literal["zerofill", "error"]): Zerofill or raise for undefined attribute, defaults to "zerofill".
+            attr_name (str): Requested asset attribute name.
+            on_undefined (Literal["zerofill", "error"] | None): Return zero or raise when the attribute is undefined.
 
+        Returns:
+            float: Sum of the requested asset attribute.
         """
         return self._assets.sum_attr(attr_name, on_undefined=on_undefined or _default_on_undefined)
 
-    def get_total_liability_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
-        """ Get the sum of a numeric attribute of total liabilities
+    def get_liability_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
+        """Get the sum of a numeric attribute across all liabilities.
 
         Args:
-            attr_name (str): Requested attribute name.
-            on_undefined (Literal["zerofill", "error"]): Zerofill or raise for undefined attribute, defaults to "zerofill".
+            attr_name (str): Requested liability attribute name.
+            on_undefined (Literal["zerofill", "error"] | None): Return zero or raise when the attribute is undefined.
 
+        Returns:
+            float: Sum of the requested liability attribute.
         """
         return self._liabs.sum_attr(attr_name, on_undefined=on_undefined or _default_on_undefined)
 
@@ -232,62 +235,37 @@ class Fund:
                 raise ValueError(f"Invalid scope '{item}', expected ('assets', 'liabs').")
 
     def invest_free_proceeds_to_cash(self, cash: Cash | None = None) -> None:
+        """Invest all free proceeds into a cash asset."""
         cash = cash or self._get_primary_cash_asset()
         if cash is not None:
-            cash.buy_amount(self.free_proceeds_keeper.take_out())
+            amount = self._free_proceeds_keeper.balance
+            cash.buy_amount(amount)
+            self._free_proceeds_keeper -= amount
         else:
             warnings.warn(f"Cash asset is neither provided nor found in existing assets.")
 
-    def take_out_free_proceeds(self) -> float:
-        """Take out all the free proceeds.
+    def apply_other_cash_flow(self, amount: float, kind: str | None = None) -> None:
+        """Apply an account-level cash flow and update free proceeds.
+
+        Args:
+            amount (float): Cash-flow amount. Positive values increase free proceeds; negative values decrease them.
+            kind (str | None): Registered cash-flow kind used for time-dimensioned reporting. If omitted or
+                unregistered, the cash flow changes free proceeds but is not recorded.
+        """
+        self._free_proceeds_keeper += amount
+        if kind is not None:
+            self._other_rec.record_other_cash_flow(kind, amount)
+
+    def get_other_cash_flow(self, kind: str) -> float:
+        """Get an account-level cash flow for the current projection time.
+
+        Args:
+            kind (str): A kind registered through `other_cash_flow_kinds` on initialization.
 
         Returns:
-            float: The free proceeds taken out.
+            float: Cash-flow amount, or `float("nan")` if `kind` is not recognized.
         """
-        amount = self._free_proceeds_keeper.take_out()
-        self._other_rec.record_free_proceeds_transfer(-amount)
-        return amount
-
-    def receive_free_proceeds(self, amount: float, /) -> None:
-        """Receive free proceeds.
-
-        Args:
-            amount (float): Amount to receive, usually positive but negative is acceptable.
-        """
-        self._free_proceeds_keeper += amount
-        self._other_rec.record_free_proceeds_transfer(amount)
-
-    def consume_free_proceeds(self, amount: float, /) -> None:
-        """Consume free proceeds.
-
-        Args:
-            amount (float): Amount to consume, usually positive but negative is acceptable.
-        """
-        self.receive_free_proceeds(-amount)
-
-    def pay_tax(self, amount: float, /) -> None:
-        self._free_proceeds_keeper -= amount
-        self._other_rec.record_pay_tax(amount)
-
-    def receive_capital_contribution(self, amount: float, /) -> None:
-        self._free_proceeds_keeper += amount
-        self._other_rec.record_receive_capital(amount)
-
-    def pay_dividends_to_shareholders(self, amount: float, /):
-        self._free_proceeds_keeper -= amount
-        self._other_rec.record_pay_dividends(amount)
-
-    @property
-    def tax_paid(self) -> float:
-        return self._other_rec.tax_paid
-
-    @property
-    def capital_contribution_received(self) -> float:
-        return self._other_rec.capital_received
-
-    @property
-    def dividends_paid_to_shareholders(self) -> float:
-        return self._other_rec.dividends_paid
+        return self._other_rec.get_other_cash_flow(kind)
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.fund_id}'"

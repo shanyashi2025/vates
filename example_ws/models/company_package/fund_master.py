@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Callable, Self
 
 from vates import ProjModelEngine
-from vates.alm import Fund, AssetAllocationParams, Rebalancer
+from vates.alm import FundAccount, AssetAllocationParams, Rebalancer
 
 from .asset_master import AssetMaster
 from .econ_master import EconMaster
@@ -33,16 +33,16 @@ class FundMaster:
     def __init__(
         self,
         *,
-        funds: list[Fund] | None = None,
-        ph_funds: list[Fund] | None = None,
-        sh_fund: Fund | None = None,
+        funds: list[FundAccount] | None = None,
+        ph_funds: list[FundAccount] | None = None,
+        sh_fund: FundAccount | None = None,
         rebalance_params_dict: dict[str, FundRebalanceParams] | None = None,
 
     ):
-        self.funds: list[Fund] = funds or []
+        self.funds: list[FundAccount] = funds or []
         self.rebalance_params_dict: dict[str, FundRebalanceParams] | None = rebalance_params_dict
-        self.ph_funds: list[Fund] = ph_funds or []
-        self.sh_fund: Fund | None = sh_fund
+        self.ph_funds: list[FundAccount] = ph_funds or []
+        self.sh_fund: FundAccount | None = sh_fund
 
     @classmethod
     def from_df(
@@ -59,13 +59,14 @@ class FundMaster:
 
         for idx, row in df.iterrows():
             fund_id = str(idx)
-            fund = Fund(
+            fund = FundAccount(
                 fund_id=fund_id,
                 model_engine=model_engine,
                 asset_categories=str(row["asset_categories"]).split(';'),
                 asset_report_bases=str(row["asset_report_bases"]).split(';'),
                 output_liab_attrs_bd=str(row["output_liab_vars_bd"]).split(';') if row["output_liab_vars_bd"] != 'none' else (),
                 output_liab_attrs_ad=str(row["output_liab_vars_ad"]).split(';') if row["output_liab_vars_ad"] != 'none' else (),
+                other_cash_flow_kinds=("proceeds_transfer",)
             )
             if row["fund_type"].lower() not in ('sh', 'shf', 'shareholder'):
                 ph_funds.append(fund)
@@ -137,7 +138,7 @@ def _rebalance_this_month(cal_month: int, rebalance_freq: int) -> bool:
     return cal_month % (12 / rebalance_freq) == 0
 
 
-def fund_rebalance(model_engine: ProjModelEngine, fund: Fund, rebalance_params: FundRebalanceParams,
+def fund_rebalance(model_engine: ProjModelEngine, fund: FundAccount, rebalance_params: FundRebalanceParams,
                    assets_df_dict: dict, econs: EconMaster, asset_mix_df: pd.DataFrame):
     fund_id = fund.fund_id
     period = fund.period
@@ -175,21 +176,21 @@ def fund_rebalance(model_engine: ProjModelEngine, fund: Fund, rebalance_params: 
     fund.record_after_dealing(scope="assets")
 
 
-def get_fund_size(fund: Fund, size_type: str, *, asset_size_basis: str) -> float:
+def get_fund_size(fund: FundAccount, size_type: str, *, asset_size_basis: str) -> float:
     if size_type == "FUND":
-        return fund.get_total_asset_attr(asset_size_basis) + fund.free_proceeds
+        return fund.get_asset_attr(asset_size_basis) + fund.free_proceeds
     elif size_type == "MATH_RES":
-        return fund.get_total_liability_attr("math_res_if")
+        return fund.get_liability_attr("math_res_if")
     elif size_type == "SURR_VALUE":
-        return fund.get_total_liability_attr("surr_val_if")
+        return fund.get_liability_attr("surr_val_if")
     elif size_type == "ACCT_VALUE":
-        return fund.get_total_liability_attr("acct_val_if")
+        return fund.get_liability_attr("acct_val_if")
     elif size_type == "ASSET_SHARE":
-        return fund.get_total_liability_attr("asset_share_if_bd")
+        return fund.get_liability_attr("asset_share_if_bd")
     elif size_type == "MAX_AS_MATH":
-        return max(fund.get_total_liability_attr("asset_share_if_bd"), fund.get_total_liability_attr("math_res_if"))
+        return max(fund.get_liability_attr("asset_share_if_bd"), fund.get_liability_attr("math_res_if"))
     elif size_type == "MAX_AS_CSV":
-        return max(fund.get_total_liability_attr("asset_share_if_bd"), fund.get_total_liability_attr("surr_val_if"))
+        return max(fund.get_liability_attr("asset_share_if_bd"), fund.get_liability_attr("surr_val_if"))
     else:
         raise ValueError(f"Invalid {size_type=}.")
 

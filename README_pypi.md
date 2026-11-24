@@ -255,7 +255,7 @@ There are building blocks for model developments:
 
 - assets: `Cash`, `Equity`, `BondFixed`, `EquityOption`
 - econs: `EquityIndex`, `YieldCurve`, `Spread`, `DefaultRisk`
-- funds: `Fund`
+- funds: `FundAccount`
 - liabs: `ExternalLiab`
 
 

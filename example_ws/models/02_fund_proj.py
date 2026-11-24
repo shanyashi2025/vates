@@ -118,8 +118,9 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
 
                 # step 5: transfer free proceeds to shareholder fund
                 if not is_sh_fund:
-                    amount = fund.take_out_free_proceeds()
-                    fund_master.sh_fund.receive_free_proceeds(amount)
+                    amount = fund.free_proceeds
+                    fund.apply_other_cash_flow(-amount, kind="proceeds_transfer")
+                    fund_master.sh_fund.apply_other_cash_flow(amount, kind="proceeds_transfer")
                 fund.record_free_proceeds("eop")
 
         # --- output aging assets ---

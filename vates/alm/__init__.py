@@ -37,7 +37,7 @@ from vates.alm.liabs import (
 )
 # funds
 from vates.alm.funds import (
-    Fund,
+    FundAccount,
 )
 
 __all__ = [
@@ -69,5 +69,5 @@ __all__ = [
     'BaseLiab',
     'ExternalLiab',
     # funds
-    'Fund',
+    'FundAccount',
 ]

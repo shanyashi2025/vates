@@ -128,11 +128,12 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             fund.record_after_dealing(scope="liabs")
 
             # step 5: transfer free proceeds to shareholder fund
-            _ = fund.take_out_free_proceeds()  # just take out, shareholder fund is None
+            amount = fund.free_proceeds
+            fund.apply_other_cash_flow(-amount, kind="proceeds_transfer")  # just take out, shareholder fund is None
             fund.record_free_proceeds("eop")
 
             # step 6: store liability cash flow
-            model.liab_cf[fund][t] = fund.total_liability_cash_flow
+            model.liab_cf[fund][t] = fund.liability_cash_flow
 
     if t == model.MAX_T:
         model.bel_dict = {}
