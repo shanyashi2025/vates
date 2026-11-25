@@ -3,7 +3,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from collections.abc import Mapping
-from typing import Literal
+from typing import Literal, Self
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition, maybe_raise_on_compare
@@ -37,11 +37,12 @@ class BondFixed(BaseAsset):
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
     __slots__ = ('_qty', '_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
-                 '_spread', '_default_risk', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
+                 '_spread', '_default_risk', '_cash_flow', '_coupon', '_principal', '_recovery', '_interest'
+                 '_purchase_amount', '_sale_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
                  'tdv_qty_default', 'tdv_qty_maturity', 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow',
-                 'tdv_coupon', 'tdv_principal', 'tdv_recovery', 'tdv_mv_price', 'tdv_abv_price',
-                 'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purchase_proceeds',
-                 'tdv_disposal_proceeds',)
+                 'tdv_coupon', 'tdv_principal', 'tdv_recovery', 'tdv_interest', 'tdv_mv_price', 'tdv_abv_price',
+                 'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purchase_amount',
+                 'tdv_sale_proceeds',)
 
     
     def __init__(
@@ -113,8 +114,12 @@ class BondFixed(BaseAsset):
         self._spread: Spread | None = spread
         self._default_risk: DefaultRisk | DefaultRiskParams | None = default_risk
         self._cash_flow: float = 0.0
-        self._purchase_proceeds: float = 0.0
-        self._disposal_proceeds: float = 0.0
+        self._coupon: float = 0.0
+        self._principal: float = 0.0
+        self._recovery: float = 0.0
+        self._interest: float = 0.0
+        self._purchase_amount: float = 0.0
+        self._sale_proceeds: float = 0.0
         self._n_clone: int = 0
 
         # Compose with specialized components
@@ -146,14 +151,15 @@ class BondFixed(BaseAsset):
         self.tdv_coupon: TDimVariable = create_tdv("coupon")
         self.tdv_principal: TDimVariable = create_tdv("principal")
         self.tdv_recovery: TDimVariable = create_tdv("recovery")
+        self.tdv_interest: TDimVariable = create_tdv("interest")
         self.tdv_mv_price: TDimVariable = create_tdv("mv_price")
         self.tdv_abv_price: TDimVariable = create_tdv("abv_price")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_abv_bd: TDimVariable = create_tdv("abv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
         self.tdv_abv_ad: TDimVariable = create_tdv("abv_ad")
-        self.tdv_purchase_proceeds: TDimVariable = create_tdv("purchase_proceeds")
-        self.tdv_disposal_proceeds: TDimVariable = create_tdv("disposal_proceeds")
+        self.tdv_purchase_amount: TDimVariable = create_tdv("purchase_amount")
+        self.tdv_sale_proceeds: TDimVariable = create_tdv("sale_proceeds")
 
         t = self.time
         self.tdv_mv_price[t] = self._mv_price_dirty
@@ -234,8 +240,12 @@ class BondFixed(BaseAsset):
 
     def _on_time_change(self) -> None:
         self._cash_flow = 0.0
-        self._purchase_proceeds = 0.0
-        self._disposal_proceeds = 0.0
+        self._coupon: float = 0.0
+        self._principal: float = 0.0
+        self._recovery: float = 0.0
+        self._interest: float = 0.0
+        self._purchase_amount = 0.0
+        self._sale_proceeds = 0.0
 
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, *, is_update_mv_price: bool = True, **kwargs) -> None:
@@ -253,6 +263,8 @@ class BondFixed(BaseAsset):
         qty_st = self._qty
         coupon = self.cash_flow_gen.get_coupon_payment_at_month(p)
         principal = self.cash_flow_gen.get_principal_payment_at_month(p)
+        freq = 1 if self._params.coupon_freq == 0 else self._params.coupon_freq  # 1 for zero coupon bond
+        interest = self._abv_price_dirty * (1 + self.amort_rate / freq) ** (freq / 12)
         abv_price = self.pricer.get_amortized_price(p)
 
         if self._default_risk is None:
@@ -270,35 +282,38 @@ class BondFixed(BaseAsset):
                 qty_default = 0
                 ead = coupon + principal
 
-        # Expected Cash Flow, generally: (1 - PD) * Contractual CF + PD * Recovery
-        #   +-------------+--------------------+--------+
-        #   | probability |     cash flow      | bv end |
-        #   +-------------+--------------------+--------+
-        #   |     1 - MPD | coupon + principal |     bv |
-        #   |         MPD |           recovery | 0 / bv |  <- 0 when mpd applies to decrement, otherwise bv
-        #   +-------------+--------------------+--------+
+        # 1. MPD affects decrement
+        #   +-------------+-----------------------+------------+
+        #   | probability |       cash flow       | book value |
+        #   +-------------+-----------------------+------------+
+        #   |     1 - MPD |    coupon + principal |         bv |
+        #   |         MPD | recovery (= RR * EAD) |         0  |
+        #   +-------------+-----------------------+------------+
         #   expected cash flow = (1 - MPD) * (coupon + principal) + MPD * recovery
-        # 1. MPD applies to decrement
-        #      expected bv end = (1 - MPD) * bv
-        #        expected loss = contractual cash flow + bv - (expected cash flow + expected bv end)
+        #  expected book value = (1 - MPD) * bv
+        #        expected loss = (contractual cash flow + contractual book value) - (expected cash flow + expected book value)
         #                      = MPD * (coupon + principal + bv) - MPD * recovery
-        #    let expected loss = MPD * LGD * EAD
-        # =>   MPD * LGD * EAD = MPD * (coupon + principal + bv) - MPD * recovery
-        # => expected recovery = MPD * recovery
-        #                      = MPD * (coupon + principal + bv) - MPD * LGD * EAD
-        #                      = MPD * RR * EAD (<- EAD = bv + coupon + principal)
-        # 2. MPD doesn't apply to decrement
-        #        expected loss = contractual cash flow - expected cash flow
+        #                      = MPD * EAD - MPD * RR * EAD  <- given EAD = coupon + principal + bv
+        #                      = MPD * (1 - RR) * EAD
+        #                      = MPD * LGD * EAD  <- the classic formula
+        # 2. MPD doesn't affect decrement
+        #   +-------------+-----------------------+
+        #   | probability |       cash flow       |
+        #   +-------------+-----------------------+
+        #   |     1 - MPD |    coupon + principal |
+        #   |         MPD | recovery (= RR * EAD) |
+        #   +-------------+-----------------------+
+        #   expected cash flow = (1 - MPD) * (coupon + principal) + MPD * recovery
+        #        expected loss = contractual cash flow - expected cash flow  <- no impact to book value
         #                      = MPD * (coupon + principal) - MPD * recovery
-        #    let expected loss = MPD * LGD * EAD
-        # =>   MPD * LGD * EAD = MPD * (coupon + principal) - MPD * recovery
-        # => expected recovery = MPD * recovery
-        #                      = MPD * (coupon + principal) - MPD * LGD * EAD
-        #                      = MPD * RR * EAD (<- EAD = coupon + principal)
+        #                      = MPD * EAD - MPD * RR * EAD  <- given EAD = coupon + principal
+        #                      = MPD * (1 - RR) * EAD
+        #                      = MPD * LGD * EAD  <- the classic formula
 
-        cf_coupon = (1 - mpd) * coupon * qty_st
-        cf_principal = (1 - mpd) * principal * qty_st
-        cf_recovery = mpd * rr * ead * qty_st
+        self._coupon = (1 - mpd) * coupon * qty_st
+        self._principal = (1 - mpd) * principal * qty_st
+        self._recovery = mpd * rr * ead * qty_st
+        self._interest = (1 - mpd) * interest * qty_st
 
         # decrement
         qty = qty_st - qty_default  # survival
@@ -306,7 +321,7 @@ class BondFixed(BaseAsset):
 
         # store calculated results
         self._qty = qty
-        self._cash_flow = cf_coupon + cf_principal + cf_recovery
+        self._cash_flow = self._coupon + self._principal + self._recovery
         self._abv_price_dirty = abv_price
         if is_update_mv_price:
             self._mv_price_dirty = self.pricer.calculate_market_price(p, self.ra_spots)
@@ -319,10 +334,11 @@ class BondFixed(BaseAsset):
         self.tdv_qty_maturity[t] = qty_maturity
         self.tdv_mv_bd[t] = self._mv_price_dirty * self._qty
         self.tdv_abv_bd[t] = self._abv_price_dirty * self._qty
-        self.tdv_coupon[t] = cf_coupon
-        self.tdv_principal[t] = cf_principal
-        self.tdv_recovery[t] = cf_recovery
+        self.tdv_coupon[t] = self._coupon
+        self.tdv_principal[t] = self._principal
+        self.tdv_recovery[t] = self._recovery
         self.tdv_cash_flow[t] = self._cash_flow
+        self.tdv_interest[t] = self._interest
 
     @property
     @transition(require_all=AssetPhase.ROLLED)
@@ -330,14 +346,38 @@ class BondFixed(BaseAsset):
         """float: Cash flow in period"""
         return self._cash_flow
 
+    @property
+    @transition(require_all=AssetPhase.ROLLED)
+    def coupon(self) -> float:
+        """float: Coupon cash flow in period"""
+        return self._coupon
+
+    @property
+    @transition(require_all=AssetPhase.ROLLED)
+    def principal(self) -> float:
+        """float: Principal cash flow in period"""
+        return self._principal
+
+    @property
+    @transition(require_all=AssetPhase.ROLLED)
+    def recovery(self) -> float:
+        """float: Recovery cash flow (on default) in period"""
+        return self._recovery
+
+    @property
+    @transition(require_all=AssetPhase.ROLLED)
+    def interest(self) -> float:
+        """float: Interest (amortized basis) in period"""
+        return self._interest
+
     def buy_propn(self, *args, **kwargs) -> None:
         """
-        Not allowed for bonds. Raises ValueError.
+        Not allowed for bonds. Raises NotImplementedError.
 
         Raises:
-            ValueError: Always.
+            NotImplementedError: Always.
         """
-        raise ValueError("Cannot buy bond by scaling existing instance.")
+        raise NotImplementedError("Cannot buy bond by scaling existing instance.")
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
@@ -354,10 +394,10 @@ class BondFixed(BaseAsset):
         if propn > 1: raise ValueError(f"{propn=:.6f}: can not sell >100% proportion of existing bonds.")
         qty = self._qty * propn
         self._qty -= qty
-        self._disposal_proceeds += self._mv_price_dirty * qty
+        self._sale_proceeds += self._mv_price_dirty * qty
 
     @transition(require_all=AssetPhase.PROFILE)
-    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> 'BondFixed':
+    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the bond profile by a factor.
 
@@ -378,7 +418,7 @@ class BondFixed(BaseAsset):
 
         qty = self._qty * scale
 
-        clone = BondFixed(
+        clone = self.__class__(
             qty=qty,
             issue_date=self._params.issue_date,
             maturity_date=self._params.maturity_date,
@@ -401,17 +441,19 @@ class BondFixed(BaseAsset):
             entry_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)
-        clone._purchase_proceeds = clone._mv_price_dirty * qty
+        clone._purchase_amount = clone._mv_price_dirty * qty
         self._n_clone += 1
         return clone
 
     @property
-    def purchase_proceeds(self) -> float:
-        return self._purchase_proceeds
+    def purchase_amount(self) -> float:
+        """float: Cash paid to purchase the bond position during the period."""
+        return self._purchase_amount
 
     @property
-    def disposal_proceeds(self) -> float:
-        return self._disposal_proceeds
+    def sale_proceeds(self) -> float:
+        """float: Cash received from selling the bond position during the period."""
+        return self._sale_proceeds
 
     @transition(require_all=AssetPhase.ROLLED, mark=AssetPhase.CLOSED)
     def close_dealing(self) -> None:
@@ -422,8 +464,8 @@ class BondFixed(BaseAsset):
         self.tdv_qty_ad[t] = self._qty
         self.tdv_mv_ad[t] = self.market_value
         self.tdv_abv_ad[t] = self.amortized_book_value
-        self.tdv_purchase_proceeds[t] = self._purchase_proceeds
-        self.tdv_disposal_proceeds[t] = self._disposal_proceeds
+        self.tdv_purchase_amount[t] = self._purchase_amount
+        self.tdv_sale_proceeds[t] = self._sale_proceeds
 
     def retrieve_cash_flow(self, t: int) -> float:
         maybe_raise_on_compare(t, must_ge=0, must_le=self.time)

@@ -137,17 +137,17 @@ class BaseAsset(ABC):
 
     @property
     @abstractmethod
-    def disposal_proceeds(self) -> float:
+    def sale_proceeds(self) -> float:
         """
-        Abstract method to get the proceeds from selling (proportion of) the asset (disposal) in period.
+        Abstract property for cash received from selling a proportion of the asset during the period.
         """
         pass
 
     @property
     @abstractmethod
-    def purchase_proceeds(self) -> float:
+    def purchase_amount(self) -> float:
         """
-        Abstract method to get the proceeds to buy (proportion of) the asset (purchase) in period.
+        Abstract property for cash paid to purchase a proportion of the asset during the period.
         """
         pass
 

@@ -52,7 +52,7 @@ class AssetReportItems:
     _ifrs_report_mapping: dict[tuple, IFRSReportItem] = {
         ('cash', IFRSClassification.FVTPL): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="market_value"),
         ('equity', IFRSClassification.FVTPL): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="market_value"),
-        ('equity', IFRSClassification.FVOCI): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="purchase_cost"),
+        ('equity', IFRSClassification.FVOCI): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="historical_cost"),
         ('fixed_bond', IFRSClassification.FVTPL): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="market_value"),
         ('fixed_bond', IFRSClassification.FVOCI): IFRSReportItem(IFRS_BS="market_value", IFRS_PL="amortized_book_value"),
         ('fixed_bond', IFRSClassification.AC): IFRSReportItem(IFRS_BS="amortized_book_value", IFRS_PL="amortized_book_value"),
@@ -62,7 +62,7 @@ class AssetReportItems:
     _local_report_mapping: dict[tuple, LocalReportItem] = {
         ('cash', LocalClassification.FVTPL): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="market_value"),
         ('equity', LocalClassification.FVTPL): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="market_value"),
-        ('equity', LocalClassification.FVOCI): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="purchase_cost"),
+        ('equity', LocalClassification.FVOCI): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="historical_cost"),
         ('fixed_bond', LocalClassification.FVTPL): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="market_value"),
         ('fixed_bond', LocalClassification.FVOCI): LocalReportItem(LOCAL_BS="market_value", LOCAL_PL="amortized_book_value"),
         ('fixed_bond', LocalClassification.AC): LocalReportItem(LOCAL_BS="amortized_book_value", LOCAL_PL="amortized_book_value"),
@@ -72,7 +72,7 @@ class AssetReportItems:
     _stat_report_mapping: dict[tuple, StatReportItem] = {
         ('cash', StatClassification.FVTPL): StatReportItem(BSV="market_value", FAV="market_value"),
         ('equity', StatClassification.FVTPL): StatReportItem(BSV="market_value", FAV="market_value"),
-        ('equity', StatClassification.FVOCI): StatReportItem(BSV="market_value", FAV="purchase_cost"),
+        ('equity', StatClassification.FVOCI): StatReportItem(BSV="market_value", FAV="historical_cost"),
         ('fixed_bond', StatClassification.FVTPL): StatReportItem(BSV="market_value", FAV="market_value"),
         ('fixed_bond', StatClassification.FVOCI): StatReportItem(BSV="market_value", FAV="amortized_book_value"),
         ('fixed_bond', StatClassification.AC): StatReportItem(BSV="amortized_book_value", FAV="amortized_book_value"),

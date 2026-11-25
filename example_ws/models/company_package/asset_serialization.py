@@ -63,7 +63,7 @@ class EquityRecord:
     local_classification: str
     stat_classification: str
     market_value: float
-    purchase_cost: float
+    historical_cost: float
     equity_index_id: str
     entry_date: pd.Period
 
@@ -76,8 +76,8 @@ class EquityRecord:
             df["entry_date"] = df["valuation_date"]
         for col in ("valuation_date", "entry_date"):
             df[col] = pd.PeriodIndex(df[col], freq="M")
-        if "purchase_cost" not in df.columns:
-            df["purchase_cost"] = df["market_value"]
+        if "historical_cost" not in df.columns:
+            df["historical_cost"] = df["market_value"]
         return _df_to_dc(df, cls)
 
     @classmethod
@@ -93,9 +93,9 @@ class EquityRecord:
                 local_classification=getattr(obj, 'local_classification'),
                 stat_classification=getattr(obj, 'stat_classification'),
                 market_value=obj.market_value,
-                purchase_cost=obj.purchase_cost,
+                historical_cost=obj.historical_cost,
                 equity_index_id=getattr(obj, '_equity_index').index_id,
-                entry_date=obj.entry_date,)
+                entry_date=obj.entry_date, )
             for obj in objs
         ]
 

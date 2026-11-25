@@ -2,7 +2,7 @@ import math
 import pandas as pd
 import warnings
 from collections.abc import Mapping
-from typing import Literal
+from typing import Literal, Self
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
 from vates.utils import transition, maybe_raise_on_compare
@@ -28,9 +28,9 @@ class EquityOption(BaseAsset):
         _q (float): Dividend yield assumption (continuously compounded).
     """
     __slots__ = ('_qty', '_call_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
-                 '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', '_purchase_proceeds', '_disposal_proceeds',
-                 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow', 'tdv_stock_price', 'tdv_price',
-                 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_proceeds', 'tdv_disposal_proceeds',)
+                 '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', '_payoff', '_purchase_amount', '_sale_proceeds',
+                 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow', 'tdv_payoff', 'tdv_stock_price', 'tdv_price',
+                 'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_amount', 'tdv_sale_proceeds',)
 
     def __init__(
         self,
@@ -90,16 +90,16 @@ class EquityOption(BaseAsset):
         self._is_pay_dividend: bool = is_pay_dividend
         self._q: float = q if is_pay_dividend else 0
         self._cash_flow: float = 0.0
-        self._purchase_proceeds: float = 0.0
-        self._disposal_proceeds: float = 0.0
+        self._payoff: float = 0.0
+        self._purchase_amount: float = 0.0
+        self._sale_proceeds: float = 0.0
         self._n_clone: int = 0
 
         if not _bypass_init_validation:
             calc_price = BlackScholesCalculator.price(
                 call_put=self._call_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-                q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12
-            )
+                q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12)
             if not math.isclose(self._price, calc_price, rel_tol=1e-6, abs_tol=1e-8):
                 raise ValueError(f"Equity option {self.asset_id} price {price:.4f} != calculated {calc_price:.4f}.")
 
@@ -108,12 +108,13 @@ class EquityOption(BaseAsset):
         self.tdv_qty_bd: TDimVariable = create_tdv("qty_bd")
         self.tdv_qty_ad: TDimVariable = create_tdv("qty_ad")
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
+        self.tdv_payoff: TDimVariable = create_tdv("payoff")
         self.tdv_stock_price: TDimVariable = create_tdv("stock_price")
         self.tdv_price: TDimVariable = create_tdv("price")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
-        self.tdv_purchase_proceeds: TDimVariable = create_tdv("purchase_proceeds")
-        self.tdv_disposal_proceeds: TDimVariable = create_tdv("disposal_proceeds")
+        self.tdv_purchase_amount: TDimVariable = create_tdv("purchase_amount")
+        self.tdv_sale_proceeds: TDimVariable = create_tdv("sale_proceeds")
 
         t = self.time
         self.tdv_qty_ad[t] = self._qty
@@ -151,8 +152,9 @@ class EquityOption(BaseAsset):
 
     def _on_time_change(self) -> None:
         self._cash_flow = 0.0
-        self._purchase_proceeds = 0.0
-        self._disposal_proceeds = 0.0
+        self._payoff = 0.0
+        self._purchase_amount = 0.0
+        self._sale_proceeds = 0.0
 
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
     def roll_forward(self, std_dev: float | None = None, q: float | None = None, **kwargs) -> None:
@@ -169,7 +171,6 @@ class EquityOption(BaseAsset):
         if not self.is_alive("bop"):
             self._qty = 0
             self._price = 0
-            self._cash_flow = 0
             return
 
         self._std_dev = std_dev if std_dev is not None else self.std_dev
@@ -181,23 +182,23 @@ class EquityOption(BaseAsset):
             self._stock_price = self._stock_price * (1 + self._equity_index.total_return)
 
         if self.is_alive("eop"):
-            self._cash_flow = 0.0
+            self._payoff = 0.0
             self._price = BlackScholesCalculator.price(
                 call_put=self._call_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-                q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12
-            )
+                q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12)
         else:  # exercise at this month
-            payoff = max(self._stock_price - self._strike_price, 0.0) if self._call_put == CallPut.CALL else \
-                     max(self._strike_price - self._stock_price, 0.0)
-            self._cash_flow = payoff * self._qty
+            self._payoff = (max(self._stock_price - self._strike_price, 0.0) if self._call_put == CallPut.CALL else
+                            max(self._strike_price - self._stock_price, 0.0)) * self._qty
             self._price = 0.0
 
+        self._cash_flow = self._payoff
         self.tdv_qty_bd[t] = self._qty
         self.tdv_stock_price[t] = self._stock_price
         self.tdv_price[t] = self._price
         self.tdv_mv_bd[t] = self._price * self._qty
         self.tdv_cash_flow[t] = self._cash_flow
+        self.tdv_payoff[t] = self._payoff
 
     def get_greeks(self) -> dict:
         """
@@ -215,12 +216,12 @@ class EquityOption(BaseAsset):
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def buy_propn(self, *args, **kwargs) -> None:
         """
-        Buy a proportion of the equity option asset.
+        Not allowed for equity option. Raises NotImplementedError.
 
         Raises:
-            ValueError: Always.
+            NotImplementedError: Always.
         """
-        raise ValueError("Can not buy equity option by scaling existing instance.")
+        raise NotImplementedError("Can not buy equity option by scaling existing instance.")
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
@@ -238,10 +239,10 @@ class EquityOption(BaseAsset):
                           f"normally expected: 0 < proportion <=1.")
         qty = self._qty * propn
         self._qty -= qty
-        self._disposal_proceeds += self._price * qty
+        self._sale_proceeds += self._price * qty
 
     @transition(require_all=AssetPhase.PROFILE)
-    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> 'EquityOption':
+    def buy_profile(self, scale: float, *, new_asset_id: str | None = None) -> Self:
         """
         Scale the equity option profile by a factor, positive/negative scale represents long/short.
 
@@ -257,7 +258,7 @@ class EquityOption(BaseAsset):
 
         qty = self._qty * scale
 
-        clone = EquityOption(
+        clone = self.__class__(
             qty=qty,
             call_put=self._call_put,
             exercise_date=self._exercise_date,
@@ -276,7 +277,7 @@ class EquityOption(BaseAsset):
             entry_date=self.period,
         )
         self._copy_dynamic_attrs_to(clone)
-        clone._purchase_proceeds = clone._price * qty
+        clone._purchase_amount = clone._price * qty
         self._n_clone += 1
         return clone
 
@@ -288,8 +289,8 @@ class EquityOption(BaseAsset):
         t = self.time
         self.tdv_qty_ad[t] = self._qty
         self.tdv_mv_ad[t] = self.market_value
-        self.tdv_purchase_proceeds[t] = self._purchase_proceeds
-        self.tdv_disposal_proceeds[t] = self._disposal_proceeds
+        self.tdv_purchase_amount[t] = self._purchase_amount
+        self.tdv_sale_proceeds[t] = self._sale_proceeds
 
     @property
     def price(self) -> float:
@@ -307,12 +308,20 @@ class EquityOption(BaseAsset):
         return self._cash_flow
 
     @property
-    def purchase_proceeds(self) -> float:
-        return self._purchase_proceeds
+    @transition(require_all=AssetPhase.ROLLED)
+    def payoff(self) -> float:
+        """float: Option payoff in period"""
+        return self._payoff
 
     @property
-    def disposal_proceeds(self) -> float:
-        return self._disposal_proceeds
+    def purchase_amount(self) -> float:
+        """float: Cash paid to acquire equity options during the period."""
+        return self._purchase_amount
+
+    @property
+    def sale_proceeds(self) -> float:
+        """float: Cash received from disposing of equity options during the period."""
+        return self._sale_proceeds
 
     def retrieve_cash_flow(self, t: int) -> float:
         maybe_raise_on_compare(t, must_ge=0, must_le=self.time)
