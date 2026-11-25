@@ -37,10 +37,10 @@ class BondFixed(BaseAsset):
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
     __slots__ = ('_qty', '_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
-                 '_spread', '_default_risk', '_cash_flow', '_coupon', '_principal', '_recovery', '_interest'
+                 '_spread', '_default_risk', '_cash_flow', '_coupon', '_principal', '_recovery', '_credit_loss', '_interest'
                  '_purchase_amount', '_sale_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
                  'tdv_qty_default', 'tdv_qty_maturity', 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow',
-                 'tdv_coupon', 'tdv_principal', 'tdv_recovery', 'tdv_interest', 'tdv_mv_price', 'tdv_abv_price',
+                 'tdv_coupon', 'tdv_principal', 'tdv_recovery', 'tdv_credit_loss', 'tdv_interest', 'tdv_mv_price', 'tdv_abv_price',
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purchase_amount',
                  'tdv_sale_proceeds',)
 
@@ -117,6 +117,7 @@ class BondFixed(BaseAsset):
         self._coupon: float = 0.0
         self._principal: float = 0.0
         self._recovery: float = 0.0
+        self._credit_loss: float = 0.0
         self._interest: float = 0.0
         self._purchase_amount: float = 0.0
         self._sale_proceeds: float = 0.0
@@ -151,6 +152,7 @@ class BondFixed(BaseAsset):
         self.tdv_coupon: TDimVariable = create_tdv("coupon")
         self.tdv_principal: TDimVariable = create_tdv("principal")
         self.tdv_recovery: TDimVariable = create_tdv("recovery")
+        self.tdv_credit_loss: TDimVariable = create_tdv("credit_loss")
         self.tdv_interest: TDimVariable = create_tdv("interest")
         self.tdv_mv_price: TDimVariable = create_tdv("mv_price")
         self.tdv_abv_price: TDimVariable = create_tdv("abv_price")
@@ -243,6 +245,7 @@ class BondFixed(BaseAsset):
         self._coupon: float = 0.0
         self._principal: float = 0.0
         self._recovery: float = 0.0
+        self._credit_loss: float = 0.0
         self._interest: float = 0.0
         self._purchase_amount = 0.0
         self._sale_proceeds = 0.0
@@ -261,59 +264,57 @@ class BondFixed(BaseAsset):
             return
 
         qty_st = self._qty
-        coupon = self.cash_flow_gen.get_coupon_payment_at_month(p)
-        principal = self.cash_flow_gen.get_principal_payment_at_month(p)
-        freq = 1 if self._params.coupon_freq == 0 else self._params.coupon_freq  # 1 for zero coupon bond
-        interest = self._abv_price_dirty * (1 + self.amort_rate / freq) ** (freq / 12)
+        coupon = self.cash_flow_gen.get_coupon(p)
+        principal = self.cash_flow_gen.get_principal(p)
+        interest = self.pricer.get_amortized_interest(p)
         abv_price = self.pricer.get_amortized_price(p)
 
         if self._default_risk is None:
             mpd = 0
-            rr = 0
+            lgd = 0
             qty_default = 0
             ead = 0
         else:
             mpd = self._default_risk.marginal_prob_of_default
-            rr = self._default_risk.recovery_rate
+            lgd = self._default_risk.loss_given_default
             if self._default_risk.pd_affects_decrement:
                 qty_default = qty_st * mpd
-                ead = abv_price + coupon + principal  # EAD (Exposure at Default)
+                ead = abv_price + coupon + principal  # EAD (Exposure at Default), also equals abv_price_st + interest
             else:
                 qty_default = 0
                 ead = coupon + principal
 
         # 1. MPD affects decrement
-        #   +-------------+-----------------------+------------+
-        #   | probability |       cash flow       | book value |
-        #   +-------------+-----------------------+------------+
-        #   |     1 - MPD |    coupon + principal |         bv |
-        #   |         MPD | recovery (= RR * EAD) |         0  |
-        #   +-------------+-----------------------+------------+
+        #   +-------------+----------------------------+------------+
+        #   | probability |         cash flow          | book value |
+        #   +-------------+----------------------------+------------+
+        #   |     1 - MPD |         coupon + principal |         bv |
+        #   |         MPD | recovery = (1 - LGD) * EAD |         0  |
+        #   +-------------+----------------------------+------------+
         #   expected cash flow = (1 - MPD) * (coupon + principal) + MPD * recovery
         #  expected book value = (1 - MPD) * bv
-        #        expected loss = (contractual cash flow + contractual book value) - (expected cash flow + expected book value)
+        # expected credit loss = contractual cash flow + contractual book value - expected cash flow - expected book value
         #                      = MPD * (coupon + principal + bv) - MPD * recovery
-        #                      = MPD * EAD - MPD * RR * EAD  <- given EAD = coupon + principal + bv
-        #                      = MPD * (1 - RR) * EAD
+        #                      = MPD * EAD - MPD * (1 - LGD) * EAD  <- given EAD = coupon + principal + bv
         #                      = MPD * LGD * EAD  <- the classic formula
         # 2. MPD doesn't affect decrement
-        #   +-------------+-----------------------+
-        #   | probability |       cash flow       |
-        #   +-------------+-----------------------+
-        #   |     1 - MPD |    coupon + principal |
-        #   |         MPD | recovery (= RR * EAD) |
-        #   +-------------+-----------------------+
+        #   +-------------+----------------------------+
+        #   | probability |         cash flow          |
+        #   +-------------+----------------------------+
+        #   |     1 - MPD |         coupon + principal |
+        #   |         MPD | recovery = (1 - LGD) * EAD |
+        #   +-------------+----------------------------+
         #   expected cash flow = (1 - MPD) * (coupon + principal) + MPD * recovery
-        #        expected loss = contractual cash flow - expected cash flow  <- no impact to book value
+        # expected credit loss = contractual cash flow - expected cash flow  <- no impact to book value
         #                      = MPD * (coupon + principal) - MPD * recovery
-        #                      = MPD * EAD - MPD * RR * EAD  <- given EAD = coupon + principal
-        #                      = MPD * (1 - RR) * EAD
+        #                      = MPD * EAD - MPD * (1 - LGD) * EAD  <- given EAD = coupon + principal
         #                      = MPD * LGD * EAD  <- the classic formula
 
         self._coupon = (1 - mpd) * coupon * qty_st
         self._principal = (1 - mpd) * principal * qty_st
-        self._recovery = mpd * rr * ead * qty_st
-        self._interest = (1 - mpd) * interest * qty_st
+        self._recovery = mpd * (1 - lgd) * ead * qty_st
+        self._credit_loss = mpd * lgd * ead * qty_st
+        self._interest = interest * qty_st
 
         # decrement
         qty = qty_st - qty_default  # survival
@@ -337,6 +338,7 @@ class BondFixed(BaseAsset):
         self.tdv_coupon[t] = self._coupon
         self.tdv_principal[t] = self._principal
         self.tdv_recovery[t] = self._recovery
+        self.tdv_credit_loss[t] = self._credit_loss
         self.tdv_cash_flow[t] = self._cash_flow
         self.tdv_interest[t] = self._interest
 
@@ -363,6 +365,12 @@ class BondFixed(BaseAsset):
     def recovery(self) -> float:
         """float: Recovery cash flow (on default) in period"""
         return self._recovery
+
+    @property
+    @transition(require_all=AssetPhase.ROLLED)
+    def credit_loss(self) -> float:
+        """float: Credit loss (amortized basis) in period, abv_bd(t) = abv_ad(t-1) + interest - cash_flow - credit_loss"""
+        return self._credit_loss
 
     @property
     @transition(require_all=AssetPhase.ROLLED)

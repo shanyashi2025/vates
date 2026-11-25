@@ -22,11 +22,6 @@ class DefaultRiskParams:
     pd_affects_decrement: bool
     default_risk_id: str = ""
 
-    @property
-    def recovery_rate(self) -> float:
-        """float: Recovery Rate (RR)."""
-        return 1 - self.loss_given_default
-
 
 @time_synchronized("model_engine")
 class DefaultRisk:
@@ -81,12 +76,6 @@ class DefaultRisk:
         """float: Loss Given Default (LGD)."""
         maybe_raise_on_compare(self._last_update, self.time)
         return self._params.loss_given_default
-
-    @property
-    def recovery_rate(self) -> float:
-        """float: Recovery Rate (RR)."""
-        maybe_raise_on_compare(self._last_update, self.time)
-        return self._params.recovery_rate
 
     def update(self, *, marginal_prob_of_default: float | None = None, loss_given_default: float | None = None,
                pd_affects_decrement: bool | None = None,) -> None:

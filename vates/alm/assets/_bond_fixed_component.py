@@ -142,7 +142,7 @@ class BondFixedCashFlowGenerator:
     def fixed_cash_flow(self) -> BondFixedCashFlow:
         return self._fixed_cash_flow
 
-    def get_coupon_payment_at_month(self, ref_date: pd.Period) -> float:
+    def get_coupon(self, ref_date: pd.Period) -> float:
         """
         Get the coupon payment at a specific month.
 
@@ -157,7 +157,7 @@ class BondFixedCashFlowGenerator:
             return float(self._fixed_cash_flow.coupon[age_in_month - 1])
         return 0.0
 
-    def get_principal_payment_at_month(self, ref_date: pd.Period) -> float:
+    def get_principal(self, ref_date: pd.Period) -> float:
         """
         Get the principal payment at a specific month.
 
@@ -194,7 +194,7 @@ class BondFixedPricer:
         cash_flow_gen (BondFixedCashFlowGenerator): Cash flow generator.
     """
 
-    __slots__ = ('cash_flow_gen', '_amortized_price',)
+    __slots__ = ('cash_flow_gen', '_amortized_prices', '_amortized_interests')
 
     def __init__(self, cash_flow_generator: BondFixedCashFlowGenerator):
         """
@@ -204,7 +204,8 @@ class BondFixedPricer:
             cash_flow_generator (BondFixedCashFlowGenerator): Cash flow generator.
         """
         self.cash_flow_gen: BondFixedCashFlowGenerator = cash_flow_generator
-        self._amortized_price: np.ndarray | None = None
+        self._amortized_prices: np.ndarray | None = None
+        self._amortized_interests: np.ndarray | None = None
 
     def calculate_market_price(self, valn_date: pd.Period, spots: npt.NDArray[np.float64]) -> float:
         """
@@ -257,20 +258,30 @@ class BondFixedPricer:
         if init_price is None:
             raise ValueError(f"'init_price' is not provided.")
         prices = np.full(self.cash_flow_gen.params.lifespan_in_months + 1, fill_value=np.nan)
+        interests = np.full(self.cash_flow_gen.params.lifespan_in_months + 1, fill_value=np.nan)
         prices[n] = init_price
         cash_flows = self.cash_flow_gen.get_future_cash_flows(since_date)
         coupon_freq = self.cash_flow_gen.params.coupon_freq
         freq = 1 if coupon_freq == 0 else coupon_freq  # 1 for zero coupon bond
         factor = (1 + amort_rate / freq) ** (freq / 12)
+        factor_int = factor - 1
         for i, cf in enumerate(cash_flows, n + 1):
             prices[i] = prices[i-1] * factor - cf
-        self._amortized_price = prices
+            interests[i] = prices[i-1] * factor_int
+        self._amortized_prices = prices
+        self._amortized_interests = interests
 
     def get_amortized_price(self, ref_date: pd.Period) -> float:
-        if self._amortized_price is None:
+        if self._amortized_prices is None:
             return float('nan')
         n = (ref_date - self.cash_flow_gen.params.issue_date).n
-        return float(self._amortized_price[n])
+        return float(self._amortized_prices[n])
+
+    def get_amortized_interest(self, ref_date: pd.Period) -> float:
+        if self._amortized_interests is None:
+            return float('nan')
+        n = (ref_date - self.cash_flow_gen.params.issue_date).n
+        return float(self._amortized_interests[n])
 
 
 class BondFixedRiskCalculator:
