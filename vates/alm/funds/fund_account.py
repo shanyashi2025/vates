@@ -5,7 +5,7 @@ from typing import Literal
 
 from vates.global_conf import GLOBAL_CHECK_MODE, CheckMode
 from vates._core import ProjModelEngine, time_synchronized
-from vates.alm.allocator import ProceedsKeeper
+from vates.alm.allocator import UnallocatedCash
 from vates.alm.assets import BaseAsset, Cash
 from vates.alm.liabs import BaseLiab
 from vates.alm._utils import ObjList
@@ -19,15 +19,14 @@ class FundAccount:
     """Container for assets, liabilities, and account-level cash flows.
 
     Provides projection-time storage, aggregation, reporting, and interactions
-    with free proceeds for a fund account. Asset dealing and rebalancing are
+    with unallocated cash for a fund account. Asset dealing and rebalancing are
     intentionally handled outside this class.
 
     Attributes:
         fund_id (str): Fund identifier.
         _assets (ObjList): Assets held by the fund.
         _liabs (ObjList): Liabilities held by the fund.
-        _free_proceeds_keeper (ProceedsKeeper): Free proceeds' keeper; can be used to invest, pay tax,
-            pay shareholder dividends, taken out, etc.
+        _unalloc_cash (UnallocatedCash): Cash that has not been allocated to a specific asset.
         _primary_cash_asset (Cash | None): Primary cash asset used for residual cash flows.
         _asset_rec (AssetRecorder): Assets recorder (reported value, returns calculator).
         _liab_rec (LiabRecorder): Liabilities recorder.
@@ -37,7 +36,7 @@ class FundAccount:
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', 'fund_id', '_assets', '_liabs',
-                 '_free_proceeds_keeper', '_primary_cash_asset', '_allocator',
+                 '_unalloc_cash', '_primary_cash_asset', '_allocator',
                  '_asset_rec', '_liab_rec', '_other_rec',)
 
     def __init__(
@@ -70,7 +69,7 @@ class FundAccount:
         # Asset and liab collections
         self._assets: ObjList[BaseAsset] = ObjList[BaseAsset]()
         self._liabs: ObjList[BaseLiab] = ObjList[BaseLiab]()
-        self._free_proceeds_keeper: ProceedsKeeper = ProceedsKeeper()
+        self._unalloc_cash: UnallocatedCash = UnallocatedCash()
         self._primary_cash_asset: Cash | None = None
 
         self._asset_rec: AssetRecorder = AssetRecorder(
@@ -88,12 +87,22 @@ class FundAccount:
         return self._assets
 
     @property
-    def free_proceeds(self) -> float:
-        return self._free_proceeds_keeper.balance
+    def unallocated_cash_balance(self) -> float:
+        """Current balance of cash that has not been allocated to an asset."""
+        return self._unalloc_cash.balance
 
     @property
-    def free_proceeds_keeper(self) -> ProceedsKeeper:
-        return self._free_proceeds_keeper
+    def unallocated_cash(self) -> UnallocatedCash:
+        """Cash balance holder used for free-proceeds and rebalancing operations."""
+        return self._unalloc_cash
+
+    def accrue_unallocated_cash_interest(self, rate: float) -> None:
+        """Apply an interest rate to the unallocated-cash balance.
+
+        Args:
+            rate (float): Periodic interest rate. For example, 0.01 represents 1%.
+        """
+        self._unalloc_cash.accrue_interest(rate)
 
     @property
     def liabilities(self) -> ObjList[BaseLiab]:
@@ -169,9 +178,9 @@ class FundAccount:
         self._asset_rec.record_after_dealing(require_investment_return=False)
         self._liab_rec.record_before_dealing(require_cash_flow=False)
         self._liab_rec.record_after_dealing()
-        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"bd")
-        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"ad")
-        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance,"eop")
+        self._other_rec.record_unalloc_cash(self._unalloc_cash.balance, "bd")
+        self._other_rec.record_unalloc_cash(self._unalloc_cash.balance, "ad")
+        self._other_rec.record_unalloc_cash(self._unalloc_cash.balance, "eop")
 
     def _get_primary_cash_asset(self) -> Cash | None:
         if self._primary_cash_asset is None or not self._primary_cash_asset.is_alive("eop"):
@@ -189,16 +198,20 @@ class FundAccount:
         for item in scope:
             if item == "assets":
                 self._asset_rec.record_before_dealing()
-                self._free_proceeds_keeper += self._asset_rec.total_cash_flow
+                self._unalloc_cash += self._asset_rec.total_cash_flow
             elif item == "liabs":
                 self._liab_rec.record_before_dealing()
-                self._free_proceeds_keeper += self._liab_rec.total_cash_flow
+                self._unalloc_cash += self._liab_rec.total_cash_flow
             else:
                 raise ValueError(f"Invalid scope '{item}', expected ('assets', 'liabs').")
 
-    def record_free_proceeds(self, when: Literal["bd", "ad", "eop"]):
-        """Record free proceeds at the specified projection phase."""
-        self._other_rec.record_free_proceeds(self._free_proceeds_keeper.balance, when)
+    def record_unallocated_cash(self, when: Literal["bd", "ad", "eop"]):
+        """Record the unallocated-cash balance at the specified projection phase.
+
+        Args:
+            when (Literal["bd", "ad", "eop"]): Before dealing, after dealing, or end of period.
+        """
+        self._other_rec.record_unalloc_cash(self._unalloc_cash.balance, when)
 
     def get_asset_attr(self, attr_name: str, /, *, on_undefined: Literal["zerofill", "error"] | None = None) -> float:
         """Get the sum of a numeric attribute across all assets.
@@ -234,25 +247,30 @@ class FundAccount:
             else:
                 raise ValueError(f"Invalid scope '{item}', expected ('assets', 'liabs').")
 
-    def invest_free_proceeds_to_cash(self, cash: Cash | None = None) -> None:
-        """Invest all free proceeds into a cash asset."""
+    def invest_unallocated_cash(self, cash: Cash | None = None) -> None:
+        """Invest all unallocated cash into a cash asset.
+
+        Args:
+            cash (Cash | None): Cash asset to receive the balance. If omitted, use the primary
+                cash asset held by the fund account.
+        """
         cash = cash or self._get_primary_cash_asset()
         if cash is not None:
-            amount = self._free_proceeds_keeper.balance
+            amount = self._unalloc_cash.balance
             cash.buy_amount(amount)
-            self._free_proceeds_keeper -= amount
+            self._unalloc_cash -= amount
         else:
             warnings.warn(f"Cash asset is neither provided nor found in existing assets.")
 
     def apply_other_cash_flow(self, amount: float, kind: str | None = None) -> None:
-        """Apply an account-level cash flow and update free proceeds.
+        """Apply an account-level cash flow and update unallocated cash.
 
         Args:
-            amount (float): Cash-flow amount. Positive values increase free proceeds; negative values decrease them.
+            amount (float): Cash-flow amount. Positive values increase unallocated cash; negative values decrease it.
             kind (str | None): Registered cash-flow kind used for time-dimensioned reporting. If omitted or
-                unregistered, the cash flow changes free proceeds but is not recorded.
+                unregistered, the cash flow changes unallocated cash but is not recorded.
         """
-        self._free_proceeds_keeper += amount
+        self._unalloc_cash += amount
         if kind is not None:
             self._other_rec.record_other_cash_flow(kind, amount)
 

@@ -118,10 +118,10 @@ def fund_model(start_year: int, start_month: int, end_year: int, scenario: str, 
 
                 # step 5: transfer free proceeds to shareholder fund
                 if not is_sh_fund:
-                    amount = fund.free_proceeds
+                    amount = fund.unallocated_cash_balance
                     fund.apply_other_cash_flow(-amount, kind="proceeds_transfer")
                     fund_master.sh_fund.apply_other_cash_flow(amount, kind="proceeds_transfer")
-                fund.record_free_proceeds("eop")
+                fund.record_unallocated_cash("eop")
 
         # --- output aging assets ---
         if aging_assets_output_config_df is not None and (

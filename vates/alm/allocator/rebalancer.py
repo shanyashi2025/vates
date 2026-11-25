@@ -9,7 +9,7 @@ from vates.global_conf import CheckMode, GLOBAL_CHECK_MODE
 from vates.alm.assets import BaseAsset, Cash
 from vates.alm.allocator._allocation_group import _AllocationGroup, AssetAllocationParams, TradeOrder, BuySellAction
 from vates.alm.allocator._enums import AssetDealingStrategy, AssetPurchaseMethod
-from vates.alm.allocator.proceeds_keeper import ProceedsKeeper
+from vates.alm.allocator.unallocated_cash import UnallocatedCash
 
 
 def _rebalance_alloc_groups(
@@ -292,7 +292,7 @@ class Rebalancer:
         self,
         exist_assets: list[BaseAsset],
         *,
-        free_proceeds_keeper: ProceedsKeeper | None = None,
+        unallocated_cash: UnallocatedCash | None = None,
         profile_assets: list[BaseAsset] | None = None,
         total_size: float,
         asset_size_basis: str,
@@ -307,7 +307,7 @@ class Rebalancer:
 
         Args:
             exist_assets (list[BaseAsset]): List of assets to be rebalanced.
-            free_proceeds_keeper (ProceedsKeeper | None): Free proceeds' keeper.
+            unallocated_cash (UnallocatedCash | None): Unallocated cash object.
             profile_assets (list[Asset] | None): Profile assets for reference.
             total_size (float): Total size for allocation, shall correspond to `asset_size_basis`.
             asset_size_basis (str): Asset reporting basis for sizing (e.g. FAV or BSV).
@@ -318,8 +318,8 @@ class Rebalancer:
             check_mode (CheckMode): Check mode for validation against allocation, defaults to `GLOBAL_CHECK_MODE`.
 
         Returns:
-            float: Free proceeds after the rebalancing: proceeds received from disposal (sell), minus proceeds spent
-                to purchase (buy); if a `free_proceeds_keeper` provided, return 0.0.
+            float: Unallocated cash remaining after rebalancing. When `unallocated_cash` is provided,
+                the cash holder is updated and the return value is 0.0.
 
         """
         t, p = self.time, self.period
@@ -351,16 +351,16 @@ class Rebalancer:
 
         _rebalance_alloc_groups(groups=groups, total_size=total_size, check_mode=check_mode)
 
-        _free_proceeds_keeper = free_proceeds_keeper or ProceedsKeeper()
+        _unalloc_cash = unallocated_cash or UnallocatedCash()
         for ag in groups:
             exist_assets.extend(ag.staged)
-            _free_proceeds_keeper += ag.take_out_free_proceeds()
+            _unalloc_cash += ag.take_out_free_proceeds()
 
         sizes = [groups[i].current_size if i is not None else 0.0 for i in tdv_dim_indices]
         self.tdv_ag_size_ad[t] = np.array(sizes)
         self.tdv_ag_wgt_pc_ad[t] = np.array([v / total_size for v in sizes]) * 100
 
-        return 0.0 if free_proceeds_keeper is not None else _free_proceeds_keeper.balance
+        return 0.0 if unallocated_cash is not None else _unalloc_cash.balance
 
     def _make_tdv_dim_indices(self, groups: list[_AllocationGroup]) -> list[int | None]:
         tdv_dim_indices: list[int | None] = [None] * len(self.group_names)

@@ -441,13 +441,12 @@ class LiabRecorder:
 
 @time_synchronized("model_engine")
 class OtherRecorder:
-    """Records free proceeds and registered account-level cash-flow kinds."""
+    """Records unallocated cash balance and registered account-level cash-flow kinds."""
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
 
     __slots__ = ('__weakref__', 'time', 'period', '_lc', 'name', 'other_cash_flow_dict',
-                 'tdv_free_proceeds_bd', 'tdv_free_proceeds_ad', 'tdv_free_proceeds_eop',
-                 'tdv_other_cash_flow_dict')
+                 'tdv_unalloc_cash', 'tdv_other_cash_flow_dict')
 
     def __init__(self, *, name: str, model_engine: ProjModelEngine | None = None,
                  other_cash_flow_kinds: list[str] | tuple[str, ...]):
@@ -457,19 +456,15 @@ class OtherRecorder:
         self.tdv_other_cash_flow_dict: dict[str, TDimVariable] = {
             kind: create_tdv(kind) for kind in other_cash_flow_kinds
         }
-        self.tdv_free_proceeds_bd: TDimVariable = create_tdv("free_proceeds_bd")
-        self.tdv_free_proceeds_ad: TDimVariable = create_tdv("free_proceeds_ad")
-        self.tdv_free_proceeds_eop: TDimVariable = create_tdv("free_proceeds_eop")
+        self.tdv_unalloc_cash: TDimArrayVariable = make_proj_variable(
+            "unallocated_cash", model_engine=model_engine, owner=name, group='fund', dims=[("bd", "ad", "eop")])
 
-    def record_free_proceeds(self, value: float, when: Literal["bd", "ad", "eop"]) -> None:
-        if when == "bd":
-            self.tdv_free_proceeds_bd[self.time] = value
-        elif when == "ad":
-            self.tdv_free_proceeds_ad[self.time] = value
-        elif when == "eop":
-            self.tdv_free_proceeds_eop[self.time] = value
-        else:
-            pass
+    def record_unalloc_cash(self, value: float, when: Literal["bd", "ad", "eop"]) -> None:
+        tup = ("bd", "ad", "eop")
+        if when not in tup:
+            return
+        index = tup.index(when)
+        self.tdv_unalloc_cash[self.time][index] = value
 
     def record_other_cash_flow(self, kind: str, amount: float) -> None:
         if kind in self.other_cash_flow_dict:
@@ -478,11 +473,3 @@ class OtherRecorder:
 
     def get_other_cash_flow(self, kind: str) -> float:
         return self.other_cash_flow_dict.get(kind, float("nan"))
-
-    def _on_time_change(self) -> None:
-        for key in self.other_cash_flow_dict:
-            self.other_cash_flow_dict[key] = 0.0
-        t = self.time
-        self.tdv_free_proceeds_bd[t] = None  # set value to None, unless `record_free_proceeds` is actively called
-        self.tdv_free_proceeds_ad[t] = None
-        self.tdv_free_proceeds_eop[t] = None

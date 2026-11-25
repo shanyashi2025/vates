@@ -143,7 +143,7 @@ def fund_rebalance(model_engine: ProjModelEngine, fund: FundAccount, rebalance_p
     fund_id = fund.fund_id
     period = fund.period
 
-    fund.record_free_proceeds("bd")
+    fund.record_unallocated_cash("bd")
 
     if _rebalance_this_month(period.month, rebalance_params.rebalance_freq):
         profile_assets = AssetMaster.profile_from_df(
@@ -159,7 +159,7 @@ def fund_rebalance(model_engine: ProjModelEngine, fund: FundAccount, rebalance_p
 
         _ = rebalance_params.rebalance_func(
             exist_assets=fund.assets,
-            free_proceeds_keeper=fund.free_proceeds_keeper,
+            unallocated_cash=fund.unallocated_cash,
             profile_assets=profile_assets,
             total_size=total_size,
             asset_size_basis=asset_size_basis,
@@ -167,18 +167,18 @@ def fund_rebalance(model_engine: ProjModelEngine, fund: FundAccount, rebalance_p
         )
 
     else:
-        fund.invest_free_proceeds_to_cash()
+        fund.invest_unallocated_cash()
 
     for asset in fund.assets:
         asset.close_dealing()
 
-    fund.record_free_proceeds("ad")
+    fund.record_unallocated_cash("ad")
     fund.record_after_dealing(scope="assets")
 
 
 def get_fund_size(fund: FundAccount, size_type: str, *, asset_size_basis: str) -> float:
     if size_type == "FUND":
-        return fund.get_asset_attr(asset_size_basis) + fund.free_proceeds
+        return fund.get_asset_attr(asset_size_basis) + fund.unallocated_cash_balance
     elif size_type == "MATH_RES":
         return fund.get_liability_attr("math_res_if")
     elif size_type == "SURR_VALUE":
