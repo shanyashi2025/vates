@@ -92,7 +92,7 @@ High-level Asset–Liability Management building blocks that plug into the proje
   `create_asset(cls_or_name, build_pipeline, ...)` is the factory: plain classes construct directly,
   while `BondFixed`/`EquityOption` route through a **builder** (`vates/alm/assets/builders/`).
   A builder performs a named `build_pipeline` of calibration steps (e.g. `derive_coupon_rate`, 
-  `calculate_amort_rate`, `calibrate_market_spread`, `calculate_market_price`, `risk_neutralize`) 
+  `calculate_amortization_rate`, `calibrate_extra_spread`, `calculate_market_price`, `risk_neutralize`) 
   then validates required prices/spreads before constructing the asset.
 - **`funds/`** — fund (`FundAccount`) with recorders (`AssetRecorder`, `LiabRecorder`, `OtherRecorder`).
 - **`allocator/`** — `Rebalancer` realigns groups of assets.

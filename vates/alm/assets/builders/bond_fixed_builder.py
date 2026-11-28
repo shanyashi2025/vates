@@ -46,9 +46,9 @@ class BondFixedBuilder:
         fixed_cash_flow: BondFixedCashFlow | dict[str, np.ndarray] | None = None,
         coupon_rate: float = float("nan"),
         abv_price: float = float("nan"),
-        amort_rate: float = float("nan"),
+        amortization_rate: float = float("nan"),
         mv_price: float = float("nan"),
-        market_spread: float = float("nan"),
+        extra_spread: float = float("nan"),
         **kwargs
     ):
         """
@@ -72,9 +72,11 @@ class BondFixedBuilder:
             fixed_cash_flow (BondFixedCashFlow | dict[str, np.ndarray] | None): Fixed cash flow of the bond.
             coupon_rate (float | None): Coupon rate.
             mv_price (float | None): Market value price (dirty value).
-            market_spread (float | None): Market spread.
+            extra_spread (float): Extra (or residual) spread applied on top of rates based on the risk-free curve and
+                `Spread` assumption. It may be specified for profile bonds (usually 0), calibrated to the observed
+                market price for existing bonds, or set to 0 for risk-neutral valuation.
             abv_price (float | None): Amortized book value price (dirty value).
-            amort_rate (float | None): Amortization rate.
+            amortization_rate (float | None): Amortization rate.
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
@@ -102,9 +104,9 @@ class BondFixedBuilder:
 
         self.coupon_rate: float = coupon_rate
         self.abv_price: float = abv_price
-        self.amort_rate: float = amort_rate
+        self.amort_rate: float = amortization_rate
         self.mv_price: float = mv_price
-        self.market_spread: float = market_spread
+        self.extra_spread: float = extra_spread
         self.extra_kwargs: dict = kwargs
 
     @property
@@ -146,9 +148,9 @@ class BondFixedBuilder:
         if spread is _MISSING:
             spread = self.spread
         if plus is _MISSING:
-            plus = self.market_spread
+            plus = self.extra_spread
         if plus is None:
-            raise ValueError(f'{self.asset_id}: market_spread not specified.')
+            raise ValueError(f'{self.asset_id}: `extra_spread` not specified.')
         if spread:
             return make_risk_adjusted_rates(rf_rates=self._rf_spot_rates, proportional_spread=spread.proportional,
                                             additive_spread=spread.additive + plus)
@@ -163,9 +165,9 @@ class BondFixedBuilder:
             self.coupon_rate = 0.0
             return self
 
-        if math.isnan(self.market_spread):
-            self.market_spread = 0.0
-            warnings.warn(f'{self.asset_id}: market_spread not specified, set to 0.')
+        if math.isnan(self.extra_spread):
+            self.extra_spread = 0.0
+            warnings.warn(f'{self.asset_id}: `extra_spread` not specified, set to 0.')
 
         spots = self._make_ra_spot_rates()
         n_months = (self.maturity_date - self.issue_date).n
@@ -175,9 +177,9 @@ class BondFixedBuilder:
 
         return self
 
-    def calculate_amort_rate(self) -> Self:
+    def calculate_amortization_rate(self) -> Self:
         """
-        Calibrate the amortized rate using the set amortized book value price.
+        Calibrate the amortization rate using the set amortized book value price.
         """
         if math.isnan(self.abv_price):
             raise ValueError('abv_price need to be set first.')
@@ -189,13 +191,13 @@ class BondFixedBuilder:
         )
         return self
 
-    def calibrate_market_spread(self) -> Self:
+    def calibrate_extra_spread(self) -> Self:
         """
-        Calculate the market spread using the set market price.
+        Calibrate `extra_spread` so the modeled price matches `mv_price`.
         """
         if math.isnan(self.mv_price):
             raise ValueError('mv_price need to be set first.')
-        self.market_spread = solve_z_spread(
+        self.extra_spread = solve_z_spread(
             target_pv=self.mv_price,
             cash_flows=self._make_cash_flow(),
             spots=self._make_ra_spot_rates(plus=0.0)
@@ -204,7 +206,7 @@ class BondFixedBuilder:
 
     def calculate_market_price(self) -> Self:
         """
-        Calculate the market price using the set market spread.
+        Calculate the market price using the current spread assumptions.
         """
         pricer = self._make_pricer()
         self.mv_price = pricer.calculate_market_price(self.period, spots=self._make_ra_spot_rates())
@@ -212,11 +214,11 @@ class BondFixedBuilder:
 
     def risk_neutralize(self) -> Self:
         """
-        Set market spread to zero and goal seek the face value that gives market price.
+        Set `extra_spread` to zero and scale cash flows to match the market price.
         """
         if math.isnan(self.mv_price):
             raise ValueError('mv_price need to be set first.')
-        self.market_spread = 0.0
+        self.extra_spread = 0.0
         pricer = self._make_pricer()
         calc_price = pricer.calculate_market_price(self.period, spots=self._make_ra_spot_rates())
         scale = self.mv_price / calc_price
@@ -274,12 +276,12 @@ class BondFixedBuilder:
                 name, kwargs = step[0].lower(), step[1]
             else:
                 raise TypeError(f"Invalid type of pipeline {type(step)}, expected 'str' or 'dict'")
-            if name in ('calibrate_market_spread', 'calculate_market_spread', 'market_spread'):
-                self.calibrate_market_spread()
+            if name in ('calibrate_extra_spread', 'calculate_extra_spread', 'extra_spread'):
+                self.calibrate_extra_spread()
             elif name in ('calculate_market_price', 'market_price'):
                 self.calculate_market_price()
-            elif name in ('calculate_amort_rate', 'amort_rate'):
-                self.calculate_amort_rate()
+            elif name in ('calculate_amortization_rate', 'amortization_rate', 'calculate_amort_rate', 'amort_rate'):
+                self.calculate_amortization_rate()
             elif name in ('derive_coupon_rate', 'calculate_coupon_rate', 'coupon_rate'):
                 self.derive_coupon_rate()
             elif name in ('risk_neutralization', 'risk_neutralize'):
@@ -292,9 +294,9 @@ class BondFixedBuilder:
         # Validate required data
         if math.isnan(self.coupon_rate): raise ValueError("coupon_rate is not yet set.")
         if math.isnan(self.mv_price): raise ValueError("mv_price is not yet set.")
-        if math.isnan(self.market_spread): raise ValueError("market_spread is not yet set.")
+        if math.isnan(self.extra_spread): raise ValueError("extra_spread is not yet set.")
         if math.isnan(self.abv_price): raise ValueError("abv_price is not yet set.")
-        if math.isnan(self.amort_rate): self.calculate_amort_rate()
+        if math.isnan(self.amort_rate): self.calculate_amortization_rate()
 
         # Validate initial price
         if self.is_profile and not math.isclose(self.abv_price, self.mv_price, rel_tol=1e-6, abs_tol=1e-8):
@@ -321,9 +323,9 @@ class BondFixedBuilder:
             face_value=self.face_value,
             fixed_cash_flow=self.fixed_cash_flow,
             mv_price=self.mv_price,
-            market_spread=self.market_spread,
+            extra_spread=self.extra_spread,
             abv_price=self.abv_price,
-            amort_rate=self.amort_rate,
+            amortization_rate=self.amort_rate,
             rf_curve=self.rf_curve,
             spread=self.spread,
             default_risk=self.default_risk,

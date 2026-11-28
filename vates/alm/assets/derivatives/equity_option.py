@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Literal, Self
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
+from vates.global_conf import GLOBAL_CHECK_MODE, CheckMode
 from vates.utils import transition, maybe_raise_on_compare
 from vates.finmath import CallPut, BlackScholesCalculator
 from vates.alm.econs import Currency, EquityIndex, YieldCurve
@@ -22,14 +23,14 @@ class EquityOption(BaseAsset):
         _stock_price (float): Underlying stock price.
         _strike_price (float): Strike price.
         _equity_index (EquityIndex): Associated equity index.
+        _index_return_kind (Literal["total", "price"]): Return series used to update the underlying stock price.
         _rf_curve (YieldCurve): Risk-free curve.
-        _std_dev (float): Standard deviation, i.e. volatility.
-        _is_pay_dividend (bool): True if paying dividend, otherwise False.
+        _volatility (float): Annualized volatility of the underlying (standard deviation of log returns).
         _q (float): Dividend yield assumption (continuously compounded).
     """
     __slots__ = ('_qty', '_call_put', '_exercise_date', '_price', '_stock_price', '_strike_price', '_equity_index', '_n_clone',
-                 '_rf_curve', '_std_dev', '_is_pay_dividend', '_cash_flow', '_payoff', '_purchase_amount', '_sale_proceeds',
-                 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow', 'tdv_payoff', 'tdv_stock_price', 'tdv_price',
+                 '_index_return_kind', '_rf_curve', '_volatility', '_cash_flow', '_payoff', '_purchase_amount', '_sale_proceeds',
+                 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow', 'tdv_payoff', 'tdv_stock_price', 'tdv_price', 'tdv_vol', 'tdv_q',
                  'tdv_mv_bd', 'tdv_mv_ad', 'tdv_purchase_amount', 'tdv_sale_proceeds',)
 
     def __init__(
@@ -41,10 +42,10 @@ class EquityOption(BaseAsset):
         stock_price: float,
         strike_price: float,
         equity_index: EquityIndex,
+        index_return_kind: Literal["total", "price"],
         rf_curve: YieldCurve,
-        std_dev: float = float("nan"),
-        is_pay_dividend: bool = False,
-        q: float = float("nan"),
+        volatility: float = float("nan"),
+        q: float = 0.0,
         model_engine: ProjModelEngine | None = None,
         asset_id: str = "",
         is_profile: bool = False,
@@ -52,7 +53,7 @@ class EquityOption(BaseAsset):
         currency: Currency | None = None,
         attr_aliases: Mapping[str, str] | None = None,
         entry_date: pd.Period | None = None,
-        _bypass_init_validation: bool = False,
+        require_validation: bool = GLOBAL_CHECK_MODE != CheckMode.BYPASS,
         **kwargs
     ):
         """
@@ -69,12 +70,14 @@ class EquityOption(BaseAsset):
             stock_price (float): Underlying stock price.
             strike_price (float): Strike price.
             equity_index (EquityIndex): Associated equity index.
+            index_return_kind (Literal["total", "price"]): Return series used to update the underlying stock price:
+                "total" (total return) or "price" (price return).
             rf_curve (YieldCurve): Risk-free curve.
-            std_dev (float): Standard deviation, i.e. volatility.
-            is_pay_dividend (bool): True if paying dividend, otherwise False.
-            q (float): Dividend yield assumption (continuously compounded).
+            volatility (float): Annualized volatility of the underlying (standard deviation of log returns).
+            q (float): Continuous annual dividend yield, defaults to 0.0.
             attr_aliases (Mapping[str, str]): Mapping of alias to named attribute.
             entry_date (pd.Period | None): Entry date; defaults to the period at initialization.
+            require_validation (bool): True to perform initial validation.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          entry_date=entry_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
@@ -85,21 +88,21 @@ class EquityOption(BaseAsset):
         self._stock_price: float = stock_price
         self._strike_price: float = strike_price
         self._equity_index: EquityIndex = equity_index
+        self._index_return_kind: Literal["total", "price"] = index_return_kind
         self._rf_curve: YieldCurve = rf_curve
-        self._std_dev: float = std_dev
-        self._is_pay_dividend: bool = is_pay_dividend
-        self._q: float = q if is_pay_dividend else 0
+        self._volatility: float = volatility
+        self._q: float = q
         self._cash_flow: float = 0.0
         self._payoff: float = 0.0
         self._purchase_amount: float = 0.0
         self._sale_proceeds: float = 0.0
         self._n_clone: int = 0
 
-        if not _bypass_init_validation:
+        if require_validation:
             calc_price = BlackScholesCalculator.price(
                 call_put=self._call_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-                q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12)
+                q=self._q, sigma=self._volatility, tau=self.os_term_m / 12)
             if not math.isclose(self._price, calc_price, rel_tol=1e-6, abs_tol=1e-8):
                 raise ValueError(f"Equity option {self.asset_id} price {price:.4f} != calculated {calc_price:.4f}.")
 
@@ -110,6 +113,8 @@ class EquityOption(BaseAsset):
         self.tdv_cash_flow: TDimVariable = create_tdv("cash_flow")
         self.tdv_payoff: TDimVariable = create_tdv("payoff")
         self.tdv_stock_price: TDimVariable = create_tdv("stock_price")
+        self.tdv_vol: TDimVariable = create_tdv("volatility")
+        self.tdv_q: TDimVariable = create_tdv("q")
         self.tdv_price: TDimVariable = create_tdv("price")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
         self.tdv_mv_ad: TDimVariable = create_tdv("mv_ad")
@@ -119,6 +124,8 @@ class EquityOption(BaseAsset):
         t = self.time
         self.tdv_qty_ad[t] = self._qty
         self.tdv_stock_price[t] = self._stock_price
+        self.tdv_vol[t] = self._volatility
+        self.tdv_q[t] = self._q
         self.tdv_price[t] = self._price
         self.tdv_mv_ad[t] = self.market_value
 
@@ -127,15 +134,17 @@ class EquityOption(BaseAsset):
         return self._qty
 
     @property
-    def std_dev(self) -> float:
-        return self._std_dev
+    def volatility(self) -> float:
+        """Annualized volatility of the underlying."""
+        return self._volatility
 
-    @std_dev.setter
-    def std_dev(self, value: float) -> None:
-        self._std_dev = value
+    @volatility.setter
+    def volatility(self, value: float) -> None:
+        self._volatility = value
 
     @property
     def q(self) -> float:
+        """Continuous annual dividend yield"""
         return self._q
 
     @q.setter
@@ -157,13 +166,13 @@ class EquityOption(BaseAsset):
         self._sale_proceeds = 0.0
 
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
-    def roll_forward(self, std_dev: float | None = None, q: float | None = None, **kwargs) -> None:
+    def roll_forward(self, volatility: float | None = None, q: float | None = None, **kwargs) -> None:
         """
         Roll the equity option asset forward one period.
 
         Args:
-            std_dev (float): Standard deviation, i.e. volatility; if None, previous value is used; defaults to None.
-            q (float): Dividend yield assumption (continuously compounded); if None, previous value is used; defaults to None.
+            volatility (float | None): Annualized volatility; if None, the previous value is retained.
+            q (float | None): Continuous annual dividend yield; if None, the previous value is retained.
 
         """
         t = self.time
@@ -173,28 +182,29 @@ class EquityOption(BaseAsset):
             self._price = 0
             return
 
-        self._std_dev = std_dev if std_dev is not None else self.std_dev
-
-        if self._is_pay_dividend:
-            self._stock_price = self._stock_price * (1 + self._equity_index.price_return)
-            self._q = q if q is not None else self._q
-        else:
-            self._stock_price = self._stock_price * (1 + self._equity_index.total_return)
+        self._stock_price *= 1 + (self._equity_index.price_return if self._index_return_kind == "price" else
+                                  self._equity_index.total_return)
 
         if self.is_alive("eop"):
             self._payoff = 0.0
+            if volatility is not None:
+                self._volatility = volatility
+            if q is not None:
+                self._q = q
             self._price = BlackScholesCalculator.price(
                 call_put=self._call_put, s=self._stock_price, k=self._strike_price,
                 r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-                q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12)
+                q=self._q, sigma=self._volatility, tau=self.os_term_m / 12)
         else:  # exercise at this month
             self._payoff = (max(self._stock_price - self._strike_price, 0.0) if self._call_put == CallPut.CALL else
                             max(self._strike_price - self._stock_price, 0.0)) * self._qty
-            self._price = 0.0
+            self._price, self._volatility, self._q = 0.0, 0.0, 0.0
 
         self._cash_flow = self._payoff
         self.tdv_qty_bd[t] = self._qty
         self.tdv_stock_price[t] = self._stock_price
+        self.tdv_vol[t] = self._volatility
+        self.tdv_q[t] = self._q
         self.tdv_price[t] = self._price
         self.tdv_mv_bd[t] = self._price * self._qty
         self.tdv_cash_flow[t] = self._cash_flow
@@ -210,7 +220,7 @@ class EquityOption(BaseAsset):
         return BlackScholesCalculator.greeks(
             call_put=self._call_put, s=self._stock_price, k=self._strike_price,
             r=math.log(1 + self._rf_curve.spot_rates[self.os_term_m]),
-            q=self._q, sigma=self._std_dev, tau=self.os_term_m / 12
+            q=self._q, sigma=self._volatility, tau=self.os_term_m / 12
         )
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
@@ -266,9 +276,9 @@ class EquityOption(BaseAsset):
             stock_price=self._stock_price,
             strike_price=self._strike_price,
             equity_index=self._equity_index,
+            index_return_kind=self._index_return_kind,
             rf_curve=self._rf_curve,
-            std_dev=self._std_dev,
-            is_pay_dividend=self._is_pay_dividend,
+            volatility=self._volatility,
             model_engine=self._model_ref(),
             asset_id=new_asset_id,
             is_profile=False,

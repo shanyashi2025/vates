@@ -93,25 +93,21 @@ class EquityIndex:
         self._total_return_index_prev = self._total_return_index
         self._price_return_index_prev = self._price_return_index
 
-    def update(self, *, total_return_index: float = float("nan"), price_return_index: float = float("nan"),
-               apply_compound_growth: bool = False) -> None:
+    def update(self, *, total_return_index: float| None = None, price_return_index: float| None = None) -> None:
         """
         Update the equity index values for the current time step. The decomposition of total return (TR),
         price return (PR, capital gain or loss) and dividend yield (DY) are: TR = PR + DY
 
         Args:
-            total_return_index (float): Total return index (TRI).
-            price_return_index (float): Price return index (PRI).
-            apply_compound_growth (bool): True if applying compound growth to TRI and PRI, defaults to False.
+            total_return_index (float): Total return index (TRI); if None, the previous value is retained.
+            price_return_index (float): Price return index (PRI); if None, the previous value is retained.
         """
-        if apply_compound_growth:
-            self._total_return_index = self._total_return_index_prev * (1 + self._total_return)
-            self._price_return_index = self._price_return_index_prev * (1 + self._price_return)
-        else:
+        if total_return_index is not None:
             self._total_return_index = total_return_index
+        if price_return_index is not None:
             self._price_return_index = price_return_index
-            self._total_return = self._total_return_index / self._total_return_index_prev - 1
-            self._price_return = self._price_return_index / self._price_return_index_prev - 1
+        self._total_return = self._total_return_index / self._total_return_index_prev - 1
+        self._price_return = self._price_return_index / self._price_return_index_prev - 1
 
         t = self.time
         self.tdv_tot_return_index[t] = self._total_return_index

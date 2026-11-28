@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Literal, Self
 
 from vates._core import ProjModelEngine, TDimVariable, make_proj_variable
+from vates.global_conf import GLOBAL_CHECK_MODE, CheckMode
 from vates.utils import transition, maybe_raise_on_compare
 from vates.alm.econs import Currency, YieldCurve, Spread, DefaultRisk, DefaultRiskParams
 from vates.alm.assets.asset_base import BaseAsset, AssetPhase
@@ -26,7 +27,8 @@ class BondFixed(BaseAsset):
     Attributes:
         _params (BondFixedParameters): Bond parameters.
         _mv_price_dirty (float): Market value price (dirty).
-        _market_spread (float): Market spread.
+        _extra_spread (float): Residual spread applied on top of rates based on the risk-free curve and `Spread`
+            assumption.
         _abv_price_dirty (float): Amortized book value price (dirty).
         _amort_rate (float): Amortization rate.
         _rf_curve (YieldCurve): Risk-free yield curve.
@@ -36,10 +38,10 @@ class BondFixed(BaseAsset):
         pricer (BondFixedPricer): Bond pricer.
         risk_calc (BondFixedRiskCalculator): Risk calculator.
     """
-    __slots__ = ('_qty', '_params', '_mv_price_dirty', '_market_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
+    __slots__ = ('_qty', '_params', '_mv_price_dirty', '_extra_spread', '_abv_price_dirty', '_amort_rate', '_rf_curve',
                  '_spread', '_default_risk', '_cash_flow', '_coupon', '_principal', '_recovery', '_credit_loss', '_interest'
                  '_purchase_amount', '_sale_proceeds', 'cash_flow_gen', 'pricer', 'risk_calc', '_n_clone',
-                 'tdv_qty_default', 'tdv_qty_maturity', 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow',
+                 'tdv_qty_default', 'tdv_qty_maturity', 'tdv_qty_bd', 'tdv_qty_ad', 'tdv_cash_flow', 'tdv_extra_spread',
                  'tdv_coupon', 'tdv_principal', 'tdv_recovery', 'tdv_credit_loss', 'tdv_interest', 'tdv_mv_price', 'tdv_abv_price',
                  'tdv_mv_bd', 'tdv_abv_bd', 'tdv_mv_ad', 'tdv_abv_ad', 'tdv_purchase_amount',
                  'tdv_sale_proceeds',)
@@ -54,9 +56,9 @@ class BondFixed(BaseAsset):
         coupon_freq: int,
         face_value: float,
         mv_price: float,
-        market_spread: float,
+        extra_spread: float = 0.0,
         abv_price: float,
-        amort_rate: float,
+        amortization_rate: float,
         rf_curve: YieldCurve,
         attr_aliases: Mapping[str, str] | None = None,
         model_engine: ProjModelEngine | None = None,
@@ -68,7 +70,7 @@ class BondFixed(BaseAsset):
         spread: Spread | None = None,
         default_risk: DefaultRisk | DefaultRiskParams | None = None,
         entry_date: pd.Period | None = None,
-        _bypass_init_validation: bool = False,
+        require_validation: bool = GLOBAL_CHECK_MODE != CheckMode.BYPASS,
         **kwargs
     ):
         """
@@ -87,14 +89,16 @@ class BondFixed(BaseAsset):
             face_value (float): Face value of the bond.
             fixed_cash_flow (BondFixedCashFlow | None): Fixed cash flow of the bond.
             mv_price (float): Market value price (dirty value).
-            market_spread (float): Market spread.
+            extra_spread (float): Extra (or residual) spread applied on top of rates based on the risk-free curve and
+                `Spread` assumption. It may be specified for profile bonds (usually 0), calibrated to the observed
+                market price for existing bonds, or set to 0 for risk-neutral valuation.
             abv_price (float): Amortized book value price (dirty value).
-            amort_rate (float): Amortization rate.
+            amortization_rate (float): Amortization rate.
             rf_curve (YieldCurve): Risk-free yield curve.
             spread (Spread | None): Spread.
             default_risk (DefaultRisk | DefaultRiskParams | None): Default risk.
             entry_date (pd.Period | None): Entry date; defaults to the period at initialization.
-            _bypass_init_validation (bool): True to bypass initial validation. Defaults to False.
+            require_validation (bool): True to perform initial validation.
         """
         super().__init__(model_engine=model_engine, asset_id=asset_id, is_profile=is_profile,
                          entry_date=entry_date, currency=currency, attr_aliases=attr_aliases, **kwargs)
@@ -107,9 +111,9 @@ class BondFixed(BaseAsset):
             face_value=face_value,
         )
         self._mv_price_dirty: float = mv_price
-        self._market_spread: float = market_spread
+        self._extra_spread: float = extra_spread
         self._abv_price_dirty: float = abv_price
-        self._amort_rate: float = amort_rate
+        self._amort_rate: float = amortization_rate
         self._rf_curve: YieldCurve = rf_curve
         self._spread: Spread | None = spread
         self._default_risk: DefaultRisk | DefaultRiskParams | None = default_risk
@@ -127,14 +131,14 @@ class BondFixed(BaseAsset):
         self.cash_flow_gen = BondFixedCashFlowGenerator(bond_params=self._params, fixed_cash_flows=fixed_cash_flow)
         self.pricer = BondFixedPricer(self.cash_flow_gen)
         self.risk_calc = BondFixedRiskCalculator(self.pricer)
-        self.pricer.lock_amortized_price(amort_rate=self.amort_rate, since_date=self.period, init_price=self._abv_price_dirty)
+        self.pricer.lock_amortized_price(amort_rate=self.amortization_rate, start_date=self.period, start_price=self._abv_price_dirty)
 
         # validate profile price
         if is_profile and not math.isclose(self._abv_price_dirty, self._mv_price_dirty, rel_tol=1e-6, abs_tol=1e-8):
             ValueError(f"Profile bond {self.asset_id}: abv_price={self._abv_price_dirty:.4f} != "
                        f"mv_price={self._mv_price_dirty:.4f}")
 
-        if not _bypass_init_validation:
+        if require_validation:
             calc_price = self.pricer.calculate_market_price(self.period, self.ra_spots)
             if not math.isclose(self._mv_price_dirty, calc_price, rel_tol=1e-6, abs_tol=1e-8):
                 raise ValueError(f"Bond {asset_id} mv_price {self._mv_price_dirty:.4f} != calculated {calc_price:.4f}.")
@@ -154,6 +158,7 @@ class BondFixed(BaseAsset):
         self.tdv_recovery: TDimVariable = create_tdv("recovery")
         self.tdv_credit_loss: TDimVariable = create_tdv("credit_loss")
         self.tdv_interest: TDimVariable = create_tdv("interest")
+        self.tdv_extra_spread: TDimVariable = create_tdv("extra_spread")
         self.tdv_mv_price: TDimVariable = create_tdv("mv_price")
         self.tdv_abv_price: TDimVariable = create_tdv("abv_price")
         self.tdv_mv_bd: TDimVariable = create_tdv("mv_bd")
@@ -164,6 +169,7 @@ class BondFixed(BaseAsset):
         self.tdv_sale_proceeds: TDimVariable = create_tdv("sale_proceeds")
 
         t = self.time
+        self.tdv_extra_spread[t] = self._extra_spread
         self.tdv_mv_price[t] = self._mv_price_dirty
         self.tdv_abv_price[t] = self._abv_price_dirty
         self.tdv_qty_ad[t] = self._qty
@@ -193,11 +199,16 @@ class BondFixed(BaseAsset):
         return self._abv_price_dirty * self._qty
 
     @property
-    def market_spread(self) -> float:
-        return self._market_spread
+    def extra_spread(self) -> float:
+        """Residual spread applied on top of rates based on the risk-free curve and `Spread` assumption."""
+        return self._extra_spread
+
+    @extra_spread.setter
+    def extra_spread(self, spread: float) -> None:
+        self._extra_spread = spread
 
     @property
-    def amort_rate(self) -> float:
+    def amortization_rate(self) -> float:
         return self._amort_rate
 
     @property
@@ -214,9 +225,9 @@ class BondFixed(BaseAsset):
             raise ValueError("rf_curve.spot_rates is None. Yield curve must be initialized.")
         if self._spread:
             return make_risk_adjusted_rates(rf_rates=rf_spots, proportional_spread=self._spread.proportional,
-                                            additive_spread=self._spread.additive + self._market_spread)
+                                            additive_spread=self._spread.additive + self._extra_spread)
         else:
-            return rf_spots + self._market_spread
+            return rf_spots + self._extra_spread
 
     @property
     def os_term_m(self) -> int | None:
@@ -251,9 +262,14 @@ class BondFixed(BaseAsset):
         self._sale_proceeds = 0.0
 
     @transition(require_all=AssetPhase.CLOSED, require_offset=-1, require_not=AssetPhase.ROLLED, mark=AssetPhase.ROLLED)
-    def roll_forward(self, *, is_update_mv_price: bool = True, **kwargs) -> None:
+    def roll_forward(self, *, extra_spread: float | None = None, **kwargs) -> None:
         """
         Roll the bond forward one period, updating quantity, prices, and cash flows.
+
+        Args:
+            extra_spread (float | None): Extra (or residual) spread applied on top of rates based on the risk-free curve
+                and `Spread` assumption; if None, the previous value is retained.
+
         """
         t, p = self.time, self.period
 
@@ -262,6 +278,9 @@ class BondFixed(BaseAsset):
             self._mv_price_dirty = 0
             self._abv_price_dirty = 0
             return
+
+        if extra_spread is not None:
+            self._extra_spread = extra_spread
 
         qty_st = self._qty
         coupon = self.cash_flow_gen.get_coupon(p)
@@ -324,10 +343,10 @@ class BondFixed(BaseAsset):
         self._qty = qty
         self._cash_flow = self._coupon + self._principal + self._recovery
         self._abv_price_dirty = abv_price
-        if is_update_mv_price:
-            self._mv_price_dirty = self.pricer.calculate_market_price(p, self.ra_spots)
+        self._mv_price_dirty = self.pricer.calculate_market_price(p, self.ra_spots)
 
         # Update arrays
+        self.tdv_extra_spread[t] = self._extra_spread
         self.tdv_mv_price[t] = self._mv_price_dirty
         self.tdv_abv_price[t] = self._abv_price_dirty
         self.tdv_qty_bd[t] = self._qty
@@ -434,9 +453,9 @@ class BondFixed(BaseAsset):
             coupon_freq=self._params.coupon_freq,
             face_value=self._params.face_value,
             mv_price=self._mv_price_dirty,
-            market_spread=self._market_spread,
+            extra_spread=self._extra_spread,
             abv_price=self._abv_price_dirty,
-            amort_rate=self._amort_rate,
+            amortization_rate=self._amort_rate,
             rf_curve=self._rf_curve,
             attr_aliases=self._attr_aliases,
             model_engine=self._model_ref(),

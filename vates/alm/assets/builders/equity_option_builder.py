@@ -2,7 +2,7 @@ import math
 import pandas as pd
 import warnings
 from collections.abc import Mapping
-from typing import Self
+from typing import Self, Literal
 
 from vates._core import ProjModelEngine, time_synchronized
 from vates.finmath import CallPut, BlackScholesCalculator
@@ -31,13 +31,13 @@ class EquityOptionBuilder:
         stock_price: float,
         strike_price: float,
         equity_index: EquityIndex,
+        index_return_kind: Literal["total", "price"],
         rf_curve: YieldCurve,
-        is_pay_dividend: bool,
         entry_date: pd.Period | None = None,
         attr_aliases: Mapping[str, str] | None = None,
         price: float  = float("nan"),
-        std_dev: float  = float("nan"),
-        q: float = float("nan"),
+        volatility: float  = float("nan"),
+        q: float = 0.0,
         **kwargs
     ):
         """
@@ -57,10 +57,11 @@ class EquityOptionBuilder:
             stock_price (float): Underlying stock price.
             strike_price (float): Strike price.
             equity_index (EquityIndex): Associated equity index.
+            index_return_kind (Literal["total", "price"]): Return series used to update the underlying stock price:
+                "total" (total return) or "price" (price return).
             rf_curve (YieldCurve): Risk-free curve.
-            std_dev (float): Standard deviation, i.e. volatility.
-            is_pay_dividend (bool): True if paying dividend, otherwise False.
-            q (float): Dividend yield assumption (continuously compounded).
+            volatility (float): Annualized volatility of the underlying (standard deviation of log returns).
+            q (float): Continuous annual dividend yield, defaults to 0.0.
         """
         self.model_engine: ProjModelEngine = model_engine
         self.asset_id: str = asset_id
@@ -74,13 +75,13 @@ class EquityOptionBuilder:
         self.stock_price: float = stock_price
         self.strike_price: float = strike_price
         self.equity_index: EquityIndex = equity_index
+        self.index_return_kind: Literal["total", "price"] = index_return_kind
         self.rf_curve: YieldCurve = rf_curve
-        self.is_pay_dividend: bool = is_pay_dividend
-        self.q: float = q if is_pay_dividend else 0
+        self.q: float = q
         if self.os_term_m <= 0: raise ValueError(f'Equity option {self.asset_id} has already expired, can not be built.')
 
         self.price: float = price
-        self.std_dev: float = std_dev
+        self.volatility: float = volatility
         self.extra_kwargs = kwargs
 
     @property
@@ -89,25 +90,25 @@ class EquityOptionBuilder:
 
     def calculate_market_price(self) -> Self:
         """
-        Calculate the market price using the volatility (standard deviation).
+        Calculate the market price using the annualized volatility.
         """
-        if math.isnan(self.std_dev):
-            raise ValueError('std_dev is not yet set.')
+        if math.isnan(self.volatility):
+            raise ValueError('volatility is not yet set.')
         self.price = BlackScholesCalculator.price(
             call_put=self.call_put, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
-            q=self.q, sigma=self.std_dev, tau=self.os_term_m / 12
+            q=self.q, sigma=self.volatility, tau=self.os_term_m / 12
         )
 
         return self
 
     def calibrate_implied_volatility(self) -> Self:
         """
-        Calculate the implied volatility.
+        Calculate the implied annualized volatility.
         """
         if math.isnan(self.price):
             raise ValueError('price is not yet set.')
-        self.std_dev = BlackScholesCalculator.implied_volatility(
+        self.volatility = BlackScholesCalculator.implied_volatility(
             call_put=self.call_put, price=self.price, s=self.stock_price, k=self.strike_price,
             r=math.log(1 + self.rf_curve.spot_rates[self.os_term_m]),
             q=self.q, tau=self.os_term_m / 12
@@ -135,7 +136,7 @@ class EquityOptionBuilder:
                 warnings.warn(f"{type(self).__name__}: '{name}' is ignored as no method matches.")
 
         if math.isnan(self.price): raise ValueError("price is not yet set.")
-        if math.isnan(self.std_dev): raise ValueError("std_dev is not yet set.")
+        if math.isnan(self.volatility): raise ValueError("volatility is not yet set.")
 
         return EquityOption(
             model_engine=self.model_engine,
@@ -151,9 +152,9 @@ class EquityOptionBuilder:
             stock_price=self.stock_price,
             strike_price=self.strike_price,
             equity_index=self.equity_index,
+            index_return_kind=self.index_return_kind,
             rf_curve=self.rf_curve,
-            std_dev=self.std_dev,
-            is_pay_dividend=self.is_pay_dividend,
+            volatility=self.volatility,
             q=self.q,
             **self.extra_kwargs
         )

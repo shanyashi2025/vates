@@ -89,7 +89,7 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
             rebalance_params = model.fund_master.rebalance_params_dict[fund_id]
 
             # step 1: assets roll forward
-            is_update_mv_price = (p.year == model.START_YEAR) or (p.month % esg_step == 0)
+            is_update_bond_mv_price = (p.year == model.START_YEAR) or (p.month % esg_step == 0)
             for asset in fund.assets:
                 if isinstance(asset, Cash):
                     if asset.nominal >= 0:
@@ -98,10 +98,13 @@ def fund_projection(model: ProjModelEngine, esg_params: dict, esg_filename: str,
                         ret_id = getattr(asset, "negative_cash_balance_ret_id")
                     ret = (1 + model.econ_master.econ_asm[ret_id]) ** (1 / 12) - 1
                     asset.roll_forward(rate_of_return=ret)
-                elif isinstance(asset, BondFixed):
-                    asset.roll_forward(is_update_mv_price=is_update_mv_price)
+                elif isinstance(asset, BondFixed) and not is_update_bond_mv_price:
+                    mv_price = asset._mv_price_dirty
+                    asset.roll_forward()
+                    asset._mv_price_dirty = mv_price
                 else:
                     asset.roll_forward()
+
             fund.record_before_dealing(scope="assets")
 
             # step 2: liabs roll forward

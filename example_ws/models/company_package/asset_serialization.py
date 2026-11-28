@@ -125,8 +125,8 @@ class BondRecord:
     build_pipeline: str = ""
     provided_cash_flow_id: str = "none"
     coupon_rate: float = float("nan")
-    amort_rate: float = float("nan")
-    market_spread: float = float("nan")
+    amortization_rate: float = float("nan")
+    extra_spread: float = float("nan")
     credit_spread: float = float("nan")
 
     def to_dict(self) -> dict[str, Any]:
@@ -164,9 +164,9 @@ class BondRecord:
                 face_value=params.face_value,
                 provided_cash_flow_id=getattr(obj, 'provided_cash_flow_id', 'none'),
                 mv_price_dirty=obj.mv_price,
-                market_spread=obj.market_spread,
+                extra_spread=obj.extra_spread,
                 abv_price_dirty=obj.abv_price,
-                amort_rate=obj.amort_rate,
+                amortization_rate=obj.amortization_rate,
                 spread_id='none' if spread is None else spread.spread_id,
                 default_risk_id='none' if default_risk is None else default_risk.default_risk_id,
                 entry_date=obj.entry_date,

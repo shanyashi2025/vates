@@ -1,4 +1,3 @@
-import math
 import numpy as np
 import pandas as pd
 from enum import Enum, unique
@@ -648,10 +647,10 @@ class AssetMaster:
                 stock_price=row["stock_price"],
                 strike_price=row["strike_price"],
                 equity_index=equity_index,
+                index_return_kind=row["index_return_kind"],
                 rf_curve=rf_curve,
-                std_dev=row["std_dev"],
-                is_pay_dividend=(row["is_pay_dividend"].lower() in ('y', 'yes')),
-                q=math.log(1 + 0.2 / 100),  # implement the logic
+                volatility=row["volatility"],
+                q=row["q"],
                 is_profile=False,
                 ifrs_classification=ifrs_classification,
                 local_classification=local_classification,

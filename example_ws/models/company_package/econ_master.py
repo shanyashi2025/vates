@@ -265,8 +265,13 @@ class EconMaster:
         """
         obj: EquityIndex = ctx.econ_obj
 
-        if date_col is None:
-            obj.update(apply_compound_growth=True)
+        if date_col is None:  # apply compound growth
+            t = obj.time
+            tri_1, tri_2 = obj.retrieve_total_return_index(t - 1), obj.retrieve_total_return_index(t - 2)
+            pri_1, pri_2 = obj.retrieve_price_return_index(t - 1), obj.retrieve_price_return_index(t - 2)
+            total_return_index = tri_1 * tri_1 / tri_2
+            price_return_index = pri_1 * pri_1 / pri_2
+            obj.update(total_return_index=total_return_index, price_return_index=price_return_index)
             return
 
         esg_vars = ctx.esg_vars
@@ -298,9 +303,6 @@ class EconMaster:
             ctx (EconContext[Currency]): Currency(ies) to update.
             date_col (str): Date column.
         """
-        if date_col is None:
-            ctx.econ_obj.update(apply_compound_growth=True)
-            return
         ctx.econ_obj.update(fx_rate=1.0)  # read from esg once there are foreign currencies
 
     def update_econ_asm(self, date_col: str | None) -> None:

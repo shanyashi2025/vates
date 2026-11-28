@@ -1,7 +1,6 @@
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import warnings
 from typing import Literal
 
 from vates._core import ProjModelEngine, time_synchronized, TDimArrayVariable, make_proj_variable
@@ -20,42 +19,34 @@ class YieldCurve:
     """
     time: int           # for type hint only, will be injected by decorator `time_synchronized`
     period: pd.Period   # for type hint only, will be injected by decorator `time_synchronized`
-    _curve: InterestRateTermStructure | None
+    _curve: InterestRateTermStructure
+    _default_output_terms: tuple[int, ...] = tuple((
+        *range(12, 61, 12), *range(120, 601, 120)))  # default: 1/2/3/4/5/10/20/30/40/50Y
 
     __slots__ = ('__dict__', '__weakref__', 'time', 'period', '_last_update',
-                 'curve_id', '_curve', 'tdv_spot_rates',)
+                 'curve_id', '_curve', '_output_terms', 'tdv_spot_rates',)
 
     def __init__(
         self,
         curve_id: str,
         *,
         model_engine: ProjModelEngine | None = None,
-        tdv_term_dim: list[int] | None = None,
+        output_terms: list[int] | tuple[int, ...] | None = None,
     ) -> None:
         """
         Initialize a YieldCurve object.
 
         Args:
             curve_id (str): Unique identifier for this yield curve.
-            tdv_term_dim (list[int] | None): List of terms (in months) to be output.
+            output_terms (list[int] | None): List of terms (in months) to be output.
         """
         self.curve_id: str = curve_id
-        self._curve: InterestRateTermStructure = None
+        self._curve: InterestRateTermStructure = InterestRateTermStructure.empty(1)
+        self._output_terms: list[int] | tuple[int, ...] = (output_terms if output_terms is not None else
+                                                           self._default_output_terms)
 
-        if tdv_term_dim is not None:
-            for value in tdv_term_dim:
-                if not isinstance(value, int):
-                    tdv_term_dim = None
-                    warnings.warn(f"'tdv_term_dim': type {type(value)} is not allowed, expected 'int'. Default is used.")
-                    break
-                if value < 0:
-                    tdv_term_dim = None
-                    warnings.warn(f"'tdv_term_dim': value {value} is not allowed, expected positive. Default is used.")
-                    break
-        tdv_term_dim = tdv_term_dim or [*range(12, 61, 12), *range(120, 601, 120)] # default: 1/2/3/4/5/10/20/30/40/50Y
-
-        self.tdv_spot_rates: TDimArrayVariable = make_proj_variable("spot_rate", owner=curve_id, group='yield_curve',
-                                                                    dims=[tdv_term_dim], model_engine=model_engine)
+        self.tdv_spot_rates: TDimArrayVariable = make_proj_variable(
+            "spot_rate", owner=curve_id, group='yield_curve', dims=[self._output_terms], model_engine=model_engine)
         self._last_update: int = self.time or 0
 
     def update(self, *,
@@ -67,13 +58,9 @@ class YieldCurve:
 
         Args:
             kind (Literal["spot_rates", "forward_rates", "discount_factors"]): Update from.
-            value (npt.NDArray[np.float64]): Updated value.
+            value (npt.NDArray[np.float64]): Updated value; if None, the previous value is retained.
         """
-        if kind is None and value is None:
-            pass
-        elif kind is None or value is None:
-            raise ValueError(f"`kind` or `value` is None.")
-        else:
+        if value is not None:
             if kind in ("spot_rates", "spot", "spotac", "zeroac"):
                 self._curve = InterestRateTermStructure.from_zeroac(value, interval_unit="M")
             elif kind in ("forward_rates", "forward", "forwardac"):
@@ -83,7 +70,10 @@ class YieldCurve:
             else:
                 raise ValueError(f"Invalid {kind=}, expected: ('spot', 'forward', 'discount').")
 
-        self._on_exit_update()
+        spots = self._curve.spotac
+        n = len(spots)
+        self.tdv_spot_rates[self.time] = np.array([0.0 if i >= n else spots[i] for i in self._output_terms])
+
         self._last_update = self.time
 
     @property
@@ -109,15 +99,6 @@ class YieldCurve:
         """dict[int, npt.NDArray[np.float64]] | None: Par yields, or None if the curve has not been initialized."""
         maybe_raise_on_compare(self._last_update, self.time)
         return self._curve.parac
-
-    def _on_exit_update(self) -> None:
-        if self._curve is None:
-            raise ValueError("Yield curve has not been initialized; call `update(...)` before `is_unchange=True`.")
-        t = self.time
-        spots = self._curve.spotac
-        n = len(spots)
-        tdv_term_dim = (int(i) for i in self.tdv_spot_rates.dims[0])
-        self.tdv_spot_rates[t] = np.array([0.0 if i >= n else spots[i] for i in tdv_term_dim])
 
     def __str__(self) -> str:
         return f"{type(self).__name__} - '{self.curve_id}'"

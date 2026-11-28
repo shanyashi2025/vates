@@ -59,19 +59,16 @@ class Currency:
     def _on_time_change(self) -> None:
         self._fx_rate_prev = self._fx_rate
 
-    def update(self, *, fx_rate: float = float("nan"), apply_compound_growth: bool = False) -> None:
+    def update(self, *, fx_rate: float | None = None) -> None:
         """
         Update the FX rate for the current time step.
 
         Args:
-            fx_rate (float): New FX rate.
-            apply_compound_growth (bool): True if applying compound growth, defaults to False.
+            fx_rate (float | None): FX rate; if None, the previous value is retained.
         """
-        if apply_compound_growth:
-            self._fx_rate = self._fx_rate_prev * (1 + self._appreciate)
-        else:
+        if fx_rate is not None:
             self._fx_rate = fx_rate
-            self._appreciate = self._fx_rate / self._fx_rate_prev - 1
+        self._appreciate = self._fx_rate / self._fx_rate_prev - 1
 
         t = self.time
         self.tdv_fx_rate[t] = fx_rate

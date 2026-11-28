@@ -247,20 +247,20 @@ class BondFixedPricer:
         discount = factor ** time
         return np.dot(cash_flows, discount)
 
-    def lock_amortized_price(self, amort_rate: float, since_date: pd.Period | None = None,
-                             init_price: float | None = None) -> None:
-        if since_date is None:
-            since_date = self.cash_flow_gen.params.issue_date
+    def lock_amortized_price(self, amort_rate: float, start_date: pd.Period | None = None,
+                             start_price: float | None = None) -> None:
+        if start_date is None:
+            start_date = self.cash_flow_gen.params.issue_date
             n = 0
-            init_price = self.calculate_amortized_price(since_date, amort_rate)
+            start_price = self.calculate_amortized_price(start_date, amort_rate)
         else:
-            n = (since_date - self.cash_flow_gen.params.issue_date).n
-        if init_price is None:
+            n = (start_date - self.cash_flow_gen.params.issue_date).n
+        if start_price is None:
             raise ValueError(f"'init_price' is not provided.")
         prices = np.full(self.cash_flow_gen.params.lifespan_in_months + 1, fill_value=np.nan)
         interests = np.full(self.cash_flow_gen.params.lifespan_in_months + 1, fill_value=np.nan)
-        prices[n] = init_price
-        cash_flows = self.cash_flow_gen.get_future_cash_flows(since_date)
+        prices[n] = start_price
+        cash_flows = self.cash_flow_gen.get_future_cash_flows(start_date)
         coupon_freq = self.cash_flow_gen.params.coupon_freq
         freq = 1 if coupon_freq == 0 else coupon_freq  # 1 for zero coupon bond
         factor = (1 + amort_rate / freq) ** (freq / 12)

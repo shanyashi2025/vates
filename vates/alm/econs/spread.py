@@ -69,17 +69,15 @@ class Spread:
         Update the spread parameters for the current time step.
 
         Args:
-            additive (float | npt.NDArray[np.float64]): Additive spread.
-            proportional (float | npt.NDArray[np.float64]): Proportional spread (multiplied by risk-free rates).
+            additive (float | npt.NDArray[np.float64]): Additive spread; if None, the previous value is retained.
+            proportional (float | npt.NDArray[np.float64]): Proportional spread (multiplied by risk-free rates);
+                if None, the previous value is retained.
         """
-        if additive is None and proportional is None:
-           pass
-        elif additive is None or proportional is None:
-            raise ValueError(f"One or more parameters are None.")
-        else:
+        if additive is not None:
             self._additive = additive
+        if proportional is not None:
             self._proportional = proportional
-        # self._on_exit_update()
+
         self._store_tdv(tdv=self.tdv_add, var=self._additive)
         self._store_tdv(tdv=self.tdv_propn, var=self._proportional)
         self._last_update = self.time

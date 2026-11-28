@@ -584,6 +584,27 @@ class InterestRateTermStructure:
             interval_unit=interval_unit,
         )
 
+    @classmethod
+    def empty(cls, n: int, /, interval_unit: Literal["Y", "M"] = "Y") -> Self:
+        """Return a term structure filled with `np.empty(n)`.
+
+        Args:
+            n (int): Length of the term structure; `max_maturity` = `n - 1`.
+            interval_unit (Literal["Y", "M"]): Grid interval unit, year or month. Defaults to year.
+
+        Returns:
+            InterestRateTermStructure: The empty term structure.
+        """
+        return cls(
+            discount=np.empty(n),
+            zeroac=np.empty(n),
+            zerocc=np.empty(n),
+            forwardac=np.empty(n),
+            forwardcc=np.empty(n),
+            parac={1: np.empty(n),},
+            interval_unit=interval_unit,
+        )
+
     def __len__(self) -> int:
         """int: Number of grid points in the term structure."""
         return len(self.discount)
