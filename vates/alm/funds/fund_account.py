@@ -257,7 +257,7 @@ class FundAccount:
         cash = cash or self._get_primary_cash_asset()
         if cash is not None:
             amount = self._unalloc_cash.balance
-            cash.adjust_nominal(amount)
+            cash += amount
             self._unalloc_cash -= amount
         else:
             warnings.warn(f"Cash asset is neither provided nor found in existing assets.")

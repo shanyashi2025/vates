@@ -74,7 +74,7 @@ class Cash(BaseAsset):
         self._nominal = self._nominal * (1 + rate_of_return)
         self.tdv_mv_bd[t] = self._nominal
 
-    def adjust_nominal(self, amount: float) -> None:
+    def _adjust_nominal(self, amount: float) -> None:
         """
         Adjust the nominal of the cash asset.
 
@@ -96,7 +96,7 @@ class Cash(BaseAsset):
         Args:
             propn (float): Proportion to buy.
         """
-        self.adjust_nominal(self._nominal * propn)
+        self._adjust_nominal(self._nominal * propn)
 
     @transition(require_all=AssetPhase.ROLLED, require_not=AssetPhase.CLOSED)
     def sell_propn(self, propn: float) -> None:
@@ -106,7 +106,7 @@ class Cash(BaseAsset):
         Args:
             propn (float): Proportion to sell.
         """
-        self.adjust_nominal(self._nominal * -propn)
+        self._adjust_nominal(self._nominal * -propn)
 
     def buy_profile(self, *args, **kwargs):
         """
@@ -149,3 +149,11 @@ class Cash(BaseAsset):
 
     def retrieve_cash_flow(self, *args) -> float:
         return 0.0
+
+    def __iadd__(self, amount: float):
+        self._adjust_nominal(amount)
+        return self
+
+    def __isub__(self, amount: float):
+        self._adjust_nominal(-amount)
+        return self
